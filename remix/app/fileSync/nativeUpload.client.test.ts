@@ -240,6 +240,7 @@ test('accepted hidden uploads pause the JS deadline, foreground restores it and 
 			(value) => authority.push(value)
 		);
 		const rejected = assert.rejects(pending, { name: 'AbortError' });
+		await new Promise<void>(resolve => setImmediate(resolve));
 		dispatch();
 		visibility('hidden');
 		t.mock.timers.tick(1_800_000);
@@ -267,6 +268,7 @@ test('accepted hidden uploads pause the JS deadline, foreground restores it and 
 			(value) => authority.push(value)
 		);
 		const timedOut = assert.rejects(old, /timed out/);
+		await new Promise<void>(resolve => setImmediate(resolve));
 		dispatch();
 		t.mock.timers.tick(900_000);
 		await timedOut;
@@ -307,4 +309,25 @@ test('Android notification preparation is capability gated and never grants uplo
 		if (previous) Object.defineProperty(globalThis, 'window', previous);
 		else delete (globalThis as any).window;
 	}
+});
+
+test('Mac compound transport is independently versioned and bounded with legacy and large-file fallback', async () => {
+ const f = await fixture(), signal = new AbortController().signal;
+ const bridge: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.17.0', fileUploadVersion: '1.1.0', fileSymbolicLinksVersion: '1.0.0', fileSingleUploadVersion: '1.0.0' };
+ for (const capabilities of [{ ...bridge, fileSingleUploadVersion: undefined }, { ...bridge, fileSingleUploadVersion: '0.9.0' }, { ...bridge, fileSingleUploadVersion: '2.0.0' }, { ...bridge, platform: 'ios' as const }])
+  assert.equal(mobileFolderSource('owner', rootId, f.entry, signal, undefined, capabilities).uploadSingle, undefined);
+ for (const size of [0, 262145, 8388609])
+  assert.equal(mobileFolderSource('owner', rootId, { ...f.entry, size, fingerprint: undefined, sha256: "a".repeat(64) }, signal, undefined, bridge).uploadSingle, undefined);
+ assert.equal(mobileFolderSource('owner', rootId, { ...f.entry, symbolicLink: { format: 'posix-symlink-v1', targetBase64: btoa('link') } }, signal, undefined, bridge).uploadSingle, undefined);
+ for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.ok(mobileFolderSource('owner', rootId, f.entry, signal, undefined, { ...bridge, fileSingleUploadVersion: version }).uploadSingle);
+ let sent: FolderRequest | undefined;
+ const receipt = { attachmentId: 'upload', version: 'c'.repeat(64), size: f.entry.size, fingerprint: f.entry.fingerprint!, payloadBytes: f.entry.size };
+ const source = mobileFolderSource('owner', rootId, f.entry, signal, async (_owner, request) => { sent = request; return { roots: [], uploadedSingle: receipt }; }, bridge);
+ assert.deepEqual(await source.uploadSingle!({ uploadId: 'upload', requestId: 'original', authorization: approval }), receipt);
+ assert.equal(sent?.action, 'upload-single'); assert.ok(source.uploadPart, 'Multipart fallback remains available');
+ const request: Extract<FolderRequest, { action: 'upload-single' }> = { action: 'upload-single', rootId, upload: { uploadId: 'upload', requestId: 'original', source: f.entry, authorization: approval } };
+ const result = { ...f.result, payload: { ...f.result.payload, uploadedSingle: receipt } };
+ assert.deepEqual(parseMobileFolderResult(result, expected, request)!.uploadedSingle, receipt);
+ for (const patch of [{ attachmentId: 'other' }, { version: 'bad' }, { size: 999 }, { payloadBytes: 1 }, { fingerprint: { ...f.entry.fingerprint, sha256: '0'.repeat(64) } }])
+  assert.throws(() => parseMobileFolderResult({ ...result, payload: { ...result.payload, uploadedSingle: { ...receipt, ...patch } } }, expected, request));
 });

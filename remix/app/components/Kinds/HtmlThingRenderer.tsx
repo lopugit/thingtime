@@ -2,6 +2,7 @@ import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
+import { ComponentRichText } from '../Builder/ComponentRichText';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
@@ -15,6 +16,7 @@ import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentMapbox } from '../Builder/Maps/ComponentMapbox';
 import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled, ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
@@ -123,6 +125,9 @@ export const ALLOWED_PROPS = new Set([
 	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
+	'aria-checked',
+	'aria-busy',
+	'aria-disabled',
 	'aria-expanded',
 	'aria-selected',
 	'aria-current',
@@ -184,6 +189,10 @@ export const ALLOWED_PROPS = new Set([
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
 	'data-tt-action-inputs',
+	// Inert composition slots adopted only by the trusted authored menu.
+	'data-tt-menu-slot',
+	'data-tt-menu-trigger',
+	'data-tt-input-type',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);
@@ -330,6 +339,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
+	if (tag === 'tt-rich-text') return <ComponentRichText key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
 	if (tag === 'tt-mapbox') return <ComponentMapbox key={key} {...node.props} />;
 	if (tag === 'tt-form')
@@ -409,20 +419,36 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
+	const held = useContentExecutionHeld();
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) || held };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
 
+// Authored images may keep a local fallback while a source loads or fails.
+// The fallback is a static same-origin asset: it does not carry user data or
+// expand the shared-media dependency graph to a second arbitrary source URL.
+function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<string, any>; fallback: string }) {
+ const [ready, setReady] = React.useState(false);
+ const [failed, setFailed] = React.useState(false);
+ const src = !failed && typeof elementProps.src === 'string' ? elementProps.src : undefined;
+ return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
+  style={{ ...elementProps.style, ...(!ready && src && { background: `center / contain no-repeat url("${fallback}")`, color: 'transparent' }) }}
+  onLoad={() => setReady(true)} onError={() => setFailed(true)} />;
+}
+
 /** Individual Builder elements share the exact HTML allowlist and URL policy. */
-export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
- tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+export function HtmlBlockElement({ tag, attributes, editorProps, children, markerContent }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode; markerContent?: React.ReactNode;
 }) {
  const mediaUrl = useSharedMediaUrl();
  if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
- if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} /></div>;
+ if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} markerContent={markerContent} /></div>;
+ if (tag === 'tt-upload') return <div {...editorProps}><ComponentUpload {...attributes} /></div>;
  if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
  if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
  if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-rich-text') return <div {...editorProps}><ComponentRichText {...attributes} /></div>;
+ if (tag === 'tt-menu') return <div {...editorProps}><ComponentMenu {...attributes}>{children}</ComponentMenu></div>;
  if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
@@ -431,5 +457,9 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
  if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ const fallback = attributes?.['data-tt-image-fallback'];
+ if (safeTag === 'img' && typeof fallback === 'string' && /^\/[a-zA-Z0-9_/-]+\.(?:png|svg|webp)$/.test(fallback) && !fallback.startsWith('//')) {
+  return <HtmlBlockImage key={String(props.src ?? '')} elementProps={merged} fallback={fallback} />;
+ }
  return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
 }

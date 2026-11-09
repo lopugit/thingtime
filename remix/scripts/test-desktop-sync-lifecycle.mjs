@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { isolatedAccountBackupProcess, verifyAccountBackupIsolation } from './account-backup-isolation.mjs';
+import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const root = resolve(import.meta.dirname, '..'), port = 28188;
 const evidence = resolve(process.argv[2] || join(tmpdir(), 'thingtime-desktop-sync-evidence'));
@@ -15,10 +16,16 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		const require = createRequire(join(root, '../MCP/package.json'));
 		await require('esbuild').build({ entryPoints: [join(root, 'scripts/mobile-sync-editor.browser.tsx')], bundle: true,
 			format: 'esm', platform: 'browser', target: 'esnext', outfile: join(dir, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'),
-			define: { 'process.env.NODE_ENV': '"development"' }, logLevel: 'error' });
+			define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error',
+			plugins: [{ name: 'synthetic-gateway-metadata', setup(build) {
+				// This browser fixture serves the canonical API manifest with no
+				// deployed gateway. Keep the real server-only Node module out.
+				build.onResolve({ filter: /\/deployment\/environmentGateway$/ }, args =>
+					args.importer.endsWith('/capabilities/thingtimeCapabilities.ts') ? { path: 'gateway', namespace: 'fixture' } : undefined);
+				build.onLoad({ filter: /^gateway$/, namespace: 'fixture' }, () => ({ contents: 'export const gatewayDescriptor = () => null;' }));
+			} }] });
 		const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: dir, TT_DESKTOP_SYNC_WORKER: dir };
-		await verifyAccountBackupIsolation(port, env);
-		const child = isolatedAccountBackupProcess(process.execPath, [import.meta.filename, evidence], { env, stdio: 'inherit' }, port, true);
+		const child = spawn(process.execPath, [import.meta.filename, evidence, ...process.argv.slice(3)], { env, stdio: 'inherit' });
 		const timer = setTimeout(() => child.kill('SIGTERM'), 180_000);
 		try { const [code] = await once(child, 'exit'); assert.equal(code, 0); } finally { clearTimeout(timer); }
 	} finally { await rm(dir, { recursive: true, force: true }); }
@@ -33,15 +40,91 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 	});
 	server.listen(port, '127.0.0.1'); await once(server, 'listening');
 	let context;
-	const errors = [], results = [];
+	const errors = [], consoleErrors = [], results = [];
+	const observeBrowser = page => {
+		page.on('pageerror', error => errors.push(error.message));
+		page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+		page.on('requestfailed', request => consoleErrors.push(request.url() + ': ' + request.failure()?.errorText));
+		page.on('response', response => { if (response.url().endsWith('/fixture.js')) consoleErrors.push('fixture.js: HTTP ' + response.status() + ' ' + response.headers()['content-type']); });
+	};
 	try {
 		await mkdir(evidence, { recursive: true });
-		context = await chromium.launchPersistentContext(join(dir, 'profile'), { headless: true, downloadsPath: join(dir, 'downloads'), acceptDownloads: false });
-		let page = context.pages()[0]; page.on('pageerror', error => errors.push(error.message));
+		context = await chromium.launchPersistentContext(join(dir, 'profile'), { headless: true, chromiumSandbox: true, downloadsPath: join(dir, 'downloads'), acceptDownloads: false });
+		let page = context.pages()[0]; observeBrowser(page);
 		await page.clock.install({ time: new Date() });
-		const probe = await context.newPage(); await assert.rejects(probe.goto('http://192.0.2.1:443/blocked', { timeout: 3000 })); await probe.close();
 		await page.setViewportSize({ width: 1440, height: 1000 });
+		const runHistoryAcceptance = async () => {
+			const base = `http://127.0.0.1:${port}/?platform=desktop&tasks&history`;
+			await page.goto(base);
+			const button = (name) => page.getByRole('button', { name, exact: true });
+			const expandConnection = async () => {
+				const heading = page.getByRole('heading', { name: 'Conflicting documents', exact: true });
+				await heading.waitFor({ timeout: 10_000 });
+				const expand = page.locator('article').filter({ has: heading }).getByRole('button', { name: 'Expand folder', exact: true });
+				if (await expand.count()) await expand.click();
+			};
+			await button('Hold next scan').click({ timeout: 10_000 });
+			await expandConnection();
+			await button('Upload now').click({ timeout: 10_000 });
+			await page.waitForFunction(() => window.syncInspectionFixture.pendingScans() === 1, undefined, { timeout: 10_000 });
+			await button('Leave Files screen').click();
+			await page.getByText('App transfer lease: active', { exact: true }).waitFor();
+			await button('Reopen Files screen').waitFor();
+			const { origin, ownerId, deviceId, dataPlane } = await page.evaluate(() => window.syncInspectionFixture.task().scope);
+			const scope = { origin, ownerId, deviceId, dataPlane };
+			const read = (identity = scope, range) => page.evaluate(({ scope, range }) => window.readSyncHistoryFixture({
+				scope, range: range ?? { from: 0, to: Date.now() + 1, bucketCount: 4 }, assertCurrent() {}
+			}), { scope: identity, range });
+			const waitForStatus = async status => {
+				const deadline = Date.now() + 10_000;
+				let observed;
+				do {
+					observed = await read();
+					if (observed.latest?.status === status) return observed;
+					await delay(50);
+				} while (Date.now() < deadline);
+				assert.fail(`Expected durable history state ${status}; observed ${JSON.stringify(observed?.latest)}`);
+			};
+			const running = await waitForStatus('running');
+			assert.ok(running.sampleCount >= 1);
+			assert.equal((await read({ ...scope, deviceId: 'different-device' })).sampleCount, 0);
+			await page.screenshot({ path: join(evidence, 'history-running-with-files-unmounted.png') });
+			await button('Reopen Files screen').click();
+			await expandConnection();
+			await button('Pause sync').click({ timeout: 10_000 });
+			const paused = await waitForStatus('paused');
+			assert.ok(paused.sampleCount > running.sampleCount);
+			assert.equal(paused.latest.uploadMbps, 0);
+			assert.equal(paused.latest.downloadMbps, 0);
+			assert.equal(paused.latest.cpuPercent, null);
+			assert.equal(paused.latest.memoryBytes, null);
+			assert.equal(paused.firstObservedAt, running.firstObservedAt);
+			await context.close();
+			context = await chromium.launchPersistentContext(join(dir, 'profile'), {
+				headless: true, chromiumSandbox: true, downloadsPath: join(dir, 'downloads'), acceptDownloads: false
+			});
+			page = context.pages()[0]; observeBrowser(page);
+			await page.goto(base + '&away');
+			await button('Reopen Files screen').waitFor();
+			const recovered = await read(scope, paused.range);
+			assert.deepEqual(recovered, paused, 'Chromium process restart retains the exact observations');
+			await page.goto(base + '&away&other-account');
+			await button('Reopen Files screen').waitFor();
+			assert.equal((await read({ ...scope, ownerId: 'other-sync-ui-fixture' })).sampleCount, 0);
+			await page.goto(base + '&away&other-origin');
+			await button('Reopen Files screen').waitFor();
+			assert.equal((await read({ ...scope, origin: 'https://other-sync.invalid' })).sampleCount, 0);
+			assert.deepEqual(errors, []);
+			const result = { ok: true, checks: ['admitted-history-with-files-unmounted', 'history-stop-terminal-measurement',
+				'history-survives-chromium-process-restart', 'history-account-origin-device-isolation'],
+				coverage: 'Production admitted runner and IndexedDB in a task-owned Chromium profile with synthetic native permissions and API.' };
+			await writeFile(join(evidence, 'history-result.json'), JSON.stringify(result, null, 2));
+			console.log(JSON.stringify(result));
+		};
+		if (process.argv.includes('--history-only')) await runHistoryAcceptance();
+		else {
 		await page.goto(`http://127.0.0.1:${port}/?platform=desktop&tasks`);
+		await page.clock.runFor(100);
 		await page.getByRole('button', { name: 'Upload now', exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Hold accepted upload reply', exact: true }).click();
 		await page.getByRole('button', { name: 'Hold next scan', exact: true }).click();
@@ -60,12 +143,12 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		const remoteBeforeRestart = await page.evaluate(() => localStorage.getItem('tt:fixture:sync-transfer-folders'));
 		const restart = async (url) => {
 			await context.close();
-			context = await chromium.launchPersistentContext(join(dir, 'profile'), { headless: true, downloadsPath: join(dir, 'downloads'), acceptDownloads: false });
-			page = context.pages()[0]; page.on('pageerror', error => errors.push(error.message));
+			context = await chromium.launchPersistentContext(join(dir, 'profile'), { headless: true, chromiumSandbox: true, downloadsPath: join(dir, 'downloads'), acceptDownloads: false });
+			page = context.pages()[0]; observeBrowser(page);
 			// Install before bootstrap creates timers, so advancing time exercises
 			// the actual scheduler rather than leaving its interval on wall time.
 			await page.clock.install({ time: new Date() });
-			await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(url);
+			await page.setViewportSize({ width: 1440, height: 1000 }); await page.goto(url); await page.clock.runFor(100);
 		};
 		for (const refused of ['other-account', 'other-origin', 'revoked-root']) {
 			await restart(`http://127.0.0.1:${port}/?platform=desktop&tasks&away&${refused}`);
@@ -252,10 +335,11 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByText('Captured versions: 2.', { exact: false }).waitFor();
 		assert.deepEqual(errors, []);
 		const result = { ok: true, checks: ['view-unmount-during-scan', 'complete-without-view', 'browser-restart-after-accepted-write-before-reply', 'same-job-and-operation-after-restart', 'durable-stop-does-not-auto-resume', 'other-account-origin-and-revoked-root-refused', 'reopen-progress', 'unchanged-no-replay', 'reattached-stop', 'saved-review-choice-after-reattach', 'retain-both-versions', 'automatic-cycle-picks-up-new-folder', 'no-early-cycle', 'idle-window-retention', 'scheduled-process-restart', 'idle-stop-survives-restart', 'offline-admission-runnable-without-capture', 'online-resumes-once-without-replay', 'strict-capture-hides-backup-coverage', 'accepted-upload-transport-loss-remains-runnable', 'online-recovers-same-job-and-receipt-without-duplicate'], results,
-			coverage: 'Production UI, app-owned adapter and IndexedDB; synthetic HTTP/native grants, OS network isolation. Real persistent Chromium process restart verified; installed Mac Quit/relaunch and OS reboot remain unverified.' };
+			coverage: 'Production UI, app-owned adapter and IndexedDB; synthetic HTTP/native grants and task-owned Chromium profile with normal networking. Real persistent Chromium process restart verified; installed Mac Quit/relaunch and OS reboot remain unverified.' };
 		await writeFile(join(evidence, 'browser-result.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result));
+		}
 	} catch (error) {
-		if (context) { await writeFile(join(evidence, 'failed-dom.txt'), await context.pages()[0].locator('body').innerText()); await context.pages()[0].screenshot({ path: join(evidence, 'failed.png') }); }
+		if (context) { await writeFile(join(evidence, 'failed-errors.json'), JSON.stringify({ errors, consoleErrors, html: await context.pages()[0].content(), fixture: await context.pages()[0].evaluate(() => ({ ready: document.readyState, history: typeof window.readSyncHistoryFixture, inspection: typeof window.syncInspectionFixture })) })); await writeFile(join(evidence, 'failed-dom.txt'), await context.pages()[0].locator('body').innerText()); await context.pages()[0].screenshot({ path: join(evidence, 'failed.png') }); }
 		throw error;
 	} finally { await context?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 }

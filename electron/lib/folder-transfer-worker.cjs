@@ -15,7 +15,7 @@ function authorize(id, signal, phase = 'chunk') {
         const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', cancel); approvals.delete(key); };
         const cancel = () => { cleanup(); reject(signal.reason); };
         const timer = setTimeout(() => { cleanup(); reject(Object.assign(new Error('authority'), { code: 'ETIMEDOUT' })); }, phase === 'dispatch' ? 60000 : 10000);
-        approvals.set(key, reply => { cleanup(); reply.accepted ? resolve(reply.target) : reject(new Error('authority')); });
+        approvals.set(key, reply => { cleanup(); reply.accepted ? resolve(reply.target) : reject(Object.assign(new Error('authority'), { code: reply.retry ? 'SYNC_DOWNLOAD_RETRY' : 'EACCES' })); });
         signal.addEventListener('abort', cancel, { once: true });
         process.send?.({ kind: 'authority', id, ticket: key, phase });
         if (signal.aborted) cancel();
@@ -65,6 +65,8 @@ process.on('message', async message => {
             if (!Number.isSafeInteger(message.offset) || !Number.isSafeInteger(message.length) || message.offset < 0 || message.length <= 0 || message.length > 2097152 || message.offset + message.length > message.size || !(Date.parse(message.expiresAt) > Date.now())) throw new Error('range');
             const response = await network.get(message.url, message.headers, controller.signal);
             try {
+                if ([408, 429].includes(response.status) || (response.status >= 500 && response.status <= 599))
+                    throw Object.assign(new Error('range transport'), { code: 'SYNC_DOWNLOAD_RETRY' });
                 if (response.status !== 206 || response.redirected || ![null, 'identity'].includes(response.headers.get('content-encoding')) || response.headers.get('content-range') !== `bytes ${message.offset}-${message.offset + message.length - 1}/${message.size}` || !response.body || (response.headers.has('content-length') && response.headers.get('content-length') !== String(message.length))) throw new Error('range');
                 const output = Buffer.alloc(message.length), reader = response.body.getReader(); let at = 0;
                 try {
@@ -91,6 +93,6 @@ process.on('message', async message => {
         process.send?.({ kind: 'reply', id: message.id, status: response.status, redirected: response.redirected });
     } catch (error) {
         // Only fixed categories cross IPC; no signed URLs or network error text.
-        process.send?.({ kind: 'reply', id: message.id, error: controller.signal.aborted ? 'cancelled' : 'transport', code: error?.message === 'authority' ? 'EACCES' : (error?.cause?.code ?? error?.code) });
+        process.send?.({ kind: 'reply', id: message.id, error: controller.signal.aborted ? 'cancelled' : 'transport', code: error?.cause?.code ?? error?.code ?? (message.kind === 'get' ? 'SYNC_DOWNLOAD_INVALID' : undefined) });
     } finally { release?.(); requests.delete(message.id); sample(); }
 });

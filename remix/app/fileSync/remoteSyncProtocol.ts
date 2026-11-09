@@ -1,3 +1,4 @@
+import { parseDeviceSyncHistoryRange, type DeviceSyncHistoryRange } from './deviceSyncHistory';
 import type { ConflictReviewView } from './conflictReviewController';
 import type { FolderCapabilities, FolderRequest, MobileFolder, MobileTrashRequest } from './mobileFolders.client';
 import type { ForegroundSyncProgress, SyncInventoryDescriptor } from './foregroundSync';
@@ -17,6 +18,7 @@ export type RemoteFolderRequest = Extract<FolderRequest, { action: 'remove' | 'v
 	{ action: 'trash-inspect'; rootId: string; trash: MobileTrashRequest };
 export type RemoteSyncCommand =
 	| { action: 'status'; cursor?: string }
+	| { action: 'history'; range: DeviceSyncHistoryRange }
 	| { action: 'resources'; operation: 'read' }
 	| { action: 'resources'; operation: 'save'; deviceResourceLimits: DeviceSyncResourcePolicy }
 	| { action: 'folders'; request: RemoteFolderRequest }
@@ -38,6 +40,7 @@ export type RemoteSyncStatus = {
 
 export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
 export const REMOTE_SYNC_DIRECTION_REQUIREMENTS = { 'api.devices-sync-control': '1.3.0' } as const;
+export const REMOTE_SYNC_HISTORY_REQUIREMENTS = { 'api.devices-sync-control': '1.4.0' } as const;
 export const REMOTE_SYNC_RESOURCE_REQUIREMENTS = { 'api.devices-sync-control': '1.2.0' } as const;
 export type RemoteSyncResources = { deviceResourceLimits: DeviceSyncResourcePolicy; resources?: SyncResourceStatus };
 export const supportsRemoteResourceControls = (capabilities: FolderCapabilities | undefined) => capabilities?.platform === 'macos' &&
@@ -59,7 +62,9 @@ export function parseRemoteSyncResources(value: unknown): RemoteSyncResources {
 	if (value.resources === undefined) return { deviceResourceLimits };
 	const metrics = value.resources;
 	const optional = ['currentUploadBytesPerSecond', 'currentDownloadBytesPerSecond', 'transferBytesPerSecond', 'scanBytesPerSecond', 'scanBytes', 'scanElapsedSeconds', 'memoryBytes', 'measuredAt'];
-	if (!object(metrics) || !exact(metrics, ['version', 'cpuPercent', 'cpuStatus', 'effectiveTransferConcurrency', 'effectiveIndexingConcurrency', 'uploadBytesPerSecond', 'downloadBytesPerSecond', ...optional]) ||
+	if (!object(metrics) || !exact(metrics, ['version', 'cpuScopes', 'cpuPercent', 'cpuStatus', 'effectiveTransferConcurrency', 'effectiveIndexingConcurrency', 'uploadBytesPerSecond', 'downloadBytesPerSecond', ...optional]) ||
+		(metrics.cpuScopes !== undefined && (!Array.isArray(metrics.cpuScopes) || metrics.cpuScopes.length > 3 ||
+			new Set(metrics.cpuScopes).size !== metrics.cpuScopes.length || metrics.cpuScopes.some(scope => !['source-thread', 'indexer-process', 'transport-process'].includes(scope)))) ||
 		optional.some(key => metrics[key] !== undefined && metrics[key] !== null && (typeof metrics[key] !== 'number' || !Number.isFinite(metrics[key]) || Number(metrics[key]) < 0))) throw Error('Invalid device resource response.');
 	return { deviceResourceLimits, resources: parseSyncResourceStatus(metrics) };
 }
@@ -67,6 +72,9 @@ export function parseRemoteSyncResources(value: unknown): RemoteSyncResources {
 export function validateRemoteSyncCommand(value: unknown): RemoteSyncCommand {
 	if (!object(value) || new TextEncoder().encode(JSON.stringify(value)).byteLength > REMOTE_SYNC_COMMAND_BYTES) throw invalid();
 	switch (value.action) {
+		case 'history':
+			if (!exact(value, ['action', 'range'])) throw invalid();
+			return { action: 'history', range: parseDeviceSyncHistoryRange(value.range) };
 		case 'resources':
 			if (value.operation === 'read') { if (!exact(value, ['action', 'operation'])) throw invalid(); }
 			else if (value.operation === 'save') {

@@ -15,7 +15,7 @@ export const PASSWORD_PREVIEW_BLOCKS:WebpageBlock[]=[{id:'pp-list',type:'collect
  ]} as WebpageBlock]} as unknown as WebpageBlock];
 /** Preview text and image are ordinary editable blocks. The adapter alone opens
  * an exact metadata ID; no secret entry or image bytes enter saved layout data. */
-export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:string;entries:PasswordMetadata[];disabled:boolean;onOpen:(entry:PasswordMetadata)=>void}){
+export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:string;entries:PasswordMetadata[];disabled:boolean;onOpen:(entry:PasswordMetadata,trigger:HTMLElement|null)=>void}){
  const root=React.useRef<HTMLDivElement>(null);
  const origin=location.origin,scope=JSON.stringify([origin,ownerId]);
  const [images,setImages]=React.useState<{scope:string;urls:Record<string,string>}>({scope,urls:{}});
@@ -36,8 +36,11 @@ export function PasswordPreviewList({ownerId,entries,disabled,onOpen}:{ownerId:s
   const changes=new MutationObserver(observe);if(root.current)changes.observe(root.current,{childList:true,subtree:true});observe();
   return()=>{controller.abort();observer.disconnect();changes.disconnect();};
  },[ownerId,scope,iconEntries]);
- return <div ref={root}><SettingsDocumentHost documentKey="password-preview-cards" title="Saved password card layout" defaultDocument={PASSWORD_PREVIEW_BLOCKS} migrateBlocks={migratePasswordPreviewContrast} scopeKey={ownerId} layoutEditingDisabled={disabled}>
- {({blocks,chrome,editing})=><TransientBlockHost scopeKey={ownerId} enabled={!editing} actions={{'password.open':({inputs})=>{if(disabled)return;const entry=entries.find(value=>value.id===inputs.id);if(entry)onOpen(entry);}}} scope={{result:{disabled,entries:entries.map(entry=>({...entry,image:(images.scope===scope?images.urls[entry.id]:undefined)||PASSWORD_BRAND_ICON,usernameLabel:entry.username||'No username or email saved',typeLabel:entry.passwordType.replace(/-/g,' ')}))}}}>
+ return <div ref={root} className="tt-password-preview-list"><style>{`
+  .tt-password-preview-list button[data-tt-action="$transient"]:enabled { cursor: pointer; }
+  .tt-password-preview-list button[data-tt-action="$transient"]:focus-visible { outline: 2px solid var(--tt-accent, currentColor); outline-offset: 2px; }
+ `}</style><SettingsDocumentHost documentKey="password-preview-cards" title="Saved password card layout" defaultDocument={PASSWORD_PREVIEW_BLOCKS} migrateBlocks={migratePasswordPreviewContrast} scopeKey={ownerId} layoutEditingDisabled={disabled}>
+ {({blocks,chrome,editing})=><TransientBlockHost scopeKey={ownerId} enabled={!editing} actions={{'password.open':({inputs})=>{if(disabled)return;const entry=entries.find(value=>value.id===inputs.id);const active=document.activeElement;const trigger=active instanceof HTMLElement&&root.current?.contains(active)?active:null;if(entry)onOpen(entry,trigger);}}} scope={{result:{disabled,entries:entries.map(entry=>({...entry,image:(images.scope===scope?images.urls[entry.id]:undefined)||PASSWORD_BRAND_ICON,usernameLabel:entry.username||'No username or email saved',typeLabel:entry.passwordType.replace(/-/g,' ')}))}}}>
  <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
  </TransientBlockHost>}
  </SettingsDocumentHost></div>;

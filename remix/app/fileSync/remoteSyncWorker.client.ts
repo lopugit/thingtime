@@ -1,3 +1,4 @@
+import { withDeviceSyncHistoryRecordingIssue } from './deviceSyncHistory.client';
 import { parseSyncDirections } from './directionalProgress';
 import { readStampedCache } from '../hooks/localCache';
 import { syncScopeKey } from './reconcile';
@@ -14,7 +15,7 @@ import { createFolderHostFetch } from './folderHostFetch.client';
 import { executeRemoteSyncDetails } from './remoteSyncDetails.client';
 import type { SyncScope } from './reconcile';
 import { deviceResourceKey, readDeviceSyncResourcePolicy, saveDeviceSyncResourcePolicy } from './deviceResourcePolicy';
-import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
 
 export const REMOTE_SYNC_REQUIREMENTS = { 'api.devices-sync-control': '1.0.0' } as const;
 // One bounded, host/owner/device/origin-scoped optional negotiation. A short
@@ -85,6 +86,24 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 	context.check();
 	const { host, ownerId, deviceId, generation, signal } = context;
 	switch (command.action) {
+		case 'history': {
+			await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control']); context.check();
+			// The rootless resources lane verifies the same native owner/device
+			// while long transfers hold the ordinary context request lane.
+			if (supportsRemoteResourceControls(host.capabilities)) {
+				const authorization = await host.request(ownerId, { action: 'resources' }, AbortSignal.any([signal, AbortSignal.timeout(4_000)]));
+				if (authorization.roots.length || !authorization.deviceResourceLimits) throw Error('The source device did not confirm its sync identity.');
+			} else await host.authorizeDevice(ownerId, deviceId, signal);
+			context.check();
+			const scope = { origin: host.origin(), ownerId, deviceId, dataPlane: 'home' };
+			const journal = await openSyncJournal();
+			try {
+				const history = await journal.deviceHistory({ scope, assertCurrent: context.check, signal }).read(command.range);
+				context.check();
+				return withDeviceSyncHistoryRecordingIssue(scope, history);
+			}
+			finally { journal.close(); }
+		}
 		case 'resources': {
 			await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control']); context.check();
 			if (!supportsRemoteResourceControls(host.capabilities)) throw Error('Update the selected Mac and its scanner to manage device resource limits.');
@@ -207,6 +226,7 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 	if (!adapter || adapter.platform !== 'macos' || !adapter.bridge.nodeGetStatus) return () => {};
 	const origin = window.location.origin, sessions = new Map<string, DeviceSession>();
 	let timer: ReturnType<typeof setTimeout> | undefined, stopped = false, releaseWindow: (() => Promise<void>) | undefined;
+	let historyRead: Promise<void> | undefined;
 	const check = () => {
 		signal.throwIfAborted();
 		if (stopped || rootIdentity.read().pending || rootIdentity.read().generation !== generation || window.location.origin !== origin || !isNativeSyncAdapterCurrent(adapter))
@@ -258,19 +278,34 @@ export function startRemoteSyncWorker(ownerId: string, generation: number, paren
 					const pending = response.command;
 					if (!pending) continue;
 					if (typeof pending.id !== 'string' || typeof pending.leaseId !== 'string' || !Number.isFinite(Date.parse(pending.expiresAt)) || Date.parse(pending.expiresAt) <= Date.now()) continue;
-					const commandSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, Date.parse(pending.expiresAt) - Date.now()))]);
-					const commandContext = { ...context, signal: commandSignal, check: () => { commandSignal.throwIfAborted(); context.check(); } };
-					let result: unknown, error: string | undefined;
-					try {
-						result = await executeRemoteSyncCommand(validateRemoteSyncCommand(pending.command), commandContext, bound);
-						if (new TextEncoder().encode(JSON.stringify(result)).byteLength > REMOTE_SYNC_RESULT_BYTES) throw Error('This device response needs a smaller page. Refresh and retry.');
-					} catch (cause) {
-						const message = cause instanceof Error ? cause.message : '';
-						error = message && message.length <= 512 ? message : 'The device could not complete this sync action. Refresh its status and retry.';
-					}
-					context.check();
-					await accountRequest(context, '/api/v1/devices/sync-control', { action: 'complete', deviceId, requestId: pending.id, leaseId: pending.leaseId,
-						...(error ? { error } : { result }) });
+					let command: RemoteSyncCommand | undefined;
+					try { command = validateRemoteSyncCommand(pending.command); } catch { /* Reply on the same claimed lease below. */ }
+					const runCommand = async (alreadyReading = false) => {
+						const history = command?.action === 'history';
+						const deadline = Math.max(1, Date.parse(pending.expiresAt) - Date.now());
+						const commandSignal = AbortSignal.any([signal, AbortSignal.timeout(history ? Math.min(deadline, 25_000) : deadline)]);
+						const commandContext = { ...context, signal: commandSignal, check: () => { commandSignal.throwIfAborted(); context.check(); } };
+						let result: unknown, error: string | undefined;
+						try {
+							if (!command) throw Error('Invalid remote sync command.');
+							if (alreadyReading) throw Error('The source device is reading another Sync history range. Retry after it finishes.');
+							result = await executeRemoteSyncCommand(command, commandContext, bound);
+							if (new TextEncoder().encode(JSON.stringify(result)).byteLength > REMOTE_SYNC_RESULT_BYTES) throw Error('This device response needs a smaller page. Refresh and retry.');
+						} catch (cause) {
+							const message = cause instanceof Error ? cause.message : '';
+							error = history && commandSignal.aborted && !signal.aborted ? 'Sync history took too long to read on the source device. Try a shorter date range.' :
+								message && message.length <= 512 ? message : 'The device could not complete this sync action. Refresh its status and retry.';
+						}
+						context.check();
+						const replyContext = history ? { ...context, signal: AbortSignal.any([signal, AbortSignal.timeout(4_000)]) } : context;
+						await accountRequest(replyContext, '/api/v1/devices/sync-control', { action: 'complete', deviceId, requestId: pending.id, leaseId: pending.leaseId,
+							...(error ? { error } : { result }) });
+					};
+					// Large ranges have one bounded independent reader. A queued
+					// Pause can proceed while history pages are being folded.
+					if (command?.action === 'history' && !historyRead) {
+						historyRead = runCommand().catch(() => {}).finally(() => { historyRead = undefined; });
+					} else await runCommand(command?.action === 'history');
 				} catch {
 					// Missing capability, revoked pairing, disconnect or an uncertain
 					// completion waits for the next poll. Claimed commands never replay.

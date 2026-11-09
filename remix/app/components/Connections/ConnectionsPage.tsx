@@ -4,7 +4,23 @@ import { Link, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { rootIdentity } from '~/utils/rootIdentity';
+import { getElectronBridge } from '~/utils/electronBridge';
+import { isNativeBridgeAvailable } from '~/utils/nativeBridge';
+import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
+import { TransientBlockHost } from '../Builder/TransientBlockHost';
+import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
+import { ConnectionProviderIcon } from './ConnectionProviderIcon';
+import { connectionIconUrl, CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION } from '~/connections/providerIcons';
+import { NamedConnectionPanel } from './NamedConnectionPanel';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
+import { linkedConnectionBlocks, providerCatalogBlocks } from './providerCatalogBlocks';
+import { oauthPendingBlocks } from './oauthPendingBlocks';
+import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
@@ -31,22 +47,91 @@ type FeedFilter = {
   enabled: boolean;
 };
 
-const PROVIDERS_CACHE = 'tt-connections-providers';
-const CONNECTIONS_CACHE = 'tt-connections-list';
-const FILTERS_CACHE = 'tt-connections-filters';
-
 export const ConnectionsPage = () => {
+  const user = useCurrentUser();
+  const dataPlane = useDataPlane();
+  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  const desktop = getElectronBridge();
+  const native = !!desktop || isNativeBridgeAvailable();
+  const [desktopScope, setDesktopScope] = React.useState<{ generation: number; origin: string }>();
+  React.useEffect(() => {
+    if (!desktop?.getInfo || identity.pending) return;
+    let current = true;
+    void desktop.getInfo().then(info => {
+      if (!current || !info.apiOrigin) return;
+      const selected = new URL(info.apiOrigin);
+      if (['https:', 'http:'].includes(selected.protocol) && !selected.username && !selected.password)
+        setDesktopScope({ generation: identity.generation, origin: selected.origin });
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [desktop, identity.generation, identity.pending]);
+  const apiOrigin = desktop ? (desktopScope?.generation === identity.generation ? desktopScope.origin : '') : origin;
+  const ownerId = !identity.pending && user?.accountKind !== 'service' ? user?.id : undefined;
+  const scopeKey = JSON.stringify([apiOrigin, ownerId, dataPlane]);
+  return <ConnectionsSession key={JSON.stringify([scopeKey, identity.generation, identity.pending])}
+    origin={origin} apiOrigin={apiOrigin} native={native} ownerId={ownerId} dataPlane={dataPlane} scopeKey={scopeKey} generation={identity.generation} />;
+};
+
+function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, scopeKey, generation }: {
+  origin: string; apiOrigin: string; native: boolean; ownerId?: string; dataPlane: string | null; scopeKey: string; generation: number;
+}) {
   const api = useApi();
+  const [providerIconOrigin, setProviderIconOrigin] = React.useState('');
+  React.useEffect(() => {
+    if (!origin) return;
+    let current = true;
+    // Icons are public presentation from the document origin, independent of
+    // the API server selected for the signed-in account and OAuth actions.
+    void requireThingtimeCapability(CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION, origin).then(() => {
+      if (current) setProviderIconOrigin(origin);
+    }).catch(() => { /* Older or unavailable servers retain the local mark. */ });
+    return () => { current = false; };
+  }, [origin]);
+  const providerIconsEnabled = !!origin && providerIconOrigin === origin;
   const lopu = useLopu();
+  const notify = React.useRef(lopu);
+  notify.current = lopu;
+  const { providers: loadProviders, list: loadConnections, filters: loadFilters } = api.v1.connections;
+  const providersCache = `tt-connections-providers:${apiOrigin}`;
+  const connectionsCache = `tt-connections-list:${scopeKey}`;
+  const filtersCache = `tt-connections-filters:${scopeKey}`;
+  const request = React.useRef<AbortController | null>(null);
+  const mounted = React.useRef(false);
+  const isCurrent = React.useCallback(() => {
+    const identity = rootIdentity.read();
+    return mounted.current && identity.generation === generation && (!ownerId || !identity.pending) && window.location.origin === origin;
+  }, [generation, ownerId, origin]);
+  const oauthAttempt = React.useRef<{ tab: NonNullable<ReturnType<typeof openConnectionOAuthTab>>; deadline: number } | null>(null);
+  const [oauthProvider, setOAuthProvider] = React.useState<string | null>(null);
+
+  const cancelOAuth = React.useCallback(() => {
+    const attempt = oauthAttempt.current;
+    if (!attempt) return;
+    oauthAttempt.current = null;
+    window.clearTimeout(attempt.deadline);
+    attempt.tab.cancel();
+  }, []);
+
+  React.useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      request.current?.abort();
+      cancelOAuth();
+    };
+  }, [cancelOAuth]);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // optimistic first paint from the synchronous cache tier (house rule:
   // never flash a loading state when prior state exists)
-  const [providers, setProviders] = React.useState<Provider[]>(() => readLocalCache<Provider[]>(PROVIDERS_CACHE) || []);
-  const [connections, setConnections] = React.useState<Connection[]>(() => readLocalCache<Connection[]>(CONNECTIONS_CACHE) || []);
-  const [filters, setFilters] = React.useState<FeedFilter[]>(() => readLocalCache<FeedFilter[]>(FILTERS_CACHE) || []);
-  const [signedOut, setSignedOut] = React.useState(false);
+  const [providers, setProviders] = React.useState<Provider[]>(() => apiOrigin ? readLocalCache<Provider[]>(providersCache) || [] : []);
+  const [connections, setConnections] = React.useState<Connection[]>(() => ownerId && apiOrigin ? readLocalCache<Connection[]>(connectionsCache) || [] : []);
+  const [filters, setFilters] = React.useState<FeedFilter[]>(() => ownerId && apiOrigin ? readLocalCache<FeedFilter[]>(filtersCache) || [] : []);
+  const [signedOut, setSignedOut] = React.useState(!ownerId);
 
+  const [namedAvailable, setNamedAvailable] = React.useState(false);
+  const [namedCredential, setNamedCredential] = React.useState<NamedConnectionInput>();
   const [connecting, setConnecting] = React.useState<Provider | null>(null);
   const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
@@ -56,45 +141,71 @@ export const ConnectionsPage = () => {
   const [filterAction, setFilterAction] = React.useState<'warn' | 'hide'>('warn');
 
   const refresh = React.useCallback(async () => {
-    try {
-      const [providersResp, connectionsResp, filtersResp] = await Promise.all([
-        api.v1.connections.providers(),
-        api.v1.connections.list().catch((err: any) => {
-          if (err?.status === 401) return { connections: null };
-          throw err;
-        }),
-        api.v1.connections.filters().catch(() => ({ filters: null }))
-      ]);
-      setProviders(providersResp.providers || []);
-      writeLocalCache(PROVIDERS_CACHE, providersResp.providers || []);
-      if (connectionsResp.connections === null) {
-        setSignedOut(true);
-      } else {
+    if (!apiOrigin || !isCurrent()) return;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const { signal } = controller;
+    const active = () => isCurrent() && !signal.aborted && request.current === controller;
+    const denied = (error: { status?: number }) => [401, 403, 409].includes(error?.status ?? 0);
+    const report = (error: { error?: string }) => {
+      if (active()) notify.current({ title: error?.error || 'Could not load your connections 😞', status: 'error' });
+    };
+    const privateFailure = (error: { status?: number; error?: string }) => {
+      if (!active()) return;
+      if (!denied(error)) return report(error);
+      setSignedOut(true);
+      cancelOAuth();
+      setOAuthProvider(null);
+      setConnections([]);
+      setFilters([]);
+      clearLocalCache(connectionsCache);
+      clearLocalCache(filtersCache);
+      controller.abort();
+    };
+    const pending: Promise<unknown>[] = [
+      loadProviders({ signal, expectedApiOrigin: apiOrigin }).then(response => {
+        if (!active()) return;
+        const providers = response.providers || [];
+        setProviders(providers);
+        writeLocalCache(providersCache, providers);
+      }).catch(report)
+    ];
+    if (ownerId) {
+      const options = { signal, expectedActor: ownerId, expectedApiOrigin: apiOrigin, expectedDataPlane: dataPlane };
+      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION)
+        .then(() => true, () => false).then(includeNamed => {
+          if (!active()) return null;
+          setNamedAvailable(includeNamed);
+          return loadConnections(options, includeNamed);
+        }).then(response => {
+        if (!active() || !response) return;
+        const connections = response.connections || [];
         setSignedOut(false);
-        setConnections(connectionsResp.connections || []);
-        writeLocalCache(CONNECTIONS_CACHE, connectionsResp.connections || []);
-      }
-      if (filtersResp.filters !== null) {
-        setFilters(filtersResp.filters || []);
-        writeLocalCache(FILTERS_CACHE, filtersResp.filters || []);
-      }
-    } catch (err: any) {
-      lopu({ title: err?.error || 'Could not load your connections 😞', status: 'error' });
+        setConnections(connections);
+        if (apiOrigin) writeLocalCache(connectionsCache, connections);
+      }).catch(privateFailure));
+      pending.push(loadFilters(options).then(response => {
+        if (!active()) return;
+        const filters = response.filters || [];
+        setFilters(filters);
+        if (apiOrigin) writeLocalCache(filtersCache, filters);
+      }).catch(privateFailure));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    await Promise.all(pending);
+  }, [apiOrigin, cancelOAuth, connectionsCache, dataPlane, filtersCache, isCurrent, loadConnections, loadFilters, loadProviders, ownerId, providersCache]);
 
-  React.useEffect(() => {
-    refresh();
-  }, [refresh]);
+  React.useEffect(() => { void refresh(); }, [refresh]);
 
   // OAuth callback landing: /connections?connected=<provider id> or
   // ?oauthError=<code>. Neither is rendered verbatim — both are untrusted URL
   // input, so the copy comes from ./shared and the param only selects it.
   React.useEffect(() => {
     const connected = searchParams.get('connected');
-    const failure = oauthErrorMessage(searchParams.get('oauthError'));
+    const code = searchParams.get('oauthError');
+    const failure = oauthErrorMessage(code);
     if (!connected && !failure) return;
+    notifyConnectionOAuthReturn(connected, code);
     if (connected) {
       const label = connectedProviderLabel(connected, providers);
       lopu({ title: label ? `Account linked via ${label} 🎉` : 'Account linked 🎉', status: 'success', duration: 6000 });
@@ -102,24 +213,76 @@ export const ConnectionsPage = () => {
     } else if (failure) {
       lopu({ title: failure, status: 'error' });
     }
-    setSearchParams({}, { replace: true });
+    const remaining = new URLSearchParams(searchParams);
+    remaining.delete('connected');
+    remaining.delete('oauthError');
+    setSearchParams(remaining, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const openConnect = async (provider: Provider) => {
-    // SSO providers hand the browser to their own sign-in — no form here
+  const openConnect = async (provider: Provider, named?: NamedConnectionInput) => {
+    if (!apiOrigin || !isCurrent()) return;
     if (provider.auth === 'oauth2') {
-      setBusy(true);
+      if (oauthAttempt.current || !ownerId || !isCurrent()) return;
+      // Electron delegates external navigation to the system browser and
+      // denies window.open handles. Preserve the original host handoff.
+      if (native || getElectronBridge() || isNativeBridgeAvailable()) {
+        setBusy(true);
+        try {
+          const response = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
+          if (isCurrent() && response?.authorizeUrl) window.location.href = response.authorizeUrl;
+        } catch (error: any) {
+          if (isCurrent()) lopu({ title: error?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
+        } finally {
+          if (isCurrent()) setBusy(false);
+        }
+        return;
+      }
+      let tab: ReturnType<typeof openConnectionOAuthTab> = null;
       try {
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id });
-        if (resp?.authorizeUrl) window.location.href = resp.authorizeUrl;
+        tab = openConnectionOAuthTab(provider.id, (result) => {
+          const attempt = oauthAttempt.current;
+          if (!attempt || attempt.tab !== tab || !isCurrent()) return false;
+          oauthAttempt.current = null;
+          window.clearTimeout(attempt.deadline);
+          setOAuthProvider(null);
+          if (result.status === 'failed') {
+            lopu({ title: oauthErrorMessage(result.code) || 'Could not finish sign-in', status: 'error' });
+          } else {
+            void refresh();
+          }
+          return true;
+        });
+        if (!tab) {
+          lopu({ title: 'Allow pop-ups for Thingtime, then try signing in again', status: 'info' });
+          return;
+        }
+        const deadline = window.setTimeout(() => {
+          if (oauthAttempt.current?.tab !== tab) return;
+          cancelOAuth();
+          setOAuthProvider(null);
+          lopu({ title: 'Sign-in timed out. You can try again.', status: 'info' });
+          void refresh();
+        }, 15 * 60 * 1000);
+        oauthAttempt.current = { tab, deadline };
+        setOAuthProvider(provider.name);
+
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
+        if (oauthAttempt.current?.tab !== tab || !isCurrent()) return;
+        if (!resp?.authorizeUrl || !tab.navigate(resp.authorizeUrl)) {
+          cancelOAuth();
+          setOAuthProvider(null);
+          lopu({ title: 'Sign-in tab closed. You can try again.', status: 'info' });
+        }
       } catch (err: any) {
-        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
-      } finally {
-        setBusy(false);
+        if (tab && oauthAttempt.current?.tab !== tab) return;
+        cancelOAuth();
+        setOAuthProvider(null);
+        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
       }
       return;
     }
+    setNamedCredential(named);
     setConnecting(provider);
     setFieldValues({});
   };
@@ -128,7 +291,7 @@ export const ConnectionsPage = () => {
     if (!connecting) return;
     setBusy(true);
     try {
-      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues });
+      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, named: namedCredential, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
       lopu({
         title: resp.alreadyLinked
           ? `Already connected to ${resp.connection?.account?.displayName} ✨`
@@ -137,6 +300,7 @@ export const ConnectionsPage = () => {
         duration: 6000
       });
       setConnecting(null);
+      setNamedCredential(undefined);
       await refresh();
     } catch (err: any) {
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
@@ -147,14 +311,19 @@ export const ConnectionsPage = () => {
 
   const unlink = async (connection: Connection) => {
     // optimistic remove, restore on failure
-    const previous = connections;
     setConnections((current) => current.filter((entry) => entry.id !== connection.id));
     try {
-      await api.v1.connections.unlink({ id: connection.id });
-      writeLocalCache(CONNECTIONS_CACHE, previous.filter((entry) => entry.id !== connection.id));
+      await api.v1.connections.unlink({ id: connection.id, named: !!connection.named, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+      if (!isCurrent() || !apiOrigin) return;
+      setConnections(current => {
+        const next = current.filter(entry => entry.id !== connection.id);
+        writeLocalCache(connectionsCache, next);
+        return next;
+      });
       lopu({ title: `Unlinked ${connection.account.displayName} 👋`, status: 'success', duration: 5000 });
     } catch (err: any) {
-      setConnections(previous);
+      if (!isCurrent()) return;
+      setConnections(current => current.some(entry => entry.id === connection.id) ? current : [...current, connection]);
       lopu({ title: err?.error || 'Could not unlink that connection 😞', status: 'error' });
     }
   };
@@ -221,7 +390,7 @@ export const ConnectionsPage = () => {
       // render-time closure may be stale under interleaved mutations
       setFilters((current) => {
         const next = [...current, resp.filter];
-        writeLocalCache(FILTERS_CACHE, next);
+        if (apiOrigin && isCurrent()) writeLocalCache(filtersCache, next);
         return next;
       });
       setFilterName('');
@@ -235,7 +404,7 @@ export const ConnectionsPage = () => {
   const toggleFilter = async (filter: FeedFilter) => {
     setFilters((current) => {
       const next = current.map((entry) => (entry.id === filter.id ? { ...entry, enabled: !filter.enabled } : entry));
-      writeLocalCache(FILTERS_CACHE, next);
+      if (apiOrigin && isCurrent()) writeLocalCache(filtersCache, next);
       return next;
     });
     try {
@@ -245,7 +414,7 @@ export const ConnectionsPage = () => {
       // concurrent changes to other filters
       setFilters((current) => {
         const next = current.map((entry) => (entry.id === filter.id ? { ...entry, enabled: filter.enabled } : entry));
-        writeLocalCache(FILTERS_CACHE, next);
+        if (apiOrigin && isCurrent()) writeLocalCache(filtersCache, next);
         return next;
       });
       lopu({ title: err?.error || 'Could not update that filter 😞', status: 'error' });
@@ -255,7 +424,7 @@ export const ConnectionsPage = () => {
   const removeFilter = async (filter: FeedFilter) => {
     setFilters((current) => {
       const next = current.filter((entry) => entry.id !== filter.id);
-      writeLocalCache(FILTERS_CACHE, next);
+      if (apiOrigin && isCurrent()) writeLocalCache(filtersCache, next);
       return next;
     });
     try {
@@ -264,13 +433,31 @@ export const ConnectionsPage = () => {
       // restore only the removed entry
       setFilters((current) => {
         const next = current.some((entry) => entry.id === filter.id) ? current : [...current, filter];
-        writeLocalCache(FILTERS_CACHE, next);
+        if (apiOrigin && isCurrent()) writeLocalCache(filtersCache, next);
         return next;
       });
       lopu({ title: err?.error || 'Could not remove that filter 😞', status: 'error' });
     }
   };
 
+  const canConnect = (provider: Provider) => provider.configured && !signedOut && !busy &&
+    (provider.auth !== 'oauth2' || (!!ownerId && !oauthProvider));
+  const providerRows = providers.map(provider => ({
+    id: provider.id, name: provider.name, about: provider.about,
+    iconUrl: connectionIconUrl(provider.id, providerIconsEnabled),
+    disabled: !canConnect(provider), buttonOpacity: canConnect(provider) ? 1 : 0.55,
+    buttonBackground: connecting?.id === provider.id ? 'var(--tt-border, #e2e8f0)' : 'transparent',
+    buttonLabel: !provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Default sign-in with ${provider.name}` :
+      provider.auth === 'credential' ? 'Connect default account' : 'Connect',
+  }));
+  const legacyConnections = connections.filter(connection => !connection.named);
+  const linkedRows = legacyConnections.map(connection => ({
+    id: connection.id, displayName: connection.account.displayName,
+    providerLabel: `${connection.providerName}${connection.contentVisibility === 'personal' ? ' · personal feed' : ''}`,
+    subtitle: `${connection.account.handle}${connection.lastSyncError ? ' · Feed sync needs attention' : ''}`,
+    iconUrl: connectionIconUrl(connection.provider, providerIconsEnabled),
+    feedHref: `/connections/feed?connection=${encodeURIComponent(connection.id)}`,
+  }));
   return (
     <Box
       maxWidth="860px"
@@ -315,75 +502,71 @@ export const ConnectionsPage = () => {
       ) : null}
 
       {/* linked accounts */}
-      {connections.length ? (
+      {!signedOut && legacyConnections.length ? (
         <Box display="flex" flexDirection="column" rowGap={3}>
           <Text fontWeight="600">Your connections</Text>
-          {connections.map((connection) => (
-            <Flex key={connection.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
-              <Text fontSize="xl">{connection.providerIcon}</Text>
-              <Box flex="1" minWidth="200px">
-                <Text fontWeight="600">
-                  {connection.account.displayName}
-                  <Text as="span" color="var(--tt-muted, #6b7280)" fontWeight="400" marginLeft={2} fontSize="sm">
-                    {connection.providerName}
-                    {connection.contentVisibility === 'personal' ? ' · personal feed' : ''}
-                  </Text>
-                </Text>
-                <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-                  {connection.account.handle}
-                  {connection.lastSyncError ? ` · ⚠️ ${connection.lastSyncError}` : ''}
-                </Text>
-              </Box>
-              <Button
-                as={Link}
-                to={`/connections/feed?connection=${encodeURIComponent(connection.id)}`}
-                size="sm"
-                variant="outline"
-                borderRadius="999px"
-              >
-                Feed
-              </Button>
-              <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => unlink(connection)}>
-                Unlink
-              </Button>
-            </Flex>
-          ))}
+          <SettingsDocumentHost documentKey="connections-linked-accounts" title="Linked connection cards" editLayoutLabel="Edit linked accounts"
+            defaultDocument={linkedConnectionBlocks} scopeKey={scopeKey} allowMediaUploads>
+            {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
+              scope={{ linked: { rows: linkedRows }, ...(editing && { item: linkedRows[0] }) }} actions={{ unlink: ({ inputs }) => {
+                const connection = legacyConnections.find(candidate => candidate.id === inputs.connectionId);
+                if (connection && isCurrent()) return unlink(connection);
+              } }}>
+              <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+            </TransientBlockHost>}
+          </SettingsDocumentHost>
         </Box>
+      ) : null}
+
+      {ownerId && !signedOut && namedAvailable ? (
+        <NamedConnectionPanel scopeKey={scopeKey} providers={providers} connections={connections} busy={busy || !!oauthProvider}
+          start={(providerId, named) => {
+            const provider = providers.find(item => item.id === providerId && item.configured);
+            if (provider) void openConnect(provider, named);
+          }}
+          remove={unlink}
+          use={async (id, operation) => {
+            const response = await api.v1.connections.useNamed({ id, operation, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+            return isCurrent() ? response?.result : undefined;
+          }}
+          onError={(error: any) => lopu({ title: error?.error || error?.message || 'Could not use the connection.', status: 'error' })}
+        />
       ) : null}
 
       {/* provider catalog */}
       <Box display="flex" flexDirection="column" rowGap={3}>
         <Text fontWeight="600">Connect a 3rd party app</Text>
-        <Box display="grid" gridTemplateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={3}>
-          {providers.map((provider) => (
-            <Box key={provider.id} {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
-              <Flex alignItems="center" columnGap={2}>
-                <Text fontSize="xl">{provider.icon}</Text>
-                <Text fontWeight="600">{provider.name}</Text>
-              </Flex>
-              <Text fontSize="sm" color="var(--tt-muted, #6b7280)" flex="1">
-                {provider.about}
-              </Text>
-              <Button
-                size="sm"
-                borderRadius="999px"
-                isDisabled={!provider.configured || signedOut || busy}
-                onClick={() => openConnect(provider)}
-                variant={connecting?.id === provider.id ? 'solid' : 'outline'}
-              >
-                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Sign in with ${provider.name}` : 'Connect'}
-              </Button>
-            </Box>
-          ))}
-        </Box>
+        {ownerId && !signedOut && !native ? (
+          <SettingsDocumentHost documentKey="connections-oauth-pending" title="Connection sign-in layout" editLayoutLabel="Edit sign-in status" defaultDocument={oauthPendingBlocks} scopeKey={scopeKey}>
+            {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ oauth: { pending: !!oauthProvider || editing, provider: oauthProvider || 'your provider' } }}
+              actions={{ stop: () => {
+                cancelOAuth();
+                setOAuthProvider(null);
+                void refresh();
+              } }}>
+              <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+            </TransientBlockHost>}
+          </SettingsDocumentHost>
+        ) : null}
+        <SettingsDocumentHost documentKey="connections-provider-catalog" title="Connection provider cards" editLayoutLabel="Edit provider cards" defaultDocument={providerCatalogBlocks}
+          scopeKey={scopeKey} showLayoutControls={!!ownerId && !signedOut} allowMediaUploads>
+          {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
+            scope={{ catalog: { providers: providerRows }, ...(editing && { item: providerRows[0] }) }} actions={{ connect: ({ inputs }) => {
+              const provider = providers.find(candidate => candidate.id === inputs.provider);
+              if (provider && canConnect(provider)) return openConnect(provider);
+            } }}>
+            <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+          </TransientBlockHost>}
+        </SettingsDocumentHost>
       </Box>
 
       {/* connect form */}
       {connecting ? (
         <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
-          <Text fontWeight="600">
-            {connecting.icon} Connect {connecting.name}
-          </Text>
+          <Flex alignItems="center" columnGap={2}>
+            <ConnectionProviderIcon provider={connecting.id} enabled={providerIconsEnabled} />
+            <Text fontWeight="600">Connect {connecting.name}</Text>
+          </Flex>
           {connecting.fields.map((field) => (
             <Box key={field.key}>
               <Text fontSize="sm" fontWeight="500" marginBottom={1}>

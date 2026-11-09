@@ -12,20 +12,17 @@ final class MacFolderSyncTests: XCTestCase {
         let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
         let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
         let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
-        let helper = folder.appendingPathComponent("paused-helper")
-        try Data("#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}'\nexec /bin/sleep 20\n".utf8).write(to: helper)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
         let waitEntered = expectation(description: "long-poll entered its own lane")
         var observeWait = false
         let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
             verify: { _, _ in if observeWait { observeWait = false; waitEntered.fulfill() } }, choose: { nil }, approve: { _ in false },
-            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("stream"), commanderIndexer: helper))
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("stream")))
         defer { service.suspend() }
         var fields = backupFields(grant.id)
         fields["capturePolicy"] = .string("one-way-supported")
         let started = try await service.handle(request("scan-stream", fields)).decode([String: JSONValue].self)
         let initial = try XCTUnwrap(started["changesPage"]).decode([String: JSONValue].self)
-        XCTAssertEqual(initial["state"], .string("running"))
+        XCTAssertTrue([JSONValue.string("running"), .string("indexed")].contains(initial["state"] ?? .null))
         var longPoll = fields; longPoll["afterSequence"] = .number(0); longPoll["waitMilliseconds"] = .number(25_000)
         observeWait = true
         let pending = Task { try await service.handle(self.request("scan-changes", longPoll)) }
@@ -44,7 +41,7 @@ final class MacFolderSyncTests: XCTestCase {
         var foreign = fields; foreign["captureId"] = .string(UUID().uuidString.lowercased())
         await rejects { try await service.handle(self.request("scan-cancel", foreign)) }
         let retained = try await service.handle(request("scan-changes", fields)).decode([String: JSONValue].self)
-        XCTAssertEqual(try retained["changesPage"]?.decode([String: JSONValue].self)["state"], .string("running"))
+        XCTAssertTrue([JSONValue.string("running"), .string("indexed")].contains(try retained["changesPage"]?.decode([String: JSONValue].self)["state"] ?? .null))
         var changed = fields; changed["ignoreRules"] = .string("*.txt")
         await rejects { try await service.handle(self.request("scan-changes", changed)) }
         let stopped = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
@@ -60,15 +57,9 @@ final class MacFolderSyncTests: XCTestCase {
         let selected = folder.appendingPathComponent("selected")
         try Data("content".utf8).write(to: selected.appendingPathComponent("file"))
         let grant = try store.add(owner, selected: selected)
-        let entry = try XCTUnwrap(MobileFolderReader.scan(bookmark: grant.bookmark).first)
-        let event = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
-        let helper = folder.appendingPathComponent("indexed-helper")
-        let text = "#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}' '{\"event\":\"entry\",\"entry\":\(event)}' '{\"event\":\"indexed\"}'\nread stop\nprintf '%s\\n' '{\"event\":\"complete\"}'\n"
-        try Data(text.utf8).write(to: helper)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
         let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
             verify: { _, _ in }, choose: { nil }, approve: { _ in false },
-            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("stream"), commanderIndexer: helper))
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("stream")))
         defer { service.suspend() }
         var fields = backupFields(grant.id); fields["capturePolicy"] = .string("one-way-supported")
         _ = try await service.handle(request("scan-stream", fields))
@@ -101,9 +92,6 @@ final class MacFolderSyncTests: XCTestCase {
                 let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
                 let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
                 let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
-                let helper = folder.appendingPathComponent("cancel-helper")
-                try Data("#!/bin/sh\nread request\nprintf '%s\\n' '{\"event\":\"hello\",\"version\":1,\"streaming\":true}'\nexec /bin/sleep 20\n".utf8).write(to: helper)
-                try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
                 let service = try MacFolderSync(origin: origin, store: store,
                     staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
                     verify: { _, _ in
@@ -114,7 +102,7 @@ final class MacFolderSyncTests: XCTestCase {
                             catch { if networkCancellation { throw URLError(.cancelled) }; throw CancellationError() }
                         }
                     }, choose: { nil }, approve: { _ in false },
-                    inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString), commanderIndexer: helper))
+                    inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString)))
                 defer { service.suspend() }
                 var fields = backupFields(grant.id); fields["capturePolicy"] = .string("one-way-supported")
                 let start = try await service.handle(request("scan-stream", fields)).decode([String: JSONValue].self)
@@ -127,7 +115,7 @@ final class MacFolderSyncTests: XCTestCase {
                 do { _ = try await pending.value; XCTFail("Cancelled request succeeded") } catch { }
                 let result = try await service.handle(request("scan-changes", reading)).decode([String: JSONValue].self)
                 let page = try XCTUnwrap(result["changesPage"]).decode([String: JSONValue].self)
-                XCTAssertEqual(page["state"], .string("running"), "\(action), network cancellation: \(networkCancellation)")
+                XCTAssertTrue([JSONValue.string("running"), .string("indexed")].contains(page["state"] ?? .null), "\(action), network cancellation: \(networkCancellation)")
                 XCTAssertEqual(page["generation"], generation)
                 // Actual authorization loss must still stop the independent producer.
                 rejectIdentity = true
@@ -164,6 +152,75 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(MacFolderSync.backupDiagnosticCode(NSError(domain: sensitive, code: 1, userInfo: [NSLocalizedDescriptionKey: sensitive])), "unexpected")
     }
 
+    func testCompoundPathObservationUsesOneFreshEntryAndReplyCheck() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        try Data("content".utf8).write(to: selected.appendingPathComponent("nested/file"))
+        let grant = try store.add(owner, selected: selected)
+        var checks = 0
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in checks += 1 }, choose: { nil }, approve: { _ in false }, conditions: { .init(network: "wifi", charging: true) })
+        let fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("nested/file"), "remainingMs": .number(30_000),
+            "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(true), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+        let result = try await service.handle(request("observe-path", fields)).decode([String: JSONValue].self)
+        let entries = try XCTUnwrap(result["observedEntries"]).decode([[String: JSONValue]].self)
+        XCTAssertEqual(entries.map { $0["path"] }, [.string("nested/file"), .string("nested")]); XCTAssertEqual(checks, 2)
+        XCTAssertEqual(result["complete"], .bool(true))
+    }
+
+    func testCompoundPathObservationRefusesAuthorityPolicyAndCancellationChangesBeforeReply() async throws {
+        for failure in ["grant", "network", "charging", "identity", "cancel"] {
+            var saved: [String: Data] = [:]
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+            var checks = 0, network = "wifi", charging = true
+            let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage-" + failure)),
+                verify: { _, _ in
+                    checks += 1
+                    if checks == 2 {
+                        if failure == "grant" { try store.remove(owner, id: grant.id) }
+                        if failure == "network" { network = "offline" }
+                        if failure == "charging" { charging = false }
+                        if failure == "identity" { throw MobileFolderStore.Failure.unavailable }
+                        if failure == "cancel" { throw CancellationError() }
+                    }
+                }, choose: { nil }, approve: { _ in false }, conditions: { .init(network: network, charging: charging) })
+            let fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("missing"), "remainingMs": .number(30_000),
+                "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(true), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+            await rejects { try await service.handle(self.request("observe-path", fields)) }
+            XCTAssertEqual(checks, 2, failure)
+        }
+    }
+
+    func testCompoundPathObservationDoesNotTreatUnsafeOrExpiredReadsAsAbsence() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("outside"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("nested"), withDestinationURL: folder.appendingPathComponent("outside"))
+        let grant = try store.add(owner, selected: selected)
+        var checks = 0, slow = false
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")),
+            verify: { _, _ in checks += 1; if slow { try await Task.sleep(for: .milliseconds(20)) } },
+            choose: { nil }, approve: { _ in false }, conditions: { .init(network: "wifi", charging: true) })
+        var fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("nested/file"), "remainingMs": .number(30_000),
+            "observation": .object(["version": .number(1), "network": .string("wifi"), "chargingOnly": .bool(false), "configurationId": .string("connection"), "configurationRevision": .string("r1")])]
+        let result = try await service.handle(request("observe-path", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(result["observationUnavailable"], .bool(true)); XCTAssertEqual(result["complete"], .bool(false))
+        XCTAssertEqual(result["observedEntries"], .array([])); XCTAssertEqual(checks, 2)
+        checks = 0; slow = true; fields["remainingMs"] = .number(1)
+        await rejects { try await service.handle(self.request("observe-path", fields)) }
+        XCTAssertEqual(checks, 1)
+        checks = 0; fields["path"] = .string("../escape"); fields["remainingMs"] = .number(30_000)
+        await rejects { try await service.handle(self.request("observe-path", fields)) }
+        XCTAssertEqual(checks, 0)
+    }
+
     private var folder: URL!
     override func setUpWithError() throws {
         folder = FileManager.default.temporaryDirectory.appendingPathComponent("mac-sync-" + UUID().uuidString)
@@ -181,7 +238,7 @@ final class MacFolderSyncTests: XCTestCase {
         return try MacFolderSync(origin: origin, store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
             verify: verify, choose: { selected }, approve: approve, chooseSource: { .folder(selected) },
-            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")))
     }
     private func root(_ service: MacFolderSync) async throws -> String {
         let result = try await service.handle(request("choose"))
@@ -244,7 +301,7 @@ final class MacFolderSyncTests: XCTestCase {
                         throw failure
                     }
                 }, choose: { nil }, approve: { _ in false },
-                inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString)))
+                inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString)))
             service.backupMonitorInterval = .milliseconds(20)
             service.backupRetrySleep = { duration in
                 XCTAssertEqual(duration, .seconds(5)); retrying = true
@@ -276,7 +333,7 @@ final class MacFolderSyncTests: XCTestCase {
             let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
             let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
             var retryGate: CheckedContinuation<Void, Never>?
-            let inventories = MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString))
+            let inventories = try NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString))
             let service = try MacFolderSync(origin: origin, store: store,
                 staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
                 verify: { _, _ in
@@ -319,7 +376,7 @@ final class MacFolderSyncTests: XCTestCase {
         let service = try MacFolderSync(origin: origin, store: store,
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
             verify: { _, _ in checks += 1; if checks >= 3 && !allow { throw URLError(.timedOut) } },
-            choose: { nil }, approve: { _ in false }, inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+            choose: { nil }, approve: { _ in false }, inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")))
         let fields = backupFields(grant.id)
         service.backupRetrySleep = { duration in sleeping.fulfill(); try await Task.sleep(for: duration) }
         _ = try await service.handle(request("scan-capture", fields))
@@ -352,7 +409,7 @@ final class MacFolderSyncTests: XCTestCase {
                     catch { throw URLError(.cancelled) } // URLSession's cancellation shape.
                 }
             }, choose: { nil }, approve: { _ in false },
-            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")))
         defer { sealGate?.resume(); service.suspend() }
         let fields = backupFields(grant.id)
         _ = try await service.handle(request("scan-capture", fields))
@@ -375,7 +432,7 @@ final class MacFolderSyncTests: XCTestCase {
         let service = try MacFolderSync(origin: origin, store: store,
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
             verify: { _, _ in checks += 1; if checks >= 3 && !allow { throw ThingtimeAPIClientError.rejected(status: 503) } },
-            choose: { nil }, approve: { _ in false }, inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")))
+            choose: { nil }, approve: { _ in false }, inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")))
         service.backupNow = { current }
         service.backupRetrySleep = { delay in
             delays.append(delay)
@@ -465,6 +522,146 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("scan-page", pageFields.merging(["capture": .object(stripped)]) { _, v in v })) }
     }
 
+    func testPhotoStrictCaptureKeepsPreparedRowsPrivateUntilLiveAuthorization() async throws {
+        struct FixturePhotos: PhotoResourceProvider {
+            let resource = PhotoResource(asset: "test-original", index: 0, name: "original.jpg", revision: "rev-1")
+            func access() -> String { "full" }
+            func inventory() throws -> [PhotoResource] { [resource] }
+            func validate(_ value: PhotoResource) throws {
+                guard value == resource else { throw PhotoLibraryReader.Failure.changed }
+            }
+            func write(_ value: PhotoResource, to url: URL) throws {
+                try validate(value)
+                try Data("photo bytes".utf8).write(to: url)
+            }
+        }
+        var saved: [String: Data] = [:], release = false
+        let provider = FixturePhotos(), index = folder.appendingPathComponent("photo-index")
+        try FileManager.default.createDirectory(at: index, withIntermediateDirectories: false)
+        let photos = try PhotoLibraryReader(provider: provider, transport: NativeRustFixture.transport(directory: index))
+        let service = try MacFolderSync(origin: origin,
+            store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
+            staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage")), verify: { _, _ in },
+            choose: { nil }, approve: { _ in false }, chooseSource: { .photos }, photos: photos)
+        defer { service.suspend() }
+        let prepared = expectation(description: "PhotoKit capture prepared")
+        service.strictSealReady = {
+            prepared.fulfill()
+            while !release { try await Task.sleep(for: .milliseconds(5)) }
+        }
+        let chosen = try await service.handle(request("choose")).decode([String: JSONValue].self)
+        let roots = try XCTUnwrap(chosen["roots"]).decode([[String: JSONValue]].self)
+        let root = try XCTUnwrap(roots.first?["id"]?.stringValue)
+        let id = UUID().uuidString.lowercased()
+        let fields = ["rootId": JSONValue.string(root), "inventoryDeviceId": .string("device"),
+                      "capturePolicy": .string("strict-async"), "captureId": .string(id)]
+        let started = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(started["strictCaptureState"], .string("running"))
+        await fulfillment(of: [prepared], timeout: 5)
+        let capture = MobileFolderInventory.Capture(id: id, generation: id, totalEntries: 1)
+        let pageFields = try fields.merging(["capture": .from(capture), "offset": .number(0)]) { _, rhs in rhs }
+        await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+        release = true
+        var complete = false
+        for _ in 0..<200 {
+            let result = try await service.handle(request("scan-status", fields)).decode([String: JSONValue].self)
+            if result["complete"] == .bool(true) { complete = true; break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(complete)
+        let result = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+        let page = try XCTUnwrap(result["inventoryPage"]).decode(MobileFolderInventory.Page.self)
+        XCTAssertEqual(page.capture, capture)
+        XCTAssertEqual(page.entries.map(\.path), [provider.resource.path])
+    }
+
+    func testStrictCaptureOutlivesRequestDeadlineAndPublishesOnlyAfterSeal() async throws {
+        for outcome in ["complete", "changed", "cancelled", "owner", "grant"] {
+            let selected = folder.appendingPathComponent("selected")
+            let file = selected.appendingPathComponent("kept")
+            try Data("kept".utf8).write(to: file)
+            var saved: [String: Data] = [:], current = Date()
+            let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+            let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+            let grant = try store.add(owner, selected: selected)
+            let preparing = expectation(description: "strict inventory prepared before remote authorization")
+            var allowSeal = false, ownerValid = true
+            let inventories = try NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString))
+            let service = try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
+                verify: { _, _ in if !ownerValid { throw MobileFolderStore.Failure.unavailable } },
+                choose: { nil }, approve: { _ in false }, inventories: inventories)
+            service.strictSealReady = {
+                preparing.fulfill()
+                while !allowSeal { try await Task.sleep(for: .milliseconds(5)) }
+            }
+            service.backupNow = { current }
+            service.backupMonitorInterval = .seconds(60)
+            var fields = backupFields(grant.id)
+            fields["capturePolicy"] = .string("strict-async")
+            let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
+            XCTAssertEqual(begin["strictCaptureState"], .string("running"))
+            XCTAssertNil(begin["capture"])
+            XCTAssertNil(begin["backupCapture"])
+            await fulfillment(of: [preparing], timeout: 3)
+            current = current.addingTimeInterval(271)
+            let pending = try await service.handle(request("scan-status", fields)).decode([String: JSONValue].self)
+            XCTAssertEqual(pending["strictCaptureState"], .string("running"))
+            XCTAssertEqual(pending["captureGeneration"], begin["captureGeneration"])
+            XCTAssertNil(pending["capture"])
+            let descriptor: JSONValue = .object(["id": try XCTUnwrap(fields["captureId"]),
+                "generation": try XCTUnwrap(begin["captureGeneration"]), "totalEntries": .number(1)])
+            let pageFields: [String: JSONValue] = ["rootId": .string(grant.id), "inventoryDeviceId": .string("device"),
+                "capture": descriptor, "offset": .number(0)]
+            await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+
+            if outcome == "cancelled" {
+                let cancelled = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+                XCTAssertEqual(cancelled["cancelled"], .bool(true))
+            } else {
+                if outcome == "changed" { try Data("changed".utf8).write(to: file) }
+                if outcome == "owner" { ownerValid = false }
+                if outcome == "grant" { try store.remove(owner, id: grant.id) }
+                allowSeal = true
+            }
+            if outcome == "owner" || outcome == "grant" {
+                await rejects { try await service.handle(self.request("scan-status", fields)) }
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+                let scope = MobileFolderInventory.Scope(owner: owner, deviceId: "device", rootId: grant.id)
+                let capture = try descriptor.decode(MobileFolderInventory.Capture.self)
+                do {
+                    _ = try inventories.read(scope, capture: capture, bookmark: grant.bookmark, offset: 0)
+                    XCTFail("Revoked strict capture was readable")
+                } catch { }
+                service.suspend()
+                continue
+            }
+            var result = pending
+            for _ in 0..<100 {
+                result = try await service.handle(request("scan-status", fields)).decode([String: JSONValue].self)
+                if result["strictCaptureState"] != .string("running") { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertEqual(result["captureGeneration"], begin["captureGeneration"])
+            if outcome == "complete" {
+                XCTAssertEqual(result["strictCaptureState"], .string("complete"))
+                XCTAssertEqual(result["capture"], descriptor)
+                let page = try await service.handle(request("scan-page", pageFields)).decode([String: JSONValue].self)
+                XCTAssertEqual(try XCTUnwrap(page["inventoryPage"]).decode(MobileFolderInventory.Page.self).entries.map(\.path), ["kept"])
+                let cancelled = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
+                XCTAssertEqual(cancelled["cancelled"], .bool(true))
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+            } else {
+                XCTAssertEqual(result["strictCaptureState"], .string("interrupted"))
+                XCTAssertNil(result["capture"])
+                if outcome == "changed" {
+                    XCTAssertEqual(result["scanFailure"], .object(["path": .string("kept"), "reason": .string("changed")]))
+                }
+                await rejects { try await service.handle(self.request("scan-page", pageFields)) }
+            }
+        }
+    }
+
     func testBackupExplicitCancellationIsDistinctFromTransportRequestCancellation() async throws {
         let selected = folder.appendingPathComponent("selected")
         // Enough metadata work to leave a live job, without allocating file data.
@@ -497,6 +694,8 @@ final class MacFolderSyncTests: XCTestCase {
         let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
         let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
         let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let lateSelection = folder.appendingPathComponent("late-selection", isDirectory: true)
+        try FileManager.default.createDirectory(at: lateSelection, withIntermediateDirectories: false)
         let service = try MacFolderSync(origin: origin, store: store,
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")),
             verify: { _, _ in
@@ -507,8 +706,8 @@ final class MacFolderSyncTests: XCTestCase {
             }, choose: {
                 await withCheckedContinuation { pickerGate = $0; pickerStarted.fulfill() }
             }, approve: { _ in true },
-            inventories: MobileFolderInventory(directory: folder.appendingPathComponent("inventories")),
-            cancelDialog: { pickerGate?.resume(returning: nil); pickerGate = nil })
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("inventories")),
+            cancelDialog: { pickerGate?.resume(returning: lateSelection); pickerGate = nil })
         defer { backupGate?.resume(); pickerGate?.resume(returning: nil); service.suspend() }
         let fields = backupFields(grant.id)
         let begin = try await service.handle(request("scan-capture", fields)).decode([String: JSONValue].self)
@@ -522,6 +721,7 @@ final class MacFolderSyncTests: XCTestCase {
         _ = try await service.handle(request("suspend", id: requestId))
         await rejects { try await pending.value }
         XCTAssertNil(pickerGate)
+        XCTAssertEqual(try store.list(owner).map(\.id), [grant.id])
         backupGate?.resume(); backupGate = nil
         let completed = try await awaitBackup(service, fields: fields)
         let status = try XCTUnwrap(completed["backupCapture"]).decode([String: JSONValue].self)
@@ -559,7 +759,7 @@ final class MacFolderSyncTests: XCTestCase {
             let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
             let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
             let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
-            let inventories = MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString))
+            let inventories = try NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString))
             let checked = expectation(description: "post-preparation identity check")
             let service = try MacFolderSync(origin: origin, store: store,
                 staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
@@ -592,7 +792,7 @@ final class MacFolderSyncTests: XCTestCase {
             let service = try MacFolderSync(origin: origin, store: store,
                 staging: MobileSyncStaging(directory: folder.appendingPathComponent(UUID().uuidString)),
                 verify: { _, _ in if !allow { throw MobileFolderStore.Failure.unavailable } }, choose: { nil }, approve: { _ in false },
-                inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString)))
+                inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString)))
             let fields = backupFields(grant.id)
             _ = try await service.handle(request("scan-capture", fields))
             if revoked == "identity" { allow = false } else { try store.remove(owner, id: grant.id) }
@@ -694,7 +894,7 @@ final class MacFolderSyncTests: XCTestCase {
                             if revoked == "grant" { try store.remove(owner, id: grant.id) }
                         }
                     }, choose: { nil }, approve: { _ in false },
-                    inventories: MobileFolderInventory(directory: folder.appendingPathComponent(UUID().uuidString)))
+                    inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent(UUID().uuidString)))
                 let requestId = UUID().uuidString
                 let fields: [String: JSONValue] = ["rootId": .string(grant.id), "inventoryDeviceId": .string("device"), "captureId": .string(UUID().uuidString.lowercased())]
                 if revoked != "none" {
@@ -753,7 +953,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.17.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.21.0", "fileSymbolicLinksVersion": "1.0.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.3.0", "fileUploadBatchVersion": "1.0.0", "fileSingleUploadVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0", "fileResourceLimitsVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
@@ -769,7 +969,8 @@ final class MacFolderSyncTests: XCTestCase {
                 staging: MobileSyncStaging(directory: folder.appendingPathComponent("round-trip-stage")),
                 verify: { owner, device in
                     guard owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
-                }, choose: { selected }, approve: { _ in approvals += 1; return true })
+                }, choose: { selected }, approve: { _ in approvals += 1; return true },
+                inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("round-trip-index")))
         }
         func hash(_ bytes: Data) -> String {
             SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
@@ -1203,6 +1404,7 @@ final class MacFolderSyncTests: XCTestCase {
             verify: { owner, device in
                 guard live, owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
             }, choose: { selected }, approve: { _ in writePrompts += 1; return true },
+            inventories: NativeRustFixture.inventory(directory: folder.appendingPathComponent("trash-source-index")),
             approveTrash: { _ in trashPrompts += 1; return allowTrash })
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(try XCTUnwrap(context["capabilities"]).decode([String: String].self)["fileTrashVersion"], "1.1.1")

@@ -1,4 +1,5 @@
 import React from 'react';
+import { syncJobFailure, syncJobFailureMessage, syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
 import { openSyncJournal } from '~/fileSync/journal.client';
 import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask } from '~/fileSync/nativeSyncTasks.client';
 import { SYNC_INTERVALS, SYNC_JOBS_CHANGED_EVENT, syncJobCanPause, syncJobEnabled, type SyncJob } from '~/fileSync/syncJobJournal';
@@ -33,16 +34,16 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 	};
 	React.useEffect(() => {
 		const controller = new AbortController();
-		setReady(false); setJob(null); setPausing(false); intervalEdited.current = intervalDraft !== undefined;
+		setReady(false); setJob(null); setPausing(false); setError(''); intervalEdited.current = intervalDraft !== undefined;
 		const load = async () => {
 			let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
 			try {
 				check(); journal = await openSyncJournal();
 				const value = await journal.jobs({ scope, currentScope: check, signal: controller.signal }).read();
 				if (!controller.signal.aborted) {
-					setJob(value); setReady(true); if (!intervalEdited.current) setInterval(value?.intervalMs ?? 300_000);
+					check(); setJob(value); setReady(true); setError(''); if (!intervalEdited.current) setInterval(value?.intervalMs ?? 300_000);
 				}
-			} catch (cause) { if (!controller.signal.aborted) { setError(cause instanceof Error ? cause.message : 'Could not read saved sync work.'); } }
+			} catch (cause) { if (!controller.signal.aborted) { setError('Could not read saved sync work. Reopen this connection to try again.'); } }
 			finally { journal?.close(); }
 		};
 		const refresh = coalescedSyncRefresh(load);
@@ -51,16 +52,17 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 		// key includes the entire scope; generation fences account transitions.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [key, generation]);
-	const report = (cause: unknown) => setError(cause instanceof Error ? cause.message : 'Automatic sync could not be updated.');
+	const report = (cause: unknown) => {
+		if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
+		setError(syncJobFailureMessage(syncJobFailure(cause)));
+	};
 	const startDisabled = disabled || !ready || stopping || !!nativeSyncTasks.read()?.active;
 	const stopDisabled = stopping || (!active && (!ready || !syncJobCanPause(job)));
 	const stopLabel = stopping ? 'Pausing…' : 'Pause sync';
-	const startLabel = activity === 'paused' || job?.state === 'paused' ? 'Resume automatic sync' : 'Start automatic sync';
+	const startLabel = job?.state === 'attention' ? job.intervalMs ? 'Retry automatic sync' : 'Start automatic sync' : activity === 'paused' || job?.state === 'paused' ? 'Resume automatic sync' : 'Start automatic sync';
 	const status = stopping ? 'Pausing sync. No new work will start.' : activity === 'paused' || job?.state === 'paused' ? 'Sync is paused. Resume when you are ready.' : active ? 'Sync is running. You can pause it at any time.' : !ready ? 'Reading this device’s saved sync state…' : job && syncJobEnabled(job)
 		? job.state === 'scheduled' ? `Automatic sync is on. Next check: ${new Date(job.nextRunAt!).toLocaleTimeString()}.` : 'Automatic sync is waiting for this device’s conditions.'
-		: job?.state === 'attention' ? job.intervalMs
-			? 'Automatic sync needs attention. Pause its saved job before starting with changed settings.'
-			: 'An earlier transfer needs attention. Pause its saved job before starting with changed settings.'
+		: job?.state === 'attention' ? syncJobAttentionMessage(job)
 		: 'Automatic sync is off.';
 	return <SettingsDocumentHost documentKey="file-sync-automation" defaultDocument={syncAutomationBlocks} scopeKey={`${key}:${generation}`}
 		title="Automatic file sync" accountTransport={accountTransport}>

@@ -1,0 +1,4 @@
+# Shared first-party engine. All consumers use local paths; nothing is published.
+[workspace]
+members = ["crates/core", "crates/indexer", "crates/ffi", "crates/platform"]
+resolver = "2"

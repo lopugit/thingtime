@@ -1,5 +1,5 @@
 import { syncRequestHasPacing } from './resourceGovernor';
-import { SyncConnectionWait } from './syncConnectionWait';
+import { SyncConnectionWait, SyncVolumeRemounted } from './syncConnectionWait';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -10,7 +10,7 @@ import {
 	supportsFolderAccess,
 	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
-	supportsNativePathInspection,
+	supportsNativePathInspection, supportsNativePathObservation,
 	supportsNativeInventoryPages,
 	supportsNativeUploadBatches,
 	supportsNativeFolderBatches,
@@ -112,10 +112,22 @@ export async function createDesktopFolderHost(input: {
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
+						const volumeOffline = '[folder_volume_offline] The granted volume is offline. Saved sync will retry.';
+						const volumeRemounted = '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.';
+						if (error instanceof Error && (error.message === volumeOffline ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${volumeOffline}`))
+							throw new SyncConnectionWait('Waiting for the granted volume to return. Saved sync work is retained.');
+						if (error instanceof Error && (error.message === volumeRemounted ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${volumeRemounted}`))
+							throw new SyncVolumeRemounted();
 						const uploadRetry = '[folder_upload_retry] Folder upload is temporarily unavailable. Retry after reconnecting.';
 						if (error instanceof Error && (error.message === uploadRetry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${uploadRetry}`))
 							throw new SyncConnectionWait('Waiting for upload transport to reconnect. Saved transfer progress will continue automatically.');
+						const downloadRetry = '[folder_download_retry] Folder download is temporarily unavailable. Retry after reconnecting.';
+						if (error instanceof Error && (error.message === downloadRetry ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${downloadRetry}`))
+							throw new SyncConnectionWait('Waiting for download transport to reconnect. Saved transfer progress will continue automatically.');
 						const transportRetry = '[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.';
 						if (error instanceof Error && (error.message === transportRetry ||
 							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${transportRetry}`))
@@ -223,6 +235,7 @@ export async function createDesktopFolderHost(input: {
 			if (['scan-capture', 'scan-page', 'scan-discard'].includes(request.action) && !supportsNativeInventoryPages(context.capabilities))
 				throw Error('Inventory pages require an updated Mac app.');
 			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');
+			if (request.action === 'observe-path' && !supportsNativePathObservation(context.capabilities)) throw Error('Update Thingtime Desktop for compound path observations.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
 			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
 				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))

@@ -1,5 +1,9 @@
 # Thingtime plans
 
+[Device location history and find-device implementation](device-location-history.md) — private observations, retention, native collection/actions and editable Mapbox composition (active).
+
+[Shared Rust index/sync backend](shared-rust-index-sync.md) — unified store, native adapters and acceptance gates (2026-11-04).
+
 `PLAN/` holds strategies, sequencing, milestones, experiments, success metrics,
 and contingency paths. Plans explain how several TODOs work together; they do
 not replace the actionable backlog in [`../TODO/`](../TODO/TODO.md) or the

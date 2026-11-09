@@ -18,6 +18,34 @@ const spec = (): PagedRunSpec => ({
 		excludedPaths: []
 	}
 });
+test('queued folder peers are run-scoped read-only hints; consumed and bounded-out peers fail closed', async () => {
+	const f = await foregroundFixture(), runs = f.journal().pagedRuns({ scope, currentScope: () => scope });
+	const both = () => {
+		const s = spec(); s.streaming!.source = 'both';
+		s.configuration = { ...s.configuration!, mode: 'two-way' };
+		s.plan.policy.mode = 'two-way'; return s;
+	};
+	const change = (sequence: number, kind: 'file' | 'folder' = 'folder') => ({ sequence, revision: String(sequence),
+		entry: { path: 'Shared', id: 'entry-' + sequence, version: String(sequence), kind, size: 0, sha256: null } satisfies SyncEntry });
+	const s = both(); await runs.begin(s);
+	await runs.appendReplicaStreamInput(s, 'local', 'local-generation', 0, [change(1)], false);
+	await runs.appendReplicaStreamInput(s, 'remote', 'remote-generation', 0, [change(1)], false);
+	const first = (await runs.nextStreamInput(s))!, state = await runs.streamState(s);
+	assert.equal(await runs.queuedFolderPeer(s, first), true);
+	assert.deepEqual(await runs.streamState(s), state, 'A peer read cannot advance any cursor or operation');
+	assert.equal(await runs.queuedFolderPeer(s, { ...first, generation: 'other-generation' }), false);
+	await runs.appendStream(s, first, null);
+	const second = (await runs.nextStreamInput(s))!;
+	assert.equal(await runs.queuedFolderPeer(s, second), false, 'A consumed source row cannot impersonate a queued opposite hint');
+	await runs.appendStream(s, second, null);
+	f.journal().close();
+	const g = await foregroundFixture(), other = g.journal().pagedRuns({ scope, currentScope: () => scope });
+	const wide = both(); await other.begin(wide);
+	await other.appendReplicaStreamInput(wide, 'local', 'local-generation', 0, Array.from({ length: 128 }, (_, i) => change(i + 1)), false);
+	await other.appendReplicaStreamInput(wide, 'remote', 'remote-generation', 0, [change(1)], false);
+	assert.equal(await other.queuedFolderPeer(wide, (await other.nextStreamInput(wide))!), false, 'Work beyond the bounded lookup falls back without rejecting the feed');
+	g.journal().close();
+});
 test('ready stream priorities preserve parent order and revisit new earlier paths without skipping confirmed receipts', async () => {
 	const f = await foregroundFixture(),
 		access = { scope, currentScope: () => scope },

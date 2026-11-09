@@ -1,5 +1,75 @@
 # Things and folders
 
+## Derived Thing metadata
+
+`ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually
+editable `thingMetadataBlocks.ts` layout shows canonical JSON and original file
+bytes separately. `thingMetadata.ts` in the Things utility layer reauthorizes
+the source, measures sorted-key JSON with `thingMetadataCore.ts`, verifies
+attachment bindings and saves one protected metadata reference. GET measures;
+owner POST rebuilds. The exact metadata permalink always rechecks its source.
+Run `test:thing-metadata`, `test:thing-metadata:integration` and the
+[manual checklist](../../TESTING.md#thing-metadata-and-file-sizes).
+See the [format and lifecycle](../thing-metadata.md).
+
+Device pages expose Location history through `DeviceLocationWorkspace`, a
+scoped data/action adapter that resolves private saved `/devices/location` and
+`settings-device-location-settings` layouts. Map markers, filters, retention,
+message controls and uploads remain separately editable blocks. Protected
+`device-observation` history is read through its owner-only device API, not
+ordinary Things discovery. See the [API map](api-endpoints-and-capabilities.md)
+and the Device location history checklist in `TESTING.md`.
+
+## Native external-volume reconnect
+
+`FolderBookmark` distinguishes a detached original volume from deletion on an
+online volume without prompting or mounting it. `NativeFilesystemContinuity`
+and `RustInventoryClient.Root` retain volume UUID, root inode and birth as an
+additional recovery fence; exact live descriptor checks remain mandatory.
+`MobileFolderInventory` retires old device/path snapshots and creates fresh
+generations rather than rewriting their identities. Legacy captures require
+the original nonstale bookmark's saved UUID and original root inode.
+
+`NativeSymbolicLinks` and Rust `backup/native_receipts.rs` resolve matching
+persistent receipt aliases for journals and portable links, including current
+attachment migration of older receipts. A legacy journal with insufficient
+volume proof is unreadable, never ordinary upload content. The small
+`commander-platform` descriptor metadata adapter isolates Darwin UUID FFI from
+the indexer's `forbid(unsafe_code)` policy.
+
+`MobileSyncStaging` uses an on-volume verified candidate for different-device
+regular downloads. Root/candidate/displaced/journal anchors and the private
+marker/content hash gate uncertain-publication recovery. Historical receipts
+remain historical; missing legacy anchors never authorize another swap.
+
+The Electron host recognizes only fixed typed availability markers. Existing
+job backoff resumes offline work. `nativeFeedRecovery` ends the old local hint
+prefix through `pagedRunJournal.endRemountedLocalFeed`, retaining every cursor,
+operation and receipt; the ordinary guarded consumer drains it before fresh
+sealed reconciliation can publish agreement. Native contracts are Mac file
+access 1.20.0 and publication 1.3.0.
+
+Regressions: `DriveReconnectTests` (opt-in real APFS), `nativeFeedRecovery`,
+`twoWayStreaming`, `desktopFolders.client`, Electron `folder-sync`, Rust native
+receipt tests and `commander-platform`. Runbooks: `TESTING.md` external-drive
+reconnect checklist. APFS images prove native remount behavior; physical USB
+hardware and the final signed installation are separate acceptance gates.
+
+## Incoming-share location selection
+
+`ThingsPage` accepts an optional `locationPicker` adapter. It keeps the existing
+list/grid/columns, breadcrumbs and folder creation while staying inside `/share`.
+`ShareSaveDestination.tsx` saves through the ordinary home-plane Things and Files
+APIs, reads results back, and retains immutable retry commands. Shared relative
+paths recreate their folder hierarchy, including empty directories. The sticky
+**Save here** controls are individual Builder blocks. See
+[incoming sharing](../incoming-sharing.md).
+Shared text uses the canonical Data sanitizer without a product string-length
+ceiling (`api.things` 1.50.0). It preserves explicit embedded Component defaults
+through exact readback and retry, rather than reporting a normalization change
+as a failed save. Types, cycles, storage admission and access checks still apply.
+
+
 `validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
 typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
 for saved/embedded definitions, PATCH/replacement semantics and tests.
@@ -27,6 +97,29 @@ The device sync screen keeps saved connection editing available offline and
 uses a protected, leased control channel for live device operations. Native
 grants and transfer journals stay on the target device. See
 [browser device sync](../browser-device-sync.md) for code paths and checks.
+Guarded streaming preparation defers missing journal ancestry before policy RPCs;
+protected point reads and executable bindings retain current policy checks. The
+`--healthy` canonical fixture lane separates startup timing from accepted-loss
+recovery while retaining exact hashes and strict checkpoints.
+The indexed local feed races its live native long poll against a cancellable,
+revisioned durable-consumer wake. Buffered revisions and the native finish/poll
+handshake still drain normally; legacy adapters keep their polling fallback.
+See `streamingIndexRecovery.test.ts` and the idle-wake checklist in `TESTING.md`.
+Mac access 1.21.0 adds the typed `observe-path` boundary used only by two-way
+streaming preparation. `nativePathObservation.ts` is shared by the installed
+adapter and canonical fixture: current saved settings are checked first, then
+one native request observes the candidate and immediate parent under live
+network/charging, expiry, bookmark and CPU guards, with fresh entry/reply
+identity. Older hosts retain separate context/inspection requests. This does
+not reuse identity responses or change transfer, scan, CPU or identity budgets.
+Regressions cover settings changes before IO, exact complete response binding,
+queue expiry, cancellation, account/grant revocation and conditions changes.
+Mac paged native inventory reads use `MobileFolderInventory.read` and
+`RustInventoryClient.checkedPage`: each Rust `page` reply includes its checked
+status so the client can validate generation, root version and coverage with
+one helper request per page. The 10,001-entry regression in
+`MobileFolderInventoryTests` asserts 79 bounded pages and no separate status
+request during read. See the Mac paged checklist in `TESTING.md`.
 
 ## Where the code lives
 
@@ -38,10 +131,10 @@ grants and transfer journals stay on the target device. See
 | Bulk move/copy/delete/share | `app/routes/api/v1/things/bulk` |
 | Thing routes | `app/routes/api/v1/things/_things.tsx` (GET/POST/PATCH/PUT/DELETE) plus `export`, `import`, `fork`, `share`, `react`, `comment`, `save`, `vote`, `updown`, `views`, `search`, `feed`, `trending`, `rss`, `reveal`, `actions` |
 | Portable transfer (export plan, ZIP/JSON bundles, import) | `app/api/utils/things/exportTransfer.ts`, `importTransfer.ts`, `app/utils/thingTransfer/*` (client: `browser.ts`, `archive.ts`) |
-| Independent sealed backup copies | `app/api/utils/backups/portableBackup.ts`, shared `backupObjectKey.ts`, `localBackupStore.ts`, `s3BackupStore.ts`; native/worker pipe entry `scripts/backup-replica.mts` (`backup:replica`), transport/resume tests in `s3BackupStore.test.ts`. Same portable v1 format; explicit vault credentials, no ambient provider configuration. Setup and incomplete live-provider/UI gates: `docs/portable-backups.md#independent-s3-replica-worker` |
+| Independent sealed backup copies | `app/api/utils/backups/portableBackup.ts`, shared `backupObjectKey.ts`, `localBackupStore.ts`, `s3BackupStore.ts`; native/worker pipe entry `scripts/backup-replica.mts` (`backup:replica`), transport/resume tests in `s3BackupStore.test.ts`. Portable v1 container with retained v1 readers; ordinary `backup-thing-content@2` uses `utils/canonicalJsonStream.ts` and streaming retention without backup-only record caps (`thingStream.test.ts`). Explicit vault credentials, no ambient provider configuration. Setup and incomplete live-provider/UI gates: `docs/portable-backups.md#independent-s3-replica-worker` |
 | Kind schemas and protected kinds | `app/schemas/registry.ts` (`PROTECTED_THINGTIME`, `folderSchema`, `isProtectedThingtime`) |
 | Indexes | `app/api/utils/mongodb/collections.ts` `ensureIndexes()` (central registry; new indexes are rare, evidence-backed exceptions) |
-| Internal point-in-time owner inventory (managed-family coverage incomplete) | `app/api/utils/backups/accountInventory.ts`, `withHomeMongoSnapshot` in `collections.ts`; canonical snapshots plus all seven Timeline record families via `backups/timelineRecords.ts`; ready attachment bytes and file-history dependency checks via `backups/attachmentRecords.ts`; offline current/version reads via `accountFileRecovery.ts`; exact draft/template/tombstone records and media dependencies via `draftRecords.ts`; large canonical ordinary content via `thingSnapshots.ts`; saved canonical themes via `themeSnapshots.ts`; approved account profile/private preferences and exact profile-media closure via `accountSnapshots.ts` and shared `timeline/accountContent.ts`; bounded owner/ID paging, modern index plan only. Contract: `docs/portable-backups.md` |
+| Internal point-in-time owner inventory (managed-family coverage incomplete) | `app/api/utils/backups/accountInventory.ts`, `withHomeMongoSnapshot` in `collections.ts`; canonical snapshots plus all seven Timeline record families via `backups/timelineRecords.ts`; ready attachment bytes and file-history dependency checks via `backups/attachmentRecords.ts`; offline current/version reads via `accountFileRecovery.ts`; exact draft/template/tombstone records and media dependencies via `draftRecords.ts`; large canonical ordinary content via `thingSnapshots.ts`; saved canonical themes via `themeSnapshots.ts`; approved account profile/private preferences and exact profile-media closure via `accountSnapshots.ts` and shared `timeline/accountContent.ts`; stored ordinary reference/media and active-selection evidence through `storedReferences.ts`; streamed notification history through `notificationSnapshots.ts` and `timeline/notificationContent.ts`; explicit subscription-authority exclusions; bounded owner/ID paging, modern index plan only. Real API proof: `test:backups:references`. Contract: `docs/portable-backups.md` |
 | Shared event/link records, IndexedDB relational queue/index, bounded cache, draft recorder and account sync | `app/timeline/` (`records.ts` and `branches.ts` are the identical local/remote durable schemas) |
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
@@ -108,14 +201,14 @@ ignore the marker when enforcing content-kind exclusivity. Coverage lives in
 | Dialogs (new folder, rename, move, share, delete, preview) | `app/components/Things/ThingsDialogs.tsx` |
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
-| Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
+| Device page `/things?device=<id>&deviceView=page` | Device cards and rows link to the dedicated page. `ThingsPage.tsx` shares `DeviceDetailsDrawer.tsx` and the top dashboard with the explicit Quick view (`deviceView=quick`); the device menu also links to sync and saved files. |
 
 Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
 open once; Cmd/Ctrl/Shift clicks select, and title links retain native
 middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
 checkboxes and action menus for Things, files and devices in every layout;
 coarse-pointer controls remain visible. Device controls are siblings of their
-primary button to preserve independent keyboard and pointer actions.
+primary link to preserve independent keyboard and pointer actions.
 `FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
 Move dialog pickers remain independent. Its folder button expands children in
 place, while modifier clicks select and context controls preserve location.
@@ -172,6 +265,28 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   home/selected discovery while keeping different data planes separate.
 
 ## Remote and stored files
+
+Completed one-way and two-way streams retain their exact receipt link through
+strict reconciliation. `pagedRunJournal.ts` builds a restartable completion
+summary in bounded history pages, separating cumulative confirmed activity from
+latest-per-path checkpoint effects and excluding unpublished intents.
+Historical-only paths remain activity records, without inventing current files
+or checkpoint effects; parent/root counters include that activity.
+`progressProjection.client.ts` joins per-path historical counters into the saved
+progress tree; `backupCompletionProgress.test.ts` covers completed/reloaded,
+no-work, A/B/A revision, and interrupted-migration behavior.
+
+For connected folder sync, `app/fileSync/streamingForegroundSync.ts` can
+prepare two-way copies from native and cloud index hints while both source
+feeds remain open. `app/api/utils/files/inventory.ts` resolves the exact
+destination under the same transaction and ancestor locks used by the
+canonical file and folder writers. Early two-way cloud writes negotiate
+`api.files` 1.10.0 before using that guard. The strict paged plan and
+checkpoint remain responsible for reconciliation and agreement.
+`app/fileSync/cloudIndexChanges.client.ts` validates Timeline deltas against
+the same sync entry contract as snapshots: nonempty files require multipart
+fingerprints, while canonical zero-byte files use the empty SHA-256 identity.
+
 
 `FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
 same `ThingsGridView`/`ThingsListView` used by `/things`. The full-page entry is
@@ -596,7 +711,7 @@ values, source context and password history. See [the password contract](../pass
 
 ## Mac backup scan implementation
 
-`Commander/crates/commander-indexer/src/backup.rs` adapts the shared bounded Rust
+`filesystem-indexer/crates/indexer/src/backup.rs` adapts the shared bounded Rust
 walker to private JSONL backup observations. `backup_ignore.rs` matches the same
 Git oracle as the web/Apple adapters. `apple/FileSync/.../CommanderBackupCapture.swift`
 runs the bundled helper under the selected grant, validates returned metadata and
@@ -701,6 +816,29 @@ measurement projections; client and worker require `api.devices-sync-control`
 mailbox retains ownership, leases and immutable saves. Focused protocol/client,
 worker, session and `deviceSyncControl` tests cover paused changes, no folder/job
 side effects, stale replies and shared polling. See browser-device-sync.md.
+The installed Mac dashboard shares one Activity Manager sampler per active
+local run. It reads the existing rootless resources lane while visible, and
+Electron projects current worker samples from the same device governor without
+changing limits. Stale transfer, scan and memory measurements expire.
+
+Sync history uses `fileSync/deviceSyncHistoryRecorder.ts` inside the admitted
+native runner, independently of dashboard mounting. `deviceSyncHistoryJournal.ts`
+stores individual origin/owner/device/data-plane scoped observations in the
+existing IndexedDB journal. Range reads process all matching rows in bounded
+batches; display buckets retain measured sample counts and null gaps.
+`deviceSyncHistory.client.ts` reads locally or requests the paired worker's
+read-only `history` command after negotiating `api.devices-sync-control` 1.4.0.
+The API lease completion and remote client both validate the requested range
+and strict result projection. `DeviceSyncResources` and
+`deviceSyncResourceBlocks.ts` expose editable live/history controls and stats.
+
+Mac signed-range staging uses the existing attachment and file reads through
+`electron/lib/folder-download.cjs` and its transport child. Native
+`fileDownloadVersion` 1.0.1 reports temporary transport failures as a runnable
+wait. Retry rechecks the same owner, selected origin, cloud revision and signed
+range, then resumes from native staging's retained offset. The folder diagnostic
+log records only closed phase and result labels. Test the retry and range
+integrity in `electron/test/folder-download.test.cjs`.
 
 POSIX symbolic-link metadata lives in `fileSync/symbolicLink.ts`; `SyncEntry`
 content/stamp equality includes link kind and exact raw target identity.
@@ -710,3 +848,267 @@ restore. `api.files` 1.9.0 / `api.file-sync-batches` 1.3.0 and native fileAccess
 1.17.0 / fileSymbolicLinks 1.0.0 are explicit requirements. Targets are never
 followed. Tests: `symbolicLink.test.ts`, canonical file/route suites and the
 isolated Mac paged HTTP lane described in mobile-file-sync.md.
+
+### Files browser and sync folder publication
+
+The Files browser includes canonical live `file` Things. Its file actions use
+the private file API and versioned attachment ranges. Moves and Trash use
+the selected Timeline revision and preserve the original file ID and history.
+Browser Upload reuses the existing upload control, then publishes the ready
+attachment with the file API when the destination is in a saved owned sync
+folder. The destination lookup reads only saved sync configurations and exact
+folder ancestry, once per distinct folder in the current operation. Other
+uploads keep their ordinary attachment placement. The sync inventory still
+enumerates only canonical files and folders.
+
+## Numeric summaries
+
+`GET /api/v1/things` (1.47.0) accepts `maxCrystalField` for first-party owner/PAT
+`thingtime=data` lists with exact `schemaId` and `parentId`; `excludeArchived=true`
+omits archived entries. `numericSummary.ts` streams the existing `listThings`
+projection and accumulates finite numbers without an item-count cap or a new
+index. It returns only a complete `summary.max`, or null for no numbers. Abort,
+pagination and access failures never return a partial maximum. This read does
+not allocate an atomic sequence. Focused tests cover filtering and complete
+pagination; real API acceptance must verify separate account/PAT boundaries.
+
+
+## Exact authorized counts and visible offset windows
+
+`api.things` 1.49.0 adds authenticated `GET /api/v1/things?count=true` with
+ordinary list filters (`thingtime`, exact `schemaId`/`parentId`, `target`,
+`folder`, `appId`, `builderApp` and `excludeArchived`). It returns
+`{ ok: true, count }` or an explicit error, never a loaded-row subtotal.
+`excludeArchived=true` excludes only literal `crystal.archived=true` in both
+ordinary lists and counts before pagination. Count requests reject paging,
+exact-ID and discussion-projection parameters.
+
+Optional list `offset` is a zero-based ordinal of authorized visible rows and
+returns `offset` plus `nextOffset` (null at the end), alongside the normal
+`things` and `nextCursor`. It cannot be combined with a cursor or discussion
+projection. This removes client-side serial page fetching for a distant page;
+it does not promise constant-time access or a reserved snapshot.
+
+`things.ts` shares `prepareThingsList` and `visibleThingsPage` across these
+reads. Ordinary owned `['data']` rows with no inherited ACL, blocked moderation
+or PAT visibility restriction can be counted natively. All exceptional rows
+stream only authorization metadata through the canonical ACL gate; app
+namespace, liveness, moderation and inherited audiences retain their exact
+checks. Offset windows scan metadata and hydrate only the requested window.
+There is no raw Mongo query input, new index, public projection or item cap.
+
+Run `test:things`, `test:api-capabilities`, and
+`node remix/scripts/things-counts-acceptance.mjs` after building Nitro with the
+node-server preset. The latter uses a fresh disposable replica and API-created
+accounts/data, checks privacy and page results, and records actual payload and
+latency observations. Synthetic measurements do not establish production
+latency or large-account query plans.
+
+
+### Ordered exact-ID joins
+
+The same `api.things` 1.49.0 contract accepts authenticated `GET /things?ids=`
+with one URL-encoded JSON array of Thing ID strings. `getThings` reads unique
+IDs in processing chunks, applies the same exact-read protected-record,
+inherited ACL, PAT, app namespace and author-liveness gates as `getThing`, and
+batches the generic public projection. It returns `{ ok: true, things }`
+aligned to the requested order, including duplicates. Each inaccessible,
+missing or protected row is `null`; no existence reason is disclosed.
+There is no discussion hydration or discovery write. `ids` rejects other
+list/id/projection parameters; the optional existing `key` remains supported.
+
+This is the existing GET endpoint, so browser Actions retain their registered
+read-only classification and canonical capability negotiation. No new route,
+MCP server/tool, URL fetcher or raw query escape hatch is introduced. The array
+has no product item cap; deployed URL and response transports remain finite.
+Clients should chunk by encoded URL bytes (and split again on a transport
+refusal) and retain all input positions, instead of truncating the selection.
+Small processing chunks can preserve input positions across related-row joins.
+
+Explicit-kind list/count requests pass their required kinds to
+`ownerLibraryQuery.ts`, pruning impossible exact managed-kind OR exceptions
+before Mongo planning while preserving the ordinary protected-kind exclusion.
+Legacy post compatibility retains the full library query. The helper truth-table
+regression covers mixed protected kinds and every retained managed guard.
+
+Timeline page capture and comparison share
+`app/timeline/pageBlockTraversal.ts`: an iterative preorder walk over authored
+container/element/collection/condition children. It rejects ancestor cycles
+without rejecting reused values and has no page block-count/nesting cap.
+`componentBindings.ts` retains existing reference validation and capture/ACL
+contracts; `componentDefinitions.ts` aligns nested stable identities. The
+compatible write corrections are `api.things` 1.49.2, `api.things-update` 1.18.1
+and `api.timeline` 1.19.1. Run `test:timeline` and the disposable
+`test:timeline:large-pages:acceptance` after a node-server build.
+
+### Builder app entry points and scoped navigation
+
+`components/Builder/builderAppNavigation.ts` resolves
+`crystal.metadata.entryPointThingId` through independent authorized app and target
+reads. `/builder?app=<id>` opens the target's existing live reader. An unset
+entry point browses contents; invalid, missing, inaccessible and folder/cyclic
+targets show an error with Browse/Retry. Navigation never executes an Action,
+changes audiences or assigns Things. `BuilderAppDialog` exposes a paged saved-page
+selector and exact Thing ID input, validating availability before saving.
+
+App cards keep explicit Browse/Edit controls. Kind, view, sort, group, display
+and search changes preserve `folder` and query in the current URL; only explicit
+All apps navigation leaves the container. Scoped search uses the existing
+ACL-checked search conditions, not client-only filtering. Coverage:
+`builderAppEntryPoint.test.ts`, `thingsLocation.test.ts`, and the isolated
+`scripts/builder-entrypoint-acceptance.mjs` real API/browser check.
+
+
+## Reviewed account recovery planning
+
+`app/backups/accountRestore.ts` defines machine-readable whole-account scope and
+explicit unknown source coverage/unavailable writer readiness.
+`api/utils/backups/accountRestorePlan.ts` and `accountRestoreRecord.ts` validate
+sealed independent entries, index reference mappings in disposable local-worker
+SQLite, and seal immutable paged reviews through `BackupObjectStore`.
+`backupObjectKey.ts` admits only generated `restore-plans` review keys.
+No destination mutation endpoint or account writer is introduced. Run
+`test:backups`; see [planning and completion boundaries](../portable-backups.md#account-restore-admission-and-durable-review-plans).
+
+## Reviewed ordinary creation and execution holds
+
+`backups/ordinaryRestoreTransaction.ts` composes the existing canonical Thing
+writer and accounted Timeline effects for explicitly selected, closed private
+graphs. Parent containment and strict reference closure are preflighted on
+disposable disk indexes. Command intents, per-effect receipts and the folder's
+protected scalar checkpoint provide resumable state; SQLite supplies no durable
+write authority. `things/contentExecutionGate.ts` and canonical
+`timeline/recordMutation.ts` fence current edits and release execution only after
+the exact new completion proof. `auth/fenceAccountSession.ts` checks the current
+full principal and writes its live session in the home content transaction.
+See [portable backups](../portable-backups.md#selected-ordinary-graph-execution-primitives--2026-11-06).
+Run `test:backups:ordinary-restore`, `test:backups`, and `test:api-capabilities`.
+No whole-account readiness or public restore endpoint is added.
+
+### File phase over reviewed restored folders
+
+`backups/accountFileRestore.ts` reuses ordinary restored folder Things and their
+protected creation/completion provenance; it never duplicates folder creation.
+`things/contentExecutionGate.attachContentExecutionHold` accounts a new scoped
+hold on an exact reviewed row and refuses an active prior hold. Canonical files
+and compact managed placements advance the active root epoch before completion
+can release holds. `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 publish
+managed placement/drain fencing. Run the file-restore real-replica proof plus
+Things/Files/Timeline and content-gate regressions. UI/job activation, History
+audit grouping and installed/native acceptance remain separate.
+
+### Normal device folders and default destinations
+
+`api.devices` 1.16.0 adds an origin/account/content-plane scoped
+`rootFolderId` reference. `api.devices-folders` 1.0.0 is registered in
+`apiDocs.ts` and the Nitro import map. Its GET is read-only: one device returns
+the owned root (or null before creation); no device ID lists paginated owned root
+references (50 per request, canonical chronological cursor), so devices are discoverable before uploads. POST verifies the
+owned device in the home control plane and resolves ordinary private `folder`
+Things through `createThing`/`getThing`, including canonical accounting,
+placement and uniqueness. There is no mixed device/folder kind or new index.
+
+`fileSync/deviceFolders.ts` keys roots and Files folders by origin, owner,
+content plane and device; each leaf also uses the stable connection ID. Labels
+never determine identity. New destinations are `Device / Files / Source label`
+(including Photo Library). Existing explicit remote destinations, opaque native
+root IDs, grants, drafts and pause settings are preserved. No save starts a
+transfer. Renames are retained; moved child folders and replaced/shared
+identities require explicit selection. Recreating a deleted root never moves
+surviving contents back implicitly.
+
+`SyncDestinationControl` uses editable Builder path/action/repeated-option
+blocks with searchable paginated collections and explicit More devices discovery. `folderPaths.ts` reads actual
+owned/private ancestry with a shared cache, four concurrent workers and scope/
+cancellation fences; transport failures remain retryable. Device page and menu
+Show Folder inspect an existing reference before creating a missing root, so
+cloud navigation works while the physical device is offline. Root browsing
+suppresses only an exact managed root already represented by its Device card;
+search, folder-only views and location pickers retain normal folder results.
+
+`SyncFolderCard` has an editable quick action outside collapsed settings,
+with separate error and destination fields. The remote command worker runs
+on paired Macs. Remote iPhone and Android panels show saved settings, and
+the current iPhone can jump to its local transfer controls. Mounted panels
+share verified saved revisions for the same owner, origin and device.
+Photos sources display their virtual source label.
+The native-only compact Things entry links to `/things?deviceSetup=1`; that
+page reuses normal device pairing and folder-grant controls.
+
+Run focused `deviceFolders`, capability, folder-card tests and
+`node scripts/test-remote-device-sync-ui.mjs`. Build the Node middleware server,
+then run `node scripts/test-device-sync-control.mjs .output/server/index.mjs
+<path-to-mongod> --device-folders` from Remix for disposable real-API acceptance.
+The launcher starts its own replica and seeds users/devices through APIs only.
+
+## Durable backup authority boundary
+
+`api/utils/backups/backupJobs.ts` owns private home-plane backup-job/event control
+Things, original-session leases and atomic cursor/hash-reference checkpoints.
+`things.ts` refuses their generic exact, inherited, mixed-kind and exported reads;
+ordinary descendants cannot borrow a public ancestor through that private boundary.
+`api.things` 1.52.1, `api.things-export` 1.16.1 and `api.things-bulk` 1.7.2 publish
+that corrected permission boundary. Unit checks are `test:backups:worker`; actual
+API-utils/replica transaction checks are `test:backups:workflow`.
+`backupWorkflow.server.ts` reuses the supported ID-only Vercel Workflow lifecycle;
+`backupEngine.server.ts` composes bounded inventory/capture/verification units.
+No public admission/UI entry is enabled until the full supported execution path
+and deployment readiness are independently accepted. Snapshot/reference sidecars
+and plaintext-bearing encrypted hasher state stay in the independent backup store,
+never ordinary Thing crystal fields. See `docs/portable-backups.md` and TESTING.
+
+iOS Photos uses `PhotoLibraryReader` and the Rust capture's gap ledger. File
+access 1.6.0 keeps iCloud-only resources explicitly incomplete while transferring
+available originals. File access 1.7.0 can fetch an exact iCloud original
+only with the saved explicit cellular allowance and live power/device checks.
+File access 1.8.0 uses `PhotoBackupQueue` for one date-ordered queue of asset
+groups. The Rust indexer seals selected originals and exact iCloud gaps;
+untouched assets need no synthetic gap rows. After the initial checkpoint,
+`pagedForegroundSync` reads only the scoped paths needed for the next batch
+and merges its verified pairs into the existing baseline. Native batch
+acknowledgement checks the exact cloud original fingerprints.
+Native upload 1.5.0 negotiates the origin's scoped transfer
+admission and queues a bounded set of already planned originals in
+`NativeDeferredUpload`. `BGProcessingTask` can finish those attachments;
+`pagedForegroundSync` retains canonical cloud folder and Timeline publication.
+See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
+iOS deferred Photos checklist for installed and physical acceptance.
+
+Explicit iOS Start/Retry recovers changed Photos backup settings for the same
+authorized grant and device with cloud copies retained. It verifies the current
+saved revision, native grant and destination, disarms the prior native queue
+and verifies the current settings again before atomically archiving the old
+operation/review pointers and admitting a fresh job. The new queue epoch
+reconciles current observations against the saved folder. Already copied files
+keep their revisions, and the saved network and charging rules still apply.
+A repeat retry of the exact revision resumes the current epoch. The root lock
+and live configuration check fence new dispatches under the old settings. If
+an earlier unguarded file publication is already in flight at the server,
+a same-folder rescan can still race that commit. The earlier journal and any
+published revision remain available. Verify both journal formats and the
+signed upload path with `photoSettingsRecovery.test.ts`.
+
+Photos installed acceptance uses `iOS/ThingtimeUITests/PhotoLibraryConsentUITests.swift`
+and `iOS/scripts/test-mobile-sync-installed.sh`: ordinary consent, same-grant
+original hashes and reopen, with storage-readiness gates and nonzero executed-test
+assertions. `nativeDeviceSyncGovernor` allows legacy connections without saved
+limits on unsupported iOS while refusing explicit device and connection limits.
+`deviceResourcePolicy.test.ts` covers that boundary; Mac enforcement is unchanged.
+
+`fileSync/configurationStart.ts` is the explicit manual Start preflight shared
+by native-host and remote controls. It rereads the exact reviewed owned revision,
+refuses retained selected drafts/identity changes, CAS-patches only paused=false,
+requires a successful acknowledgement and matching fresh readback, then returns
+the confirmed configuration for existing runner admission. Uncertain writes
+never start or blindly retry. Save/open and automatic scheduling never unpause
+a connection; unrelated Home settings/drafts stay intact. Test with
+`configurationStart.test.ts`, `test-explicit-sync-start-ui.mjs` and the compiled
+device-folder replica fixture.
+
+`DeviceSyncResources` and connection limit controls classify the actual selected
+iOS bridge capability. A locally paired match is verified through its native
+identity; other devices use their scoped status. Missing native resource support
+shows iOS-managed/unavailable rather than Mac budgets or invented zero telemetry.
+Existing explicit limits/drafts remain intact; ordinary connection progress is
+independent from native CPU/scan telemetry. The paused-start browser harness
+exercises unsupported iOS capabilities and retained controls at both widths.

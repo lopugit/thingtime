@@ -2,6 +2,8 @@ import { Worker, type WorkerOptions } from 'node:worker_threads';
 
 export interface FileChangeBatch {
   paths: string[];
+  inventoryPaths: string[];
+  inventoryLostEvents: boolean;
   fullReconciliation: boolean;
   volumesChanged: boolean;
 }
@@ -11,6 +13,7 @@ export interface FileChangeOptions {
   filesystemRoots: string[];
   databaseDirectory: string;
   filesystemEnabled: boolean;
+  inventoryEnabled?: boolean;
   recursive: boolean;
 }
 
@@ -22,6 +25,7 @@ const { parentPort, workerData } = require('node:worker_threads');
 const { watch } = require('node:fs');
 const path = require('node:path');
 const pending = new Set();
+const inventoryPending = new Set();
 const watchers = [];
 const watchedRoots = [];
 let quietTimer;
@@ -29,24 +33,32 @@ let deadlineTimer;
 let notified = false;
 let fullReconciliation = false;
 let volumesChanged = false;
+let inventoryLostEvents = Boolean(workerData.inventoryEnabled);
 let firstChangeAt = 0;
 const within = (candidate, root) => candidate === root || candidate.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 const canonical = value => {
   const resolved = path.resolve(value);
   return resolved.startsWith('/System/Volumes/Data/') ? resolved.slice('/System/Volumes/Data'.length) : resolved;
 };
+const databaseDirectory = canonical(workerData.databaseDirectory);
+const inFilesystemRoots = candidate => workerData.filesystemRoots.some(
+  entry => within(candidate, entry) || within(entry, candidate),
+);
 function notify() {
   if (quietTimer) clearTimeout(quietTimer);
   quietTimer = undefined;
   if (deadlineTimer) clearTimeout(deadlineTimer);
   deadlineTimer = undefined;
-  if (!notified && pending.size) { notified = true; parentPort.postMessage({ type: 'changed' }); }
+  if (!notified && (pending.size || inventoryPending.size || fullReconciliation || inventoryLostEvents)) {
+    notified = true;
+    parentPort.postMessage({ type: 'changed' });
+  }
 }
-function foldBurst() {
+function foldBurst(paths) {
   // Bound metadata, not user data: widen a dense changed subtree instead of
   // dropping any event or repeatedly sorting the entire set per notification.
   const counts = new Map();
-  for (const entry of pending) {
+  for (const entry of paths) {
     let parent = path.dirname(entry);
     while (true) {
       counts.set(parent, (counts.get(parent) || 0) + 1);
@@ -55,41 +67,41 @@ function foldBurst() {
       parent = next;
     }
   }
-  const threshold = Math.ceil(pending.size / 4);
-  let selected = path.parse(pending.values().next().value).root;
+  const threshold = Math.ceil(paths.size / 4);
+  let selected = path.parse(paths.values().next().value).root;
   for (const [parent, count] of counts) {
     if (count >= threshold && parent.length > selected.length) selected = parent;
   }
-  for (const entry of pending) if (within(entry, selected)) pending.delete(entry);
-  pending.add(selected);
+  for (const entry of paths) if (within(entry, selected)) paths.delete(entry);
+  paths.add(selected);
 }
 function recordChange(event, filename, root) {
   let changed = canonical(filename ? path.resolve(root, filename.toString()) : root);
   // APFS Data-volume aliases must be excluded before WAL writes can feed back.
-  if (within(changed, workerData.databaseDirectory)) return;
-  const bundle = changed.split(path.sep).findIndex(part => part.toLowerCase().endsWith('.app'));
-  if (bundle >= 0) changed = changed.split(path.sep).slice(0, bundle + 1).join(path.sep);
-  const relevant = workerData.filesystemEnabled && workerData.filesystemRoots.some(entry => within(changed, entry) || within(entry, changed));
-  if (!relevant && event !== 'rename' && !/(?:^|\/)(?:Applications|Volumes)(?:\/|$)|\.app(?:\/|$)/i.test(changed)) return;
-  if (!filename || changed === '/Volumes' || path.dirname(changed) === '/Volumes' || /(?:^|\/)git\/ignore$/.test(changed)) {
+  if (within(changed, databaseDirectory)) return;
+  const mountChange = changed === '/Volumes' || path.dirname(changed) === '/Volumes';
+  if (!filename || mountChange || /(?:^|\/)git\/ignore$/.test(changed)) {
     fullReconciliation = true;
-    volumesChanged ||= changed === '/Volumes' || path.dirname(changed) === '/Volumes';
+    inventoryLostEvents ||= Boolean(workerData.inventoryEnabled);
+    volumesChanged ||= mountChange;
+    pending.clear();
+    inventoryPending.clear();
+    notify();
+    return;
   }
+  if (fullReconciliation) return;
   if (changed.endsWith(path.sep + '.git' + path.sep + 'info' + path.sep + 'exclude')) changed = path.resolve(changed, '../../..');
   else if (['.gitignore', '.ignore'].includes(path.basename(changed))) changed = path.dirname(changed);
-  // Check covered events too: a continuous native callback burst can keep
-  // worker timers from running even after its pending subtree has folded.
-  if (!notified && firstChangeAt && Date.now() - firstChangeAt >= 3000) notify();
-  // An existing ancestor already covers this event; this is O(path depth).
-  let ancestor = changed;
-  while (true) {
-    if (pending.has(ancestor)) return;
-    const next = path.dirname(ancestor);
-    if (next === ancestor) break;
-    ancestor = next;
-  }
-  pending.add(changed);
-  if (pending.size > 1024) foldBurst();
+  // Forward only authorized filesystem watch events, before applying launcher
+  // bundle semantics. Private inventory roots remain unknown to Commander.
+  const inventoryRelevant = workerData.inventoryEnabled && !inventoryLostEvents && inFilesystemRoots(changed);
+  if (inventoryRelevant) remember(inventoryPending, changed, 256);
+  const bundle = changed.split(path.sep).findIndex(part => part.toLowerCase().endsWith('.app'));
+  if (bundle >= 0) changed = changed.split(path.sep).slice(0, bundle + 1).join(path.sep);
+  const searchRelevant = (workerData.filesystemEnabled && inFilesystemRoots(changed)) ||
+    event === 'rename' || /(?:^|\/)(?:Applications|Volumes)(?:\/|$)|\.app(?:\/|$)/i.test(changed);
+  if (searchRelevant) remember(pending, changed, 1024);
+  if (!searchRelevant && !inventoryRelevant) return;
   if (notified) return; // The daemon takes this batch after its active writer.
   if (!firstChangeAt) firstChangeAt = Date.now();
   // Native FSEvents delivery itself can starve this worker's timers. Crossing
@@ -99,6 +111,18 @@ function recordChange(event, filename, root) {
   quietTimer = setTimeout(notify, 750);
   if (!deadlineTimer) deadlineTimer = setTimeout(notify, 3000);
 }
+function remember(paths, changed, limit) {
+  let ancestor = changed;
+  while (true) {
+    if (paths.has(ancestor)) return;
+    const next = path.dirname(ancestor);
+    if (next === ancestor) break;
+    ancestor = next;
+  }
+  paths.add(changed);
+  if (paths.size > limit) foldBurst(paths);
+}
+let registrationFailed = false;
 for (const root of workerData.roots) {
   if (workerData.recursive && watchedRoots.some(parent => within(root, parent))) continue;
   try {
@@ -106,21 +130,25 @@ for (const root of workerData.roots) {
     watcher.on('error', () => parentPort.postMessage({ type: 'watch-error' }));
     watchers.push(watcher);
     watchedRoots.push(root);
-  } catch { /* Try descendant fallback roots and retain periodic reconciliation. */ }
+  } catch { registrationFailed = true; /* Keep any usable descendant fallback roots. */ }
 }
+if (registrationFailed) parentPort.postMessage({ type: 'watch-error' });
+notify(); // A new subscription has no checkpoint for changes made while it was absent.
 parentPort.on('message', message => {
   if (message.type !== 'take') return;
   if (quietTimer) clearTimeout(quietTimer);
   if (deadlineTimer) clearTimeout(deadlineTimer);
   quietTimer = deadlineTimer = undefined;
+  const inventoryPaths = [...inventoryPending];
+  inventoryPending.clear();
   const sorted = [...pending].sort((left, right) => left.length - right.length);
   const paths = [];
   for (const entry of sorted) if (!paths.some(parent => within(entry, parent))) paths.push(entry);
   pending.clear();
   firstChangeAt = 0;
   notified = false;
-  parentPort.postMessage({ type: 'batch', paths, fullReconciliation, volumesChanged });
-  fullReconciliation = volumesChanged = false;
+  parentPort.postMessage({ type: 'batch', paths, inventoryPaths, inventoryLostEvents, fullReconciliation, volumesChanged });
+  fullReconciliation = volumesChanged = inventoryLostEvents = false;
 });
 `;
 

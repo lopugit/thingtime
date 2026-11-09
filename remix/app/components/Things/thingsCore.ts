@@ -19,6 +19,7 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
+  executionHeld?: boolean;
   inode?: import('~/api/utils/devices/deviceFilesystemCore').FilesystemEntry & { deviceId: string };
   audience?: ResolvedAudience;
   id: string;
@@ -30,6 +31,7 @@ export type ThingsThing = {
   targetId: string | null;
   parentId?: string | null;
   folderId: string | null;
+  timelineHeadId?: string;
   crystal: Record<string, any>;
   extended: unknown | null;
   tags: string[];

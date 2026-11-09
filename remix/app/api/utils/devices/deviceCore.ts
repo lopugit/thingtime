@@ -1,3 +1,5 @@
+import type {DeviceDescriptorPatch} from './deviceDescriptorPatch';
+import {normalizeNotificationInput,normalizeMediaInput,type DeviceNotificationInput,type DeviceMediaInput,type DeviceMediaPrepareInput} from './deviceAlertCore';
 import { normalizeDeviceScriptInput, type DeviceScriptInput } from './deviceScript';
 import { normalizeDeviceMenuBar, type DeviceMenuBar } from './deviceMenuBar';
 import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
@@ -5,6 +7,9 @@ import { createHash } from 'node:crypto';
 import { isDevicePlatform, type DevicePlatform } from '../../../devices/platform';
 
 export const DEVICE_COMMAND_KINDS = [
+	'notification.show',
+	'media.play',
+	'media.prepare',
 	'script.run',
 	'filesystem',
 	'connector.start',
@@ -242,8 +247,42 @@ export type DevicePowerTimersState = { displayIdleMinutes: number | null; system
 export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceChromeYouTubeState = { isInstalled: boolean; isRunning: boolean };
+const DEVICE_RESOURCE_FIELDS = {
+	cpuPercent: { min: 0, max: 100, integer: false },
+	memoryUsedBytes: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+	memoryTotalBytes: { min: 1, max: Number.MAX_SAFE_INTEGER, integer: true },
+	diskUsedBytes: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+	diskTotalBytes: { min: 1, max: Number.MAX_SAFE_INTEGER, integer: true },
+	diskReadBytesPerSecond: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: false },
+	diskWriteBytesPerSecond: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: false },
+	networkRxBytesPerSecond: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: false },
+	networkTxBytesPerSecond: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: false },
+	networkLinkBitsPerSecond: { min: 1, max: Number.MAX_SAFE_INTEGER, integer: true }
+} as const;
+
+type DeviceResourceField = keyof typeof DEVICE_RESOURCE_FIELDS;
+export type DeviceResourceState = Partial<Record<DeviceResourceField, number>>;
+
+const normalizeDeviceResources = (value: unknown): DeviceResourceState | null => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const resources: DeviceResourceState = {};
+	for (const [key, measurement] of Object.entries(value)) {
+		if (!Object.prototype.hasOwnProperty.call(DEVICE_RESOURCE_FIELDS, key)) return null;
+		const field = key as DeviceResourceField;
+		const { min, max, integer } = DEVICE_RESOURCE_FIELDS[field];
+		if (typeof measurement !== 'number' || !Number.isFinite(measurement) ||
+			measurement < min || measurement > max || (integer && !Number.isSafeInteger(measurement))) return null;
+		resources[field] = measurement;
+	}
+	const { memoryUsedBytes, memoryTotalBytes, diskUsedBytes, diskTotalBytes } = resources;
+	if ((memoryUsedBytes !== undefined && memoryTotalBytes !== undefined && memoryUsedBytes > memoryTotalBytes) ||
+		(diskUsedBytes !== undefined && diskTotalBytes !== undefined && diskUsedBytes > diskTotalBytes)) return null;
+	return resources;
+};
+
 export type DeviceStateSnapshot = {
 	menuBar?: DeviceMenuBar;
+	resources?: DeviceResourceState;
 	locked: boolean;
 	volume: number | null;
 	muted: boolean | null;
@@ -317,13 +356,15 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'powerTimers', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube', 'menuBar'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube', 'menuBar', 'resources'
 			].includes(key)
 		)
 	)
 		return null;
 	const menuBar = raw.menuBar === undefined ? undefined : normalizeDeviceMenuBar(raw.menuBar);
 	if (menuBar === null || (raw.locked === true && menuBar && (menuBar.status !== 'locked' || menuBar.items.length))) return null;
+	const resources = raw.resources === undefined ? undefined : normalizeDeviceResources(raw.resources);
+	if (resources === null) return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
@@ -395,8 +436,10 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		}
 		battery = { level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled, ...details };
 	}
+	// MongoDB can store omitted optional objects as null. Normalize them to
+	// undefined so the established complete-snapshot hash keeps the same keys.
 	let powerTimers: DevicePowerTimersState | undefined;
-	if (raw.powerTimers !== undefined) {
+	if (raw.powerTimers !== undefined && raw.powerTimers !== null) {
 		if (!raw.powerTimers || typeof raw.powerTimers !== 'object' || Array.isArray(raw.powerTimers)) return null;
 		const candidate = raw.powerTimers as Record<string, unknown>;
 		if (!exactKeys(candidate, ['displayIdleMinutes', 'systemSleepMinutes', 'diskIdleMinutes'])) return null;
@@ -471,21 +514,21 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		return id && name && typeof service.isConnected === 'boolean' ? { id, name, isConnected: service.isConnected } : null;
 	});
 	let appleMusic: DeviceAppleMusicState | undefined;
-	if (raw.appleMusic !== undefined) {
+	if (raw.appleMusic !== undefined && raw.appleMusic !== null) {
 		if (!raw.appleMusic || typeof raw.appleMusic !== 'object' || Array.isArray(raw.appleMusic)) return null;
 		const candidate = raw.appleMusic as Record<string, unknown>;
 		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
 		appleMusic = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
 	}
 	let spotify: DeviceSpotifyState | undefined;
-	if (raw.spotify !== undefined) {
+	if (raw.spotify !== undefined && raw.spotify !== null) {
 		if (!raw.spotify || typeof raw.spotify !== 'object' || Array.isArray(raw.spotify)) return null;
 		const candidate = raw.spotify as Record<string, unknown>;
 		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
 		spotify = { isInstalled: candidate.isInstalled, isRunning: candidate.isRunning };
 	}
 	let chromeYouTube: DeviceChromeYouTubeState | undefined;
-	if (raw.chromeYouTube !== undefined) {
+	if (raw.chromeYouTube !== undefined && raw.chromeYouTube !== null) {
 		if (!raw.chromeYouTube || typeof raw.chromeYouTube !== 'object' || Array.isArray(raw.chromeYouTube)) return null;
 		const candidate = raw.chromeYouTube as Record<string, unknown>;
 		if (!exactKeys(candidate, ['isInstalled', 'isRunning']) || typeof candidate.isInstalled !== 'boolean' || typeof candidate.isRunning !== 'boolean') return null;
@@ -514,7 +557,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		appleMusic,
 		spotify,
 		chromeYouTube,
-		...(menuBar ? { menuBar } : {})
+		...(menuBar ? { menuBar } : {}),
+		...(resources && Object.keys(resources).length ? { resources } : {})
 	};
 };
 
@@ -688,6 +732,9 @@ type ConnectorInput = { connectorId: string };
 type CursorPageInput = { cursor?: string; limit?: number };
 
 export type DeviceCommandInputByKind = {
+	'notification.show':DeviceNotificationInput;
+	'media.play':DeviceMediaInput;
+	'media.prepare':DeviceMediaPrepareInput;
 	'script.run': DeviceScriptInput;
 	'filesystem': FilesystemInput;
 	'connector.start': ConnectorInput;
@@ -795,6 +842,9 @@ export const deviceConnectorSupportsCommand = (
 };
 
 const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
+	'notification.show':'notification.show.v1',
+	'media.play':'media.play.v1',
+	'media.prepare':'media.prepare.v1',
 	'filesystem': 'filesystem.v1',
 	'script.run': 'script.bash.v1',
 	'app.focus': 'apps.launch',
@@ -976,6 +1026,9 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
+		case 'notification.show': {const normalized=normalizeNotificationInput(raw);return normalized?ok(normalized):deviceFail(400,'Invalid typed notification');}
+		case 'media.play':
+		case 'media.prepare': {const normalized=normalizeMediaInput(raw,kind==='media.prepare');return normalized?ok(normalized):deviceFail(400,'Invalid uploaded media reference');}
 		case	'script.run': {
 			const input = normalizeDeviceScriptInput(raw);
 			return input ? ok(input) : deviceFail(400, 'Invalid bounded Bash script');
@@ -1269,8 +1322,8 @@ export const decideDeviceRevision = (
 	return existingHash === incomingHash ? 'same' : 'conflict';
 };
 
-export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[], capabilities?: string[]): string =>
-	devicePayloadHash({ state, connectors, ...(capabilities === undefined ? {} : { capabilities }) });
+export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[], capabilities?: string[], descriptorPatch?: DeviceDescriptorPatch): string =>
+	devicePayloadHash({ state, connectors, ...(capabilities === undefined ? {} : { capabilities }), ...(descriptorPatch === undefined ? {} : {descriptorPatch}) });
 
 export type DeviceLeaseDecision = 'active' | 'expired' | 'invalid';
 export const decideDeviceLease = (storedLeaseHash: unknown, presentedLeaseHash: string, leaseExpiresAt: unknown, now: Date): DeviceLeaseDecision => {

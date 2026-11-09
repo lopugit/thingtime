@@ -1,19 +1,20 @@
 import { MAPBOX_SDK_VERSION } from '../../../library/mapSdks';
 
-const mapboxBaseUrl = `/vendor/mapbox-gl/v${MAPBOX_SDK_VERSION}`;
-const mapboxScriptUrl = `${mapboxBaseUrl}/mapbox-gl.js`;
-const mapboxStylesUrl = `${mapboxBaseUrl}/mapbox-gl.css`;
+const mapboxBaseUrl = '/vendor/mapbox-gl/v' + MAPBOX_SDK_VERSION;
+const mapboxScriptUrl = mapboxBaseUrl + '/mapbox-gl.js';
+const mapboxStylesUrl = mapboxBaseUrl + '/mapbox-gl.css';
 
-let pending: Promise<any> | null = null;
+const pendingByDocument = new WeakMap<Document, Promise<any>>();
 
-export function loadMapbox(): Promise<any> {
-	if (typeof window === 'undefined') return Promise.reject(new Error('Map is unavailable on this device.'));
-	const existing = (window as any).mapboxgl;
-	if (existing?.Map) return Promise.resolve(existing);
-	if (pending) return pending;
-	// The build stages the official npm distribution under this origin. This
-	// loader also works in IIFE embeds; the SDK's blob worker is allowed by CSP.
-	pending = new Promise((resolve, reject) => {
+export function loadMapbox(document: Document): Promise<any> {
+	const view = document.defaultView as (Window & { mapboxgl?: any }) | null;
+	if (!view) return Promise.reject(new Error('Map is unavailable in this document.'));
+	if (view.mapboxgl?.Map) return Promise.resolve(view.mapboxgl);
+	const existing = pendingByDocument.get(document);
+	if (existing) return existing;
+	// The SDK uses realm-specific DOM constructors. Builder viewport iframes
+	// load their own same-origin vendor assets and worker in their document.
+	const pending = new Promise((resolve, reject) => {
 		if (!document.querySelector('link[data-tt-mapbox-css]')) {
 			const link = document.createElement('link');
 			link.rel = 'stylesheet';
@@ -24,10 +25,23 @@ export function loadMapbox(): Promise<any> {
 		const script = document.createElement('script');
 		script.src = mapboxScriptUrl;
 		script.async = true;
-		const timeout = window.setTimeout(() => { script.remove(); reject(new Error('Map could not load.')); }, 15000);
-		script.onload = () => { window.clearTimeout(timeout); resolve((window as any).mapboxgl); };
-		script.onerror = () => { window.clearTimeout(timeout); script.remove(); reject(new Error('Map could not load.')); };
+		const failed = () => {
+			view.clearTimeout(timeout);
+			script.remove();
+			reject(new Error('Map could not load.'));
+		};
+		const timeout = view.setTimeout(failed, 15_000);
+		script.onload = () => {
+			if (!view.mapboxgl?.Map) return failed();
+			view.clearTimeout(timeout);
+			resolve(view.mapboxgl);
+		};
+		script.onerror = failed;
 		document.head.appendChild(script);
-	}).catch((error) => { pending = null; throw error; });
+	}).catch((error) => {
+		pendingByDocument.delete(document);
+		throw error;
+	});
+	pendingByDocument.set(document, pending);
 	return pending;
 }

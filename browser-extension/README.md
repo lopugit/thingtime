@@ -170,6 +170,7 @@ for Testing binary:
 
 ```sh
 node browser-extension/test/workspace-browser.mjs --playwright /absolute/path/to/playwright/index.mjs
+node browser-extension/test/workspace-browser.mjs --catalog-only --playwright /absolute/path/to/playwright/index.mjs
 ```
 
 This creates and removes its own profile, extension fixture and browser windows;
@@ -180,6 +181,8 @@ text, keyboard navigation and stale website targeting. The fixture imports the p
 Chrome APIs; it does not click the OS toolbar. Installed acceptance must still
 verify the real toolbar event and originating tab. This is UI acceptance, not
 proof of a relying party accepting a passkey.
+Use `--catalog-only` for a headless check of delayed catalogs, cached search,
+pagination, retry and locking, without the native window focus checks.
 
 Chrome's [action documentation](https://developer.chrome.com/docs/extensions/reference/api/action)
 explains why `default_popup` is removed to receive toolbar clicks. Its
@@ -188,9 +191,12 @@ provides popup-window creation/focus/resize using the existing permissions.
 
 ## Password workspace, explicit autofill and local QR (0.3)
 
-Saved accounts appear above the workspace tabs, with the saved username/email
-under each title. Matching hosts sort first; search also finds other saved
-accounts. Autofill stays unavailable for other hosts. Connect vault opens an
+Saved accounts appear in the workspace Overview, with the saved username/email
+under each title. Matches for the selected website sort first; search covers the
+full catalog and can find other saved accounts. A refresh keeps the same
+account's cards searchable and shows one inline indicator while it runs.
+Account changes, origin changes and locking clear the old account list.
+Autofill stays unavailable for other sites. On-demand vault access opens an
 owned first-party Thingtime popup; credentials are obtained only there through
 the negotiated `api.passwords` 1.6.1 confirmation/fill contract. The extension
 never reads a browser cookie or makes an authenticated cross-origin vault fetch.
@@ -211,10 +217,16 @@ retains an invalidated extension context after an update, it offers explicit
 **Reload website** guidance rather than a raw runtime error; reloading is never
 automatic and can discard unsaved site edits.
 
-Saved bare Website hosts mean HTTPS. Discovery may match a hostname, but the
-server still verifies the selected entry's exact saved HTTPS origin, including
-its port, with the live account/session and required approval. A host suggestion
-does not grant fill access. Wildcard or userinfo-bearing values are refused.
+The chooser refreshes the live provider catalog without moving focus if it
+already has a connection. It lists and searches all saved matches for this
+website. A temporary refresh failure keeps the same account's list available
+with a Retry button. Selecting a row takes priority over the background refresh
+and verifies the selected account through the live provider.
+Saved bare Website hosts mean HTTPS. Both extension surfaces use the
+server's exact saved origins, including scheme and port, when available.
+Older hostname-only catalogs suggest HTTPS default-port matches only. The
+server still verifies the exact saved origin with the live account/session and
+required approval. Wildcard or userinfo-bearing values are refused.
 
 The account catalog is allowlisted metadata held in memory while its owned
 provider document is live. Closing/locking that connection clears it. Passwords,

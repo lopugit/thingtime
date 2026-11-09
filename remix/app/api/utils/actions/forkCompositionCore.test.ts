@@ -101,3 +101,25 @@ test('copied collection rows and dialog completion bindings follow the copied ac
 	assert.deepEqual(compositionReferences(['component'], copy), [{ kind: 'action', ref: 'copy-save' }]);
 	assert.equal(original.render.props.itemTemplate.ttTemplate.children[0].ttAction, 'save');
 });
+
+test('private copies rebind only literal map sources and preserve independently bound marker actions', () => {
+	const props = {
+		favouritesSource: { action: 'source', inputs: { label: 'source', id: '{item.id}' } },
+		routeSource: { action: '{item.action}' },
+		points: [{ action: 'row-action' }]
+	};
+	const copiedId = (_kind: string, ref: string) => `copy-${ref}`;
+	const expected = { ...props, favouritesSource: { ...props.favouritesSource, action: 'copy-source' } };
+	const component = { render: { tag: 'tt-mapbox', props } };
+	const componentCopy = rewriteComposition(['component'], component, copiedId);
+	assert.deepEqual(componentCopy.render.props, expected);
+	assert.deepEqual(compositionReferences(['component'], componentCopy), [{ kind: 'action', ref: 'copy-source' }]);
+	const webpage = { blocks: [{ type: 'element', tag: 'tt-mapbox', props: { ...props, 'data-tt-action': 'marker-action' } }] };
+	const pageCopy = rewriteComposition(['webpage'], webpage, copiedId);
+	assert.deepEqual(pageCopy.blocks[0].props, { ...expected, 'data-tt-action': 'copy-marker-action' });
+	assert.deepEqual(rewriteComposition(['webpage'], pageCopy, copiedId).blocks[0].props, {
+		...expected, favouritesSource: { ...props.favouritesSource, action: 'copy-copy-source' },
+		'data-tt-action': 'copy-copy-marker-action'
+	});
+	assert.equal(webpage.blocks[0].props.favouritesSource.action, 'source');
+});

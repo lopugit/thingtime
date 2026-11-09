@@ -30,7 +30,7 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
   if (node.tag === 'tt-collection') return [{ id: id('collection'), type: 'collection', props, children: visit(itemTemplate) }];
   // These are existing guarded Builder primitives. Keep the intrinsic node as
   // an editable boundary and expand its authored children independently.
-  if (node.tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change'].includes(node.tag))
+  if (node.tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-upload', 'tt-menu', 'tt-rich-text'].includes(node.tag))
    throw new Error(`The ${node.tag} control cannot yet be expanded into blocks.`);
   const children = Array.isArray(node.children) ? node.children : node.children == null ? [] : [node.children];
   const textOnly = children.every((child: unknown) => typeof child === 'string' || typeof child === 'number');

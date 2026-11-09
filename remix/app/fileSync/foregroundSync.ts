@@ -26,6 +26,13 @@ import type { TransferActivity } from './transferActivity';
 export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
 
 export type ForegroundSyncProgress = {
+	/** A durable, path-free wait reason for the exact connection. */
+	message?: string;
+	waiting?: boolean;
+	photoDownload?: { fraction: number };
+	photoQueue?: { pending: number; unavailable: number };
+	photoAccess?: 'full' | 'limited';
+	backgroundTransfer?: 'queued' | 'foreground-only';
 	directions?: import('./directionalProgress').SyncDirectionalTotals;
 	statisticsObservedAt?: number;
 	resources?: import('./resourceGovernor').SyncResourceStatus;
@@ -52,11 +59,14 @@ export type ForegroundSyncProgress = {
 	preparation?: { phase: 'validate-local' | 'read-remote' | 'validate-remote' | 'index-plan' | 'plan' | 'review' | 'operations' | 'cloud'; completed?: number; total?: number };
 };
 export type ForegroundSyncInput = {
+	/** Optional PhotoKit-specific native queue; durable file publication stays here. */
+	deferredUploads?: { publishPhotos?: true; skipLookahead?: true; queued(count: number, scheduled?: boolean): void };
 	currentScope(): SyncScope;
 	readConfiguration(): Promise<unknown>;
 	authorizeDevice(): Promise<void>;
 	/** Fresh native composite request; preserves the same authorization boundary. */
 	authorizeContext?(): Promise<SyncConditions>;
+	observeLocal?(path: string, parent: string, saved: SavedFileSyncConfiguration): Promise<{ conditions: SyncConditions; entries: (SyncEntry | null)[] }>;
 	/** Trusted native adapter: IO authenticates independently; mutation policy stays fresh. Source construction performs no IO. */
 	nativeOperationGuards?: true;
 	/** Explicit negotiated bounded operation, never inferred from cloud metadata. */
@@ -65,12 +75,13 @@ export type ForegroundSyncInput = {
 	conditions(): Promise<SyncConditions>;
 	scanLocal(): Promise<SyncEntry[]>;
 	/** Native durable revision feed; negotiated separately from sealed captures. */
-	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
+	streamLocalChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, waitForFinish?: (signal: AbortSignal) => Promise<void>): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Origin-negotiated durable remote revisions, using the same run cursor contract. */
 	streamRemoteChanges?(captureId: string, afterSequence: number, signal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }): AsyncIterable<import('./streamingIndex').NativeIndexChangesPage>;
 	/** Set only by the native adapter with exact path inspection and staging. */
 	streamCloudChanges?: boolean;
 	scanLocalPages?(options?: {
+		observationPurpose?: 'plan' | 'checkpoint';
 		resume?(capture: import('./nativeInventory').NativeBackupCapture): Promise<import('./nativeInventory').NativeInventoryResume>;
 		retainCaptureUntilHandoff?: boolean;
 	}): AsyncIterable<LocalInventoryPage>;

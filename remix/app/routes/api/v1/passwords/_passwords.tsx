@@ -2,7 +2,7 @@ import { passwordWebsiteOrigins } from '~/passwords/icons';
 import { resolveWebsiteIcon } from '~/api/utils/passwords/websiteIcons';
 import { passwordVerification } from '~/api/utils/passwords/verification';
 import { verificationContext } from '~/passwords/verificationPolicy';
-import { passwordPreviewUsername, passwordFieldValue } from '~/passwords/model';
+import { passwordPreviewUsername, passwordCanAutofillAtOrigin, passwordFieldValue } from '~/passwords/model';
 import { createHash } from 'node:crypto';
 import { passwordFileOperation } from '~/api/utils/passwords/files';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
@@ -113,6 +113,7 @@ export function createPasswordHandler(overrides: Partial<typeof defaults> = {}) 
       if (body.operation === 'fill') {
         if (!context || context.purpose !== 'fill') throw new PasswordManagerError(403, 'Approve this exact website and saved login first.');
         const saved = await deps.readPassword(user.id, context.entryId);
+        if (!passwordCanAutofillAtOrigin(saved.entry, context.origin)) throw new PasswordManagerError(403, 'Choose a saved login for this exact website origin.');
         await checkPasskeySession();
         if ((await deps.getCurrentUser(request))?.id !== user.id) throw new PasswordManagerError(401, 'Your session ended.');
         return json({ok:true,ownerId:user.id, username:passwordPreviewUsername(saved.entry),password:passwordFieldValue(saved.entry,'password')}, {headers});

@@ -1,7 +1,7 @@
 import { BrowserExtensionAccounts } from './BrowserExtensionAccounts';
 import React from 'react';
 import { BrowserPasswordFillProvider } from './BrowserPasswordFillProvider';
-import { passwordVerificationRequest } from '~/passwords/client';
+import { passwordApprovalRequest, passwordVerificationRequest } from '~/passwords/client';
 import { verificationWindow } from '~/passwords/verificationPolicy';
 import { Box, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -11,7 +11,7 @@ import { TransientBlockHost, type TransientBlockActions } from '../Builder/Trans
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { PasswordBrandMark } from './PasswordBrandMark';
 import { BROWSER_PROVIDER_BLOCKS, migrateBrowserProviderBranding } from './browserProviderBlocks';
-import { browserProviderVault, browserProviderFailure, ensureBrowserProvider, loadProviderChoices, providerRp, runProviderCeremony, validateProviderRequest, type BrowserProviderAttempt, type ProviderChoice, type ProviderRequest } from '~/passwords/browserProviderCeremony';
+import { browserProviderVault, browserProviderFailure, ensureBrowserProvider, loadProviderChoices, providerApprovalBudget, providerRp, runProviderCeremony, validateProviderRequest, type BrowserProviderAttempt, type ProviderChoice, type ProviderRequest } from '~/passwords/browserProviderCeremony';
 
 const detailOf = (event: Event) => { const detail = (event as CustomEvent).detail; return typeof detail === 'string' ? JSON.parse(detail) : detail; };
 const emit = (name: string, detail: Record<string, unknown>) => document.dispatchEvent(new CustomEvent(name, { detail: JSON.stringify({ version: 1, ...detail }) }));
@@ -36,7 +36,7 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
   const [confirmation,setConfirmation] = React.useState({required:true,window:'always',revision:null as string|null});
   const confirmationVersion = React.useRef(0);
   const [windowChoice,setWindowChoice]=React.useState('');
-  const live = React.useRef<{ request: ProviderRequest; controller: AbortController; attempt: BrowserProviderAttempt; busy: boolean; excluded: boolean } | null>(null);
+  const live = React.useRef<{ request: ProviderRequest; receivedAt: number; controller: AbortController; attempt: BrowserProviderAttempt; busy: boolean; excluded: boolean } | null>(null);
   const fieldRoot = React.useRef<HTMLDivElement>(null);
   const vault = React.useMemo(() => browserProviderVault(ownerId), [ownerId]);
   const clearPassword = () => { fieldRoot.current?.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; }); };
@@ -86,7 +86,7 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
         document.title='Thingtime';
         if (live.current?.request.id === incoming.id) return;
         if (live.current) return; // A second request cannot replace current approval.
-        live.current = { request: incoming, controller: new AbortController(), attempt: {}, busy: false, excluded: false };
+        live.current = { request: incoming, receivedAt: performance.now(), controller: new AbortController(), attempt: {}, busy: false, excluded: false };
         setWindowChoice(''); setConfirmation({required:true,window:'always',revision:null}); setRequest(incoming); setExcluded(false); setLoaded(false); setFinished(''); setError('');
         void refresh();
       } catch {
@@ -126,28 +126,42 @@ function ProviderSession({ ownerId }: { ownerId: string }) {
     'provider.cancel': () => {
       const operation = live.current;
       if (!operation || operation.request.id !== request?.id) return;
-      finish({ error: { name: operation.excluded ? 'InvalidStateError' : 'NotAllowedError', message: operation.excluded ? 'The website excludes an existing saved passkey.' : 'Passkey request cancelled.' } }, operation.excluded ? 'Return to the website to use your existing passkey.' : 'Request cancelled.');
+      const message = operation.excluded ? 'Return to the website to use your existing passkey.'
+        : operation.busy && operation.attempt.writeId ? 'Request cancelled before Thingtime could confirm the save. Check the saved passkey before trying again.'
+        : 'Request cancelled.';
+      finish({ error: { name: operation.excluded ? 'InvalidStateError' : 'NotAllowedError', message: operation.excluded ? 'The website excludes an existing saved passkey.' : 'Passkey request cancelled.' } }, message);
     },
     'provider.fallback': () => { if (!live.current?.excluded) finish({ fallback: true }, 'Continue with your browser’s other passkey provider.'); },
     'provider.approve': async invocation => {
       const operation = live.current;
-      if (!operation || operation.busy || operation.excluded || !loaded || invocation.signal.aborted) return;
+      if (!operation || operation.request.id !== request?.id || operation.busy || operation.excluded || !loaded || invocation.signal.aborted) return;
       let password = String(invocation.readField('password') || '');
       const selectedId = String(invocation.readField('credential') || choices[0]?.id || '');
+      const selected = choices.find(choice => choice.id === selectedId) ?? null;
       clearPassword();
+      if (operation.request.type === 'get' && !selected) { setError('Choose a saved passkey for this website.'); return; }
       if (!password && confirmation.required) { setError('Enter your Thingtime account password to verify this request.'); return; }
+      const budget = providerApprovalBudget(operation.request, operation.receivedAt);
+      if (!budget) { setError('Start a new passkey request from the website.'); return; }
+      const deadline = AbortSignal.timeout(budget);
+      const signal = AbortSignal.any([operation.controller.signal, invocation.signal, deadline]);
       operation.busy = true; setBusy(true); setError('');
       try {
         const window = verificationWindow(invocation.readField('verificationWindow') || confirmation.window);
         if(window!==confirmation.window){
-          await passwordVerificationRequest(ownerId,{operation:'verification-settings',window,...(operation.request.type==='get'?{id:selectedId}:{revision:confirmation.revision})},operation.controller.signal);
+          await passwordApprovalRequest(ownerId,{operation:'verification-settings',window,...(operation.request.type==='get'?{id:selectedId}:{revision:confirmation.revision})},signal);
           setConfirmation(previous=>({...previous,window,required:true}));
         }
-        const response = await runProviderCeremony(operation.request, password, selectedId, vault, operation.controller.signal, operation.attempt);
+        const response = await runProviderCeremony(operation.request, password, selected, browserProviderVault(ownerId, 'approval'), signal, operation.attempt);
         password = '';
-        if (live.current === operation && !invocation.signal.aborted) finish({ response }, 'Passkey complete. Return to the website.');
+        signal.throwIfAborted();
+        if (live.current === operation) finish({ response }, 'Passkey complete. Return to the website.');
       } catch (caught) {
-        const failure = browserProviderFailure(caught, operation, live.current);
+        const failure = deadline.aborted && live.current === operation
+          ? { kind: 'retryable', message: operation.attempt.writeId
+            ? 'This request ended before Thingtime could confirm the save. Check the saved passkey before trying again.'
+            : 'This request is ending. Start a new passkey request from the website.' }
+          : browserProviderFailure(caught, operation, live.current);
         if (failure) {
           if((caught as any)?.status===403)setConfirmation(previous=>({...previous,required:true}));
           if (failure.kind === 'excluded') { operation.excluded = true; setExcluded(true); }

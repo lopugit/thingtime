@@ -1,3 +1,4 @@
+import { parseCloudSyncDestination, type CloudSyncDestination } from './cloudSyncDestination';
 import { parseSymbolicLink, validSymbolicLink, type SymbolicLink } from './symbolicLink';
 import { EMPTY_CONTENT_SHA256, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
 import { validSyncPath, type SyncEntry } from './reconcile';
@@ -10,7 +11,7 @@ export type CloudFileContent = { attachmentId: string; version: string; size: nu
 export type CloudFile = { id: string; revision: string; name: string; folderId: string | null; trashed: boolean; symbolicLink?: SymbolicLink; content: CloudFileContent };
 export type CloudFileCommit = {
 	id: string; operationId: string; expectedRevision: string | null; name: string; folderId: string | null;
-	attachmentId: string; contentVersion: string; trashed: boolean; symbolicLink?: SymbolicLink;
+	attachmentId: string; contentVersion: string; trashed: boolean; symbolicLink?: SymbolicLink; syncDestination?: CloudSyncDestination;
 };
 export type CloudFileRetention = CloudFileCommit & { kind: 'retained-version'; expectedRevision: string; trashed: false };
 export const CLOUD_FILE_RETENTION_REQUIREMENTS = { 'api.files': '1.3.0' } as const;
@@ -18,21 +19,23 @@ const object = (v: unknown): v is Record<string, any> => !!v && typeof v === 'ob
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
 const hex = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
-export const validFileName = (v: unknown): v is string => typeof v === 'string' && v.length <= 255 && !v.includes('/') && validSyncPath(v);
+export const validFileName = (v: unknown): v is string => typeof v === 'string' && !!v.trim() && !/[\\/\p{Cc}\p{Cf}]/u.test(v) && v !== '.' && v !== '..';
 export function parseCloudFileCommit(value: unknown): CloudFileCommit {
-	if (!object(value) || Object.keys(value).some(k => !['id', 'operationId', 'expectedRevision', 'name', 'folderId', 'attachmentId', 'contentVersion', 'trashed', 'symbolicLink'].includes(k)) ||
+	if (!object(value) || Object.keys(value).some(k => !['id', 'operationId', 'expectedRevision', 'name', 'folderId', 'attachmentId', 'contentVersion', 'trashed', 'symbolicLink', 'syncDestination'].includes(k)) ||
 		!uuid(value.id) || !uuid(value.operationId) || (value.expectedRevision !== null && !identifier(value.expectedRevision)) ||
 		!validFileName(value.name) || (value.folderId !== null && !identifier(value.folderId)) || !identifier(value.attachmentId) ||
-		!hex(value.contentVersion) || typeof value.trashed !== 'boolean' || (value.expectedRevision === null && value.trashed)) throw Error('Invalid file commit');
+		!hex(value.contentVersion) || typeof value.trashed !== 'boolean' || (value.expectedRevision === null && value.trashed) ||
+		(value.syncDestination !== undefined && (value.trashed || value.folderId === null))) throw Error('Invalid file commit');
 	return { id: value.id, operationId: value.operationId, expectedRevision: value.expectedRevision, name: value.name,
-		folderId: value.folderId, attachmentId: value.attachmentId, contentVersion: value.contentVersion, trashed: value.trashed, ...(value.symbolicLink === undefined ? {} : { symbolicLink: parseSymbolicLink(value.symbolicLink) }) };
+		folderId: value.folderId, attachmentId: value.attachmentId, contentVersion: value.contentVersion, trashed: value.trashed,
+		...(value.syncDestination === undefined ? {} : { syncDestination: parseCloudSyncDestination(value.syncDestination, value.name) }), ...(value.symbolicLink === undefined ? {} : { symbolicLink: parseSymbolicLink(value.symbolicLink) }) };
 }
 /** Retain alternate bytes without publishing them as the live file. */
 export function parseCloudFileRetention(value: unknown): CloudFileRetention {
 	if (!object(value) || value.kind !== 'retained-version') throw Error('Invalid file retention');
 	const { kind, ...fields } = value;
 	const command = parseCloudFileCommit(fields);
-	if (command.expectedRevision === null || command.trashed) throw Error('Retention needs a current live file');
+	if (command.expectedRevision === null || command.trashed || command.syncDestination) throw Error('Retention needs a current live file');
 	return { ...command, kind, expectedRevision: command.expectedRevision, trashed: false };
 }
 export function parseCloudFile(value: unknown): CloudFile {

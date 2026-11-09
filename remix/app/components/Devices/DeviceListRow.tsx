@@ -1,11 +1,13 @@
 import React, { memo } from 'react';
+import { Link } from 'react-router';
 import { browseClickIntent, BROWSE_CONTROLS_SX } from '../Things/browseInteraction';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
 import { ChevronRight, Laptop, Lock, Watch as WatchIcon } from 'lucide-react';
 
 import type { DeviceSnapshot, DeviceSummary } from './deviceTypes';
-import { DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
+import { DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen, resolvedDevicePresence } from './DeviceCard';
+import { deviceThingsPageHref } from './deviceNavigation';
 
 export type DeviceListRowProps = {
 	device: DeviceSummary;
@@ -16,21 +18,19 @@ export type DeviceListRowProps = {
 	now?: number;
 	controls?: React.ReactNode;
 	onSelect: (deviceId: string) => void;
-	onOpen?: (deviceId: string) => void;
 	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceListRow = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onOpen, onContextMenu, controls }: DeviceListRowProps) => (
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu, controls }: DeviceListRowProps) => (
 		<Box position="relative" role="group" sx={BROWSE_CONTROLS_SX}>
 		<Flex
 			_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }}
 			_hover={{ background: 'var(--tt-surface-hover, #f7f7f8)' }}
 			alignItems="center"
 			aria-label={`Open ${device.name}`}
-			title={onOpen ? 'Click or press Enter to browse saved files. Select with the checkbox or modifier-click; right-click for device settings.' : undefined}
-			aria-pressed={selected}
-			as="button"
+			title="Open device page"
+			as={Link}
 			background={selected ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.08))' : 'transparent'}
 			borderBottom="1px solid var(--tt-border, #ececef)"
 			color="var(--tt-ink, #17171c)"
@@ -39,10 +39,9 @@ export const DeviceListRow = memo(
 			minWidth={0}
 			onClick={(event) => {
 				const intent = browseClickIntent(event);
-				if (intent === 'select' || (intent === 'open' && !onOpen)) onSelect(device.id);
-				else if (intent === 'open') onOpen?.(device.id);
+				if (intent === 'select' || intent === 'ignore') event.preventDefault();
+				if (intent === 'select') onSelect(device.id);
 			}}
-				onKeyDown={(event) => { if (onOpen && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(device.id); } }}
 			onContextMenu={(event) => onContextMenu?.(device.id, event)}
 			paddingX={{ base: 3, md: 4 }}
 			paddingY={2.5}
@@ -50,7 +49,7 @@ export const DeviceListRow = memo(
 			sx={controls ? { '@media (hover: none), (pointer: coarse)': { paddingRight: '112px' } } : undefined}
 			textAlign="left"
 			transition="background 120ms ease"
-			type="button"
+			to={deviceThingsPageHref(device.id)}
 			width="100%"
 		>
 			<Flex
@@ -76,9 +75,9 @@ export const DeviceListRow = memo(
 				</Flex>
 				<Flex alignItems="center" gap={2} marginTop={1} minWidth={0} wrap="wrap">
 					<DeviceHealthBadges now={now} summary={device} />
-					<Text color="var(--tt-muted, #71717a)" fontSize="10px" title={device.lastSeenAt || undefined}>
+					{resolvedDevicePresence(device, now) === 'online' && device.serviceStatus !== 'degraded' ? <Text color="var(--tt-muted, #71717a)" fontSize="10px" title={device.lastSeenAt || undefined}>
 						{formatDeviceLastSeen(device.lastSeenAt, now)}
-					</Text>
+					</Text> : null}
 					{pendingCommandCount > 0 ? (
 						<Text color="var(--tt-accent, #db2777)" fontSize="10px" fontWeight={700}>
 							{pendingCommandCount} queued

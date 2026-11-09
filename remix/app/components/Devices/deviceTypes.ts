@@ -151,6 +151,19 @@ export type DeviceSystemProperties = {
 	charging?: boolean | null;
 };
 
+export type DeviceResources = {
+	cpuPercent?: number;
+	memoryUsedBytes?: number;
+	memoryTotalBytes?: number;
+	diskUsedBytes?: number;
+	diskTotalBytes?: number;
+	diskReadBytesPerSecond?: number;
+	diskWriteBytesPerSecond?: number;
+	networkRxBytesPerSecond?: number;
+	networkTxBytesPerSecond?: number;
+	networkLinkBitsPerSecond?: number;
+};
+
 export type DeviceObservedState = {
 	volume: number | null;
 	muted: boolean | null;
@@ -175,6 +188,7 @@ export type DeviceObservedState = {
 	appleMusic?: DeviceAppleMusic;
 	spotify?: DeviceSpotify;
 	chromeYouTube?: DeviceChromeYouTube;
+	resources?: DeviceResources;
 	observedAt: string;
 };
 
@@ -197,6 +211,7 @@ export type DeviceConnector = {
 
 export type DeviceSummary = {
 	id: string;
+	rootFolderId?: string | null;
 	name: string;
 	platform: string;
 	serviceStatus: DeviceServiceStatus;

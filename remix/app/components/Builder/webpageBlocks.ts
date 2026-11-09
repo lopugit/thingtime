@@ -368,11 +368,14 @@ export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
 }
 
 /** New intrinsic element boundaries accepted by the saved Webpage writer. */
-export function requiresEditableIntrinsicContract(blocks: WebpageBlock[]): boolean {
+export function requiresEditableIntrinsicContract(
+ blocks: WebpageBlock[],
+ tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload', 'tt-menu', 'tt-rich-text']
+): boolean {
  const pending = [...blocks];
  while (pending.length) {
   const block = pending.pop()!;
-  if (block.type === 'element' && ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox'].includes(block.tag || '')) return true;
+  if (block.type === 'element' && tags.includes(block.tag || '')) return true;
   if (block.children) pending.push(...block.children);
  }
  return false;

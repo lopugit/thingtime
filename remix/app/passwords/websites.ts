@@ -16,9 +16,27 @@ export function passwordWebsiteOrigin(value: unknown): string | null {
   } catch { return null; }
 }
 
-export function passwordWebsiteOrigins(fields: {type: string; value: string}[]): string[] {
-  return [...new Set(fields.filter(field => field.type === 'url').flatMap(field => {
+type WebsiteField = {type: string; value: string; concealed?: boolean; structured?: boolean};
+
+/** Some saved service home pages send users to a separate first-party login
+ * origin. Keep the approved destinations finite and directional. In particular,
+ * AWS sign-in uses signin.aws.amazon.com; custom AWS account portals,
+ * arbitrary subdomains, Amazon retail and alternate ports stay separate. */
+const LOGIN_DESTINATIONS: ReadonlyMap<string, string> = new Map([
+  ['https://aws.amazon.com', 'https://signin.aws.amazon.com'],
+  ['https://console.aws.amazon.com', 'https://signin.aws.amazon.com'],
+  ['https://portal.aws.amazon.com', 'https://signin.aws.amazon.com'],
+]);
+
+export function passwordAutofillOrigins(fields: WebsiteField[]): string[] {
+  const origins = new Set<string>();
+  for (const field of fields) {
+    if (field.type !== 'url' || field.concealed || field.structured) continue;
     const origin = passwordWebsiteOrigin(field.value);
-    return origin ? [origin] : [];
-  }))];
+    if (!origin) continue;
+    origins.add(origin);
+    const login = LOGIN_DESTINATIONS.get(origin);
+    if (login) origins.add(login);
+  }
+  return [...origins];
 }

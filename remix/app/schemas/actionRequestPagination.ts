@@ -51,13 +51,15 @@ export function parseActionRequestPagination(raw: unknown): ActionRequestPaginat
 		maxItems
 	};
 }
-const containsIndexedExpression = (value: unknown, depth = 0): boolean => {
+const containsExpression = (value: unknown, names: string[], depth = 0): boolean => {
 	if (!value || typeof value !== 'object' || depth > 64) return false;
-	if (!Array.isArray(value) && Array.isArray((value as any).ttExpr) && ['indexBy', 'groupBy'].includes((value as any).ttExpr[0])) return true;
-	return Object.values(value).some((entry) => containsIndexedExpression(entry, depth + 1));
+	if (!Array.isArray(value) && Array.isArray((value as any).ttExpr) && names.includes((value as any).ttExpr[0])) return true;
+	return Object.values(value).some((entry) => containsExpression(entry, names, depth + 1));
 };
-export const browserActionMinimumVersion = (program: Record<string, unknown>): '1.7.0' | '1.8.0' | '1.9.0' | '1.11.0' =>
-	containsIndexedExpression(program.steps)
+export const browserActionMinimumVersion = (program: Record<string, unknown>): '1.7.0' | '1.8.0' | '1.9.0' | '1.11.0' | '1.40.0' =>
+	containsExpression(program.steps, ['encodeURIComponent'])
+		? '1.40.0'
+		: containsExpression(program.steps, ['indexBy', 'groupBy'])
 		? '1.11.0'
 		: program.expressionLimits !== undefined || (Array.isArray(program.steps) && program.steps.some((step) => step?.op === 'each'))
 		? '1.9.0'

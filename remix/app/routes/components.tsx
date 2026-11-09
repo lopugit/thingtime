@@ -6,3 +6,16 @@ import { ComponentsBrowsePage } from '~/components/ComponentsLibrary/ComponentsB
 export default function Components() {
 	return <ComponentsBrowsePage />;
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "Thingtime components",
+  "description": "Reusable interface pieces, ready to explore and make your own.",
+  "eyebrow": "THINGTIME · COMPONENTS",
+  "badges": [
+    "Composable",
+    "Shareable"
+  ],
+  "variant": "collection"
+} as const;

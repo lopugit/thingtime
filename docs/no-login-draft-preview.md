@@ -44,7 +44,22 @@ npm --prefix MCP exec playwright install chromium
 npm --prefix MCP run build
 ```
 
-Connect an MCP host that supports **local stdio servers** to:
+In a local Codex task, keep the hosted Thingtime MCP for account tools and run
+the local tools on demand. List the tools and their input schemas first:
+
+```sh
+node MCP/dist/localCli.js list
+printf '{}\n' | node MCP/dist/localCli.js call thingtime_capabilities
+node MCP/dist/localCli.js call thingtime_render_and_export --output ./draft-preview < arguments.json
+```
+
+Use a new output directory. It receives canonical JSON and PNG files with
+private permissions. The command prints render metadata, and keeps the draft,
+browser and output files on this machine. Local archive commands still use
+`THINGTIME_MCP_ALLOWED_ROOTS` and `THINGTIME_MCP_STATE_DIR` and require the
+existing per-operation confirmation.
+
+Hosts that need local tool discovery through MCP can still use stdio:
 
 ```json
 {

@@ -1,13 +1,19 @@
 import React from 'react';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
 import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
+import { useLidarScanActivation } from '../NativeBridge/LidarScanProvider';
+import { isLidarScanInput } from '../NativeBridge/lidarScanBridge';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { gatherFormFields, useWebpageRuntime } from '~/components/Builder/webpageRuntime';
+import { ownsAuthoredControl } from '../Builder/authoredControlOwnership';
+import { captureComponentFormFields } from '../Builder/componentFormFields';
+import { notifyComponentControlActivation } from '../Builder/componentControlActivation';
 
 // The click half of the ttAction binding (componentTemplate.ts resolves the
 // markup half). Attach the returned handler as onClickCapture on a TRUSTED
@@ -83,17 +89,21 @@ export const clickTtActionForEnter = (event: React.KeyboardEvent, requireFieldse
 		field.tagName !== 'INPUT' ||
 		['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
 	) return;
-	const fieldset = field.closest('fieldset');
+	const candidate = field.closest('fieldset');
+	const fieldset = candidate && ownsAuthoredControl(event.currentTarget as HTMLElement, candidate) ? candidate : null;
 	if (requireFieldset && !fieldset) return;
 	const group = fieldset || event.currentTarget as HTMLElement;
 	const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
 	if (!submit) return;
 	const action = submit.getAttribute('data-tt-action');
-	const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-	if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-		event.preventDefault();
-		submit.click();
+	if (action === LOCAL_UI_ACTION) {
+		try {
+			const input = JSON.parse(submit.getAttribute('data-tt-action-inputs') || '{}');
+			if (input?.op !== 'search' && !(input?.op === 'query' && input.scope === 'page' && input.form === true)) return;
+		} catch { return; }
 	}
+	event.preventDefault();
+	submit.click();
 };
 
 // A result that carries a `message` string narrates itself in the toast —
@@ -114,7 +124,10 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
+export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void; fallbackGroup?: (control: HTMLElement, boundary: HTMLElement) => HTMLElement }) => {
+	const held = useContentExecutionHeld(options?.executionHeld);
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -141,17 +154,24 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	runtimeRef.current = runtime;
 	const user = useCurrentUser();
 	const signedIn = !!user?.id;
-	const identityRef = React.useRef(user?.id);
-	identityRef.current = user?.id;
+	const activateLidar = useLidarScanActivation();
+	const location = useLocation();
+	// A local selection keeps the route generation. Account/access changes
+	// and real navigation retire async confirmations and completions.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque action generation
+	const actionIdentity = React.useMemo(() => ({}), [user?.id, runtime.identity, location.key, held]);
+	const identityRef = React.useRef(actionIdentity);
+	identityRef.current = actionIdentity;
 	const navigate = useNavigate();
 
 	return React.useCallback(
 		(event: React.MouseEvent) => {
+			if (heldRef.current) { event.preventDefault(); event.stopPropagation(); return; }
 			const origin = event.target as HTMLElement | null;
 			if (isTransientBlockTarget(origin)) return;
 			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
 			// closest() can walk past the wrapper — only act on controls INSIDE it
-			if (!control || !(event.currentTarget as HTMLElement).contains(control)) return;
+			if (!control || !ownsAuthoredControl(event.currentTarget as HTMLElement, control)) return;
 			// Reserved for an explicitly mounted transient adapter. Never prepare,
 			// record or gather its fields as a normal Action, even outside that host.
 			if (control.getAttribute('data-tt-action') === TRANSIENT_BLOCK_ACTION) return;
@@ -160,7 +180,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
 			event.preventDefault();
 			event.stopPropagation();
-			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
+			if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
 			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
@@ -168,20 +188,35 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				try {
 					const input = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
 					if (input && typeof input === 'object' && !Array.isArray(input)) {
+						if (input.op === 'native') {
+							if (!activateLidar || !isLidarScanInput(input) || !control.matches('button[type=button]') ||
+								!event.nativeEvent.isTrusted || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+							const issue = activateLidar(user?.id);
+							if (issue) lopuRef.current({ title: 'LiDAR scanner', description: issue, status: 'info', link: { label: 'Things', href: '/things' } });
+							return;
+						}
 						const wrapper = event.currentTarget as HTMLElement;
 						const fieldset = control.closest('fieldset') as HTMLElement | null;
-						const group = fieldset && wrapper.contains(fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
+						const group = fieldset && ownsAuthoredControl(wrapper, fieldset) ? fieldset : fallbackGroupRef.current?.(control, wrapper) || wrapper;
 						if (input.op === 'query' && input.form === true) {
+							if (busyRef.current) return;
 							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 							if (invalid) { invalid.reportValidity(); return; }
-							localRef.current?.(localQueryFormInput(input, gatherFormFields(group)));
-						} else localRef.current?.(input);
+							const identity = identityRef.current;
+							busyRef.current = true; control.setAttribute('aria-busy', 'true');
+							void captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected)
+								.then(fields => { if (mountedRef.current && identity === identityRef.current) { localRef.current?.(localQueryFormInput(input, fields)); notifyComponentControlActivation(control); } })
+								.catch(error => { if (mountedRef.current && identity === identityRef.current) lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' }); })
+								.finally(() => { busyRef.current = false; control.removeAttribute('aria-busy'); });
+						} else { localRef.current?.(input); notifyComponentControlActivation(control); }
 					}
 				} catch {}
 				return;
 			}
+			if (busyRef.current) return;
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
+				notifyComponentControlActivation(control);
 				return;
 			}
 			if (!signedIn && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
@@ -198,6 +233,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					.finally(() => {
 						busyRef.current = false;
 					});
+				notifyComponentControlActivation(control);
 				return;
 			}
 			let inputs: Record<string, unknown> = {};
@@ -212,18 +248,14 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			// component root. Fields win over static inputs, including explicit
 			// empty text; excluded or missing fields preserve static inputs.
 			const boundary = event.currentTarget as HTMLElement;
-			const group = (control.closest('fieldset') as HTMLElement | null) || fallbackGroupRef.current?.(control, boundary) || boundary;
+			const fieldset = control.closest('fieldset') as HTMLElement | null;
+			const group = (fieldset && ownsAuthoredControl(boundary, fieldset) ? fieldset : null) || fallbackGroupRef.current?.(control, boundary) || boundary;
 			if (group.querySelector('[data-tt-upload-blocking="true"]')) {
 				lopuRef.current({ title: 'Finish adding your file', description: 'Wait for the upload, then choose Use file before running this form.', status: 'info' });
 				return;
 			}
 			const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 			if (invalid) { invalid.reportValidity(); return; }
-			try { inputs = { ...inputs, ...gatherFormFields(group) }; }
-			catch (error) {
-				lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' });
-				return;
-			}
 			busyRef.current = true;
 			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;
@@ -235,10 +267,14 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			reportPending?.(action);
 			(async () => {
 				try {
+					const fields = await captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected);
+					if (!mountedRef.current || identity !== identityRef.current) return;
+					inputs = { ...inputs, ...fields };
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
 						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
 					}
+					notifyComponentControlActivation(control);
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
 					// path must never hand the viewer's authority to a stranger's
@@ -254,6 +290,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							if (!mountedRef.current || identity !== identityRef.current) return false;
 							if (key === CATALOG_RECORD_ACTION) {
 								const { installSuiteOnServer } = await import('../Builder/installSuite');
+								if (!mountedRef.current || identity !== identityRef.current) return false;
 								await installSuiteOnServer('catalog-records', { onlyMissing: true });
 								return true;
 							}
@@ -288,20 +325,21 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						runRuntime.report(report);
 						reportResult?.(report);
 					}
-				} catch {
+				} catch (error) {
 					if (mountedRef.current && identity === identityRef.current) {
-						lopuRef.current({ title: 'Could not run this action', status: 'error' });
-						const report = { action, ok: false, result: null, error: 'Could not run this action' };
+						const message = messageOf(error) || 'Could not run this action';
+						lopuRef.current({ title: 'Could not run this action', description: message, status: 'error' });
+						const report = { action, ok: false, result: null, error: message };
 						runRuntime.report(report);
 						reportResult?.(report);
 					}
 				} finally {
 					control.removeAttribute('aria-busy');
 					busyRef.current = false;
-					if (mountedRef.current) reportPending?.(null);
+					if (mountedRef.current && identity === identityRef.current) reportPending?.(null);
 				}
 			})();
 		},
-		[navigate, signedIn]
+		[activateLidar, navigate, signedIn, user?.id]
 	);
 };

@@ -1,3 +1,4 @@
+import { readDeviceSyncHistory } from '../app/fileSync/deviceSyncHistory.client';
 import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
 import type { MobileFolder } from '../app/fileSync/mobileFolders.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
@@ -61,6 +62,8 @@ const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const iosTaskQA = new URLSearchParams(location.search).get('platform') === 'ios' && new URLSearchParams(location.search).has('tasks');
 const taskQA = (desktop || iosTaskQA) && new URLSearchParams(location.search).has('tasks');
+const historyQA = desktop && taskQA && new URLSearchParams(location.search).has('history');
+if (historyQA) Object.assign(window, { readSyncHistoryFixture: readDeviceSyncHistory });
 let taskHeld = false;
 const heldScans = new Map<string, () => void>();
 const captureQA = new URLSearchParams(location.search).has('capture');
@@ -354,6 +357,8 @@ window.thingtimeNativeBridge = {
 								...request,
 								roots,
 								...inventoryReply(request),
+				...(historyQA && request.action === 'scan-cancel' && request.capturePolicy === 'one-way-supported' ?
+					{ changesPage: { id: request.captureId, generation: request.captureId, state: 'interrupted', revision: 0, changes: [], nextSequence: 0, hasMore: false } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 								...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 								...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
@@ -364,7 +369,7 @@ window.thingtimeNativeBridge = {
 				);
 			}
 		};
-		if (request.action === 'scan' && holdNextScan) { holdNextScan = false; if (taskQA) heldScans.set(request.requestId, reply); return; }
+		if ((request.action === 'scan' || (historyQA && ['scan-capture', 'scan-stream'].includes(request.action))) && holdNextScan) { holdNextScan = false; if (taskQA) heldScans.set(request.requestId, reply); return; }
 		setTimeout(reply, 30);
 	}
 };
@@ -385,7 +390,7 @@ if (desktop) {
 			}
 			if (request.ownerId !== ownerId || request.deviceId !== deviceId || (request.action !== 'context' && request.origin !== canonicalOrigin))
 				throw Error('Desktop fixture identity changed');
-			if (request.action === 'scan' && holdNextScan) {
+			if ((request.action === 'scan' || (historyQA && ['scan-capture', 'scan-stream'].includes(request.action))) && holdNextScan) {
 				holdNextScan = false;
 				if (taskQA) {
 					await new Promise<void>(resolve => { heldScans.set(request.requestId, resolve); pending.set(request.requestId, resolve as any); });
@@ -400,15 +405,18 @@ if (desktop) {
 				...request,
 				origin: canonicalOrigin,
 				roots,
-				...(manifest ? { capabilities: { fileAccessVersion: ignoreQA ? '1.9.0' : partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
+				...(manifest ? { capabilities: { ...(historyQA ? { fileResourceLimitsVersion: '1.1.1' } : {}), fileAccessVersion: historyQA ? '1.16.0' : ignoreQA ? '1.9.0' : partialQA ? '1.8.0' : homeQA ? '1.6.0' : inspectionQA ? (inventoryQA ? '1.5.1' : '1.4.0') : '1.1.0' }, apiCapabilities: { ...manifest, origin: canonicalOrigin } } : {}),
 				...inventoryReply(request),
+				...(historyQA && request.action === 'scan-cancel' && request.capturePolicy === 'one-way-supported' ?
+					{ changesPage: { id: request.captureId, generation: request.captureId, state: 'interrupted', revision: 0, changes: [], nextSequence: 0, hasMore: false } } : {}),
 				...(request.action === 'scan' ? { complete: true, entries: localEntries.filter(entry => !isNativeScanExcluded(entry.path, canonicalNativeScanExclusions(request.excludedPaths ?? []))), excludedPaths: canonicalNativeScanExclusions(request.excludedPaths ?? []) } : {}),
 				...(request.action === 'inspect' ? { complete: true, entry: localEntries.find(entry => entry.path === request.path) ?? null } : {}),
 				...(captureQA && request.action === 'read' ? captureChunk(request) : {}),
 				...(captureQA && request.action === 'read-range'
 					? { chunk: { version: request.version, size: captureBytes.length, offset: request.offset, length: request.length, bytes: captureBytes.slice(request.offset, request.offset + request.length) } }
 					: {}),
-				...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
+				...(request.action === 'conditions' || (historyQA && request.action === 'context') ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {}),
+				...(historyQA && request.action === 'resources' ? { roots: [], deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 } } : {})
 			};
 		}
 	};
@@ -546,9 +554,10 @@ function Fixture() {
 		</ChakraProvider>
 	);
 }
+const initialRootData = { user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' };
 const router = createMemoryRouter([
-	{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }), element: <Fixture /> }
-]);
+	{ id: 'root', path: '/', loader: () => initialRootData, element: <Fixture /> }
+], { hydrationData: { loaderData: { root: initialRootData } } });
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

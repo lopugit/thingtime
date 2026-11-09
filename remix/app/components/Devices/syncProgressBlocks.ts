@@ -1,6 +1,7 @@
 import { parseSyncResourceStatus } from '~/fileSync/resourceGovernor';
 import { parsePriorityReadiness } from '~/fileSync/priorityReadiness';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
+import type { SyncMode } from '~/fileSync/reconcile';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { syncProgressMetrics, type SyncProgressPage, type SyncProgressState, type SyncProgressTotals } from '~/fileSync/progressProjection';
 
@@ -77,7 +78,7 @@ export function syncProgressNodeDisplay(value: SyncProgressTotals, progress: For
 		counts: `${value.files.toLocaleString()} files · ${folders.toLocaleString()} ${value.kind === 'folder' && value.path ? 'subfolders' : 'folders'} · ${value.unchanged.toLocaleString()} unchanged · ${value.excluded.toLocaleString()} excluded`,
 		bytes: `${progressBytes(result.bytes)} / ${progressBytes(value.bytesTotal)} to copy · ${value.confirmedFiles.toLocaleString()} / ${value.transferFiles.toLocaleString()} files confirmed · ${progressBytes(value.indexedBytes)} indexed` };
 }
-export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '', prioritiesEnabled = false, prioritiesDisabled = false) {
+export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>, progress: ForegroundSyncProgress | undefined, state: SyncProgressState, hasIndex: boolean, message = '', focusedFolder = '', prioritiesEnabled = false, prioritiesDisabled = false, mode?: SyncMode) {
 	const rows: Record<string, unknown>[] = [];
 	const append = (parent: string, depth: number) => {
 		const branch = branches[parent]; if (!branch) return;
@@ -97,7 +98,11 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const liveIndex = progress?.indexState === 'indexing' || progress?.indexState === 'watching';
 	const growingTotal = liveIndex || progress?.totalFinal === false;
 	const stoppedIndex = (liveIndex || !hasIndex) && ['error', 'paused', 'cancelled'].includes(state);
-	const download = progress?.direction === 'download';
+	const hasUpload = !!progress?.directions?.upload.operations, hasDownload = !!progress?.directions?.download.operations;
+	const mixed = hasUpload && hasDownload;
+	const transfer = mixed || (!hasUpload && !hasDownload && mode === 'two-way' && !progress?.direction);
+	const download = hasDownload && !hasUpload || (!hasUpload && !hasDownload && (progress?.direction === 'download' || mode === 'download'));
+	const activeDownload = progress?.direction === 'download' || (!progress?.direction && download);
 	const preparation = progress?.preparation;
 	const preparationLabels: Record<NonNullable<ForegroundSyncProgress['preparation']>['phase'], string> = {
 		'validate-local': 'Validating device structure', 'read-remote': 'Reading cloud structure', 'validate-remote': 'Validating cloud structure',
@@ -114,10 +119,10 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 		: progress?.stage === 'checking' ? 'Checking access…' : 'Indexing files… Total still being discovered.';
 	const coverage = progress?.coverage === 'partial' ? ` Partial backup · ${(progress.skipped ?? 0).toLocaleString()} skipped observations. Review backup coverage below.` : '';
 	const globalState = state === 'error' ? 'Error' : state === 'cancelled' ? 'Cancelled' : state === 'paused' ? 'Paused' : progress?.stage === 'complete' || state === 'complete' ? progress?.coverage === 'partial' ? 'Supported items complete · Partial backup' : 'Complete'
-		: preparation ? `Preparing ${download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? `Verifying ${download ? 'downloaded' : 'uploaded'} files`
+		: preparation ? `Preparing ${transfer ? 'transfers' : download ? 'download' : 'upload'}` : progress?.stage === 'verifying' ? transfer ? 'Verifying files' : `Verifying ${download ? 'downloaded' : 'uploaded'} files`
 		: progress?.indexState === 'watching' && progress.confirmed === progress.total && !progress.path ? 'Waiting for new indexed files'
-		: progress?.stage === 'transferring' || hasIndex ? download ? 'Downloading' : 'Uploading' : 'Waiting for the first indexed file';
-	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
+		: progress?.stage === 'transferring' || hasIndex ? activeDownload ? 'Downloading' : progress?.direction === 'upload' ? 'Uploading' : transfer ? 'Transferring' : 'Uploading' : 'Waiting for the first indexed file';
+	return { sync: { ...priorityReadinessDisplay(progress, state), prioritiesEnabled, prioritiesDisabled, transferTitle: `2. ${transfer ? 'Transfer' : download ? 'Download' : 'Upload'} files and folders`, indexDescription: indexed + (!stoppedIndex && preparationText ? ` ${preparationText}` : '') + coverage, uploadDescription: `${globalState}${progress ? ` · ${progress.confirmed.toLocaleString()} / ${progress.total.toLocaleString()} operations confirmed${growingTotal ? ' so far · Total may grow' : ''}` : ''}${summary ? ` · ${syncProgressNodeDisplay(summary, progress, state).bytes}` : ''}`,
 		currentFolder: focusedFolder || 'Root folder', atRoot: !focusedFolder,
 		folderSummary: focusDisplay ? `${focusDisplay.percentLabel} · ${focusDisplay.counts} · ${focusDisplay.bytes}${growingTotal ? ' · Based on files prepared so far' : ''}` : hasIndex ? 'Reading folder totals…' : 'Folder totals become available as files are indexed.',
 		current: progress?.path ? `Current file: ${progress.path}${progress.bytes !== undefined && progress.size !== undefined ? ` · ${progressBytes(progress.bytes)} / ${progressBytes(progress.size)}` : ''}` : message,

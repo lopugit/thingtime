@@ -86,3 +86,18 @@ test('aborted and disordered pages never publish partial aggregates', async () =
 	await assert.rejects(projectSyncProgress({ async *rows() { yield row('a'); controller.abort(); yield row('b'); } }, { signal: controller.signal }), /abort/i);
 	await assert.rejects(projectSyncProgress({ async *rows() { yield row('b'); yield row('a'); } }), /order changed/);
 });
+
+test('strict folder totals preserve early copies without duplicating discovery or hiding a later operation', async () => {
+	const pending = row('A/file', 20), early = row('A/file', 10, true);
+	const absent = row('Removed/child', 7, true);
+	const page = await projectSyncProgress(source([
+		{ entry: entry('A', 0, 'folder'), operation: null },
+		{ ...pending, early: early.operation! },
+		{ ...absent, operation: null, early: absent.operation!, observed: false },
+	]));
+	assert.deepEqual([page.parent.files, page.parent.folders, page.parent.operations, page.parent.confirmed, page.parent.indexedBytes], [1, 1, 3, 2, 20]);
+	assert.deepEqual(page.rows.map(node => [node.path, node.files, node.operations, node.bytesTotal, node.bytesConfirmed]), [
+		['A', 1, 2, 30, 10],
+		['Removed', 0, 1, 7, 7],
+	]);
+});

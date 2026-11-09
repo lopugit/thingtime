@@ -9,6 +9,7 @@ import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentDialog, ComponentForm, ComponentCountdown } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import { ComponentDisplayOnly } from '../Builder/NativeComponentControls';
+import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -336,6 +337,7 @@ const renderChildren = (children: ChakraThingNode[] | ChakraThingNode | undefine
 };
 
 export const ChakraThingRenderer = ({ node }: { node: ChakraThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
+	const held = useContentExecutionHeld();
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) || held };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };

@@ -16,7 +16,8 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
 import type { ThingMods } from '~/components/Thingtime/thingMods';
-import { emptyPasswordEntry, FIELD_TYPES, PASSWORD_TYPES, type PasswordEntry, type PasswordMetadata, type FieldType } from '~/passwords/model';
+import { emptyPasswordEntry, FIELD_TYPES, PASSWORD_TYPES, passwordPreviewUsername, type PasswordEntry, type PasswordMetadata, type FieldType } from '~/passwords/model';
+import { passwordWebsiteOrigins } from '~/passwords/icons';
 import { passwordRequest } from '~/passwords/client';
 import { previewPasswordFile, visitPasswordFile, passwordImportErrorMessage, exportPasswordBackup, type PasswordFormat, type PasswordImportPreview } from '~/passwords/transfer';
 import { scanQrFile, scanQrScreen } from '~/passwords/qr.client';
@@ -35,6 +36,14 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
   const [iconBusy, setIconBusy] = React.useState(false);
   const [draft, setDraft] = React.useState<Draft | null>(null), [customLabel, setCustomLabel] = React.useState(''), [customType, setCustomType] = React.useState<FieldType>('text');
+  const editorHeading = React.useRef<HTMLHeadingElement>(null);
+  const returnFocus = React.useRef<HTMLElement | null>(null);
+  const [openCount, setOpenCount] = React.useState(0);
+  React.useLayoutEffect(() => {
+    if (!openCount) return;
+    editorHeading.current?.focus({ preventScroll: true });
+    editorHeading.current?.scrollIntoView({ block: 'start' });
+  }, [openCount]);
   const [search, setSearch] = React.useState(''), [sort, setSort] = React.useState('title');
   const [listLoading, setListLoading] = React.useState(true), [settledSearch, setSettledSearch] = React.useState<string | null>(null);
   const listEpoch = React.useRef(0), listAbort = React.useRef<AbortController | null>(null);
@@ -49,7 +58,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; iconFiles?: Map<number, string>; pendingIcon?: { id: string; revision: number; writeId: string; entry: PasswordEntry }; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
   const clear = React.useCallback(() => {
     listEpoch.current++; setListLoading(false); generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear();
-    setDraft(null); setIconBusy(false); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
+    returnFocus.current = null; setDraft(null); setIconBusy(false); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
   }, []);
   React.useEffect(() => {
     active.current = true;
@@ -85,6 +94,11 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     return () => { clearTimeout(timer); listAbort.current?.abort(); window.removeEventListener('focus', check); };
   }, [refresh, showError]);
   const clearAndRefresh = () => { clear(); refresh().catch(showError); };
+  const closeEntry = () => {
+    const trigger = returnFocus.current;
+    clearAndRefresh();
+    if (trigger?.isConnected) trigger.focus();
+  };
   const changeSearch = (value: string) => {
     listEpoch.current++; listAbort.current?.abort(); setListLoading(true); setError(''); setSearch(value);
   };
@@ -96,9 +110,18 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     const payload = JSON.stringify(draft); if (retry.current?.payload !== payload) retry.current = { payload, writeId: crypto.randomUUID() };
     const result = await request({ operation: 'save', ...draft, writeId: retry.current.writeId });
     retry.current = null; setDraft(prev => prev?.id === draft.id ? { ...prev, revision: result.record.revision } : prev);
-    setRecords(prev => [...prev.filter(item => item.id !== result.record.id), result.record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
+    const username = passwordPreviewUsername(draft.entry);
+    const record = { ...result.record, ...(username ? { username } : {}), ...(!result.record.icon && passwordWebsiteOrigins(draft.entry).length ? { websiteIcon: true } : {}) };
+    setRecords(prev => [...prev.filter(item => item.id !== record.id), record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
   });
-  const read = (record: PasswordMetadata) => run(async () => { const result = await request({ operation: 'read', id: record.id }); setDraft({ id: result.id, revision: result.revision, entry: result.entry }); retry.current = null; setDeleteConfirm(false); });
+  const read = (record: PasswordMetadata, trigger: HTMLElement | null) => run(async () => {
+    const result = await request({ operation: 'read', id: record.id });
+    returnFocus.current = trigger;
+    setDraft({ id: result.id, revision: result.revision, entry: result.entry });
+    retry.current = null;
+    setDeleteConfirm(false);
+    setOpenCount(value => value + 1);
+  });
   const loadImport = async (file?: File) => {
     if (!file || busy) return;
     importRead.current?.abort();
@@ -197,7 +220,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
         {error && !listLoading && <Button mt={3} variant="outline" onClick={() => { setError(''); refresh().catch(showError); }}>Retry search</Button>}
       </Box>
       {draft && <Box {...card} flex={1} width={{ base: '100%', md: 'auto' }} minWidth={0}>
-        <Flex justifyContent="space-between" mb={4} gap={3}><Flex alignItems="center" gap={3}><PasswordEntryIcon ownerId={ownerId} entryId={draft.id} icon={draft.entry.icon} /><PasswordBrandMark size={24} /><Heading size="md">{draft.revision ? 'Edit entry' : 'New entry'}</Heading></Flex><Button size="sm" onClick={clearAndRefresh}>Close</Button></Flex>
+        <Flex justifyContent="space-between" mb={4} gap={3}><Flex alignItems="center" gap={3}><PasswordEntryIcon ownerId={ownerId} entryId={draft.id} icon={draft.entry.icon} /><PasswordBrandMark size={24} /><Heading ref={editorHeading} tabIndex={-1} scrollMarginTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 12px)" size="md">{draft.revision ? 'Edit entry' : 'New entry'}</Heading></Flex><Button size="sm" onClick={closeEntry}>Close</Button></Flex>
         <Text as="label" htmlFor="password-title">Title</Text><Input id="password-title" value={draft.entry.title} onChange={event => updateEntry({ ...draft.entry, title: event.target.value })} mb={3} />
         <Text as="label" htmlFor="password-type">Password type</Text><Select id="password-type" isDisabled={draft.entry.passwordType === 'passkey'} value={draft.entry.passwordType} onChange={event => updateEntry({ ...draft.entry, passwordType: event.target.value as PasswordEntry['passwordType'] })} mb={4}>{PASSWORD_TYPES.filter(type => type !== 'passkey' || draft.entry.passwordType === 'passkey').map(type => <option key={type} value={type}>{type.replace(/-/g, ' ')}</option>)}</Select>
         {draft.entry.passwordType === 'passkey' && <Text fontSize="sm" mb={4}>This passkey was created by the native Thingtime provider. Keep its signing fields intact to continue signing in.</Text>}

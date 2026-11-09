@@ -44,7 +44,7 @@ if (!process.argv.includes('--child')) {
     await admin.db('admin').command({ replSetInitiate: { _id: 'storage_recovery', members: [{ _id: 0, host: `127.0.0.1:${port}` }] } });
     for (let n = 0; !(await admin.db('admin').command({ hello: 1 })).isWritablePrimary; n++) { if (n > 100) throw new Error('Replica primary timeout'); await delay(100); }
     await admin.close();
-    child = spawn(process.execPath, ['--import', 'tsx', script, '--child', ...process.argv.filter(arg=>['--password-records','--password-verification','--verification-ui'].includes(arg))], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['--import', 'tsx', script, '--child', ...process.argv.filter(arg=>['--password-records','--password-verification','--verification-ui','--native-approval-ui'].includes(arg))], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout!.on('data', data => output += data); child.stderr!.on('data', data => output += data);
     const timeout = setTimeout(() => child?.kill('SIGTERM'), 180_000);
     const [code] = await once(child, 'exit'); clearTimeout(timeout);

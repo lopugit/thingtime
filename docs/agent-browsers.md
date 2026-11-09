@@ -119,6 +119,10 @@ duplication, including their preparation stage.
 ## Credentials
 
 For an authorized task requiring a password or passkey, use the Thingtime
+desktop's [scoped native password CLI](native-password-agent.md) on Linux or
+Windows when available. Its browser is a separately owned isolated process;
+it does not reuse another task's browser lease or the user's personal profile.
+For other supported credential flows, use the Thingtime
 password manager **on the executing device**, matching service origin and
 account. Reuse an authorized session when sufficient. Use supported retrieval,
 autofill or sign-in interfaces; passkeys require their supported flow and any

@@ -16,6 +16,8 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
  await invoke({operation:'save',id:crypto.randomUUID(),writeId:crypto.randomUUID(),revision:0,entry:{title:'No username fixture',passwordType:'secure-note',fields:[]}});
  let heldSettings:{enter:()=>void;gate:Promise<void>}|null=null,releaseHeld=()=>{};
  const holdNextSettings=()=>{let enter!:()=>void,release!:()=>void;const entered=new Promise<void>(resolve=>enter=resolve),gate=new Promise<void>(resolve=>release=resolve);heldSettings={enter,gate};releaseHeld=release;return{entered,release};};
+ let heldCatalog:{enter:()=>void;gate:Promise<void>}|null=null;
+ const holdNextCatalog=()=>{let enter!:()=>void,release!:()=>void;const entered=new Promise<void>(resolve=>enter=resolve),gate=new Promise<void>(resolve=>release=resolve);heldCatalog={enter,gate};return{entered,release};};
  const server=createServer(async(req,res)=>{
   try{
    if(req.url==='/__password_verification_fixture'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({id:ownerId,username,temporary:false,accountKind:'user'}));return;}
@@ -30,6 +32,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
     const response=await handler[req.method==='GET'?'loader':'action']({request});
     const body=raw.length?JSON.parse(raw.toString('utf8')):null;
     if(heldSettings&&body?.operation==='verification-settings'&&body.window===undefined&&body.reuseRecentDeviceVerification===undefined){const held=heldSettings;heldSettings=null;held.enter();await held.gate;}
+    if(heldCatalog&&body?.operation==='catalog'){const held=heldCatalog;heldCatalog=null;held.enter();await held.gate;}
     res.statusCode=response.status;
     response.headers.forEach((value:string,name:string)=>{if(name!=='set-cookie')res.setHeader(name,value);});
     if(response.headers.getSetCookie().length)res.setHeader('Set-Cookie',response.headers.getSetCookie());res.end(Buffer.from(await response.arrayBuffer()));return;
@@ -41,13 +44,21 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(18090,'127.0.0.1',resolve);});
  let browser:any,page:any;const issues:string[]=[];
  try{
-  browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1280,height:900}});
+  browser=await chromium.launch({headless:true,executablePath:chromium.executablePath(),chromiumSandbox:true});const context=await browser.newContext({viewport:{width:1280,height:900}});
   const signedIn=await context.request.post(origin+'/api/v1/login',{headers:{Origin:origin},data:{username,password}});assert.equal(signedIn.status(),200,'Fresh synthetic sign-in at the exact UI origin');
   page=await context.newPage();page.on('pageerror',(error:Error)=>issues.push(error.name+': '+error.message.slice(0,200)+' '+String(error.stack).split('\n').slice(1,3).join(' ')));
   const inspect=async(name:string)=>{await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));await page.evaluate(()=>window.scrollTo(0,0));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name}: no horizontal overflow`);await page.screenshot({path:`${output}/${name}.png`,fullPage:true});};
+  if(process.argv.includes('--native-approval-ui')){
+   await(await import('./password-native-approval-ui.integration')).runNativeApprovalUI({context,page,origin,ownerId,password,inspect});
+   assert.deepEqual(issues,[]);return;
+  }
   await page.goto(origin+'/scripts/password-verification.browser.html');
   await page.getByText('Isolated login',{exact:true}).waitFor();
   await page.getByText(longUser,{exact:true}).waitFor();await page.getByText('No username or email saved',{exact:true}).waitFor();
+  const importedCard=page.getByRole('button',{name:/^Synthetic AWS account /});
+  assert.equal(await importedCard.locator('[data-block-id="pp-username"]').innerText(),'root-fixture@example.invalid');
+  const manifest=await context.request.get(origin+'/.well-known/thingtime-capabilities.json');
+  assert.equal((await manifest.json()).features['api.passwords'].version,'1.8.0');
   await page.getByRole('checkbox',{name:'Reuse recent device verification'}).waitFor();
   // Actual saved fields → owner API → anonymous public probe → decoded PNG →
   // editable card image. No third-party favicon lookup or personal browser.
@@ -99,8 +110,13 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
 
   await page.reload();await page.getByText('Isolated login',{exact:true}).waitFor();assert.equal(await page.getByRole('combobox',{name:'Password confirmation interval',exact:true}).inputValue(),'never');
   // Exercise the actual entry draft and durable save path, not a block gallery.
-  await page.getByRole('button',{name:/^Isolated login /}).click();
-  await page.getByRole('heading',{name:'Edit entry',exact:true}).waitFor();
+  const loginCard=page.getByRole('button',{name:/^Isolated login /});
+  const editorHeading=page.getByRole('heading',{name:'Edit entry',exact:true});
+  await loginCard.getByText('Isolated login',{exact:true}).click();
+  await editorHeading.waitFor();
+  await page.waitForFunction(()=>document.activeElement?.textContent==='Edit entry');
+  assert.equal(await page.locator('#password-title').inputValue(),'Isolated login');
+  assert.equal(await page.locator('#password-title').evaluate((field:HTMLElement)=>{const rect=field.getBoundingClientRect();return rect.top>=0&&rect.bottom<=innerHeight;}),true,'Clicking a card at 375px reveals the editor below the list');
   const entryControl=page.locator('[data-settings-document="password-entry-verification"]');
   await entryControl.getByRole('combobox',{name:'Password confirmation interval',exact:true}).selectOption('always');
   await entryControl.getByRole('button',{name:'Apply to entry',exact:true}).click();
@@ -108,10 +124,15 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await entryControl.screenshot({path:`${output}/entry-override-narrow.png`});
   const savedEntry=page.waitForResponse((response:any)=>new URL(response.url()).pathname==='/api/v1/passwords'&&response.request().postDataJSON()?.operation==='save');
   await page.getByRole('button',{name:'Save entry',exact:true}).click();assert.equal((await savedEntry).status(),200);
+  await loginCard.getByText('fixture@example.invalid',{exact:true}).waitFor();
   await page.reload();await page.getByRole('button',{name:/^Isolated login /}).waitFor();
-  await page.getByRole('button',{name:/^Isolated login /}).click();await page.getByRole('heading',{name:'Edit entry',exact:true}).waitFor();
+  await page.setViewportSize({width:1280,height:900});
+  await loginCard.focus();await loginCard.press('Enter');await editorHeading.waitFor();
+  await page.waitForFunction(()=>document.activeElement?.textContent==='Edit entry');
   assert.equal(await page.locator('[data-settings-document="password-entry-verification"]').getByRole('combobox').inputValue(),'always');
   await page.getByRole('button',{name:'Close',exact:true}).click();
+  assert.equal(await loginCard.evaluate((card:HTMLElement)=>document.activeElement===card),true,'Closing returns focus to the selected card');
+  await page.setViewportSize({width:375,height:812});
   // Normal Builder selection exposes the repeated card's individual text block.
   const cards=page.locator('[data-settings-document="password-preview-cards"]');
   await cards.getByRole('button',{name:'Edit layout',exact:true}).click();
@@ -166,6 +187,36 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.getByRole('button',{name:'Verify and save passkey',exact:true}).click();await page.waitForFunction(()=>(window as any).fixtureResult?.response?.type==='public-key');
   await begin();await page.getByRole('button',{name:'Save passkey',exact:true}).waitFor();assert.equal(await page.locator('input[type=password]').count(),0,'Remembered device does not ask again');await inspect('approval-remembered-narrow');
   await page.getByRole('button',{name:'Save passkey',exact:true}).click();await page.waitForFunction(()=>(window as any).fixtureResult?.response?.type==='public-key');
-  assert.deepEqual(issues,[]);console.log('PASS: isolated Chrome actual manager/provider + disposable real API; desktop/narrow scrolling/overflow; durable preference and per-entry override reload; deferred old GET/toggle/cache fencing; actual Builder username block edit/save/reload; current-password Never enrollment; next explicit registration skips password with server device proof; synthetic credentials only.');
+  await page.goto(origin+'/scripts/password-verification.browser.html?surface=native');
+  await page.getByRole('heading',{name:'Thingtime password workspace',exact:true}).waitFor();
+  const selected=(await invoke({operation:'catalog'})).body.catalog.find((item:any)=>item.title==='Isolated login');
+  assert.ok(selected?.id);
+  const requestBase={version:1,expectedOwnerId:ownerId,origin:'https://fixture.test',target:{tabId:1,frameId:0,documentId:'isolated-provider'}};
+  const stalledId=crypto.randomUUID(),fillId=crypto.randomUUID();
+  await page.emulateMedia({reducedMotion:'reduce'});
+  const stalled=holdNextCatalog();
+  try{
+   await page.evaluate(payload=>{
+    (window as any).vaultResponses=[];
+    document.addEventListener('thingtime:password-vault-response',event=>{const {id,error}=JSON.parse((event as CustomEvent).detail);(window as any).vaultResponses.push({id,error});});
+    document.dispatchEvent(new CustomEvent('thingtime:password-vault-request',{detail:JSON.stringify(payload)}));
+   },{...requestBase,type:'catalog',id:stalledId});
+   await stalled.entered;
+   const indicator=page.locator('.chakra-spinner[aria-hidden="true"]');
+   await indicator.waitFor();assert.equal(await indicator.count(),1);
+   assert.equal(await indicator.evaluate((node:HTMLElement)=>getComputedStyle(node).animationName),'none');
+   await page.screenshot({path:`${output}/catalog-loading-reduced-motion.png`});
+   const cancelCatalog=(id:string)=>page.evaluate(id=>document.dispatchEvent(new CustomEvent('thingtime:password-vault-cancel',{cancelable:true,detail:JSON.stringify({version:1,id})})),id);
+   assert.equal(await cancelCatalog(crypto.randomUUID()),true,'A different operation cannot cancel the catalog');
+   assert.equal(await cancelCatalog(stalledId),false,'The active catalog acknowledges cancellation synchronously');
+   await page.evaluate(payload=>document.dispatchEvent(new CustomEvent('thingtime:password-vault-request',{detail:JSON.stringify(payload)})),{...requestBase,type:'fill',id:fillId,entryId:selected.id});
+   stalled.release();
+   await page.getByRole('button',{name:'Verify and autofill',exact:true}).waitFor();
+   await page.getByText('Isolated login · fixture@example.invalid',{exact:true}).waitFor();
+   assert.deepEqual(await page.evaluate(()=> (window as any).vaultResponses),[],'The cancelled catalog cannot reply or finish the active selection');
+   await page.getByRole('button',{name:'Cancel',exact:true}).click();
+   await page.waitForFunction(id=>(window as any).vaultResponses.some((item:any)=>item.id===id&&item.error?.name==='AbortError'),fillId);
+  }finally{stalled.release();}
+  assert.deepEqual(issues,[]);console.log('PASS: isolated Chrome actual manager/provider + disposable real API; desktop/narrow scrolling and focus; durable preference and per-entry override; saved Builder edits; cancelled catalog cannot end a selected fill; synthetic credentials only.');
  }catch(error){if(!await page?.getByRole('heading',{name:'Edit entry',exact:true}).count())await page?.screenshot({path:`${output}/failure.png`,fullPage:true}).catch(()=>{});console.log('UI diagnostic:',JSON.stringify({issues,headings:await page?.locator('h1,h2,[role=alert]').allTextContents().catch(()=>[])}));throw error;}finally{releaseHeld();await browser?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 }

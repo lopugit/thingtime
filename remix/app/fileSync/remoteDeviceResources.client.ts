@@ -3,10 +3,11 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { negotiateRemoteDirectionalProgress, createRemoteSyncClient, type RemoteSyncClient } from './remoteSyncClient.client';
 import { parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncStatus, type RemoteSyncResources } from './remoteSyncProtocol';
 import { validNativeSourcePath, type MobileFolder } from './mobileFolders.client';
+import { parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseDeviceSyncResourcePolicy, type DeviceSyncResourcePolicy } from './deviceResourcePolicy';
 
 type Scope = { origin: string; ownerId: string; deviceId: string };
-type State = { status: RemoteSyncStatus | null; online: boolean; checking: boolean; error: string };
+type State = { status: RemoteSyncStatus | null; receivedAt?: number; online: boolean; checking: boolean; error: string };
 const empty: State = { status: null, online: false, checking: false, error: '' };
 
 /** One current-only, identity-qualified heartbeat shared by the overview and
@@ -30,22 +31,26 @@ export function createRemoteDeviceStatusSession(input: Scope & {
   reading = (async () => {
    try {
     const directionsReady = input.negotiateDirections ? await input.negotiateDirections().catch(() => false) : false;
-    check(); let cursor: string | undefined, snapshot: RemoteSyncStatus | undefined, resourceUsage: RemoteSyncResources | undefined;
+    check(); let cursor: string | undefined, snapshot: RemoteSyncStatus | undefined, heartbeat: RemoteSyncStatus | undefined, resourceUsage: RemoteSyncResources | undefined;
+    let receivedAt: number | undefined;
     const cursors = new Set<string>(), roots = new Map<string, MobileFolder>(), jobs = new Map<string, RemoteSyncStatus['jobs'][number]>();
     do {
      const value = await client.send<RemoteSyncStatus>({ action: 'status', ...(cursor ? { cursor } : {}) }, { signal, timeoutMs: 12_000 }); signal.throwIfAborted(); check();
      if (value?.version !== 1 || value.deviceId !== input.deviceId || !Array.isArray(value.roots) || !Array.isArray(value.jobs) || !Number.isFinite(Date.parse(value.observedAt)) ||
       value.roots.some(root => !root || typeof root.id !== 'string' || typeof root.name !== 'string' || (root.sourcePath !== undefined && (!validNativeSourcePath(root.sourcePath) || root.sourceKind === 'photos'))) ||
       value.jobs.some(job => !job || typeof job.connectionId !== 'string') || (value.nextCursor !== undefined && (typeof value.nextCursor !== 'string' || cursors.has(value.nextCursor)))) throw Error('The device returned an invalid sync status.');
-     if (value.resourceUsage !== undefined) resourceUsage = parseRemoteSyncResources(value.resourceUsage);
+     if (!cursor) {
+      receivedAt = Date.now();
+      if (value.resourceUsage !== undefined) resourceUsage = parseRemoteSyncResources(value.resourceUsage);
+     }
      if (!directionsReady || value.directionalProgressVersion !== '1.0.0') {
       value.jobs = value.jobs.map(({ progress: _progress, ...job }) => job);
       if (value.task) { const { directions: _directions, ...legacy } = value.task.progress; value.task = { ...value.task, progress: legacy }; }
      }
      for (const root of value.roots) roots.set(root.id, root); for (const job of value.jobs) jobs.set(job.connectionId, job);
-     snapshot = value; cursor = value.nextCursor; if (cursor) cursors.add(cursor);
+     heartbeat ??= value; snapshot = value; cursor = value.nextCursor; if (cursor) cursors.add(cursor);
     } while (cursor);
-    publish({ status: { ...snapshot!, ...(resourceUsage ? { resourceUsage } : {}), roots: [...roots.values()], jobs: [...jobs.values()] }, online: true, checking: false, error: '' });
+    publish({ status: { ...snapshot!, observedAt: heartbeat!.observedAt, task: heartbeat!.task, ...(resourceUsage ? { resourceUsage } : {}), roots: [...roots.values()], jobs: [...jobs.values()] }, receivedAt, online: true, checking: false, error: '' });
    } catch (cause) {
     if (!signal.aborted) publish({ ...state, online: false, checking: false, error: cause instanceof Error ? cause.message : 'Device unavailable. Saved settings remain editable.' });
    } finally { reading = undefined; readAbort = undefined; if (state.checking) publish({ ...state, checking: false }); schedule(); }
@@ -70,7 +75,7 @@ export function createRemoteDeviceStatusSession(input: Scope & {
    const value = parseDeviceSyncResourcePolicy(policy);
    const result = parseRemoteSyncResources(await client.send({ action: 'resources', operation: 'save', deviceResourceLimits: value })); check();
    if (JSON.stringify(result.deviceResourceLimits) !== JSON.stringify(value)) throw Error('The selected device did not confirm the requested resource policy.');
-   publish({ ...state, status: { ...state.status, observedAt: new Date().toISOString(), resourceUsage: result } });
+   publish({ ...state, status: { ...state.status, resourceUsage: result } });
    return result.deviceResourceLimits;
   }
  };
@@ -101,7 +106,12 @@ export function useDeviceSyncRemoteResources({ ownerId, deviceId, enabled }: { o
  const origin = typeof window === 'undefined' ? '' : window.location.origin;
  const state = useRemoteDeviceSyncStatus({ ownerId, deviceId, origin }, enabled);
  const usage = state.status?.resourceUsage;
- return { origin, policy: usage?.deviceResourceLimits, resources: usage?.resources, observedAt: state.status ? Date.parse(state.status.observedAt) : undefined,
+ let taskResources: SyncResourceStatus | undefined;
+ if (state.status?.task?.active && state.status.task.progress?.resources) {
+  try { taskResources = parseSyncResourceStatus(state.status.task.progress.resources); }
+  catch { /* Malformed or unsupported task telemetry remains unavailable. */ }
+ }
+ return { origin, capabilities: state.status?.capabilities, taskResources, receivedAt: state.receivedAt, online: state.online, checking: state.checking, refresh: state.refresh, policy: usage?.deviceResourceLimits, resources: usage?.resources, observedAt: state.status ? Date.parse(state.status.observedAt) : undefined,
   active: state.online && !!state.status?.task?.active, status: state.error || (!enabled ? 'Remote device resources are unavailable.' : state.online ? usage ? usage.resources ? 'Measured on the selected device.' : 'Selected device policy available; resource measurements are unavailable.' : 'Update the selected device and server to view resource usage.' : 'Connecting to the selected device…'),
   save: enabled && state.online && usage && supportsRemoteResourceControls(state.status?.capabilities) ? state.save : undefined };
 }

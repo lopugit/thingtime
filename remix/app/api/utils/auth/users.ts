@@ -1,3 +1,4 @@
+import { effectiveConnectorConfirmations, type ConnectorConfirmationPatch, type ConnectorConfirmations } from '../chatgpt/connectorProtections';
 import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
@@ -428,6 +429,28 @@ export const findUserById = async (id: string) => {
 	if (thing) return userThingToDoc(thing);
 	return legacy;
 };
+
+/** A delegated private upload publication must serialize with the current
+ * account's upload-permission change or deletion, as well as session revoke.
+ * Keep the same Things-first identity and permission policy as ordinary auth. */
+export async function fencePrivateUploadPermission(id: string, token: string, session: any, signal: AbortSignal) {
+	if (!session?.inTransaction()) throw Error('Upload authorization requires the publication transaction');
+	const options = { session, signal };
+	const things = await getThingsCollection();
+	const filter = { shareId: id, thingtime: 'user' };
+	const row = await things.findOne(filter, options);
+	const eligible = (user: any) => user && user.accountKind !== 'service' && userPrivateUploadsEnabled(user);
+	if (row) {
+		if (!eligible(userThingToDoc(row))) return false;
+		const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { fileSyncPublicationFence: token } }, options);
+		return result.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(id)) return false;
+	const legacy = await getUsersCollection(), legacyFilter = { _id: new ObjectId(id) };
+	if (!eligible(await legacy.findOne(legacyFilter, options))) return false;
+	const result = await legacy.updateOne(legacyFilter, { $set: { fileSyncPublicationFence: token } }, options);
+	return result.matchedCount === 1;
+}
 
 // Batch form for bounded admin directories. Preserve caller order and the
 // same Things-first migration precedence as findUserById, while replacing up
@@ -2143,6 +2166,36 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 };
 
 export const updateUserProfile = createUpdateUserProfile();
+
+// Connector protections are private account metadata. Updating a subset
+// merges it in the same CAS path as other secure account preferences.
+export const getUserConnectorConfirmations = async (userId: string): Promise<ConnectorConfirmations> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+  if (thing) return effectiveConnectorConfirmations(unpackSecure((thing as any).secure).meta?.connectorConfirmations);
+  const legacy = ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.connectorConfirmations': 1 } }) : null;
+  return effectiveConnectorConfirmations(legacy?.meta?.connectorConfirmations);
+};
+
+export const setUserConnectorConfirmations = async (
+  userId: string, patch: ConnectorConfirmationPatch
+): Promise<ConnectorConfirmations> => {
+  let next = effectiveConnectorConfirmations();
+  const result = await mutateUserThingSecure(userId, secure => {
+    next = { ...effectiveConnectorConfirmations(secure.meta!.connectorConfirmations), ...patch };
+    secure.meta!.connectorConfirmations = next;
+  });
+  if (result === 'mutated') return next;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).findOneAndUpdate(
+    { _id: new ObjectId(userId) },
+    { $set: { ...Object.fromEntries(Object.entries(patch).map(([key, value]) => [`meta.connectorConfirmations.${key}`, value])), updatedAt: new Date() } },
+    { projection: { 'meta.connectorConfirmations': 1 }, returnDocument: 'after' }
+  );
+  if (!legacy) throw new Error('Account not found.');
+  return effectiveConnectorConfirmations(legacy.meta?.connectorConfirmations);
+};
 
 // Personal instructions are private secure metadata: never part of a profile,
 // Thing crystal, search index, admin roster, or another viewer's prompt.

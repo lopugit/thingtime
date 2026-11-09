@@ -7,11 +7,13 @@ import { useTimelineSession } from '../../timeline/TimelineProvider';
 import { TIMELINE_CHANGED_EVENT } from '../../timeline/clientEvents';
 import { type TimelineEvent, type TimelineScope } from '../../timeline/contract';
 import { rootIdentity } from '../../utils/rootIdentity';
+import { getElectronBridge } from '../../utils/electronBridge';
 import { attachmentContentUrl } from '../Attachments/attachmentUiCore';
 import type { CloudFile, CloudFileCommit } from '../../fileSync/cloudFile';
 import { exportFileVersion, supportsFileExport } from '../../fileSync/fileExport.client';
 import {
 	checkFileRestoreReceipt,
+	desktopFileRestoreScope,
 	fileContentId,
 	fileRestoreCommand,
 	fileRestoreKey,
@@ -49,24 +51,47 @@ export function TimelineFileVersions({ event, onApplied }: { event: TimelineEven
 	);
 }
 
-export function TimelineFileVersion({
-	label,
-	version,
-	scope,
-	enabled,
-	onApplied
-}: {
+type TimelineFileVersionProps = {
 	label: string;
 	version: CloudFile;
 	scope: TimelineScope;
 	enabled: boolean;
 	onApplied(): void;
-}) {
+};
+
+export function TimelineFileVersion(props: TimelineFileVersionProps) {
+	const { scope } = props;
+	const bridge = getElectronBridge();
+	const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+	const [verified, setVerified] = React.useState<{ generation: number; renderer: TimelineScope; restore: TimelineScope | null }>();
+	React.useEffect(() => {
+		if (!bridge?.getInfo || identity.pending) return;
+		let current = true;
+		const generation = identity.generation;
+		void bridge.getInfo().then(info => {
+			if (current && getElectronBridge() === bridge && rootIdentity.read().generation === generation && !rootIdentity.read().pending)
+				setVerified({ generation, renderer: scope, restore: desktopFileRestoreScope(scope, info) });
+		}).catch(() => {});
+		return () => { current = false; };
+	}, [bridge, identity.generation, identity.pending, scope]);
+	const restoreScope = !bridge ? scope : !identity.pending && verified?.generation === identity.generation && verified.renderer === scope ? verified.restore : null;
+	const actionKey = JSON.stringify([identity.generation, scope.ownerId, scope.dataPlane, scope.apiOrigin, restoreScope?.apiOrigin, props.version.id, props.version.revision]);
+	return <TimelineFileVersionActions key={actionKey} {...props} enabled={props.enabled && (!bridge || !!restoreScope)} restoreScope={restoreScope} />;
+}
+
+function TimelineFileVersionActions({
+	label,
+	version,
+	scope,
+	restoreScope,
+	enabled,
+	onApplied
+}: TimelineFileVersionProps & { restoreScope: TimelineScope | null }) {
 	const api = useApi();
-	const key = fileRestoreKey(scope, version);
+	const key = restoreScope ? fileRestoreKey(restoreScope, version) : null;
 	const [initial] = React.useState(() => {
 		try {
-			const saved = localStorage.getItem(key);
+			const saved = key ? localStorage.getItem(key) : null;
 			return { command: saved ? parseFileRestoreCommand(JSON.parse(saved), version) : null, error: '' };
 		} catch {
 			return { command: null, error: 'Could not read the saved restore. Reopen History after local storage is available.' };
@@ -99,7 +124,7 @@ export function TimelineFileVersion({
 		};
 	}, [enabled]);
 	const run = async (work: (check: () => void, signal: AbortSignal) => Promise<void>, restoring = true) => {
-		if (!live.current || active.current || (restoring && initial.error)) return;
+		if (!live.current || active.current || (restoring && (!key || initial.error))) return;
 		const controller = new AbortController();
 		active.current = controller;
 		const generation = rootIdentity.read().generation;
@@ -131,18 +156,19 @@ export function TimelineFileVersion({
 	};
 	const prepare = () =>
 		run(async (check, signal) => {
+			if (!key || !restoreScope) return;
 			const pending = localStorage.getItem(key);
 			if (pending) {
 				setCommand(parseFileRestoreCommand(JSON.parse(pending), version));
 				return;
 			}
-			const current = await api.v1.files.read(scope, version.id, { signal });
+			const current = await api.v1.files.read(restoreScope, version.id, { signal });
 			check();
 			setReview(current);
 		});
 	const apply = () =>
 		run(async (check, signal) => {
-			if (!command && !review) return;
+			if (!key || !restoreScope || (!command && !review)) return;
 			const saved = localStorage.getItem(key);
 			const input = command ?? fileRestoreCommand(review!, version, crypto.randomUUID());
 			if (saved && JSON.stringify(parseFileRestoreCommand(JSON.parse(saved), version)) !== JSON.stringify(input))
@@ -154,7 +180,7 @@ export function TimelineFileVersion({
 			setReview(null);
 			setRefused(false);
 			check();
-			const result = await api.v1.files.commit(scope, input, { signal });
+			const result = await api.v1.files.commit(restoreScope, input, { signal });
 			check();
 			await checkFileRestoreReceipt(result?.file, input, version, scope.ownerId);
 			check();
@@ -166,7 +192,7 @@ export function TimelineFileVersion({
 			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
 		});
 	const reviewAgain = () => {
-		if (!refused || !command) return;
+		if (!key || !refused || !command) return;
 		try {
 			if (localStorage.getItem(key) === JSON.stringify(command)) localStorage.removeItem(key);
 			setCommand(null);
@@ -223,7 +249,7 @@ export function TimelineFileVersion({
 					)
 				)}
 				{!review && !command && (
-					<Button size="sm" variant="outline" isDisabled={!enabled || busy || !!initial.error} onClick={() => void prepare()}>
+					<Button size="sm" variant="outline" isDisabled={!enabled || !restoreScope || busy || !!initial.error} onClick={() => void prepare()}>
 						Review restore
 					</Button>
 				)}

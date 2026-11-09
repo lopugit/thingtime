@@ -1,9 +1,11 @@
 import React from 'react';
+import { useContentExecutionHeld } from './ContentExecutionHold';
 import { Box } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LOCAL_UI_ACTION, localQueryHref, reduceLocalUi } from '../Actions/localUiAction';
 import { componentNavigationState, componentPageHref, hasComponentBackEntry } from './componentNavigation';
+import { ownsAuthoredControl } from './authoredControlOwnership';
 import { ComponentDataScope } from './ComponentSelect';
 import { ComponentLocalControl } from './NativeComponentControls';
 import { useWebpageRuntime } from './webpageRuntime';
@@ -24,7 +26,7 @@ export const isExpandedPageAction = (target: { closest: (selector: string) => El
 /** A page-level fallback must never collect fields from unrelated rows. */
 export const expandedActionGroup = (control: HTMLElement, boundary: HTMLElement): HTMLElement => {
 	const group = control.closest<HTMLElement>('[data-tt-action-group]');
-	return group && boundary.contains(group) ? group : control;
+	return group && ownsAuthoredControl(boundary, group) ? group : control;
 };
 
 export const PageActionSurface = ({
@@ -39,15 +41,26 @@ export const PageActionSurface = ({
 	confirm?: TtActionConfirmHandler;
 	surfaceRef?: React.Ref<HTMLDivElement>;
 }) => {
+	const held = useContentExecutionHeld();
+	actionEnabled = actionEnabled && !held;
 	const runtime = useWebpageRuntime();
 	const parentScope = React.useContext(ComponentDataScope);
 	const navigate = useNavigate();
 	const location = useLocation();
 	const lopu = useLopu();
-	const identity = JSON.stringify([runtime.viewer.id, runtime.pageId, runtime.query]);
-	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown> }>({ identity, values: {} });
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
+	const identity = React.useMemo(() => ({}), [runtime.identity, location.key]);
+	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown> }>({ identity, values: {} });
 	const values = local.identity === identity ? local.values : {};
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const onLocal = (input: Record<string, unknown>) => {
+		// Native adapters may retain a callback across an async event.
+		if (heldRef.current) return;
+		if (input.op === 'query' && input.scope === 'page') {
+			runtime.setPageQuery(input.params);
+			return;
+		}
 		if (input.op === 'query' || input.op === 'back') {
 			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
 				navigate(-1);
@@ -76,7 +89,7 @@ export const PageActionSurface = ({
 	const onAction = useTtActionClicks({ onUnowned, confirm, onLocal, fallbackGroup: expandedActionGroup });
 	return <ComponentLocalControl.Provider value={actionEnabled ? onLocal : null}>
 		<ComponentDataScope.Provider value={{ ...parentScope, ...values, ...(runtime.pageId ? { query: runtime.query, last: runtime.last, viewer: runtime.viewer, page: { id: runtime.pageId } } : {}) }}>
-		<Box
+		<Box key={runtime.identity.key}
 		{...props}
 		ref={surfaceRef}
 		onClickCapture={actionEnabled ? (event: React.MouseEvent<HTMLDivElement>) => {

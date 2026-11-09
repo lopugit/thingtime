@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudInventoryService, createCloudPathService } from './inventory';
+import { ExactCloudSyncDestinationChanged } from '../../../fileSync/cloudSyncDestination';
+import { assertCloudSyncDestination, createCloudInventoryService, createCloudPathService } from './inventory';
 import { contentPartPlan } from '../../../fileSync/contentFingerprint';
 const date = new Date('2026-10-17T00:00:00Z');
 const folder = (id: string, parent: string | null, name = id) => ({
@@ -89,6 +90,8 @@ function fixture(input = [folder('root', null), folder('nested', 'root'), file('
 		maxEntries
 	};
 	return {
+		guard: (path: string, parent: string, expected: {id: string; revision: string} | null) => dependencies.transaction(session =>
+			assertCloudSyncDestination(collection, session, 'owner', { rootId: 'root', path }, parent, expected)),
 		read: createCloudInventoryService(dependencies),
 		bounded: (overrides: Parameters<typeof createCloudPathService>[0] = {}) => createCloudPathService({ ...dependencies, ...overrides }),
 		docs,
@@ -391,4 +394,18 @@ test('path scan admission and workspace close are part of completion', async () 
   await work({}); attempts++; f.clock(20_001); return work({});
  } });
  f.clock(0); assert.equal((await timed('owner', 'root', 'absent')).status, 503); assert.equal(attempts, 1);
+});
+
+test('guarded publication rejects a late sibling alias, a moved parent, and stale revisions inside the write snapshot', async () => {
+	const f = fixture();
+	await f.guard('nested/file', 'nested', { id: 'file', revision: 'revision-file' });
+	await f.guard('nested/new', 'nested', null);
+	f.docs.push(file('racer', 'nested', 'NEW'));
+	await assert.rejects(f.guard('nested/new', 'nested', null), ExactCloudSyncDestinationChanged);
+	f.docs.pop();
+	f.docs[2].timelineHeadId = 'new-revision';
+	await assert.rejects(f.guard('nested/file', 'nested', { id: 'file', revision: 'revision-file' }), ExactCloudSyncDestinationChanged);
+	f.docs.push(folder('elsewhere', null));
+	f.docs[1].folderId = 'elsewhere';
+	await assert.rejects(f.guard('nested/new', 'nested', null), ExactCloudSyncDestinationChanged);
 });

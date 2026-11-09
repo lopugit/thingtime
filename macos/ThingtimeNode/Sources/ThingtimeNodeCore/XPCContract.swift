@@ -53,6 +53,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 
     private static let onboardingReads: Set<String> = [
         "node.status",
+        "location.status",
         "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
@@ -63,7 +64,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
         "pairing.resume",
         "pairing.unpair"
     ]
-    private static let permissionMutations: Set<String> = ["permissions.request"]
+    private static let permissionMutations: Set<String> = ["permissions.request", "location.set-enabled", "location.request-permission", "location.request-notification-permission", "location.open-settings"]
 
     public static func access(for method: String) -> ThingtimeNodeXPCRequestAccess {
         if method == "folder-sync.request" { return .folderSync }
@@ -77,7 +78,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 		switch method {
 		case "pairing.claim", "pairing.resume":
 			return pairingConfirmationTimeoutSeconds
-		case "pairing.unpair", "permissions.request":
+		case "pairing.unpair", "permissions.request", "location.set-enabled", "location.request-permission", "location.request-notification-permission", "location.open-settings":
 			return presenceConfirmationTimeoutSeconds
 		default:
 			return 0

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { App } from '../App.js';
 import { api } from '../lib/api.js';
 import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 import { useCommander } from './useCommander.js';
@@ -19,7 +21,9 @@ vi.mock('../lib/api.js', () => ({
   },
 }));
 vi.mock('../lib/nativeBridge.js', () => ({
+  beginWindowDrag: vi.fn(),
   hideLauncher: vi.fn(async () => undefined),
+  nativeBridgeAvailable: vi.fn(() => true),
   nativeRequest: vi.fn(async () => undefined),
 }));
 
@@ -244,6 +248,87 @@ describe('useCommander launcher sessions', () => {
     expect(hideLauncher).not.toHaveBeenCalled();
   });
 
+  it('starts a fresh emoji search when the same launcher opens the picker again', async () => {
+    const itemId = 'extension:builtin:emoji-symbols:search-emoji-symbols';
+    const title = 'Search Emoji & Symbols';
+    vi.mocked(api.bootstrap).mockResolvedValueOnce({
+      ...bootstrap,
+      extensions: [
+        {
+          id: 'builtin:emoji-symbols',
+          name: 'emoji-symbols',
+          title: 'Emoji & Symbols',
+          description: '',
+          version: '1.0.0',
+          source: 'builtin',
+          enabled: true,
+          compatibility: 'native',
+          commands: [{ name: 'search-emoji-symbols', title, mode: 'view', disabled: false, keywords: [] }],
+        },
+      ],
+    });
+    vi.mocked(api.streamSearch).mockImplementation(async (query, onEvent) => {
+      onEvent({
+        type: 'results',
+        phase: 'complete',
+        hits:
+          query === 'emoji'
+            ? [
+                {
+                  id: itemId,
+                  title,
+                  kind: 'extension',
+                  keywords: [],
+                  favourite: false,
+                  actions: [{ id: 'run', title }],
+                  score: 1,
+                  matchedRanges: [],
+                },
+              ]
+            : [],
+        complete: true,
+        cached: false,
+      });
+    });
+
+    render(<App />);
+    const launcherSearch = { name: 'Search apps, commands, files and folders' };
+    const emojiSearch = { name: 'Search emoji and symbols' };
+    const launcherInput = await screen.findByRole('textbox', launcherSearch);
+    fireEvent.change(launcherInput, { target: { value: 'emoji' } });
+    await screen.findByRole('option', { name: /Search Emoji & Symbols/ });
+    fireEvent.keyDown(launcherInput, { key: 'Enter' });
+
+    const firstInput = await screen.findByRole('textbox', emojiSearch);
+    fireEvent.change(firstInput, { target: { value: 'red heart' } });
+    expect(await screen.findByRole('option', { name: /^red heart,/i })).toBeVisible();
+    expect(firstInput).toHaveValue('red heart');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Default skin tone' }), { target: { value: '3' } });
+
+    // Native hide keeps the renderer mounted. Its next presentation can
+    // deliver both events before React commits an intermediate launcher view.
+    act(() => {
+      window.dispatchEvent(new CustomEvent('commander:launcher-opened'));
+      window.dispatchEvent(new CustomEvent('commander:command-hotkey', { detail: itemId }));
+    });
+
+    const reopenedInput = await screen.findByRole('textbox', emojiSearch);
+    expect(reopenedInput).toHaveValue('');
+    expect(reopenedInput).toHaveFocus();
+    expect(screen.getByRole('option', { name: /^grinning face,/i })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Default skin tone' })).toHaveValue('3');
+    fireEvent.change(reopenedInput, { target: { value: 'blue heart' } });
+    expect(await screen.findByRole('option', { name: /^blue heart,/i })).toBeVisible();
+
+    fireEvent.keyDown(reopenedInput, { key: 'Escape' });
+    const normalInput = await screen.findByRole('textbox', launcherSearch);
+    expect(normalInput).toHaveValue('');
+    fireEvent.change(normalInput, { target: { value: 'emoji' } });
+    await screen.findByRole('option', { name: /Search Emoji & Symbols/ });
+    fireEvent.keyDown(normalInput, { key: 'Enter' });
+    expect(await screen.findByRole('textbox', emojiSearch)).toHaveValue('');
+  });
+
   it('does not locally open a disabled emoji extension while HTTP is stalled', async () => {
     vi.mocked(api.bootstrap).mockResolvedValueOnce({
       ...bootstrap,
@@ -270,5 +355,22 @@ describe('useCommander launcher sessions', () => {
     await waitFor(() => expect(api.execute).toHaveBeenCalledWith(itemId, 'run', ''));
     await waitFor(() => expect(result.current.activeView).toBe('emoji-symbols'));
     expect(hideLauncher).not.toHaveBeenCalled();
+  });
+
+  it('ignores a delayed view response after the launcher opens a new session', async () => {
+    let complete!: (value: { ok: true; view: { id: 'emoji-symbols' } }) => void;
+    vi.mocked(api.execute).mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    const { result } = renderHook(() => useCommander());
+    await waitFor(() => expect(result.current.bootstrap).not.toBeNull());
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('commander:command-hotkey', { detail: 'extension:builtin:emoji-symbols:search-emoji-symbols' }),
+      );
+      window.dispatchEvent(new CustomEvent('commander:launcher-opened'));
+    });
+
+    await act(async () => complete({ ok: true, view: { id: 'emoji-symbols' } }));
+    expect(result.current.activeView).toBeNull();
   });
 });

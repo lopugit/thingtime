@@ -1,5 +1,7 @@
 # 🧠 Thingtime × Claude — Feature To-Do
 
+[57 — Shared Rust index/sync](57-shared-rust-index-sync.md) — in progress; shared database, native cutover and verified recovery.
+
 This folder is our shared roadmap. Each file is one feature: what it's for, what
 already exists in the code, what's missing/broken, the plan, and how we'll know
 it's done.

@@ -82,6 +82,49 @@ test('Codex OAuth accepts only the matching ChatGPT CIMD loopback callback', () 
   assert.equal(parseChatGptAuthorizationRequest(params, 'https://thingtime.com').ok, false);
 });
 
+test('the shared Codex CIMD accepts only its exact issuer-bound loopback callbacks', () => {
+  const clientId = 'https://chatgpt.com/oauth/codex/client.json';
+  const origin = 'https://thingtime.com';
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: clientId,
+    redirect_uri: 'http://127.0.0.1:49152/callback',
+    resource: `${origin}${CHATGPT_MCP_PATH}`,
+    code_challenge: validPkceChallenge,
+    code_challenge_method: 'S256',
+    state: validState
+  });
+
+  for (const redirectUri of ['http://127.0.0.1:49152/callback', 'http://localhost:49152/callback']) {
+    params.set('redirect_uri', redirectUri);
+    const parsed = parseChatGptAuthorizationRequest(params, origin);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) assert.equal(parsed.request.redirectUri, redirectUri);
+  }
+
+  for (const redirectUri of [
+    'http://127.0.0.1/callback',
+    'http://127.0.0.1:0/callback',
+    'http://127.0.0.1:65536/callback',
+    'http://127.1:49152/callback',
+    'https://127.0.0.1:49152/callback',
+    'http://localhost.attacker.invalid:49152/callback',
+    'http://localhost:49152/callback/other',
+    'http://localhost:49152/other/../callback',
+    'http://localhost:49152/callback?next=x',
+    'http://localhost:49152/callback#x',
+    'http://user@localhost:49152/callback',
+    'https://chatgpt.com/connector_platform_oauth_redirect'
+  ]) {
+    params.set('redirect_uri', redirectUri);
+    assert.equal(parseChatGptAuthorizationRequest(params, origin).ok, false, redirectUri);
+  }
+
+  params.set('redirect_uri', 'http://127.0.0.1:49152/callback');
+  params.set('client_id', `${clientId}?unknown`);
+  assert.deepEqual(parseChatGptAuthorizationRequest(params, origin), { ok: false, error: 'Unknown OAuth client' });
+});
+
 test('dynamic OAuth clients are bound to registered loopback or exact ChatGPT callbacks only', () => {
   const redirectUri = 'http://127.0.0.1:49152/callback/thingtime_mcp_AbC123';
   assert.equal(normalizeDynamicClientRedirectUri(redirectUri), redirectUri);

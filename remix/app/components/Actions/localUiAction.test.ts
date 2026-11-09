@@ -51,6 +51,18 @@ test('query navigation encodes values and stays on the current page', async () =
 });
 
 
+test('in-page query selection preserves literal values and rejects route authority atomically', async () => {
+	const { localQueryParams } = await import('./localUiAction');
+	const selected = localQueryParams({ view: 'favourite', id: 'A&B #?', show: false, count: 0 });
+	assert.ok(selected);
+	assert.deepEqual(Object.fromEntries(selected), { view: 'favourite', id: 'A&B #?', show: 'false', count: '0' });
+	assert.deepEqual(Object.fromEntries(localQueryParams({})!), {});
+	for (const invalid of [{ view: 'favourite', mode: 'edit' }, { view: 'favourite', key: 'bearer' }, { view: 'favourite', nested: {} }, JSON.parse('{"view":"favourite","__proto__":"bad"}')]) {
+		assert.equal(localQueryParams(invalid), null);
+	}
+});
+
+
 test('query forms collect only declared names, preserve exclusions and require opt-in', async () => {
 	const { localQueryFormInput, localQueryHref } = await import('./localUiAction');
 	const input = { op: 'query', form: true, params: { q: 'old', language: 'html', absent: 'kept' } };

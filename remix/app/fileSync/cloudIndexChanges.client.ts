@@ -1,5 +1,6 @@
 import { readCloudInventoryStream } from './cloudInventoryStream';
 import { inventorySyncEntry } from './cloudInventory';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
 import type { CloudInventoryPage } from './cloudInventoryPages';
 import type { CloudTransportRuntime } from './cloudTransport';
 import { sameSyncScope, validSyncEntry, type SyncEntry, type SyncScope } from './reconcile';
@@ -40,7 +41,8 @@ export function parseCloudIndexFeed(value: unknown, rootId: string, after?: numb
 			change.position <= previous ||
 			change.position > feed.cursor ||
 			!validSyncEntry(change.entry) ||
-			(change.entry.kind === 'file' && !change.entry.fingerprint) ||
+			(change.entry.kind === 'file' && !change.entry.fingerprint &&
+				(change.entry.size !== 0 || change.entry.sha256 !== EMPTY_CONTENT_SHA256)) ||
 			(change.entry.kind === 'folder' ? change.subtree !== change.entry.id : change.subtree !== null)
 		)
 			throw Error('Cloud index revision changed.');

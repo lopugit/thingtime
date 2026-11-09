@@ -1,11 +1,13 @@
 import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { ComponentDataScope } from './ComponentSelect';
+import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
 import { loadMapboxSourcePages } from './Maps/mapboxSource';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -82,7 +84,8 @@ export const useThingSource = ({
 	argValues,
 	interactive,
 	loadAllPages = false,
-	resolvedInputs = false
+	resolvedInputs = false,
+	executionHeld = false
 }: {
 	source: ThingSourceBinding | null | undefined;
 	// namespaces the localStorage cache line under the runtime's pageId — a
@@ -93,7 +96,10 @@ export const useThingSource = ({
 	// Map overlays consume every page, using the same delegated read/cache boundary.
 	loadAllPages?: boolean;
 	resolvedInputs?: boolean;
+	executionHeld?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
 	const api = useApi();
 	const dataPlane = useDataPlane();
@@ -105,17 +111,14 @@ export const useThingSource = ({
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
 	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
-	// inputs interpolate {arg} tokens against the args and {query.x} against
-	// the URL — the same substitution the template itself gets
-	const inputsKey = JSON.stringify(resolvedInputs ? { i: source?.inputs || null } : { i: source?.inputs || null, a: argValues, q: runtime.query });
-	const inputs = React.useMemo(() => {
-		if (!source?.inputs) return {};
-		if (resolvedInputs) return source.inputs;
-		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
-		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
-	}, [inputsKey, resolvedInputs]);
-	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
+	// Only the resolved inputs identify a read. Selecting an unrelated panel
+	// or marker leaves this source, its existing result, and its cache intact.
+	const resolved = source?.inputs && !resolvedInputs
+		? resolveTemplate(source.inputs, { ...argValues, query: runtime.query })
+		: source?.inputs;
+	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
+	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null, held]);
 	const initial = React.useMemo(
 		() => ({
 			identity: runtime.identity,
@@ -153,10 +156,10 @@ export const useThingSource = ({
 	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
 	// A manual refetch explicitly reconnects a live stream; action runs do not.
-	const runVersion = source?.refresh === 'live' ? runtime.refreshVersion + local * 1_000_000_007 : manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
-	// Action reports replace runtime.load; that cache is only used by action
-	// sources. A live stream keeps its connection until explicit refresh.
-	const sourceLoader = source?.refresh === 'live' ? null : runtime.load;
+	const runVersion = (source?.refresh === 'live' || manual ? runtime.refreshVersion : runtime.version + tick * 1_000_003) + local * 1_000_000_007;
+	// Automatic sources subscribe to the versioned shared loader. Manual
+	// sources read the current loader when mounted, rebound, or refetched.
+	const automaticLoader = !manual && source?.refresh !== 'live' ? runtime.load : null;
 	const signedIn = runtime.viewer.signedIn;
 	const viewerId = runtime.viewer.id;
 	const pageId = runtime.pageId;
@@ -261,13 +264,17 @@ export const useThingSource = ({
 				const run = (cursor?: string) => {
 					const pageInputs = cursor ? { ...inputs, cursor } : inputs;
 					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
-					return sourceLoader!(shareKey, () =>
+					return runtime.load(shareKey, () =>
 					runtime.sharedRun
 						? runtime.sharedRun(source.action, pageInputs)
 						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
 					) as Promise<any>;
 				};
-				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor) : await run();
+				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
+					if (stale()) return;
+					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
+					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });
+				}) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
@@ -286,14 +293,14 @@ export const useThingSource = ({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; only action sources subscribe to the version-keyed sourceLoader
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are serialized bindings; runVersion includes explicit refreshes; manual sources use the current shared loader without subscribing to Action reports
 	}, [
 		active,
 		signedIn,
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		sourceLoader,
+		automaticLoader,
 		viewerId,
 		sourceKey,
 		inputsKey,
@@ -357,6 +364,7 @@ export const LiveTemplate = ({
 	onUnowned,
 	confirm,
 	onDoubleClickCapture,
+	executionHeld = false,
 	children
 }: {
 	render: unknown;
@@ -366,9 +374,13 @@ export const LiveTemplate = ({
 	onUnowned?: TtActionUnownedHandler;
 	confirm?: TtActionConfirmHandler;
 	onDoubleClickCapture?: (event: React.MouseEvent) => void;
+	executionHeld?: boolean;
 	children?: React.ReactNode;
 }) => {
+	const held = useContentExecutionHeld(executionHeld);
+	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
+	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
 	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -379,11 +391,22 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
-	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
-	const active = local.identity === identity ? local : { identity, values: {} };
-	const [pending, setPending] = React.useState<{ identity: string; action: string | null }>({ identity, action: null });
+	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope]);
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
+	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
+	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
+	const active = local.identity === identity ? local : { identity, values: {}, outcome: undefined };
+	const [pending, setPending] = React.useState<{ identity: object; action: string | null }>({ identity, action: null });
+	React.useEffect(() => { if (held) setPending({ identity, action: null }); }, [held, identity]);
+	const heldRef = React.useRef(held);
+	heldRef.current = held;
 	const onLocal = (input: Record<string, unknown>) => {
+		// Native adapters may retain a callback across an async event.
+		if (heldRef.current) return;
+		if (input.op === 'query' && input.scope === 'page') {
+			runtime.setPageQuery(input.params);
+			return;
+		}
 		if (input.op === 'query' || input.op === 'back') {
 			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
 				navigate(-1);
@@ -417,6 +440,7 @@ export const LiveTemplate = ({
 		}));
 	};
 	const onTtAction = useTtActionClicks({
+		executionHeld: held,
 		onUnowned,
 		confirm,
 		onLocal,
@@ -433,7 +457,8 @@ export const LiveTemplate = ({
 	);
 	if (!resolved) return null;
 	return (
-		<NativeControlsEnabled.Provider key={identity} value={interactive}>
+		<ContentExecutionBoundary held={executionHeld}>
+		<NativeControlsEnabled.Provider key={`${runtime.identity.key}:${draftKey}`} value={interactive}>
 			<ComponentDragBoundary>
 			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
 				<ComponentDataScope.Provider value={liveScope}>
@@ -489,5 +514,6 @@ export const LiveTemplate = ({
 			</ComponentLocalControl.Provider>
 			</ComponentDragBoundary>
 		</NativeControlsEnabled.Provider>
+		</ContentExecutionBoundary>
 	);
 };

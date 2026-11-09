@@ -7,6 +7,7 @@ import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 
 import { readDeviceDetailCache, readDeviceListCache, writeDeviceDetailCache, writeDeviceListCache } from './deviceCache';
 import { createDeviceRuntimeState, deviceActionPolicy, reconcileDeviceCommand } from './deviceCore';
+import { readDeviceResources } from './deviceResourceMetrics';
 import type { DeviceActionControl, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type {
 	DeviceActionKind,
@@ -380,6 +381,7 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 	const allCapabilities = [...device.capabilities, ...device.connectors.flatMap((connector) => connector.capabilities)];
 	return {
 		id: device.id,
+		rootFolderId: device.rootFolderId,
 		name: device.name || 'Computer',
 		platform: device.platform,
 		// The cloud projection proves the paired node exists, but does not expose
@@ -446,6 +448,7 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			spotify: device.state?.spotify,
 			chromeYouTube: device.state?.chromeYouTube,
 			powerTimers: device.state?.powerTimers,
+			resources: readDeviceResources(device.state?.resources),
 			battery: device.state?.battery
 				? {
 					...device.state.battery,

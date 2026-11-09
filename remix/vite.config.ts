@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
+import { automaticRoutePreviewsPlugin } from './scripts/generate-route-previews.mjs';
 
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
@@ -287,5 +288,5 @@ export default defineConfig({
       '/api': forwardHostProxy(localApiTarget)
     }
   },
-  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [automaticRoutePreviewsPlugin(), librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

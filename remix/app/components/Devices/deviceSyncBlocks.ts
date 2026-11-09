@@ -18,6 +18,14 @@ const linkStyle = {
 	'text-decoration': 'none',
 	'overflow-wrap': 'anywhere'
 };
+export const localMobileSyncBlocks: WebpageBlock[] = [
+	{ ...text('local-mobile-sync-description', 'p', 'This is your paired device. Use its sync controls below to edit settings or start a transfer.'), css: { 'font-size': '14px', 'margin-bottom': '8px' } },
+	{ ...text('local-mobile-sync-link', 'a', 'Go to this device’s sync controls', {
+		href: '{localSync.href}',
+		'data-tt-action': '$transient',
+		'data-tt-action-inputs': { operation: 'go-to-local-sync' }
+	}), css: linkStyle }
+];
 export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 	{
 		id: 'device-sync-overview',
@@ -41,7 +49,7 @@ export const deviceSyncOverviewBlocks: WebpageBlock[] = [
 				css: { display: 'flex', gap: '8px', 'flex-wrap': 'wrap' },
 				children: [
 					{ ...text('device-sync-all-things', 'a', 'All Things', { href: '/things' }), css: linkStyle },
-					{ ...text('device-sync-settings-link', 'a', 'Device settings', { href: '{deviceSync.settingsHref}' }), css: linkStyle },
+					{ ...text('device-sync-settings-link', 'a', 'Device page', { href: '{deviceSync.settingsHref}' }), css: linkStyle },
 					{ ...text('device-sync-activity-link', 'a', 'Activity manager', { href: '/things?activity=1' }), css: linkStyle },
 					{ ...text('device-sync-files-link', 'a', 'Browse synced files', { href: '{deviceSync.filesHref}' }), css: linkStyle }
 				]

@@ -53,17 +53,24 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLSchemes: [thingtime]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         ITSAppUsesNonExemptEncryption: false
-        NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
+        NSLocationWhenInUseUsageDescription: Thingtime can save this device's measured location when you enable location history.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Thingtime can periodically save this device’s measured location in the background when you enable device location history. You can turn this off in device settings.
+        NSCameraUsageDescription: Thingtime uses the camera for LiDAR scans and to take photos and videos you choose to save or share.
         NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice conversations and when you record a video to share.
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
         NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share or back up original files with their embedded metadata.
         UILaunchScreen: {}
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).file-upload
+          - $(PRODUCT_BUNDLE_IDENTIFIER).file-sync-processing
+          - $(PRODUCT_BUNDLE_IDENTIFIER).device-presence
         UIBackgroundModes:
           - audio
           - processing
+          - fetch
+          - location
         NSSupportsLiveActivities: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -83,6 +90,14 @@ targets:
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
+        OTHER_LDFLAGS: "$(inherited) -force_load $(BUILT_PRODUCTS_DIR)/libcommander_indexer_ffi.a -lsqlite3 -liconv -lc++"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    preBuildScripts:
+      - name: Build shared Rust filesystem indexer
+        script: '"$SRCROOT/../filesystem-indexer/scripts/build-ios.sh"'
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/libcommander_indexer_ffi.a"
     entitlements:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
@@ -120,6 +135,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: $(THINGTIME_IOS_BUNDLE_IDENTIFIER)
@@ -186,6 +202,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
+        ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -220,6 +238,19 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).tests
         GENERATE_INFOPLIST_FILE: true
 
+  ThingtimeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ThingtimeUITests
+    dependencies:
+      - target: Thingtime
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).uitests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: Thingtime
+
 schemes:
   Thingtime:
     build:
@@ -227,10 +258,12 @@ schemes:
         Thingtime: all
         ThingtimeWatch: all
         ThingtimeTests: [test]
+        ThingtimeUITests: [test]
     test:
       gatherCoverageData: true
       targets:
         - ThingtimeTests
+        - ThingtimeUITests
     run:
       config: Debug
     archive:

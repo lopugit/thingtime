@@ -52,3 +52,11 @@ test('versionContentEquals ignores key order between versionContent output and s
  assert.equal(versionContentEquals(ordered, { ...basis, crystal: { z: 1, a: [{ k: 'v', j: null }, 1] } }), false, 'array order still matters');
  assert.equal(versionContentEquals(ordered, { ...basis, extended: null }), false);
 });
+
+test('wide object comparison processes all fields instead of imposing a total visit ceiling', () => {
+ const base = Object.fromEntries(Array.from({ length: 100_001 }, (_, index) => [`field${index}`, index]));
+ const current = { ...base, current: true }, incoming = { ...base, incoming: true };
+ const merged = mergeVersionValues(base, current, incoming);
+ assert.equal(merged.conflicts.length, 0);
+ assert.equal(versionContentEquals(merged.value, { ...base, current: true, incoming: true }), true);
+});

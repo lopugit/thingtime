@@ -90,6 +90,7 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	startsWith: sig(2, 2, 'Text starts with prefix.'),
 	endsWith: sig(2, 2, 'Text ends with suffix.'),
 	replace: sig(3, 3, 'Replace every occurrence of a substring.'),
+	encodeURIComponent: sig(1, 1, 'UTF-8 URI-component encoding of text; null/undefined become empty text. Other types and unpaired UTF-16 surrogates are refused.'),
 	padStart: sig(2, 3, 'Pad text on the left to a length (fill defaults to " ").'),
 	toNumber: sig(1, 1, 'Coerce to a number (null when not numeric).'),
 	toString: sig(1, 1, 'Coerce to text.'),
@@ -672,6 +673,15 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			const parts = source.split(needle);
 			capProjectedText(source.length + (parts.length - 1) * (replacement.length - needle.length), ctx);
 			return capText(parts.join(replacement), ctx);
+		}
+		case 'encodeURIComponent': {
+			const value = args[0];
+			if (value !== null && value !== undefined && typeof value !== 'string') return ctx.fail('encodeURIComponent expected text or null');
+			const source = capText((value ?? '') as string, ctx);
+			let encoded: string;
+			try { encoded = encodeURIComponent(source); }
+			catch { return ctx.fail('encodeURIComponent requires well-formed UTF-16 text'); }
+			return capText(encoded, ctx);
 		}
 		case 'padStart':
 			return capText(

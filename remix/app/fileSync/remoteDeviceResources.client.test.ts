@@ -4,19 +4,26 @@ import { createRemoteDeviceStatusSession } from './remoteDeviceResources.client'
 const policy = { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 };
 const status = { version: 1 as const, deviceId: 'device', observedAt: '2026-11-03T00:00:00.000Z', roots: [], rootsReady: false, jobs: [], task: null,
  capabilities: { platform: 'macos', fileAccessVersion: '1.16.0', fileResourceLimitsVersion: '1.1.0' }, resourceUsage: { deviceResourceLimits: policy } };
-test('overview and manager share a coalesced heartbeat; save selected-device policy while paused', async () => {
+test('overview and manager share a coalesced heartbeat; save selected-device policy while paused', async t => {
+ t.mock.timers.enable({ apis: ['Date'], now: 100_000 });
  let reads = 0, saves = 0, visible = true, onVisibility = () => {}, active = true;
  const session = createRemoteDeviceStatusSession({ origin: 'https://device.test', ownerId: 'owner', deviceId: 'device', visible: () => visible,
   assertCurrent: () => { if (!active) throw Error('identity changed'); }, subscribeVisibility: fn => { onVisibility = fn; return () => {}; },
   createClient: () => ({ send: async (command: any) => {
    if (command.action === 'resources') { saves++; return { deviceResourceLimits: command.deviceResourceLimits }; }
-   reads++; return command.cursor ? { ...status, resourceUsage: undefined } : { ...status, nextCursor: '32' };
+   reads++;
+   if (command.cursor) t.mock.timers.setTime(110_000);
+   return command.cursor ? { ...status, observedAt: '2026-11-03T00:00:01.000Z', resourceUsage: undefined } : { ...status, nextCursor: '32' };
   } }) as any });
  const releaseOverview = session.retain(), releaseManager = session.retain();
  await Promise.all([session.refresh(), session.refresh()]);
  assert.equal(reads, 2); assert.deepEqual(session.read().status?.resourceUsage, { deviceResourceLimits: policy });
+ assert.equal(session.read().receivedAt, 100_000, 'the receipt is anchored to the first status page');
+ t.mock.timers.setTime(120_000);
  assert.deepEqual(await session.save({ ...policy, cpuPercent: 12 }), { ...policy, cpuPercent: 12 }); assert.equal(saves, 1);
  assert.deepEqual(session.read().status?.resourceUsage?.deviceResourceLimits, { ...policy, cpuPercent: 12 });
+ assert.equal(session.read().status?.observedAt, status.observedAt, 'neither later pages nor a policy save are a fresh status heartbeat');
+ assert.equal(session.read().receivedAt, 100_000, 'saving cannot refresh the status receipt');
  visible = false; onVisibility(); await session.refresh(); assert.equal(reads, 2);
  active = false; await assert.rejects(session.save(policy), /identity changed/); releaseOverview(); releaseManager();
 });

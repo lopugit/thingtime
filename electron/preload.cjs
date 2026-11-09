@@ -1,12 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('thingtimeDesktop', {
+if (process.argv?.includes('--thingtime-native-password-approval')) {
+	contextBridge.exposeInMainWorld('thingtimeDesktop', {
+		passwordApprovalReady: ownerId => ipcRenderer.invoke('thingtime-desktop:password-approval-ready', ownerId),
+		passwordApprovalRespond: response => ipcRenderer.invoke('thingtime-desktop:password-approval-respond', response),
+	});
+} else contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	activityVersion: '1.0.0',
 	activityRequest: (request) => ipcRenderer.invoke('thingtime-desktop:activity', request),
-	passwordsVersion: process.platform === 'darwin' ? '1.2.0' : undefined,
+	passwordsVersion: process.platform === 'darwin' ? '1.2.0' : ['linux', 'win32'].includes(process.platform) ? '1.3.0' : undefined,
+	passwordsMode: process.platform === 'darwin' ? 'system' : ['linux', 'win32'].includes(process.platform) ? 'scopedDesktop' : undefined,
 	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
 	fileExportVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),
+	attachmentUploadVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	attachmentUploadRequest: (request) => {
+		if (request?.action === 'chunk' && (!(request.bytes instanceof Uint8Array) || request.bytes.length > 256 * 1024))
+			throw Error('Invalid upload chunk.');
+		return ipcRenderer.invoke('thingtime-desktop:attachment-upload', request);
+	},
 	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
 	folderSyncTaskVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
 	setFolderSyncActive: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync-active', request),
@@ -55,6 +67,8 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	openAppLocations: () => ipcRenderer.invoke('thingtime-desktop:open-app-locations'),
 	restartAfterPermissions: () => ipcRenderer.invoke('thingtime-desktop:permission-restart'),
 	nodeControl: (request) => ipcRenderer.invoke('thingtime-desktop:node-control', request),
+	deviceLocationVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	deviceLocationRequest: (request) => ipcRenderer.invoke('thingtime-desktop:node-location', request),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
 	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),

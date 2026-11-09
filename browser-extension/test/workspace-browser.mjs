@@ -33,11 +33,13 @@ chrome.runtime.onMessage.addListener((message,sender)=>{if(message?.action==='na
 globalThis.openFixtureWorkspace=async()=>{const [tab]=await chrome.tabs.query({url:'https://workspace-fixture.test/'});return testController.open(tab);};`);
 const profile = await mkdtemp(path.join(tmpdir(), 'thingtime-workspace-profile-'));
 const output = process.env.THINGTIME_WORKSPACE_EVIDENCE || path.join(tmpdir(), 'thingtime-workspace-evidence');
+const catalogOnly=process.argv.includes('--catalog-only');
 await mkdir(output, {recursive:true});
 await writeFile(path.join(output,'runtime.json'),JSON.stringify({profile,extension,browserExecutable:chromium.executablePath(),synthetic:true},null,2));
 let context;let passwordWorkspaceAcceptance=null;
 try {
- context = await chromium.launchPersistentContext(profile, {headless:false, viewport:null, args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ const headless=catalogOnly;
+ context = await chromium.launchPersistentContext(profile, {headless, ...(headless?{channel:'chromium'}:{}), viewport:null, args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
  const extensionOrigin = worker.url().split('/').slice(0,3).join('/');
  await context.route('https://workspace-fixture.test/**', route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Disposable website fixture</title><h1>Website fixture</h1>'}));
@@ -59,6 +61,83 @@ try {
   const dimensions=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));assert.ok(dimensions.scroll<=dimensions.width,`${name}: horizontal overflow`);
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));await page.screenshot({path:path.join(output,`${name}.png`),fullPage:true});await page.evaluate(()=>window.scrollTo(0,0));
  }
+ async function exerciseSlowCatalog(){
+ // Test the real account bridge over a reserved synthetic origin. The second
+ // complete catalog is delayed beyond the old roster deadline and fails once.
+ const catalogOrigin='https://catalog-fixture.test';
+ await context.route(`${catalogOrigin}/**`,route=>route.fulfill({contentType:'text/html',body:`<!doctype html><title>Synthetic vault</title><script>
+  const owner='synthetic-catalog-owner';
+  const accounts=[{id:owner,username:'fixture-owner',active:true}];
+  const catalog=Array.from({length:64},(_,i)=>({id:'entry-'+i,title:'Amazon account '+String(i).padStart(2,'0'),username:'fixture-'+i+'@example.test',domains:['workspace-fixture.test'],origins:['https://workspace-fixture.test'],fillEligible:true}));
+  window.catalogRequests=0;window.catalogCancelled=0;
+  document.addEventListener('thingtime:extension-accounts-cancel',()=>window.catalogCancelled++);
+  document.addEventListener('thingtime:extension-accounts-request',event=>{
+   const {nonce,operation}=JSON.parse(event.detail);
+   const send=reply=>document.dispatchEvent(new CustomEvent('thingtime:extension-accounts-response',{detail:JSON.stringify({version:1,nonce,...reply})}));
+   if(operation==='discover'){send({accounts});return;}
+   window.catalogRequests++;
+   if(window.holdCatalog){
+    window.releaseCatalog=error=>send(error?{error:true}:{accounts,catalog:[...catalog,{...catalog[0],id:'new',title:'Amazon root account',username:'fixture-root@example.test'}]});
+   }else send({accounts,catalog});
+  });
+ </script>`}));
+ const catalogPage=await context.newPage();await catalogPage.goto(catalogOrigin);
+ await page.getByRole('tab',{name:'Config'}).click();await page.locator('#origin').fill(catalogOrigin);await page.getByRole('button',{name:'Save connection',exact:true}).click();
+ await page.getByRole('tab',{name:'Overview'}).click();await page.locator('#vault-count').getByText('64 saved accounts',{exact:true}).waitFor();
+ assert.equal(await page.locator('.vault-account').count(),50);
+ await page.getByRole('button',{name:'Load more accounts'}).click();
+ assert.equal(await page.locator('.vault-account').count(),64);
+ await catalogPage.evaluate(()=>window.holdCatalog=true);
+ const firstFill=page.locator('.vault-account button').first();
+ await firstFill.focus();
+ await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await catalogPage.waitForFunction(()=>typeof window.releaseCatalog==='function');
+ assert.equal(await firstFill.evaluate(button=>document.activeElement===button),true);
+ const requests=await catalogPage.evaluate(()=>window.catalogRequests);
+ for(const width of [960,375]){
+  await page.setViewportSize({width,height:740});
+  await page.locator('#vault-search').fill('fixture-63');
+  await page.locator('.vault-account').getByText('fixture-63@example.test',{exact:true}).waitFor();
+  assert.equal(await page.locator('#vault-progress:visible').count(),1);
+  assert.equal(await page.locator('#vault-status').textContent(),'');
+  if(width===375){
+   await page.emulateMedia({reducedMotion:'reduce'});
+   assert.equal(await page.locator('.vault-spinner').evaluate(spinner=>getComputedStyle(spinner).animationName),'none');
+  }
+  await check(`catalog-refresh-${width}`);
+ }
+ await page.locator('#vault-refresh').click();
+ assert.equal(await catalogPage.evaluate(()=>window.catalogRequests),requests,'Repeated refresh coalesces while request is pending');
+ // Give the prior 2.5-second cutoff time to fire if it regresses.
+ await new Promise(resolve=>setTimeout(resolve,2700));
+ assert.equal(await page.locator('#vault-progress').isVisible(),true);
+ const filteredFill=page.locator('.vault-account button');
+ await filteredFill.focus();
+ await catalogPage.evaluate(()=>{window.releaseCatalog(true);delete window.releaseCatalog;});
+ await page.locator('#vault-status').getByText('Saved accounts could not be loaded. Choose Refresh to retry.',{exact:true}).waitFor();
+ assert.equal(await page.locator('#vault-progress').isVisible(),false);
+ assert.equal(await page.locator('.vault-account').getByText('fixture-63@example.test',{exact:true}).count(),1);
+ assert.equal(await filteredFill.evaluate(button=>document.activeElement===button),true);
+ await page.locator('#vault-refresh').click();await catalogPage.waitForFunction(()=>typeof window.releaseCatalog==='function');
+ await page.locator('#vault-search').fill('amazon root');
+ await catalogPage.evaluate(()=>{window.releaseCatalog(false);delete window.releaseCatalog;});
+ await page.locator('.vault-account').getByText('fixture-root@example.test',{exact:true}).waitFor();
+ assert.equal(await page.locator('#vault-progress').isVisible(),false);
+ await page.locator('#vault-refresh').click();await catalogPage.waitForFunction(()=>typeof window.releaseCatalog==='function');
+ await page.locator('#vault-lock').click();
+ await catalogPage.waitForFunction(()=>window.catalogCancelled===1);
+ await catalogPage.evaluate(()=>window.releaseCatalog(false));
+ await page.getByRole('heading',{name:'Connection locked',exact:true}).waitFor();
+ assert.equal(await page.locator('.vault-account').count(),0);
+ assert.equal(await page.locator('#vault-search').inputValue(),'');
+ await catalogPage.close();
+ }
+ if(catalogOnly){
+  await exerciseSlowCatalog();
+  assert.deepEqual(errors,[]);
+  await writeFile(path.join(output,'result.json'),JSON.stringify({status:'pass',synthetic:true,checks:['64-entry catalog','slow refresh on desktop and mobile','cached search and paging','coalescing','error/retry','lock cancels refresh'],errors},null,2));
+  console.log(`Synthetic Chrome workspace catalog acceptance passed. Evidence: ${output}`);
+ }else{
  await check('overview-desktop');
  await page.getByRole('tab',{name:'Requests'}).click();await page.getByText('No active passkey requests.',{exact:false}).waitFor();await check('requests-desktop');
  await page.getByRole('tab',{name:'Config'}).click();
@@ -140,6 +219,7 @@ try {
   passwordWorkspaceAcceptance=await exercisePasswordWorkspace({context,worker,site,page,origin:providerUIOrigin,output});
   await page.getByRole('tab',{name:'Config'}).click();
  }
+ await exerciseSlowCatalog();
  await page.setViewportSize({width:960,height:760});
  await page.getByRole('tab',{name:'Config'}).click();await page.locator('#enabled').uncheck();await page.locator('#origin').fill('https://thingtime.com');await page.getByRole('button',{name:'Save connection',exact:true}).click();await page.getByText('Thingtime is off.',{exact:false}).waitFor();
  // Viewport changes model resizing without touching the user's browser.
@@ -151,6 +231,7 @@ try {
  await page.getByRole('tab',{name:'Help'}).click();await check('help-dark-large-text');await page.getByRole('tab',{name:'Overview'}).click();await check('overview-dark-large-text');
  await site.goto('https://workspace-fixture.test/navigated');await page.getByRole('tab',{name:'Overview'}).click();await page.getByRole('button',{name:'Refresh status'}).click();await page.getByText('No current website selected.',{exact:false}).waitFor();
  assert.deepEqual(errors,[]);
- await writeFile(path.join(output,'result.json'),JSON.stringify({status:'pass',synthetic:true,passwordWorkspaceAcceptance,checks:['screen fit','all tabs desktop/narrow/landscape','32px text dark/reduced-motion','keyboard tabs','appearance save/reload','stale document target','rendered active get/create requests via content bridge','exact fallback request identity','fallback/cancellation requester focus and request cleanup','dedicated popup with two same-site windows and original requester return'],actualProviderFixture:providerUIOrigin?{status:'pass',syntheticAPI:true,checks:['actual component excluded create','no approval refresh or fallback','password input cleared','explicit return exact two-hop identity','requester focus and cleanup']}:null,errors},null,2));
+ await writeFile(path.join(output,'result.json'),JSON.stringify({status:'pass',synthetic:true,passwordWorkspaceAcceptance,checks:['screen fit','all tabs desktop/narrow/landscape','32px text dark/reduced-motion','keyboard tabs','appearance save/reload','stale document target','rendered active get/create requests via content bridge','exact fallback request identity','fallback/cancellation requester focus and request cleanup','dedicated popup with two same-site windows and original requester return','64-entry slow catalog refresh, cached search, retry, coalescing and lock'],actualProviderFixture:providerUIOrigin?{status:'pass',syntheticAPI:true,checks:['actual component excluded create','no approval refresh or fallback','password input cleared','explicit return exact two-hop identity','requester focus and cleanup']}:null,errors},null,2));
  console.log(`Synthetic Chrome workspace acceptance passed. Evidence: ${output}`);
+ }
 } finally {await context?.close();await rm(profile,{recursive:true,force:true});await rm(extension,{recursive:true,force:true});}

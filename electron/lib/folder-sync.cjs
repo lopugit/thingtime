@@ -1,16 +1,18 @@
 'use strict';
 
 const { governorFor, limits: resourceLimits, deviceLimits } = require('./folder-resource-governor.cjs');
+const { TransferWorkerDisconnected } = require('./folder-transfer-process.cjs');
 const { stageFolderDownload } = require('./folder-download.cjs');
 const { uploadFolderPart, uploadRetry, retryableUploadFailure } = require('./folder-upload.cjs');
 const { validateFolderBatchInput, validateFolderBatchReply } = require('./folder-validate-batch.cjs');
+const { uploadFolderSingle } = require('./folder-upload-single.cjs');
 const { uploadFolderBatch } = require('./folder-upload-batch.cjs');
 const { BATCH_FAILURE_FIELDS } = require('./folder-sync-diagnostics.cjs');
 const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'observe-path', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -21,7 +23,7 @@ const unavailable = () => new Error('Folder access changed. Reopen this device w
 const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
 const shutdownWait = () => new Error('[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.');
 const transportRetry = () => new Error('[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.');
-const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'cancelled', 'unsupported_feature']);
+const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'folder_volume_retry', 'cancelled', 'unsupported_feature']);
 const requestFailureCode = error => error?.name === 'ThingtimeNodeBridgeError' && nativeFailureCodes.has(error.code) ? error.code :
     error?.message === verificationRetry().message ? 'folder_identity_retry' : error?.message === unavailable().message ? 'host-refused' : 'unclassified';
 const transientStatus = status => status === 408 || status === 429 || (status >= 500 && status <= 599);
@@ -227,6 +229,7 @@ class DesktopFolderSync {
         if (!input || typeof input !== 'object' || Array.isArray(input) || !UUID.test(input.requestId) ||
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
+        if (input.action === 'observe-path' && (!Number.isInteger(input.remainingMs) || input.remainingMs < 1 || input.remainingMs > 30_000)) throw unavailable();
         if (input.deviceResourceLimits !== undefined) deviceLimits(input.deviceResourceLimits);
         if (input.resourceLimits !== undefined) {
             if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
@@ -273,6 +276,7 @@ class DesktopFolderSync {
             apiOrigin: context.apiOrigin, ownerId: input.ownerId, deviceId: input.deviceId,
             supported: supportsBatchPages(value?.capabilities?.fileAccessVersion),
             folders: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileFolderBatchVersion ?? ''),
+            single: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileSingleUploadVersion ?? ''),
             bulk: /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value?.capabilities?.fileUploadBatchVersion ?? ''),
             // Public feature negotiation belongs to this exact live binding,
             // never to an authorization TTL or an account/device grant.
@@ -325,25 +329,26 @@ class DesktopFolderSync {
         const timing = requestTiming(input.action, this.now, row => this.diagnostic(row));
         let outcome = 'failed', endReply;
         const lane = input.action === 'scan-changes' ? 'streamWaiter' : input.action === 'resources' ? 'resourceRequest' : 'active';
-        const state = { context, folderDeadline: input.action === 'validate-folder-batch' ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
+        const state = { context, folderDeadline: ['validate-folder-batch', 'observe-path'].includes(input.action) ? this.now() + input.remainingMs : null, input: structuredClone(input), abort: new AbortController(), dispatched: false, lane, phase: 'admission' };
         const policy = state.input.resourceLimits ?? { cpuPercent: 15, uploadBytesPerSecond: 625000, downloadBytesPerSecond: 625000 };
-        const governedPayload = policy && ((['upload-part', 'upload-batch'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+        const governedPayload = policy && ((['upload-part', 'upload-batch', 'upload-single'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
             (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
         const timer = governedPayload ? null : setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
-        const verify = async () => {
+        const verify = async (externalSignal) => {
             const previousPhase = state.phase;
             state.phase = 'account-verification';
             this.assertCurrent(state);
-            const signal = AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]);
+            const signal = AbortSignal.any([state.abort.signal, ...(externalSignal ? [externalSignal] : []), AbortSignal.timeout(20_000)]);
             await timing.measure('account', () => this.verifyAccount(context, signal)); this.assertCurrent(state);
             state.phase = previousPhase;
         };
         let governor;
+        const readResources = state.input.action === 'resources' && state.input.deviceResourceLimits === undefined;
         const nativeRequest = (request, extra = {}) => timing.measure('native', async () => {
             const governed = { ...request, ...(request.rootId === state.input.rootId && state.input.resourceLimits ? { resourceLimits: state.input.resourceLimits, resourceScope: state.input.resourceScope } : {}), ...(state.input.deviceResourceLimits ? { deviceResourceLimits: state.input.deviceResourceLimits } : {}) };
             const reply = await this.requestNative('folder-sync.request', governed, { ...extra, signal: extra.signal ?? state.abort.signal });
-            if (governor && reply?.resources?.version === 1) governor.observeNative(reply.resources);
+            if (governor && !readResources && reply?.resources?.version === 1) governor.observeNative(reply.resources);
             return reply;
         });
         try {
@@ -377,7 +382,7 @@ class DesktopFolderSync {
                 if (!this.samePageCapability(context, state.input)?.supported)
                     throw new Error('This native host does not support larger inventory pages. Update Thingtime and reconnect.');
             }
-            if (state.input.action === 'upload-part') {
+            if (['upload-part', 'upload-single'].includes(state.input.action)) {
                 state.phase = 'capability-verification';
                 let manifest = this.samePageCapability(context, state.input)?.apiCapabilities;
                 if (!manifest) {
@@ -387,6 +392,10 @@ class DesktopFolderSync {
                 if (!/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(manifest?.features?.['api.attachment-upload-parts']?.version ?? ''))
                     throw new Error('The selected server does not support this version of folder sync.');
             }
+            if (state.input.action === 'observe-path') {
+                state.input.remainingMs = Math.floor(state.folderDeadline - this.now());
+                if (!(state.input.remainingMs > 0 && state.input.remainingMs <= 30_000)) throw unavailable();
+            }
             if (state.input.action === 'validate-folder-batch') {
                 const capability = this.samePageCapability(context, state.input);
                 if (!capability?.folders || !/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(capability.apiCapabilities?.features?.['api.file-sync-batches']?.version ?? ''))
@@ -394,6 +403,7 @@ class DesktopFolderSync {
                 state.input.remainingMs = Math.floor(state.folderDeadline - this.now());
                 validateFolderBatchInput(state.input, context);
             }
+            if (state.input.action === 'upload-single' && !this.samePageCapability(context, state.input)?.single) throw new Error('This native host does not support compound single uploads.');
             if (state.input.action === 'upload-batch') {
                 const capability = this.samePageCapability(context, state.input);
                 if (!capability?.bulk || !/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(capability.apiCapabilities?.features?.['api.file-sync-batches']?.version ?? ''))
@@ -406,28 +416,38 @@ class DesktopFolderSync {
             }
             state.phase = 'native-request';
             state.dispatched = true;
-            const value = state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
+            const value = state.input.action === 'upload-single' ? await uploadFolderSingle({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) : state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
                 assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, refreshPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) :
                 state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
-            if (governor) value.resources = governor.snapshot();
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            if (governor && !readResources) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
                 value.apiCapabilities = apiCapabilities;
+                const accessVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(value.capabilities?.fileAccessVersion ?? '');
+                if (Number(accessVersion?.[1]) >= 16 && value.capabilities?.fileResourceLimitsVersion === '1.1.0')
+                    value.capabilities = { ...value.capabilities, fileResourceLimitsVersion: '1.1.1' };
                 if (/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileResourceLimitsVersion ?? '') && /^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileStagingVersion ?? '') && /^1\.(1[7-9]|[2-9][0-9]|[1-9][0-9]{2,})\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-content']?.version ?? ''))
-                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.0' };
+                    value.capabilities = { ...value.capabilities, fileDownloadVersion: '1.0.1' };
                 if (/^1\.([2-9]|[1-9][0-9]+)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileAccessVersion ?? ''))
                     value.capabilities = { ...value.capabilities, fileUploadVersion: '1.1.0' };
+                if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.capabilities?.fileSingleUploadVersion ?? '') || !/^1\.([1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.attachment-upload-parts']?.version ?? '')) delete value.capabilities?.fileSingleUploadVersion;
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
                 value.deviceId !== input.deviceId || value.origin !== context.apiOrigin) throw unavailable();
+            // The read lane borrows the current governor without replacing its
+            // policy. Merge native gauges only after the exact reply is fenced.
+            if (governor && readResources && value.resources?.version === 1) {
+                governor.observeNative(value.resources);
+                value.resources = governor.snapshot();
+            }
             if (state.input.action === 'context') this.rememberPageCapability(context, state.input, value);
             if (input.action === 'read-range') {
                 const c = value.chunk;
@@ -448,12 +468,16 @@ class DesktopFolderSync {
                 this.reportFailure(input.action, state.phase, error);
                 // Only fixed, trusted native transport codes may retry. Source,
                 // account, capability and protocol refusals remain terminal.
-                if (state.phase === 'native-request' && error?.name === 'ThingtimeNodeBridgeError' &&
-                    ['node_timeout', 'node_unavailable'].includes(error.code)) throw transportRetry();
+                if (state.phase === 'native-request' && (error instanceof TransferWorkerDisconnected ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && ['node_timeout', 'node_unavailable'].includes(error.code)))) throw transportRetry();
                 // Electron serializes Error.name in its rejection text. Normalize
                 // this exact native marker to the renderer's existing contract.
                 if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_identity_retry' &&
                     error.message === verificationRetry().message) throw verificationRetry();
+                if (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'folder_volume_retry' &&
+                    ['[folder_volume_offline] The granted volume is offline. Saved sync will retry.',
+                     '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.'].includes(error.message))
+                    throw new Error(error.message);
             }
             // The native bridge reports cancellation with its own fixed code.
             // A genuine authority/protocol refusal still keeps its diagnosis.

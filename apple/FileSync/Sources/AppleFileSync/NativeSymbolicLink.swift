@@ -19,7 +19,7 @@ public struct NativeSymbolicLink: Codable, Equatable, Sendable {
 
 enum NativeSymbolicLinks {
     typealias Failure = MobileFolderStore.Failure
-    private struct Registration: Codable { let identity: String; let birth: String; let hash: String; let symbolicLink: NativeSymbolicLink?; let journal: Bool }
+    private struct Registration: Codable { let identity: String; let birth: String; let hash: String; let symbolicLink: NativeSymbolicLink?; let journal: Bool; var continuity: String? = nil }
     private struct Envelope: Encodable {
         let format = "thingtime-symbolic-link-fallback-v1"
         let originalKind = "symbolic-link"
@@ -30,7 +30,7 @@ enum NativeSymbolicLinks {
     // receipt authorizes interpreting it during an ordinary scan. A copied or
     // user-authored envelope stays an ordinary file until an explicit restore.
     @TaskLocal static var receiptDirectory: URL?
-    private static var registry: URL {
+    static var registry: URL {
         if let receiptDirectory { return receiptDirectory }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ThingtimeNativeLinkReceipts-v1", isDirectory: true)
@@ -47,7 +47,7 @@ enum NativeSymbolicLinks {
             let current = openat(fd, marker, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
             if current >= 0 {
                 defer { close(current) }
-                guard let previous = registration(info), previous.journal,
+                guard let previous = registration(info, continuity: try NativeFilesystemContinuity.identity(fd)), previous.journal,
                       let existing = try markerBytes(current), hash(existing) == previous.hash else { throw Failure.changed }
                 proof = existing
             } else {
@@ -59,20 +59,33 @@ enum NativeSymbolicLinks {
                 guard n == proof.count, fsync(created) == 0, fsync(fd) == 0 else { throw Failure.storage }
             }
         }
+        let continuity = try NativeFilesystemContinuity.identity(fd)
+        let row = Registration(identity: identity(info), birth: birth(info), hash: hash(proof), symbolicLink: link, journal: journal, continuity: continuity)
+        try saveRegistration(row, location: location)
+        if let continuity {
+            try saveRegistration(row, location: registry.appendingPathComponent(hash(Data(("persistent:" + continuity).utf8))))
+        }
+    }
+    private static func saveRegistration(_ row: Registration, location: URL) throws {
         try NativeFileJournal.locked(directory: location) { record in
             let attributes = try MobileFolderReader.info(record)
             guard attributes.st_uid == geteuid(), attributes.st_mode & 0o077 == 0 else { throw Failure.storage }
-            try NativeFileJournal.save(Registration(identity: identity(info), birth: birth(info), hash: hash(proof), symbolicLink: link, journal: journal), record)
+            try NativeFileJournal.save(row, record)
         }
     }
-    private static func registration(_ s: stat) -> Registration? {
+    private static func registration(_ s: stat, continuity: String? = nil) -> Registration? {
         let root = open(registry.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard root >= 0 else { return nil }; defer { close(root) }
-        let record = openat(root, hash(Data(identity(s).utf8)), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard record >= 0 else { return nil }; defer { close(record) }
-        guard let info = try? MobileFolderReader.info(record), info.st_uid == geteuid(), info.st_mode & 0o077 == 0,
-              let row = try? NativeFileJournal.read(record, as: Registration.self), row.identity == identity(s), row.birth == birth(s) else { return nil }
-        return row
+        for key in [identity(s), continuity.map { "persistent:" + $0 }].compactMap({ $0 }) {
+            let record = openat(root, hash(Data(key.utf8)), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard record >= 0 else { continue }; defer { close(record) }
+            guard let info = try? MobileFolderReader.info(record), info.st_uid == geteuid(), info.st_mode & 0o077 == 0,
+                  let row = try? NativeFileJournal.read(record, as: Registration.self), row.birth == birth(s),
+                  (row.continuity == nil && row.identity == identity(s)) ||
+                    (row.continuity != nil && continuity != nil && row.continuity == continuity) else { continue }
+            return row
+        }
+        return nil
     }
     private static func markerBytes(_ fd: Int32) throws -> Data? {
         let info = try MobileFolderReader.info(fd)
@@ -81,23 +94,72 @@ enum NativeSymbolicLinks {
         let n = bytes.withUnsafeMutableBytes { pread(fd, $0.baseAddress!, $0.count, 0) }
         guard n == bytes.count else { return nil }; return bytes
     }
+    static func journalProof(_ directory: Int32) throws -> String {
+        let info = try MobileFolderReader.info(directory)
+        guard let row = registration(info, continuity: try NativeFilesystemContinuity.identity(directory)), row.journal else { throw Failure.changed }
+        let marker = openat(directory, ".thingtime-owned-journal", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard marker >= 0 else { throw Failure.changed }; defer { close(marker) }
+        guard let bytes = try markerBytes(marker), hash(bytes) == row.hash else { throw Failure.changed }
+        return row.hash
+    }
+    /// The caller already checked the original bookmark and recorded root.
+    /// Both persistent inode/birth and the private marker must independently
+    /// match before publishing a new current-attachment receipt alias.
+    static func reconnectJournal(_ directory: Int32, continuity: String, markerHash: String) throws {
+        guard try NativeFilesystemContinuity.identity(directory) == continuity else { throw Failure.changed }
+        let marker = openat(directory, ".thingtime-owned-journal", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard marker >= 0 else { throw Failure.changed }; defer { close(marker) }
+        guard let bytes = try markerBytes(marker), hash(bytes) == markerHash else { throw Failure.changed }
+        let info = try MobileFolderReader.info(directory)
+        let row = Registration(identity: identity(info), birth: birth(info), hash: markerHash, symbolicLink: nil, journal: true, continuity: continuity)
+        try saveRegistration(row, location: url(info))
+        try saveRegistration(row, location: registry.appendingPathComponent(hash(Data(("persistent:" + continuity).utf8))))
+    }
     static func isOwnedJournal(_ parent: Int32, name: String) -> Bool {
         var s = stat()
-        guard fstatat(parent, name, &s, AT_SYMLINK_NOFOLLOW) == 0, s.st_mode & S_IFMT == S_IFDIR,
-              let row = registration(s), row.journal else { return false }
+        guard fstatat(parent, name, &s, AT_SYMLINK_NOFOLLOW) == 0, s.st_mode & S_IFMT == S_IFDIR else { return false }
         let directory = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard directory >= 0 else { return false }; defer { close(directory) }
-        guard let actual = try? MobileFolderReader.info(directory), identity(actual) == identity(s), birth(actual) == birth(s) else { return false }
+        guard let actual = try? MobileFolderReader.info(directory), identity(actual) == identity(s), birth(actual) == birth(s),
+              let row = registration(actual, continuity: try? NativeFilesystemContinuity.identity(directory)), row.journal else { return false }
         let marker = openat(directory, ".thingtime-owned-journal", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         guard marker >= 0 else { return false }; defer { close(marker) }
         guard let bytes = try? markerBytes(marker), hash(bytes) == row.hash else { return false }
         return true
     }
+    /// A pre-upgrade receipt cannot prove its old volume after device-number
+    /// reassignment. If its private marker/inode/birth still match, refuse the
+    /// ambiguous subtree instead of exposing displaced bytes as ordinary data.
+    static func checkedOwnedJournal(_ parent: Int32, name: String) throws -> Bool {
+        if isOwnedJournal(parent, name: name) { return true }
+        let fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { return false }; defer { close(fd) }
+        let marker = openat(fd, ".thingtime-owned-journal", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard marker >= 0 else { return false }; defer { close(marker) }
+        guard let bytes = try markerBytes(marker) else { return false }
+        let info = try MobileFolderReader.info(fd), proof = hash(bytes)
+        let receipts = open(registry.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard receipts >= 0 else { return false }; defer { close(receipts) }
+        var ambiguous = false
+        try MobileFolderReader.visitNames(receipts) { key in
+            guard !ambiguous, key.count == 64 else { return }
+            let record = openat(receipts, key, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard record >= 0 else { return }; defer { close(record) }
+            let attributes = try MobileFolderReader.info(record)
+            guard attributes.st_uid == geteuid(), attributes.st_mode & 0o077 == 0,
+                  let row = try NativeFileJournal.read(record, as: Registration.self), row.journal,
+                  row.birth == birth(info), row.hash == proof,
+                  let inode = row.identity.split(separator: ":").last, inode == Substring(String(info.st_ino)) else { return }
+            ambiguous = true
+        }
+        if ambiguous { throw Failure.changed }
+        return false
+    }
     static func isWithinOwnedJournal(_ root: Int32, path: String) throws -> Bool {
         let parts = try MobileFolderReader.components(path)
         var parent = dup(root); guard parent >= 0 else { throw Failure.unavailable }; defer { close(parent) }
         for (index, name) in parts.enumerated() {
-            if isOwnedJournal(parent, name: name) { return true }
+            if try checkedOwnedJournal(parent, name: name) { return true }
             if index < parts.count - 1 {
                 let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
                 guard next >= 0 else { if errno == ENOENT { return false }; throw Failure.unavailable }; close(parent); parent = next
@@ -122,7 +184,7 @@ enum NativeSymbolicLinks {
                 guard !next.overflow else { throw Failure.limit }; capacity = next.partialValue
             }
         }
-        guard s.st_mode & S_IFMT == S_IFREG, let row = registration(s), let link = row.symbolicLink else { return nil }
+        guard s.st_mode & S_IFMT == S_IFREG, let row = registration(s, continuity: try NativeFilesystemContinuity.identity(fd)), let link = row.symbolicLink else { return nil }
         let envelope = try JSONEncoder().encode(Envelope(symbolicLink: link))
         guard s.st_size == envelope.count else { return nil }
         var bytes = Data(count: envelope.count)

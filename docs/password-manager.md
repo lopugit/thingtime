@@ -19,7 +19,7 @@ never reads them or schedules a later clipboard overwrite.
 
 ## Storage and access
 
-`api.passwords` 1.6.1 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.8.0 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -28,16 +28,28 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 `read`, `save`, `delete`, `export`, `catalog`, `verify-passkey`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
-`catalog` returns names, usernames, exact HTTPS domains and public passkey
+`catalog` returns names, usernames, exact HTTPS origins, legacy domain hints and public passkey
 identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
 excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
+
+Opening a card by pointer or keyboard brings the entry editor into view, even
+when a long results list precedes it. Closing returns focus to the card when it
+is still present. A card's subtitle, catalog entry and verified fill share the
+saved login identifier. Descriptions, notes, hidden form inputs and concealed
+fields are excluded. A legacy import can use an explicit saved login email or
+username when the canonical field is missing or points at metadata. If the
+fallback is ambiguous, the subtitle stays empty. This does not rewrite imports.
 
 Autofill interprets a saved bare Website host such as `thingtime.com` as
 `https://thingtime.com`, through the same normalizer for catalog discovery and
 selected-entry verification. Explicit HTTPS URLs keep their exact origin,
 including non-default ports and subdomains. Catalog host matches are discovery
-hints; final fill still requires the exact saved HTTPS origin, live session,
-selected entry and current verification grant. Wildcards, userinfo, whitespace,
+hints; final fill still requires an authorized exact HTTPS origin, live session,
+selected entry and current verification grant. AWS logins saved for the exact
+default HTTPS origins `aws.amazon.com`, `console.aws.amazon.com`, or
+`portal.aws.amazon.com` can also be chosen on the AWS sign-in destination
+`https://signin.aws.amazon.com`. This is a one-way allowlist of exact origins;
+alternate ports, Amazon retail and other AWS hosts are not included. Wildcards, userinfo, whitespace,
 backslashes, scheme-relative values and non-HTTPS URLs cannot authorize fill.
 No records are rewritten and no browser credential or signing-key access is added.
 The browser fill client negotiates this compatible correction at `api.passwords`
@@ -211,6 +223,12 @@ account is required. Use a separate browser profile, account and replica databas
 for testing; never import personal browser sessions or production credentials.
 
 ## Native Password AutoFill
+
+Linux and Windows desktop bridge 1.3.0 provides scoped browser autofill and a
+private agent CLI with direct credential delivery, OS-encrypted state and the
+existing per-entry verification policy. It does not advertise system-wide
+AutoFill or passkeys. See [the native password agent contract](native-password-agent.md)
+for prerequisites, first-sign-in limits, supported consumers and packaging.
 
 Native provider code is present in `apple/Passwords` and
 `apple/PasswordProvider`; the desktop bridge negotiates the installed provider.

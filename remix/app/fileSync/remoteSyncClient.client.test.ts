@@ -114,3 +114,16 @@ test('resource saves require control 1.2 and recover the exact accepted command 
  await assert.rejects(client.send(command));
  assert.deepEqual(await client.send(command), { deviceResourceLimits: policy }); assert.equal(posts, 1); assert.equal(input.storage.data.size, 0);
 });
+
+test('history negotiates 1.4.0 before dispatch and cannot borrow a client for another device', async () => {
+ const input = base();
+ const range = { from: 1000, to: 5000, bucketCount: 2 };
+ let posts = 0;
+ const client = createRemoteSyncClient({ ...input, requireCapability: async (feature, minimum) => {
+  assert.equal(feature, 'api.devices-sync-control'); assert.equal(minimum, '1.4.0'); throw Error('Older server');
+ }, fetch: async () => { posts++; return reply({}); } });
+ await assert.rejects(client.send({ action: 'history', range }), /updated, reachable/);
+ assert.equal(posts, 0);
+ client.assertHistoryScope({ origin: input.origin, ownerId: input.ownerId, deviceId: input.deviceId, dataPlane: 'home' });
+ assert.throws(() => client.assertHistoryScope({ origin: input.origin, ownerId: input.ownerId, deviceId: 'other', dataPlane: 'home' }), /device changed/);
+});

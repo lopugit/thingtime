@@ -354,6 +354,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let chromeYouTube: ChromeYouTubeTelemetry
     public let collectedAt: Date
     public let menuBar: MenuBarTelemetry?
+    public let resources: DeviceResourceTelemetry?
 
     public init(
         deviceName: String,
@@ -375,6 +376,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         displays: [DisplayTelemetry],
         collectedAt: Date,
         menuBar: MenuBarTelemetry? = nil,
+        resources: DeviceResourceTelemetry? = nil,
         printers: [PrinterTelemetry] = [],
         cameras: [CameraTelemetry] = [],
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
@@ -404,6 +406,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.displays = displays
         self.collectedAt = collectedAt
         self.menuBar = menuBar
+        self.resources = resources
         self.printers = printers
         self.cameras = cameras
         self.bluetoothDevices = bluetoothDevices
@@ -443,6 +446,7 @@ public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private var menuBarSnapshot: MenuBarTelemetry?
     private var menuBarRead: Task<Void, Never>?
     private var menuBarGeneration = UUID()
+    private var resourceSampler = DeviceResourceSampler()
 
     public init() {
         sessionActivity = SessionActivityMonitor()
@@ -539,6 +543,7 @@ public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
             displays: SystemDisplayConfiguration.displays(),
             collectedAt: now,
             menuBar: menuBarSnapshot,
+            resources: resourceSampler.snapshot(),
             printers: SystemPrinters.all(),
             cameras: SystemCameras.all(),
             bluetoothDevices: SystemBluetooth.pairedDevices(),

@@ -1,6 +1,8 @@
+import type { SyncResourceDraft } from '../components/Devices/syncResourceControlsBlocks';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 
+export type PhotoAutomationDraft = { speed: string; speedUnit: 'Mbps' | 'MB/s'; data: string; dataUnit: 'MB' | 'GB'; notificationIntervalMs: string };
 export type ConfigurationDraft = {
 	version: 1;
 	id: string;
@@ -8,6 +10,8 @@ export type ConfigurationDraft = {
 	configuration: FileSyncConfiguration;
 	exclusions: string;
 	pending: boolean;
+	resourceDraft?: SyncResourceDraft;
+	photoAutomationDraft?: PhotoAutomationDraft;
 };
 export type ConfigurationEditorScope = { origin: string; ownerId: string; dataPlane: string; deviceId: string };
 export const configurationDraftKey = (scope: ConfigurationEditorScope) => 'tt:sync-editor:v1:' + JSON.stringify(scope);
@@ -36,8 +40,39 @@ export function readConfigurationDraft(raw: string | null, deviceId: string): Co
 		localRootId: draft.configuration.localRootId || 'unselected',
 		remoteFolderId: draft.configuration.remoteFolderId || 'unselected'
 	});
+	if (draft.resourceDraft !== undefined) {
+		const fields = ['upload', 'uploadUnit', 'download', 'downloadUnit', 'transferConcurrency', 'indexingConcurrency', 'cpuPercent'];
+		if (!draft.resourceDraft || fields.some(field => typeof (draft.resourceDraft as any)[field] !== 'string') ||
+			!['Kbps', 'Mbps', 'Gbps'].includes(draft.resourceDraft.uploadUnit) || !['Kbps', 'Mbps', 'Gbps'].includes(draft.resourceDraft.downloadUnit))
+			throw Error('The saved resource draft needs recovery; it has not been replaced.');
+	}
+	const photo = draft.photoAutomationDraft;
+	if (photo !== undefined && (!photo || typeof photo.speed !== 'string' || typeof photo.data !== 'string' ||
+		typeof photo.notificationIntervalMs !== 'string' || !['Mbps', 'MB/s'].includes(photo.speedUnit) ||
+		!['MB', 'GB'].includes(photo.dataUnit))) throw Error('The saved Photos automation draft needs recovery; it has not been replaced.');
 	if (draft.pending) canonicalDraftConfiguration(draft);
 	return draft;
+}
+/** Keep the existing scoped key so legacy drafts migrate on the first verified
+ * edit. Reading never removes or rewrites a legacy or damaged journal. */
+export function readConfigurationDrafts(raw: string | null, deviceId: string): ConfigurationDraft[] {
+	if (raw === null) return [];
+	const value = JSON.parse(raw);
+	if (value?.version === 1) return [readConfigurationDraft(raw, deviceId)!];
+	if (value?.version !== 2 || !Array.isArray(value.drafts))
+		throw Error('The saved connection drafts need recovery; they have not been replaced.');
+	const drafts = value.drafts.map((draft: unknown) => readConfigurationDraft(JSON.stringify(draft), deviceId)!);
+	if (new Set(drafts.map((draft: ConfigurationDraft) => draft.id)).size !== drafts.length)
+		throw Error('The saved connection drafts contain duplicate identities; they have not been replaced.');
+	return drafts;
+}
+export function persistConfigurationDrafts(
+	storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
+	key: string,
+	previous: string | null,
+	drafts: ConfigurationDraft[]
+): string | null {
+	return persistDraftJournal(storage, key, previous, drafts.length ? JSON.stringify({ version: 2, drafts }) : null);
 }
 export function canonicalDraftConfiguration(draft: ConfigurationDraft) {
 	return parseFileSyncConfiguration({ ...draft.configuration, excludedPaths: draft.exclusions.split(/\r?\n/).filter((path) => path !== '') });
@@ -51,8 +86,10 @@ export function persistConfigurationDraft(
 	previous: string | null,
 	next: ConfigurationDraft | null
 ): string | null {
+	return persistDraftJournal(storage, key, previous, next === null ? null : JSON.stringify(next));
+}
+function persistDraftJournal(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, key: string, previous: string | null, raw: string | null) {
 	if (storage.getItem(key) !== previous) throw Error('This connection draft changed in another tab. Reload to recover it.');
-	const raw = next === null ? null : JSON.stringify(next);
 	if (raw === null) storage.removeItem(key);
 	else storage.setItem(key, raw);
 	if (storage.getItem(key) !== raw) throw Error('Could not preserve this draft on the device. Free storage and try again.');

@@ -165,7 +165,7 @@
       clipboard with unique text, paste an emoji into TextEdit, then verify the unique clipboard content is restored.
 - [ ] With Accessibility denied (or a stale enabled grant), select a non-leading emoji and repeatedly press Return or double-click it. The native window, font size, eight-column grid width, selected emoji, recents and learned ranking must remain stable. The complete explanation, Open Accessibility Settings and Copy Emoji controls must fit at standard, minimum, compact and large-text sizes; scroll to the final emoji and open Actions without clipping. The keep-clipboard action must not change the pasteboard change count even transiently. Only an explicit Copy Emoji action may replace it.
 - [ ] For a signing-identity migration, compare the installed app's designated requirement with its prior build. If macOS still shows the old grant enabled but rejects paste, refresh only Commander's Accessibility toggle after explicit user approval, relaunch the same installed bundle, and verify Return and double-click paste into a disposable TextEdit document while retaining the previous clipboard.
-- [ ] Reopen Commander after leaving the emoji picker and verify the normal launcher returns with an empty query. Reopen the picker and verify its Recently Used ordering and selected skin tone persist locally.
+- [ ] With a nonempty emoji search, dismiss the window and immediately reopen the picker with its shortcut in the same launcher. Verify the focused search is empty and only the unfiltered grid appears. Repeat via Back and the Search Emoji & Symbols result. Verify Recently Used ordering and the selected skin tone persist, and the normal launcher returns with an empty query when opened separately.
 
 ## Settings
 

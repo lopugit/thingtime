@@ -1,5 +1,49 @@
 # Attachments and media
 
+Paired-device background staging uses the existing private file reservation and
+multipart provider. `files/transferAdmissions.ts` verifies the browser session,
+exact pairing, saved configuration and private destination. It authorizes signing and
+completing that one reservation. An explicit Photos publication descriptor can
+also bind the verified attachment through the canonical Files transaction. A
+revocable 1.2 Photos run can replenish original reservations under the same
+private destination and current settings. Version 1.3 supports guarded same-grant original updates with retained Files history. See the [transfer admission
+contract and fixture](../file-sync-transfer-admissions.md).
+
+The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
+explicit supported backup mode for persisted paging/integrity assertions.
+The real embedded iOS transport must advertise no strict watcher coverage and
+refuse strict capture, async strict preparation and inline strict preparation.
+`MobileFolderBridge.startInventoryCapture` requires `backup-supported` for
+folders and calls `prepareBackup`/`sealBackup`; legacy strict calls still refuse.
+Run that suite on both platforms and Rust workspace tests; see `TESTING.md`
+"Shared Rust filesystem index and sync" for the separate coverage guarantees.
+
+## Incoming shares
+
+The iOS system Share extension hosts the ordinary `/share` web composer through
+`iOS/ShareSupport/ShareComposerBridge.swift`. `components/IncomingShare/` verifies
+the exact native request, account and origin; `attachmentFileSource.ts` supplies
+lazy multipart slices and bounded thumbnails without rebuilding an entire file
+in JavaScript. Post, Message and Save retain the original source independently
+of their purpose-bound upload drafts. See [incoming sharing](../incoming-sharing.md)
+for native recovery, destination fences and the acceptance matrix.
+Zero-byte post/comment/message originals use the shared verified-empty upload
+path (`api.attachment-uploads` 1.9.0 and completion 1.7.0), retaining draft expiry,
+owner/request fencing and quota accounting. Image-only and recording uploads
+retain nonempty validation. `attachments.test.ts` covers local empty bytes,
+replay, lease recovery and exact input/access refusals.
+
+
+The packaged Mac Files uploader uses a versioned Electron bridge for nonempty
+S3 parts when the bundled loopback UI targets a remote HTTPS API. It reuses the
+ordinary attachment reservation, scoped part signer and completion checks. The
+host streams bounded chunks to the signed S3 object with exact length and
+checksum, and invalidates on account, endpoint or frame changes. HTTPS browser
+and same-origin local storage retain the existing upload path. Run
+`electron/test/attachment-upload.test.cjs` and `desktopAttachmentUpload.test.ts`
+for transport, origin, integrity and cancellation coverage.
+
+
 Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
 reason (upload approval, origin, account or credential-purpose refusal).
 `cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a
@@ -602,6 +646,26 @@ installed/large-production acceptance gaps.
 
 ### Mac paged transfer acceptance
 
+The early proof's `scripts/mac-fixture-host.mts` composes the production Electron
+manager and renderer host factories with only synthetic IPC/window/session
+adapters. Negotiation, composite authorization, native guards, transfer worker,
+byte/CPU governors and signing remain canonical. Its server observes worker PUTs;
+timing rows separate native identity admission/HTTP and digest-worker wall time.
+`scripts/mac-fixture-http-observer.mjs` records the canonical native PUT method
+and normalized object endpoint through an append barrier; its regression uses
+the actual native HTTP uploader without recording signed query/body data.
+Full native two-way acceptance requires a provider-backed signed HTTPS download
+target; local attachment storage currently lacks it. The explicit
+`--upload-start-diagnostic` keeps the same connection/capabilities with an empty
+cloud folder, measures only upload, and cannot pass the two-way proof validator.
+
+The test-only `scripts/mac-fixture-transport.mjs` multiplexes result/chunk request
+IDs and preserves the native manager's independent polling and active lanes.
+Run `test:files:mac-fixture-transport` for held-poll, out-of-order, binary framing,
+cancellation and EOF regressions before the native/HTTP proof. Early proof
+queue/service and identity-duration aggregates distinguish fixture scheduling
+from native work; they do not weaken identity checks or prove installed latency.
+
 `test:files:mac-paged` uses `scripts/test-mac-paged-sync.mjs` to own an isolated
 HTTP server, replica and synthetic identity. `mac-file-sync.integration.mts
 --paged` connects the real Swift folder adapter to `pagedForegroundSync`,
@@ -617,6 +681,16 @@ requires the patched contract, so older clients retain bounded scans. The shared
 runner lifts the combined path ceiling only with all paged/path/review adapters.
 Run `test:files:mac-paged -- --wide` for the API-provisioned 10,003-path Mac proof,
 plus Apple staging/Trash tests and `nativeInventory.test.ts` for version gates.
+Add `--wide-mixed` to that same runner for 10,033 paths with nested folders and
+24 mixed-size native files, exact local/cloud hashes, restart/reply recovery,
+complete checkpoints, phase times and unchanged-run transfer reuse. This
+remains an isolated local API/native fixture, not installed or provider evidence.
+The authenticated attachment-content byte-cache route must also serve a
+verified empty stored object as HTTP 200 with zero bytes when its storage GET
+has no stream. It checks the current exact-version empty checksum, size and
+object existence; missing objects and nonempty null streams remain errors.
+Its semantic contract is `api.attachment-content` 1.17.2. Regression:
+`attachmentsRoutes.test.ts` plus the mixed native/HTTP fixture.
 See [wide native destinations](../mobile-file-sync.md#wide-native-destination-checks--2026-10-19).
 
 
@@ -685,3 +759,83 @@ main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;
 frames, alpha and timing inside the network-disabled worker. See README for
 format/animation/SVG limits. Run the media/image tests, template-block tests,
 capability coverage and the isolated Chrome acceptance runner.
+
+Local object storage 1.1.0 implements the shared `signDownloadRange` provider
+contract with a separate 60-second HMAC GET scope bound to the immutable version
+and exact Range. Native target issuance preserves owner/fingerprint gates and
+requires an absolute HTTPS storage origin. Run `localAttachmentStorage.test.ts`
+and `attachments.test.ts` for scope refusal, byte correctness and owner checks.
+
+### Mac compound transport
+
+`MacSingleUploadOperation.swift`, `folder-upload-single.cjs` and the shared
+`FingerprintSource.uploadSingle` negotiate `fileSingleUploadVersion` 1.0.0 for
+a bounded regular-file transport under the existing single-file executor.
+Strong source checks surround emission, PUT and stored verification. Current
+account/configuration/grant authority and shared resources remain mandatory;
+publication stays in `cloudTransport.ts`'s guarded `/files` path. Larger files,
+symbolic links, custom hooks and unsupported capabilities retain their existing
+transport. Run `MacSingleUploadOperationTests`, `folder-upload-single.test.cjs`,
+`nativeUpload.client.test.ts` and `cloudTransport.test.ts`; see the dated
+[transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+### Shared native scan pacing
+
+`filesystem-indexer/crates/indexer/src/resources.rs` owns the shared scan-byte
+schedule used by strict and backup hashing in `backup.rs`. Reservations retain
+elapsed hashing/metadata work and timer overshoot, with at most 100 ms of idle
+credit shared across workers. Cancellation checks remain bounded to 25 ms sleeps.
+This is internal resource scheduling; native/HTTP contracts, user-selected scan
+and transfer rates, CPU targets and data-size acceptance are unchanged.
+Tests: `cargo test --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer`
+(fake clock, aggregate small reads, burst bounds and real concurrent cancellation).
+
+### Native HTTP fixture compatibility
+
+`remix/scripts/mac-fixture-capabilities.mjs` declares the native paged fixture's
+minimum file, content and batch API requirements. `test-mac-paged-sync.mjs`
+checks the exact fixture origin and the shared `capabilitySatisfies` contract
+before disposable registration, so compatible additive releases do not stop
+real byte-transfer acceptance. Missing, malformed, old or breaking features
+still refuse. Run `node --test remix/scripts/mac-fixture-capabilities.test.mjs`
+and the relevant `test:files:mac-paged` scenario. The closed HTTP observer records
+first parsed body-byte enqueue and completed payload length without switching
+the request into flowing mode; its real-network regression delays consumption
+and verifies unchanged bytes and diagnostic redaction.
+### Reviewed account-file restore
+
+`backups/accountFileRestoreBytes.ts` privately verifies offline current/history
+ranges before `cloudTransport.stageCloudFileBytes` uses ordinary approved uploads.
+Upload request and target file IDs are independent; runtime scope stays pinned
+across stages. `backups/accountFileRestore.ts` composes `cloudFiles.commit` with
+current actor/session/root fencing and a durable checkpoint. Existing file writes
+negotiate `api.files` 1.12.1 for restore epochs. Attachment inventory reads only
+`moderation.status`, excluding provider diagnostics/Dates, and current file
+snapshots preserve inert symlink metadata. Run `test:backups`, `test:files`,
+`test:api-capabilities` and `test:backups:file-restore`; see the dated contract in
+[portable backups](../portable-backups.md#reviewed-account-file-publication--6-november-2026).
+
+The native mixed fixture retains legacy fallback coverage by default. Add
+`--canonical-worker` to select the canonical desktop manager, negotiated native
+compound/batch/authorization context and scoped TLS, while keeping the same
+synthetic bytes, accepted-reply losses and restart assertions. Proof validation
+rejects legacy/missing worker parity when the modern lane was requested. Server
+PUT observations, retained IDs, exact hashes and admission/HTTP timing make the
+transport and cost visible without cached authorization.
+
+`streamingForegroundSync.ts` retains one inventory chunk of no-op folder pairs
+only after fresh policy and both point reads. An opposite-feed exact echo can
+only defer; it cannot authorize a copy or child. New/changed/evicted observations
+and every effect retain current checks; strict reconciliation always reads
+fresh. `twoWayStreaming.test.ts` covers policy, scope, stale ancestors, restart
+and eviction. Use `--canonical-worker --streaming-two-way` in the mixed native
+fixture for the actual deletes-off dual-feed path; scalar deletes-on and legacy
+transport lanes remain separate evidence.
+
+For initial folder prefixes, `pagedRunJournal.queuedFolderPeer` reads only
+already committed opposite-replica folder inputs through the existing path
+index, with a bounded revision scan and fresh-preparation fallback. Guarded
+streaming may defer a paired folder without authorizing any effect, child or
+checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
+still reads both replicas afresh. The canonical mixed fixture reports queued
+peer deferrals before first confirmed file alongside byte/hash/recovery proof.

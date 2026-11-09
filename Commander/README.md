@@ -247,10 +247,10 @@ history, and each session keeps up to eight de-duplicated commands for direct re
 corepack pnpm typecheck
 corepack pnpm test
 corepack pnpm build
-cargo fmt --check --manifest-path crates/commander-core/Cargo.toml
-cargo test --manifest-path crates/commander-core/Cargo.toml
-cargo fmt --check --manifest-path crates/commander-indexer/Cargo.toml
-cargo test --manifest-path crates/commander-indexer/Cargo.toml
+cargo fmt --check --manifest-path ../filesystem-indexer/crates/core/Cargo.toml
+cargo test --manifest-path ../filesystem-indexer/crates/core/Cargo.toml
+cargo fmt --check --manifest-path ../filesystem-indexer/crates/indexer/Cargo.toml
+cargo test --manifest-path ../filesystem-indexer/crates/indexer/Cargo.toml
 swift build --package-path hosts/macos
 ./script/build_and_run.sh --verify
 ```

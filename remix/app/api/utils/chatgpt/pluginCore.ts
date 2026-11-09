@@ -16,21 +16,22 @@ export const CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-au
 export const CHATGPT_CAPABILITY_MANIFEST_PATH = '/.well-known/thingtime-chatgpt-capabilities.json';
 
 export const CHATGPT_PLUGIN_FEATURES = {
-  'chatgpt.mcp': '1.5.0',
-  'chatgpt.oauth': '1.10.0',
+  'chatgpt.mcp': '2.0.0',
+  'chatgpt.oauth': '1.11.0',
+  'chatgpt.confirmations': '1.0.0',
   'chatgpt.agent-reporting': '1.0.0',
-  'chatgpt.connections': '1.3.0',
-  'chatgpt.things.read': '1.3.0',
-  'chatgpt.things.write': '1.1.0',
+  'chatgpt.connections': '2.0.0',
+  'chatgpt.things.read': '1.4.0',
+  'chatgpt.things.write': '2.0.0',
   'chatgpt.schemas': '1.0.0',
   'chatgpt.relationships': '1.0.0',
-  'chatgpt.mutations.preview': '1.0.0',
+  'chatgpt.mutations.preview': '2.0.0',
   'chatgpt.resources': '1.0.0',
-  'chatgpt.history': '1.0.0',
-  'chatgpt.workflows': '1.0.0',
-  'chatgpt.ui': '1.0.0',
+  'chatgpt.history': '2.0.0',
+  'chatgpt.workflows': '2.0.0',
+  'chatgpt.ui': '1.1.0',
   'chatgpt.changes': '1.0.0',
-  'chatgpt.capabilities': '1.0.0'
+  'chatgpt.capabilities': '2.0.0'
 } as const;
 
 export const CHATGPT_MCP_TOOL_FEATURES = {
@@ -38,6 +39,7 @@ export const CHATGPT_MCP_TOOL_FEATURES = {
   list_thingtime_accounts: 'chatgpt.connections',
   select_thingtime_account: 'chatgpt.connections',
   remove_thingtime_account: 'chatgpt.connections',
+  get_thingtime_confirmation_requirements: 'chatgpt.confirmations',
   get_thingtime_profile: 'chatgpt.connections',
   prepare_thingtime_agent_task: 'chatgpt.agent-reporting',
   get_thingtime_agent_task: 'chatgpt.agent-reporting',
@@ -53,6 +55,8 @@ export const CHATGPT_MCP_TOOL_FEATURES = {
   validate_thingtime_thing: 'chatgpt.schemas',
   list_thingtime_related: 'chatgpt.relationships',
   list_thingtime_changes: 'chatgpt.changes',
+  stage_thingtime_mutation_plan: 'chatgpt.mutations.preview',
+  get_thingtime_mutation_preview: 'chatgpt.mutations.preview',
   preview_thingtime_mutation: 'chatgpt.mutations.preview',
   apply_thingtime_mutation: 'chatgpt.mutations.preview',
   list_thingtime_history: 'chatgpt.history',
@@ -81,7 +85,7 @@ export const CHATGPT_MCP_METHOD_FEATURES = {
 } as const satisfies Record<string, keyof typeof CHATGPT_PLUGIN_FEATURES>;
 
 export const CHATGPT_MCP_INSTRUCTIONS =
-  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Authorized private task lifecycle reporting uses prepare_thingtime_agent_task, get_thingtime_agent_task, report_thingtime_agent_task and coordinate_thingtime_agent_task with a stable task identity and the independent agents.report grant; things does not include that grant. Reuse the returned distinct Character and private task records. Standing task-reporting authorization permits these bounded private lifecycle updates without repeat confirmation; never fall back to public owner identity or generic writes when reporting access is unavailable. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. Every composed workflow and multi-Thing mutation must be previewed first; apply or undo only after stating the selected account, targets, effects, and obtaining clear confirmation. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
+  'Thingtime operates only on named accounts connected through this app. For “@Thingtime login”, call login_thingtime: without a valid connection the host opens the native OAuth browser flow and completes its registered callback. For “@Thingtime list accounts”, call list_thingtime_accounts. When an account is ambiguous, list connected accounts and select one explicitly. Never request or expose a Thingtime token. Authorized private task lifecycle reporting uses prepare_thingtime_agent_task, get_thingtime_agent_task, report_thingtime_agent_task and coordinate_thingtime_agent_task with a stable task identity and the independent agents.report grant; things does not include that grant. Reuse the returned distinct Character and private task records. Standing task-reporting authorization permits these bounded private lifecycle updates without repeat confirmation; never fall back to public owner identity or generic writes when reporting access is unavailable. When exact Thing IDs are supplied, use get_thingtime_thing or get_thingtime_things; never rely on recent pages to locate known IDs. When a comment target ID is supplied, use list_thingtime_comments instead of scanning recent Things. Use list_thingtime_related for parent, child, folder, backlink, or thread traversal. Discover and validate schemas before authoring typed data. Read, resources, validation, change feeds, previews, and searches may proceed on request. For direct mutations, use get_thingtime_confirmation_requirements for the selected account. Every composed workflow, undo and multi-Thing mutation still requires a signed preview. Use stage_thingtime_mutation_plan for requests too large for one transport call and follow preview.nextCursor using get_thingtime_mutation_preview to review the complete plan. Review the exact account, targets and effects and follow confirmationRequired. Set confirmed=true only after the user explicitly confirms; omit it when confirmation is disabled. Treat confirmation_required as a request to obtain approval, and never invent it. Connected AI app approvals and Thingtime permissions still apply. Never invent or call arbitrary API paths, URLs, database queries, or executable code.';
 
 export const CHATGPT_PLUGIN_ROUTES = [
   { method: 'POST', path: CHATGPT_MCP_PATH, feature: 'chatgpt.mcp' },
@@ -164,6 +168,7 @@ const CHATGPT_REDIRECT_URIS = new Set([
 ]);
 const CODEX_CIMD_CLIENT_PREFIX = 'https://chatgpt.com/oauth/codex/';
 const CODEX_CIMD_CLIENT_SUFFIX = '/client.json';
+const CODEX_SHARED_CIMD_CLIENT_ID = 'https://chatgpt.com/oauth/codex/client.json';
 
 const cleanOrigin = (value: unknown): string | null => {
   if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null;
@@ -241,6 +246,14 @@ const normalizeCodexCimdRedirectUri = (value: unknown, callbackId: string): stri
   }
 };
 
+// Codex uses the shared CIMD with an issuer-bound callback. Match only the
+// two loopback hosts published by that client and its exact callback path.
+const normalizeCodexSharedCimdRedirectUri = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const match = /^http:\/\/(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})\/callback$/.exec(value);
+  return match?.[0] === value && Number(match[1]) <= 65535 ? value : null;
+};
+
 // Dynamic Client Registration is a compatibility path for Codex clients that
 // cannot use CIMD yet, and for ChatGPT developer apps. A registration may use
 // only a native loopback callback or ChatGPT's exact connector callback; no
@@ -316,15 +329,20 @@ export const parseChatGptAuthorizationRequest = (
   if (params.get('response_type') !== 'code') return { ok: false, error: 'response_type must be code' };
 
   const clientId = params.get('client_id')?.trim() || '';
+  const isCodexSharedClient = clientId === CODEX_SHARED_CIMD_CLIENT_ID;
   const codexCallbackId = codexCallbackIdFromClientId(clientId);
   const registeredDynamicClient = dynamicClient?.clientId === clientId ? dynamicClient : null;
-  if (!allowedChatGptClientIds().includes(clientId) && !codexCallbackId && !registeredDynamicClient) return { ok: false, error: 'Unknown OAuth client' };
+  if (!isCodexSharedClient && !codexCallbackId && !registeredDynamicClient && !allowedChatGptClientIds().includes(clientId)) {
+    return { ok: false, error: 'Unknown OAuth client' };
+  }
 
   const redirectUri = registeredDynamicClient
     ? normalizeRegisteredClientRedirectUri(params.get('redirect_uri'), origin)
     : codexCallbackId
       ? normalizeCodexCimdRedirectUri(params.get('redirect_uri'), codexCallbackId)
-      : normalizeChatGptRedirectUri(params.get('redirect_uri'));
+      : isCodexSharedClient
+        ? normalizeCodexSharedCimdRedirectUri(params.get('redirect_uri'))
+        : normalizeChatGptRedirectUri(params.get('redirect_uri'));
   if (registeredDynamicClient && (!redirectUri || !registeredDynamicClient.redirectUris.includes(redirectUri))) {
     return { ok: false, error: 'redirect_uri is not registered for this OAuth client' };
   }

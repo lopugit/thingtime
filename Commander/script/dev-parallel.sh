@@ -58,8 +58,8 @@ if [[ "$MODE" != start ]]; then
   if host_pid >/dev/null; then echo 'Stop the development host before rebuilding.' >&2; exit 1; fi
   if [[ "$MODE" == build ]]; then
     corepack pnpm --dir "$ROOT" build
-    cargo build --locked --manifest-path "$ROOT/crates/commander-core/Cargo.toml"
-    cargo build --locked --manifest-path "$ROOT/crates/commander-indexer/Cargo.toml"
+    cargo build --locked --manifest-path "$ROOT/../filesystem-indexer/crates/core/Cargo.toml"
+    cargo build --locked --manifest-path "$ROOT/../filesystem-indexer/crates/indexer/Cargo.toml"
     swift build --package-path "$ROOT/hosts/macos"
   fi
   SWIFT_BIN="$(swift build --package-path "$ROOT/hosts/macos" --show-bin-path)/Commander"
@@ -72,8 +72,8 @@ if [[ "$MODE" != start ]]; then
   ditto "$ROOT/apps/desktop-ui/dist" "$RESOURCES/ui"
   ditto "$ROOT/apps/daemon/dist/commander-daemon.mjs" "$RESOURCES/commander-daemon.mjs"
   ditto "$ROOT/apps/daemon/dist/worker.js" "$RESOURCES/worker.js"
-  ditto "$ROOT/crates/commander-core/target/debug/commander-search" "$RESOURCES/commander-core"
-  ditto "$ROOT/crates/commander-indexer/target/debug/commander-indexer" "$RESOURCES/commander-indexer"
+  ditto "$ROOT/../filesystem-indexer/target/debug/commander-search" "$RESOURCES/commander-core"
+  ditto "$ROOT/../filesystem-indexer/target/debug/commander-indexer" "$RESOURCES/commander-indexer"
   # Reuse an executable only, never any installed app settings or credentials.
   NODE_EXECUTABLE="${COMMANDER_DEV_NODE:-$(node -p 'process.execPath')}"
   NODE_EXECUTABLE="$(node -p 'require("node:fs").realpathSync(process.argv[1])' "$NODE_EXECUTABLE")"

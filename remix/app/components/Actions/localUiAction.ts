@@ -50,10 +50,9 @@ export const reduceLocalUi = (
 	return Object.keys(next).length <= 32 ? next : current;
 };
 
-// Explicit user navigation only. Parameters are encoded, never concatenated
-// into executable URLs, and navigation remains on the current Builder page.
-export function localQueryHref(pageId: string | null, params: unknown): string | null {
-	if (!pageId || !/^[A-Za-z0-9_-]{1,160}$/.test(pageId) || !params || typeof params !== 'object' || Array.isArray(params)) return null;
+// In-page selection uses the same bounds and reserved keys as navigation.
+export function localQueryParams(params: unknown): URLSearchParams | null {
+	if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
 	const values = Object.entries(params);
 	if (values.length > 32) return null;
 	const query = new URLSearchParams();
@@ -64,7 +63,14 @@ export function localQueryHref(pageId: string | null, params: unknown): string |
 		if (String(value).length > (cursor ? MAX_PAGINATION_CURSOR_CHARS : 200)) return null;
 		query.set(key, String(value));
 	}
-	return `/p/${encodeURIComponent(pageId)}?${query.toString()}`;
+	return query;
+}
+
+// Explicit user navigation stays on the current Builder page.
+export function localQueryHref(pageId: string | null, params: unknown): string | null {
+	if (!pageId || !/^[A-Za-z0-9_-]{1,160}$/.test(pageId)) return null;
+	const query = localQueryParams(params);
+	return query ? `/p/${encodeURIComponent(pageId)}?${query.toString()}` : null;
 }
 
 // Form navigation is opt-in and only collects explicitly declared parameter

@@ -1,15 +1,24 @@
 import { deviceResourceKey, deviceSyncGovernor } from './deviceResourcePolicy';
-import { parseFileSyncConfiguration, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
-import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
+import { parseFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
+import { assertConfiguredSyncApproval, planConfiguredFileSync, readOwnedFileSyncConfiguration, type SyncConditions, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
 import type { CloudTransportRuntime } from './cloudTransport';
 import type { ForegroundSyncInput } from './foregroundSync';
 
+export const LEGACY_NATIVE_INACTIVE_MESSAGE = 'Folder access paused. Try again when the app is active.';
+const WAIT_MESSAGES = { paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
+	network: 'Waiting for the selected network.', wifi: 'Waiting for Wi-Fi. Connect this device to Wi-Fi to continue.',
+	charging: 'Waiting for this device to charge.', inactive: 'Waiting for Thingtime to become active.',
+	'data-budget': 'Waiting for the next upload data allowance.' } as const;
+export type SyncWaitReason = keyof typeof WAIT_MESSAGES;
+export const isSyncWaitReason = (reason: unknown): reason is SyncWaitReason =>
+	typeof reason === 'string' && Object.prototype.hasOwnProperty.call(WAIT_MESSAGES, reason);
 export class SyncConditionsWait extends Error {
-	constructor(readonly reason: 'paused' | 'offline' | 'network' | 'charging') {
-		super({ paused: 'This connection is paused.', offline: 'Waiting for an internet connection.',
-			network: 'Waiting for the selected network.', charging: 'Waiting for this device to charge.' }[reason]);
+	constructor(readonly reason: SyncWaitReason, readonly retryAt?: number, readonly minimumPartBytes?: number) {
+		super(reason === 'data-budget' && minimumPartBytes !== undefined
+			? `Set the hourly data allowance to at least ${minimumPartBytes.toLocaleString()} bytes for the next upload part.`
+			: WAIT_MESSAGES[reason]);
 	}
 }
 
@@ -28,14 +37,19 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		signal.throwIfAborted();
 		if (!sameSyncScope(scope, input.currentScope())) throw Error('Sync context changed.');
 	};
-	const authorize = async () => {
+	const authorize = async (observe?: () => Promise<SyncConditions>) => {
 		check();
+		if (configuration.photoAutomation) for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.resourceLimits) for (const [feature, minimum] of Object.entries(FILE_SYNC_RESOURCE_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);
 		check();
 		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
 		check();
-		const conditions = input.authorizeContext ? await input.authorizeContext() : await (async () => {
+		if (observe) {
+				assertConfiguredSyncApproval(current, approved, scope, configuration.localRootId, configuration.remoteFolderId);
+				if (current.configuration.paused) throw new SyncConditionsWait('paused');
+			}
+			const conditions = observe ? await observe() : input.authorizeContext ? await input.authorizeContext() : await (async () => {
 			await input.authorizeDevice(); check(); return input.conditions();
 		})();
 		check();
@@ -49,7 +63,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 			remoteFolderId: configuration.remoteFolderId,
 			conditions
 		});
-		if (result.status === 'waiting') throw new SyncConditionsWait(result.reason);
+		if (result.status === 'waiting') throw new SyncConditionsWait(configuration.network === 'wifi' && (result.reason === 'network' || result.reason === 'offline') ? 'wifi' : result.reason);
 		return conditions;
 	};
 	const scanCloud = async () => {
@@ -76,6 +90,16 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		if (entry !== null && (!validSyncEntry(entry) || entry.path !== path)) throw Error('Native path observation changed.');
 		return entry === null ? null : structuredClone(entry);
 	};
+	const observeLocal = input.observeLocal ? async (path: string, parent: string) => {
+		check();
+		if (!validSyncPath(path) || parent !== path.split('/').slice(0, -1).join('/')) throw Error('Invalid observation paths.');
+		let result: Awaited<ReturnType<NonNullable<ForegroundSyncInput['observeLocal']>>> | undefined;
+		await authorize(async () => { result = await input.observeLocal!(path, parent, approved); check(); return result.conditions; });
+		check();
+		const paths = parent ? [path, parent] : [path];
+		if (!result || result.entries.length !== paths.length || result.entries.some((entry, i) => entry !== null && (!validSyncEntry(entry) || entry.path !== paths[i]))) throw Error('Native path observation changed.');
+		return structuredClone(result.entries);
+	} : undefined;
 	const openSource = async (entry: SyncEntry) => {
 		check();
 		if (!input.nativeOperationGuards) await authorize();
@@ -115,5 +139,5 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		stage: async (...args: Parameters<typeof input.localTarget.stage>) => { await authorize(); return input.localTarget!.stage(...args); },
 		publish: async (...args: Parameters<typeof input.localTarget.publish>) => { await authorize(); return input.localTarget!.publish(...args); }
 	} : undefined;
-	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, openSource, runtime, localTarget };
+	return { configuration, approved, check, authorize, scan, scanCloud, readLocal, observeLocal, openSource, runtime, localTarget };
 }

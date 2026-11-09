@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import Thingtime
 
 @MainActor
@@ -16,6 +17,7 @@ private final class BackgroundSchedulerFixture: NativeUploadBackgroundScheduling
     var registrations = 0, submissions = 0, cancellations = 0
     var reject = false, unavailable = false
     var delivered: BackgroundTaskFixture?
+    var requestedTitle: String?
     func register(_ handler: @escaping (NativeUploadBackgroundTask) -> Void) -> Bool {
         registrations += 1; self.handler = handler; return !unavailable
     }
@@ -24,10 +26,55 @@ private final class BackgroundSchedulerFixture: NativeUploadBackgroundScheduling
         if reject { throw URLError(.notConnectedToInternet) }
         if let delivered { handler?(delivered) }
     }
+    func submit(title: String, subtitle: String) throws { requestedTitle = title; try submit() }
     func cancel() { cancellations += 1 }
+}
+
+@MainActor
+private final class ProcessingTaskFixture: NativeDeferredUploadSystemTask {
+    var expiration: (() -> Void)?
+    var completions: [Bool] = []
+    func complete(_ success: Bool) { completions.append(success) }
 }
 @MainActor
 final class NativeUploadBackgroundTests: XCTestCase {
+    func testPhotoWorkerKeepsOneLeaseAcrossForegroundSystemWakeAndReturn() throws {
+        var state = UIApplication.State.active
+        let lease = NativePhotoExecutionLease(foregroundAllowed: true, applicationState: { state })
+        var cancellations = 0
+        lease.expired = { cancellations += 1 }
+        try lease.check()
+        state = .inactive; try lease.check()
+        state = .background; XCTAssertThrowsError(try lease.check())
+        let first = ProcessingTaskFixture(); XCTAssertTrue(lease.attach(first)); try lease.check()
+        let duplicate = ProcessingTaskFixture(); XCTAssertFalse(lease.attach(duplicate))
+        state = .active; first.expiration?(); try lease.check()
+        XCTAssertEqual(first.completions, [false]); XCTAssertEqual(cancellations, 0)
+        state = .background
+        let second = ProcessingTaskFixture(); XCTAssertTrue(lease.attach(second)); try lease.check()
+        second.expiration?()
+        XCTAssertEqual(cancellations, 1); XCTAssertEqual(second.completions, [false])
+        XCTAssertThrowsError(try lease.check()); lease.finish(false)
+        XCTAssertEqual(second.completions, [false])
+    }
+
+    func testContinuedPhotosUsesOnlyMeasuredOriginalsAndCompletesOnce() async throws {
+        let scheduler = BackgroundSchedulerFixture(), coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate(); let task = BackgroundTaskFixture(); scheduler.delivered = task
+        let granted = await coordinator.begin(presentation: .init(title: "Thingtime Photos backup", subtitle: "Checking…",
+            completedSubtitle: "Photos backup finished", bytes: nil), expired: { XCTFail("Unexpected expiration") })
+        let lease = try XCTUnwrap(granted)
+        XCTAssertEqual(scheduler.requestedTitle, "Thingtime Photos backup")
+        XCTAssertEqual(task.progress.completedUnitCount, 0)
+        lease.work(completed: 1, total: 3, subtitle: "1 original checked")
+        lease.work(completed: 0, total: 3, subtitle: "Stale update")
+        XCTAssertEqual(task.progress.completedUnitCount, 1)
+        XCTAssertEqual(task.subtitles.last, "1 original checked")
+        lease.work(completed: 3, total: 3, subtitle: "3 originals checked")
+        lease.finish(success: true); lease.finish(success: false)
+        XCTAssertEqual(task.completions, [true])
+    }
+
     func testSingleRegistrationSerialJobsProgressAndExactTerminalCompletion() async throws {
         let scheduler=BackgroundSchedulerFixture(), coordinator=NativeUploadBackgroundCoordinator(scheduler:scheduler)
         coordinator.activate();coordinator.activate();XCTAssertEqual(scheduler.registrations,1)

@@ -145,3 +145,26 @@ test('collection discovery follows authored row controls while refusing row-data
 	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'div', props: crystal.render.props } }), []);
 	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'tt-dialog', props: { closeOnAction: 'private' } } }), []);
 });
+
+
+test('a stored map includes its declared source and marker Component without borrowing row authority', () => {
+	const props = {
+		favouritesSource: { action: 'saved-map-source', inputs: { component: '{item.component}' } },
+		routeSource: { action: '{item.action}' },
+		points: [{ component: 'ungranted-row-component', renderComponent: 'ungranted-row-renderer' }]
+	};
+	assert.deepEqual(compositionReferences(['webpage'], { blocks: [{
+		type: 'element', tag: 'tt-mapbox', props, children: [{
+			type: 'container', children: [
+				{ type: 'component', component: 'saved-marker', args: { label: '{point.label}' } },
+				{ type: 'component', component: '{item.component}' }
+			]
+		}]
+	}] }), [
+		{ kind: 'action', ref: 'saved-map-source' },
+		{ kind: 'component', ref: 'saved-marker', args: { label: '{point.label}' } }
+	]);
+	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'tt-mapbox', props } }), [
+		{ kind: 'action', ref: 'saved-map-source' }
+	]);
+});

@@ -1,4 +1,4 @@
-import { thingBuilderHref, thingLiveHref, type ThingsThing } from '../../Things/thingsCore';
+import { isBuilderApp, thingBuilderHref, thingLiveHref, type ThingsThing } from '../../Things/thingsCore';
 import type { ThingContextSection } from './contextMenuModel';
 
 type BuilderMenuThing = Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>> & { author?: { id: string } | null };
@@ -10,7 +10,8 @@ export function builderThingMenuSections(thing: BuilderMenuThing | undefined, vi
   const builder = thingBuilderHref(thing, viewerId);
   const live = thingLiveHref(thing);
   const actions = [
-    ...(builder ? [{ id: 'open-builder', command: 'open-builder', label: 'Open in Builder', icon: '🧱', lucide: 'blocks', href: builder }] : []),
+    ...(builder ? [{ id: 'open-builder', command: 'open-builder', label: isBuilderApp(thing as ThingsThing) ? 'Browse app' : 'Open in Builder', icon: '🧱', lucide: 'blocks', href: builder }] : []),
+    ...(builder && isBuilderApp(thing as ThingsThing) ? [{ id: 'edit-app', command: 'edit', label: 'Edit app…', icon: '✏️', lucide: 'pencil' }] : []),
     ...(live ? [{ id: 'open-live', command: 'open-live', label: 'Open live page', icon: '🌐', lucide: 'external-link', href: live }] : [])
   ];
   return actions.length ? [{ id: 'builder-navigation', actions }] : [];

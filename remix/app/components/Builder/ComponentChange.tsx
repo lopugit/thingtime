@@ -1,11 +1,14 @@
 import React from 'react';
 import { ComponentLocalControl, NativeControlsEnabled, ComponentDisplayOnly } from './NativeComponentControls';
 import { componentChangeInputs } from './componentChangeInputs';
+import { useWebpageRuntime } from './webpageRuntime';
 
 /** Convert a field change to the same delegated Action path as a button. */
 export function ComponentChange({
 	inputPath,
 	stateKey,
+	clear,
+	queryKey,
 	debounceMs,
 	allowEmpty,
 	className,
@@ -15,12 +18,14 @@ export function ComponentChange({
 	const displayOnly = React.useContext(ComponentDisplayOnly);
 	const enabled = React.useContext(NativeControlsEnabled) && !displayOnly;
 	const local = React.useContext(ComponentLocalControl);
+	const { setPageQuery } = useWebpageRuntime();
+	const usesQuery = typeof queryKey === 'string' && queryKey.length > 0;
 	const button = React.useRef<HTMLButtonElement>(null);
 	const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	const binding = JSON.stringify([enabled, inputPath, stateKey, props['data-tt-action'], props['data-tt-action-inputs']]);
+	const binding = JSON.stringify([enabled, inputPath, stateKey, clear, queryKey, allowEmpty, props['data-tt-action'], props['data-tt-action-inputs']]);
 	const currentBinding = React.useRef(binding);
 	currentBinding.current = binding;
-	React.useEffect(() => () => clearTimeout(timer.current), [binding]);
+	React.useEffect(() => () => clearTimeout(timer.current), [binding, setPageQuery]);
 	return (
 		<span
 			className={typeof className === 'string' ? className : undefined}
@@ -30,8 +35,21 @@ export function ComponentChange({
 				if (!['INPUT', 'SELECT', 'TEXTAREA'].includes(field.tagName)) return;
 				const value =
 					field.type === 'checkbox' ? field.checked : ['number', 'range'].includes(field.type) && field.value ? Number(field.value) : field.value;
-				if (typeof stateKey === 'string') local?.({ op: 'set', key: stateKey, value });
+				if (typeof stateKey === 'string') local?.({ op: 'set', key: stateKey, value, ...(clear === undefined ? {} : { clear }) });
 				clearTimeout(timer.current);
+				const delay = typeof debounceMs === 'number' && Number.isFinite(debounceMs) ? Math.min(2000, Math.max(0, debounceMs)) : 0;
+				if (usesQuery) {
+					// Retire the old source immediately, even while waiting for the
+					// debounce. This branch only changes presentation query state.
+					setPageQuery({ [queryKey]: '' }, true);
+					if (value === '' && allowEmpty === false) return;
+					const publish = () => {
+						if (currentBinding.current === binding) setPageQuery({ [queryKey]: value }, true);
+					};
+					if (delay) timer.current = setTimeout(publish, delay);
+					else publish();
+					return;
+				}
 				if (value === '' && allowEmpty === false) return;
 				let inputs;
 				try {
@@ -47,7 +65,6 @@ export function ComponentChange({
 					button.current.setAttribute('data-tt-action-inputs', JSON.stringify(inputs));
 					button.current.click();
 				};
-				const delay = typeof debounceMs === 'number' && Number.isFinite(debounceMs) ? Math.min(2000, Math.max(0, debounceMs)) : 0;
 				if (delay) timer.current = setTimeout(submit, delay);
 				else submit();
 			}}
@@ -59,7 +76,7 @@ export function ComponentChange({
 				hidden
 				aria-hidden="true"
 				tabIndex={-1}
-				data-tt-action={!displayOnly && typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
+				data-tt-action={!usesQuery && !displayOnly && typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
 			/>
 		</span>
 	);

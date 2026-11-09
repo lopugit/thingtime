@@ -1,5 +1,97 @@
 # API endpoints and capabilities
 
+`api.things-metadata` 1.0.0 registers GET/POST
+`/api/v1/things/metadata` in the canonical docs registry and Nitro import map.
+GET reads authorized current measurements; same-origin owning-session POST
+saves a protected derived reference. Clients negotiate this feature before
+either operation. Both manifests and `test:api-capabilities` cover it; run
+`test:thing-metadata:integration` for real handlers, ACLs, concurrent rebuilds,
+deletion and checksum-verified original file bytes. See [Thing metadata](../thing-metadata.md).
+
+`api.file-sync-transfer-admissions` 1.3.0 extends
+`POST /api/v1/files/sync-transfer-admissions`. The owner can admit publication
+of an exact private Photos original or open a revocable iPhone run for subsequent original reservations. The current native runner can update a previously verified same-grant original through the canonical Files revision guard. Existing 1.0.0 admissions still authorize
+signing and completing only the original reservation. Optional v4 Photos policy
+requires `api.things` 1.53.0 and `api.things-update` 1.21.0. The import map and registry describe the route;
+`test:api-capabilities` checks negotiation and `test:files:transfer-admissions`
+exercises the built API. See [transfer admissions](../file-sync-transfer-admissions.md).
+
+## Private device observations and locate actions
+
+`deviceObservations.ts` implements owner-only location reads/settings and
+device-bearer observations, with collection-generation fencing, immutable
+sample IDs, observed/received timestamps and accounted retention cleanup.
+The observations, observation-settings, node-observations and cleanup routes
+have independently negotiated `api.devices-*` features at 1.0.0. History is
+relational protected `device-observation` Things, not a growing device array.
+
+`deviceAlerts.ts` and `deviceAlertMedia.ts` implement owner-targeted alerts,
+bound APNs registrations, lease-authorized attachment versions and prepared
+notification sounds. Their alerts/node-push/node-media/node-alert-sounds
+features are 1.0.0; command features are 1.11.0. Devices/node-state 1.15.0
+accept a closed optional model descriptor patch. Notification lists/settings
+1.8.0 include device-alert history. Notifications-devices 1.3.0 removes the
+old registration count limits that could discard existing device bindings.
+Reuse existing ownership/session checks,
+command approvals, leases, media holds and notification history. APNs provider
+acceptance never asserts playback; uncertain effects retain their request ID.
+
+Run `test:devices`, `test:api-capabilities`, the built-server manifest smoke,
+and the native mobile/Node suites. `DeviceLocationWorkspace` is a scope-fenced
+read/action adapter for private saved editable layouts, with canonical uploads
+and a separately negotiated native location bridge. No new MCP is introduced.
+
+## Independent backup destinations
+
+`api.backup-destinations` 1.0.0 registers private full-account home-plane
+`GET /api/v1/backups/destinations` in the docs registry and Nitro map. The shared
+client negotiates its explicit requirement map before reading. Fixed-label
+administrator vault registration is selected by exact deployment environment
+and origin; only opaque destination IDs, labels and configured-unverified
+status are projected. Primary attachment bucket reuse refuses. This is
+configuration discovery only: execution remains unavailable. Run destination
+unit/route tests, `test:api-capabilities` and the compiled
+`scripts/smoke-built-backup-destinations.mjs --bundle <output>` proof; see
+[independent destination setup](../backup-destinations.md).
+
+## Incoming-share message compatibility
+
+`api.chats-messages` 1.3.0 accepts large purpose-matched attachment selections
+and message text without the old 25-item/4,000-character product ceilings.
+`api.chats-messages-edit` 1.1.0 removes the matching edit ceiling. Both public
+manifests derive these versions from `apiDocs.ts`; the Messenger client
+negotiates them before mutation. No new HTTP route or permission is introduced.
+Native sharing negotiates its own exact-origin `thingtimeShare` 1.x bridge.
+Zero-byte social files require upload-start 1.9.0 and upload-complete 1.7.0.
+Long shared Data text requires Things 1.50.0; updates, imports and the built-in
+schema descriptor publish compatible contracts 1.19.0, 1.13.0 and 1.2.0.
+Run `test:api-capabilities`, the attachment service tests, and the built-server
+incoming-share acceptance before release.
+
+
+## Connector confirmations and large mutation plans
+
+`api.settings-connector-protections` 1.0.0 registers GET/POST
+`/api/v1/settings/connector-protections`; the current owning account alone may
+write its ten confirmation preferences, with `X-Thingtime-Expected-Actor` and
+same-origin validation. Connected Things PATs can read their own effective
+policy but cannot disable it. Missing settings default to enabled; failed
+negotiation/read requires confirmation. `api.chatgpt-mcp` 2.0.0 uses compact
+signed preview references, encrypted staged plans, paged review/history and
+single-use application. Current account preferences are checked again at
+application, including the underlying operation and workflow/undo rules.
+Run `test:chatgpt`, `test:api-capabilities`, and
+`test:connector-mutations:acceptance`. See the hosted connector documentation
+for staged text parts and unavoidable upstream transport constraints.
+
+`api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
+measurements to the existing device state mirror. `DeviceResources.swift`
+samples host counters, `ThingtimeAPIClient` sends the fields only to a
+compatible paired origin, and `normalizeDeviceState` validates the scalar
+allowlist for writes and the owner-only read projection. Older snapshots omit
+these fields. Run `test:devices`, `test:api-capabilities`, and the
+`DeviceResourcesTests` Swift suite. See the [native node guide](../../macos/ThingtimeNode/README.md).
+
 `api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
 account browser and installed sync worker. `deviceSyncControl.ts` authenticates
 the owner and current device pairing, delivers an immutable request once, and
@@ -25,7 +117,10 @@ Run `test:mongodb-connections`,
 Private task reporting publishes `api.agent-reporting` 1.0.0 on
 `POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
 the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
-and its separate `chatgpt.agent-reporting` 1.0.0 contract. Its four tools
+and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
+publishes `api.chatgpt-oauth-authorize` 1.2.0 and `chatgpt.oauth` 1.11.0 for
+the issuer-bound Codex CIMD and its exact ephemeral loopback callback.
+The reporting tools
 negotiate reporting, Characters and overview at the connected account's exact
 origin, and require `agents.report` independently of `things`. Run
 `test:agent-reporting`, `test:chatgpt` and `test:api-capabilities`; see
@@ -158,6 +253,10 @@ Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
 `tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
 `api.things-update` 1.14.0 on update. Builder negotiates these before saving;
 `api.webpages-resolve` remains the independent read contract.
+
+Stored map source Actions are discovered through shared composition
+(`api.actions-run` 1.39.0) and retargeted to their copied IDs in private copies
+(`api.things-fork` 1.8.0). Map inputs and runtime row values do not grant access.
 
 ## Where the code lives
 
@@ -561,6 +660,13 @@ The dispatcher records allowlisted storage failure codes without logging respons
 bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
 worker, controller gates and the scheduled production monitor.
 
+
+Connections catalog, account/list, unlink, feed, filters and OAuth begin/callback
+publish independent 2.0.0 contracts through `apiDocs.ts` and both generated
+manifests. The existing `useApi` connection methods negotiate these requirements.
+There is no new endpoint. Owner-private encrypted grants replace shared tokens;
+OAuth app configuration is exact-origin/environment scoped. Read the auth map,
+README social OAuth setup and TESTING before provider acceptance.
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
@@ -578,3 +684,187 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+## Public social metadata
+
+`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.2.0.
+`api.social-card` 1.4.0 and `utils/socialPreviewDesign.ts` share five template
+IDs and four layout choices. Only `previewTheme`/`previewLayout` survive into
+share metadata and matching canonical URLs so each chosen card stays identifiable. The anonymous JSON
+projection adds resolved design and choice catalogues.
+`meta/socialMetadata.ts` reuses the anonymous `resolveSocialPreview` projection
+and `socialMetaFromPreview`; the route resets custom data-plane selection and
+never resolves caller identity. Same-origin inputs lose query/fragment before
+lookup, remote URLs are refused, and private/missing content uses generic
+metadata. The JSON response is an explicit title/description/URL/type/image
+allowlist. `social-previews.read` applies fail-closed anonymous rate limiting.
+`meta/socialCardImages.ts` embeds canonical public attachment thumbnails in
+cards, with bounded decoding and a fresh anonymous authorization/version check.
+`api.social-card` 1.3.0 shares automatic route defaults from the actual browser
+router (`scripts/generate-route-previews.mjs` →
+`app/utils/automaticRoutePreviews.generated.json`), with optional literal
+`socialPreview` exports in route modules. New app pages need no parallel backend
+metadata registry. Saved `/p/:id` and `/t/:id` pages use
+`meta/publicWebpageContent.ts` over the anonymous `resolveWebpage` projection:
+visible supported copy/managed images are inferred; saved `name`/`description`
+remain optional overrides. Runtime sources, Actions, private bindings and system
+`siteRoute` layouts are never executed or inferred. Endpoint capability manifests
+and semantic version negotiation still apply. See
+[the automatic metadata contract](../seo-social-metadata.md).
+Run `test:social-previews` and `test:api-capabilities`.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.
+
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.
+
+
+`api.things` 1.49.0 advertises exact authenticated counts (`count=true`), shared
+literal archive filtering, and visible ordinal list windows (`offset`) on the
+existing Things endpoint. Both manifests derive this additive contract from
+`apiDocs.ts`; count and list reuse the same canonical scope and exact ACL gates.
+See [Things and folders](things-and-folders.md#exact-authorized-counts-and-visible-offset-windows)
+for query and response semantics, performance limits, and real replica coverage.
+
+
+`api.maps` 1.1.0 adds exact-address `autocomplete:false`, allowlisted geocoding
+confidence/accuracy metadata, and correlated `queries` batches on the existing
+owner/Vault-scoped suggest operation. Batch inputs are validated before key
+access, duplicate addresses share provider calls, processing chunks are not a
+product cap, and failures never return partial results. Permanent results retain
+the exact expected-selection and storage-policy contract. See [Maps](../maps.md).
+
+`api.things` 1.49.0 also adds ordered authenticated `ids` JSON-array exact reads
+on the existing GET endpoint. Missing/denied/protected positions are null;
+canonical ACLs and projections are shared with single reads. This remains a
+registered read-only Action request. URL/response transport limits require
+chunkable clients, never truncation or a maximum dataset size.
+
+
+`api.actions-run` 1.40.0 adds unary `ttExpr:["encodeURIComponent",value]`
+for authored URL components. It accepts string/nullish inputs, refuses other
+types and malformed UTF-16 without leaking the value, and retains the existing
+expression output budget. Programs using it negotiate execution protocol 1.40;
+encoding performs no HTTP operation. Both capability manifests derive this
+version from the canonical registry. Run expression, browser Action protocol
+and capability tests.
+
+Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
+`api.things-update` 1.18.1 and `api.timeline` 1.19.1. The shared iterative
+Timeline block traversal removes the hidden 1,200-block/24-level write and
+comparison limits; existing Component authorization and capture contracts remain.
+Both manifests derive these PATCH versions from the canonical endpoint registry.
+
+The bounded Mac byte transport negotiates independent native
+`fileSingleUploadVersion` 1.0.0; it does not add HTTP endpoints or alter existing
+API feature versions. The host/client continue to negotiate the selected origin's
+attachment start/part/complete/content contracts and use those canonical routes.
+The native proof includes attachment identity/version/size/fingerprint only;
+publication remains the existing guarded Files contract. See the
+[compound transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+
+## Shared-content request transport
+
+Incoming sharing negotiates `api.things` 1.51.0, `api.things-update` 1.20.0,
+`api.things-comment` 1.11.0, `api.chats-messages` 1.4.0,
+`api.chats-messages-edit` 1.2.0, `api.attachment-uploads` 1.10.0,
+`api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0 and `api.files`
+1.12.0. Both manifest generators derive these independent minors from apiDocs.
+The scoped shared-content JSON reader admits authorization/rate limits before
+streaming fatal UTF-8 decoding with no application body ceiling. Other control
+requests retain numeric budgets. Completion accepts only uploadId and enumerates
+parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
+run `test:shared-content`, `test:api-capabilities` and the isolated real-API
+`remix/scripts/shared-body-acceptance.mjs` harness.
+
+The merged shared-value Action contract is `api.actions-run` 1.42.0. The
+authored-controls branch independently used 1.41.0, so that origin alone must
+not satisfy clients requiring complete shared Data values. Both generators
+read the canonical version; shared-content Action clients require 1.42.0, while
+older authored-control-only minima remain valid for their narrower contract.
+
+`api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
+broad content. Existing snapshot parts handle breadth beyond inline processing
+windows; no total-content node cap remains. Full-content checkout, merge,
+export and restore clients require this patch. Metadata reads retain their
+older minima. Run `test:timeline`; the wire/parts formats are unchanged.
+
+## Reviewed creation projections and execution admission
+
+Things 1.52.0 adds derived `executionHeld` and owner-only scalar
+`creationProgress`. Component browse 1.1.0 and Webpage resolve 1.13.0 retain the
+hold; Actions run 1.43.0 refuses held server/browser/shared/child admission.
+Both manifests derive from `apiDocs.ts`; clients negotiate the small maps in
+`backups/contentCreation.ts` and `utils/sharedContentCapabilities.ts`.
+There is no new restore route/import-map entry. Run capability coverage plus
+`backups/creationContract.test.ts`, the real ordinary-restore replica proof and
+the isolated execution-hold browser check. After the canonical Remix build,
+`test:content-execution:built` imports the compiled Vercel fetch handler in a
+clean synthetic runtime and checks both manifests and all four docs routes.
+
+
+## Client discovery failure classification
+
+`requireCapability.client.ts` uses the canonical `ThingtimeApiError` for network,
+deadline and HTTP discovery errors, including an interrupted response body.
+Parsing and compatibility checks remain separate: malformed/missing/breaking or
+wrong-origin manifests and 401/403/404 cannot retain protected projections.
+Temporary failures may retain a same-scope readable template only while execution
+remains unverified and inert. This is a client lifecycle correction, with no
+endpoint/manifest feature change. Run its focused tests and the full real-route
+Schema refresh/revocation fixture documented in `TESTING.md`.
+
+### Account-file restore writer epoch corrections
+
+`api.files` 1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 fence
+writes/moves/drains of held restored content through the root content epoch.
+`ACCOUNT_FILE_RESTORE_REQUIREMENTS` negotiates them with existing Things,
+Timeline and exact attachment content contracts. Both manifest generators derive
+versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
+internal options, never new accepted HTTP fields; public retained-version input
+and upload approval remain unchanged. Run `test:api-capabilities`, the backup
+contract test, canonical build/output smoke and `test:backups:file-restore`.
+
+
+Backup dispatch recovery is `/api/v1/backups/run` (`api.backup-dispatch` 1.0.0),
+registered in the docs registry, Nitro import map and existing Vercel cron config.
+GET uses the existing scheduler secret; POST uses full same-origin administrator
+permission and no selectors/payload. `backupDispatch.server.ts` reserves opaque
+attempt IDs before SDK start; `backupJobs.ts` keeps original-session and
+transaction/lease fences. No browser call can supply a Workflow run ID, store
+address, original session or runnable intent. Source configuration and compiled
+routing are not deployed scheduler/provider evidence; see TESTING and README.
+
+The first-party `/api/v1/backups/workspace` contract (`api.backup-workspace`
+1.0.0) provides catalog, sealed snapshot pages, durable job progress and completed
+review reads, plus fixed snapshot/review/restore/control commands. Its route,
+Nitro map, `useApi` wrappers and explicit requirements share the DTO in
+`app/backups/workspace.ts`. Saved source paths come from a bounded worker catalog
+stage over retained exact-timestamp descriptors. Browser reads never obtain
+provider configuration, session references, execution leases or writable intents.
+See the first-party backup workspace checklist in TESTING for real HTTP/Builder
+acceptance and the separate deployed scheduler/provider gates.

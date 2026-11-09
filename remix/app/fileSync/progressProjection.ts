@@ -1,3 +1,4 @@
+import type { ConfirmedHistoryTotals } from './pagedRunJournal';
 import type { SyncOperation } from './execute';
 import type { ForegroundSyncProgress } from './foregroundSync';
 import { parsePagedRunSpec, type PagedRunSpec } from './pagedRunJournal';
@@ -15,7 +16,7 @@ export function parseSyncProgressDescriptor(value: unknown): SyncProgressDescrip
 	return { scope: structuredClone(input.scope), run };
 }
 export type SyncProgressState = 'running' | 'paused' | 'cancelled' | 'error' | 'complete';
-export type SyncProgressRow = { entry: SyncEntry; operation: SyncOperation | null; excluded?: boolean };
+export type SyncProgressRow = { entry: SyncEntry; operation: SyncOperation | null; early?: SyncOperation; history?: ConfirmedHistoryTotals | null; observed?: boolean; excluded?: boolean };
 export type SyncProgressTotals = {
 	path: string; kind: 'file' | 'folder'; files: number; folders: number; indexedBytes: number; excluded: number;
 	unchanged: number; operations: number; confirmed: number; transferFiles: number; confirmedFiles: number;
@@ -32,15 +33,28 @@ const totals = (path: string, kind: 'file' | 'folder'): SyncProgressTotals => ({
 const contains = (parent: string, path: string) => !parent || path === parent || path.startsWith(`${parent}/`);
 const safeAdd = (a: number, b: number) => { const sum = a + b; if (!Number.isSafeInteger(sum)) throw new RangeError('Sync progress byte totals exceed the supported safe range.'); return sum; };
 const add = (target: SyncProgressTotals, row: SyncProgressRow, activePath?: string) => {
-	const { entry, operation } = row;
-	if (entry.kind === 'file') { target.files++; target.indexedBytes = safeAdd(target.indexedBytes, entry.size); } else target.folders++;
-	if (row.excluded) { target.excluded++; return; }
-	if (!operation) { target.unchanged++; return; }
-	target.operations++; if (operation.confirmed) target.confirmed++;
-	if (operation.mutation.kind === 'copy' && operation.mutation.source.kind === 'file') {
-		target.transferFiles++; target.bytesTotal = safeAdd(target.bytesTotal, operation.mutation.source.size);
-		if (operation.confirmed) { target.confirmedFiles++; target.bytesConfirmed = safeAdd(target.bytesConfirmed, operation.mutation.source.size); }
-		else if (operation.mutation.path === activePath) target.activeFile = { path: activePath, size: operation.mutation.source.size };
+	const { entry } = row;
+	if (row.observed !== false) {
+		if (entry.kind === 'file') { target.files++; target.indexedBytes = safeAdd(target.indexedBytes, entry.size); } else target.folders++;
+		if (row.excluded) target.excluded++;
+		else if (!row.operation && !row.early && !row.history?.operations) target.unchanged++;
+	}
+ if (row.history) {
+  target.operations = safeAdd(target.operations, row.history.operations);
+  target.confirmed = safeAdd(target.confirmed, row.history.operations);
+  target.transferFiles = safeAdd(target.transferFiles, row.history.files);
+  target.confirmedFiles = safeAdd(target.confirmedFiles, row.history.files);
+  target.bytesTotal = safeAdd(target.bytesTotal, Number(row.history.bytes));
+  target.bytesConfirmed = safeAdd(target.bytesConfirmed, Number(row.history.bytes));
+ }
+	for (const operation of [row.early, row.excluded ? null : row.operation]) {
+		if (!operation) continue;
+		target.operations++; if (operation.confirmed) target.confirmed++;
+		if (operation.mutation.kind === 'copy' && operation.mutation.source.kind === 'file') {
+			target.transferFiles++; target.bytesTotal = safeAdd(target.bytesTotal, operation.mutation.source.size);
+			if (operation.confirmed) { target.confirmedFiles++; target.bytesConfirmed = safeAdd(target.bytesConfirmed, operation.mutation.source.size); }
+			else if (operation.mutation.path === activePath) target.activeFile = { path: activePath, size: operation.mutation.source.size };
+		}
 	}
 };
 
@@ -66,8 +80,8 @@ export async function projectSyncProgress(source: SyncProgressSource, request: S
 		let aggregate = children.get(child);
 		if (!aggregate) {
 			if (children.size === SYNC_PROGRESS_PAGE_SIZE) { more = true; continue; }
-			if (child !== row.entry.path) throw Error('Sync progress folder ancestor is missing.');
-			aggregate = totals(child, row.entry.kind); children.set(child, aggregate);
+			if (child !== row.entry.path && row.observed !== false) throw Error('Sync progress folder ancestor is missing.');
+			aggregate = totals(child, child === row.entry.path ? row.entry.kind : 'folder'); children.set(child, aggregate);
 		}
 		add(aggregate, row, request.activePath);
 	}
@@ -87,7 +101,7 @@ export function syncProgressMetrics(value: SyncProgressTotals, progress?: Foregr
 	const activeBytes = active && Number.isFinite(progress?.bytes) && Number.isFinite(progress?.size)
 		? Math.max(0, Math.min(progress!.bytes!, progress!.size!, value.bytesTotal - value.bytesConfirmed)) : 0;
 	const bytes = value.bytesConfirmed + activeBytes, finished = value.confirmed === value.operations;
-	const excludedOnly = value.excluded > 0 && value.excluded === value.files + value.folders;
+	const excludedOnly = value.operations === 0 && value.excluded > 0 && value.excluded === value.files + value.folders;
 	const percent = excludedOnly ? null : finished ? 100 : Math.min(99.9, value.bytesTotal > 0
 		? 100 * bytes / value.bytesTotal : 100 * value.confirmed / value.operations);
 	const status = excludedOnly ? 'Excluded' : finished ? value.operations ? 'Complete' : 'Up to date'

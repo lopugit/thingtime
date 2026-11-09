@@ -22,10 +22,12 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
   'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
+  'v1/files/sync-transfer-admissions': () => import('../../../app/routes/api/v1/files/sync-transfer-admissions/_sync-transfer-admissions'),
   'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
@@ -171,6 +173,10 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/chats/settings': () => import('../../../app/routes/api/v1/chats/settings/_settings'),
   'v1/chats/update': () => import('../../../app/routes/api/v1/chats/update/_update'),
   'v1/chats/updates': () => import('../../../app/routes/api/v1/chats/updates/_updates'),
+	'v1/backups/workspace': () => import('../../../app/routes/api/v1/backups/workspace/_workspace'),
+	'v1/backups/run': () => import('../../../app/routes/api/v1/backups/run/_run'),
+	'v1/backups/destinations': () => import('../../../app/routes/api/v1/backups/destinations/_destinations'),
+	'v1/devices/folders': () => import('../../../app/routes/api/v1/devices/folders/_folders'),
 	'v1/devices': () => import('../../../app/routes/api/v1/devices/_devices'),
 	'v1/devices/approvals': () => import('../../../app/routes/api/v1/devices/approvals/_approvals'),
 	'v1/devices/sync-control': () => import('../../../app/routes/api/v1/devices/sync-control/_sync-control'),
@@ -178,6 +184,14 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
 	'v1/devices/node/live-sync': () => import('../../../app/routes/api/v1/devices/node/live-sync/_live-sync'),
+	'v1/devices/alerts': () => import('../../../app/routes/api/v1/devices/alerts/_alerts'),
+	'v1/devices/node/push': () => import('../../../app/routes/api/v1/devices/node/push/_push'),
+	'v1/devices/node/media': () => import('../../../app/routes/api/v1/devices/node/media/_media'),
+	'v1/devices/node/alert-sounds': () => import('../../../app/routes/api/v1/devices/node/alert-sounds/_alert-sounds'),
+	'v1/devices/observations/cleanup': () => import('../../../app/routes/api/v1/devices/observations/cleanup/_cleanup'),
+	'v1/devices/observations': () => import('../../../app/routes/api/v1/devices/observations/_observations'),
+	'v1/devices/observation-settings': () => import('../../../app/routes/api/v1/devices/observation-settings/_observation-settings'),
+	'v1/devices/node/observations': () => import('../../../app/routes/api/v1/devices/node/observations/_observations'),
 	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
@@ -201,7 +215,9 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
   'v1/connections/oauth/callback': () => import('../../../app/routes/api/v1/connections/oauth/callback/_callback'),
+  'v1/connections/provider-icon': () => import('../../../app/routes/api/v1/connections/provider-icon/_provider-icon'),
   'v1/connections/providers': () => import('../../../app/routes/api/v1/connections/providers/_providers'),
+  'v1/connections/named': () => import('../../../app/routes/api/v1/connections/named/_named'),
   'v1/connections/unlink': () => import('../../../app/routes/api/v1/connections/unlink/_unlink'),
   'v1/connections/youtube/channels': () => import('../../../app/routes/api/v1/connections/youtube/channels/_channels'),
   'v1/connections/youtube/search': () => import('../../../app/routes/api/v1/connections/youtube/search/_search'),
@@ -266,6 +282,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
   'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
+  'v1/settings/connector-protections': () => import('../../../app/routes/api/v1/settings/connector-protections/_connector-protections'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
@@ -303,6 +320,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
+	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/users/activity': () => import('../../../app/routes/api/v1/users/activity/_activity'),
@@ -404,7 +422,17 @@ export default defineHandler(async (event) => {
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
   }
 
+  // Fixed public provider artwork is an asset of the document origin. It
+  // never reads the account, selected data plane, or fallback API.
+  if (path === 'v1/connections/provider-icon') {
+    if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
+    const route = await routeModules['v1/connections/provider-icon']();
+    const response = normalizeResponse(await route.loader!({ request: event.req }));
+    return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
+  }
+
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/files/sync-transfer-admissions') return jsonResponse({ ok: false, error: 'File transfer admissions require this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });

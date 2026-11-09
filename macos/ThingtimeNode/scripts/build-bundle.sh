@@ -11,7 +11,7 @@ CONTENTS_PATH="${APP_PATH}/Contents"
 VERSION="${THINGTIME_NODE_VERSION:-0.1.0}"
 BUILD_NUMBER="${THINGTIME_NODE_BUILD_NUMBER:-1}"
 SIGNING_MODE="${THINGTIME_NODE_SIGNING_MODE:-signed}"
-INDEXER_MANIFEST="${PACKAGE_ROOT}/../../Commander/crates/commander-indexer/Cargo.toml"
+INDEXER_MANIFEST="${PACKAGE_ROOT}/../../filesystem-indexer/crates/indexer/Cargo.toml"
 INDEXER_TARGET="${CACHE_ROOT}/commander-indexer-release"
 
 case "${CACHE_ROOT}" in
@@ -24,23 +24,28 @@ esac
 
 cargo build --locked --release --manifest-path "${INDEXER_MANIFEST}" --target-dir "${INDEXER_TARGET}"
 
-swift build \
-    --package-path "${PACKAGE_ROOT}" \
-    --scratch-path "${SWIFT_SCRATCH}" \
-    --configuration release
+# Build only shipped products. Test-only executables may use @testable
+# imports and must never make a non-testable Release bundle depend on fixtures.
+SWIFT_PRODUCTS=(ThingtimeNode ThingtimeNodeBridge ThingtimeSpeech)
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    swift build \
+        --package-path "${PACKAGE_ROOT}" \
+        --scratch-path "${SWIFT_SCRATCH}" \
+        --configuration release \
+        --product "${product}"
+done
 
 BIN_PATH="$(swift build \
     --package-path "${PACKAGE_ROOT}" \
     --scratch-path "${SWIFT_SCRATCH}" \
     --configuration release \
     --show-bin-path)/ThingtimeNode"
-BRIDGE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNodeBridge"
 RESOURCE_BUNDLE_PATH="$(dirname "${BIN_PATH}")/ThingtimeNode_ThingtimeNodeCore.bundle"
 ICON_SOURCE_PATH="${PACKAGE_ROOT}/Resources/ThingtimeNodeIcon.png"
 
-test -x "${BIN_PATH}"
-test -x "${BRIDGE_PATH}"
-test -x "$(dirname "${BIN_PATH}")/ThingtimeSpeech"
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    test -x "$(dirname "${BIN_PATH}")/${product}"
+done
 test -d "${RESOURCE_BUNDLE_PATH}"
 test -f "${ICON_SOURCE_PATH}"
 mkdir -p "${STAGE_ROOT}"
@@ -49,10 +54,10 @@ if [[ -e "${APP_PATH}" ]]; then
 fi
 mkdir -p "${CONTENTS_PATH}/MacOS"
 mkdir -p "${CONTENTS_PATH}/Resources"
-/usr/bin/ditto "${BIN_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNode"
-/usr/bin/ditto "${BRIDGE_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+for product in "${SWIFT_PRODUCTS[@]}"; do
+    /usr/bin/ditto "$(dirname "${BIN_PATH}")/${product}" "${CONTENTS_PATH}/MacOS/${product}"
+done
 /usr/bin/ditto "${INDEXER_TARGET}/release/commander-indexer" "${CONTENTS_PATH}/MacOS/commander-indexer"
-/usr/bin/ditto "$(dirname "${BIN_PATH}")/ThingtimeSpeech" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
 /usr/bin/ditto "${RESOURCE_BUNDLE_PATH}" "${CONTENTS_PATH}/Resources/ThingtimeNode_ThingtimeNodeCore.bundle"
 /usr/bin/ditto "${PACKAGE_ROOT}/Resources/Info.plist" "${CONTENTS_PATH}/Info.plist"
 ICON_WORK_ROOT="$(mktemp -d "${CACHE_ROOT}/icon-build.XXXXXX")"
@@ -127,5 +132,7 @@ case "${SIGNING_MODE}" in
         ;;
 esac
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+# Check the actual signed payload, including unsigned fixtures, not only the source plist.
+"${SCRIPT_DIR}/verify-location-entitlement.sh" "${APP_PATH}"
 /usr/bin/codesign -dr - "${APP_PATH}" 2>&1
 echo "${APP_PATH}"

@@ -121,11 +121,13 @@ test('component-aware branch preview retains definitions and folder-source links
  assert.throws(() => parseBranchMergePreview(chosen, 'user-1', { ...choice, componentChoices: {} }), /choices/);
 });
 
-test('combined preview refuses dense versions before returning a response the client cannot decode', async () => {
+test('combined preview preserves dense versions beyond former aggregate node budgets', async () => {
  const content = { left: 1, right: 0, rows: Array(70_000).fill(0) };
  const h = setup(content, content);
  for (const options of [request, { ...request, componentChoices: {} }]) {
-  await assert.rejects(h.service('user-1', options), (error: any) => error.status === 413 && /too large to preview/.test(error.message));
+  const preview = parseBranchMergePreview((await h.service('user-1', options)).preview, 'user-1', options);
+  assert.deepEqual((preview.current.value as any).crystal.rows, content.rows);
+  assert.deepEqual((preview.incoming.value as any).crystal.rows, content.rows);
  }
  assert.equal(h.target.head.eventId, 'current');
 });

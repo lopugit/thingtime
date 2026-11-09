@@ -1,3 +1,4 @@
+import { selectedDesktopApiOrigin } from '../utils/electronBridge';
 import { sameSymbolicLink } from './symbolicLink';
 import { timelineScopeKey, type TimelineEvent, type TimelineScope } from '../timeline/contract';
 import { CLOUD_FILE_ADAPTER, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
@@ -59,6 +60,12 @@ export function parseFileRestoreCommand(value: unknown, version: CloudFile): Clo
 export function fileRestoreKey(scope: TimelineScope, version: CloudFile): string {
 	if (scope.dataPlane !== 'home') throw Error('File versions require home storage.');
 	return `tt-file-restore:${timelineScopeKey(scope)}:${version.id}:${version.revision}`;
+}
+
+/** Desktop History is rendered locally, but file restores target its selected account API. */
+export function desktopFileRestoreScope(scope: TimelineScope, info: { contentOrigin?: string | null; apiOrigin?: string | null }): TimelineScope | null {
+	const apiOrigin = selectedDesktopApiOrigin(scope.apiOrigin, info);
+	return apiOrigin ? { ...scope, apiOrigin } : null;
 }
 
 async function fileOperationEventId(ownerId: string, id: string, operationId: string, kind: 'commit' | 'retain'): Promise<string> {

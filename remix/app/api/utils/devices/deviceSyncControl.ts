@@ -1,3 +1,4 @@
+import { parseDeviceSyncHistory } from '~/fileSync/deviceSyncHistory';
 import { createHash, randomUUID } from 'node:crypto';
 import { Binary } from 'mongodb';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
@@ -103,9 +104,10 @@ export function createDeviceSyncControlService(overrides: Partial<Dependencies> 
     if (claimed && 'result' in input) {
       const command = payload(claimed).command;
       try {
-        if (command?.action === 'resources') input = { ...input, result: parseRemoteSyncResources(input.result) };
+        if (command?.action === 'history') input = { ...input, result: parseDeviceSyncHistory(input.result, command.range) };
+        else if (command?.action === 'resources') input = { ...input, result: parseRemoteSyncResources(input.result) };
         else if (command?.action === 'status' && input.result?.resourceUsage !== undefined) parseRemoteSyncResources(input.result.resourceUsage);
-      } catch { return fail(400, 'Invalid device resource response'); }
+      } catch { return fail(400, command?.action === 'history' ? 'Invalid device sync history response' : 'Invalid device resource response'); }
     }
     const result = 'error' in input ? { error: input.error } : { result: input.result };
     const row = await things.findOneAndUpdate(completionFilter,
