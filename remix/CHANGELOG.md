@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
+  its glibc requirements and password hash compatibility before release.
+  **Codex (AI)**
+
 - 2026-11-09: Authorize ChatGPT plan usage from Thingtime desktop while keeping
   the selected account API. Protect the grant on the device and save completed
   Lopu text turns through the account's transcript API. **Codex (AI)**
