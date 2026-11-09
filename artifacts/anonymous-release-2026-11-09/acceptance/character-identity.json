@@ -189,8 +189,37 @@
     "errors": []
   },
   "sameProfileAddAccount": {
-    "verified": false,
-    "authenticatedLoginRoute": "The normal login route redirected an authenticated session.",
-    "fixtureStop": "The synthetic admin-owned Character did not appear in the composer picker after cold reload and an option-targeted retry."
+    "verified": true,
+    "testsPassed": 1,
+    "testsSkipped": 0,
+    "narrowViewWidth": 320,
+    "ownerLoginStatus": 200,
+    "addLoginStatus": 200,
+    "switchStatus": 200,
+    "identityPath": [
+      "owner",
+      "character",
+      "owner"
+    ],
+    "ownerAndCharacterBothInRoster": true,
+    "ownerAndCharacterPrivateApiReadsIsolated": true,
+    "characterPrivatePostRendered": true,
+    "ownerPrivatePostRenderedAfterSwitch": true,
+    "foreignOwnerSelectionStatus": 403,
+    "anonymousThingRemainsOnlyInAnonymousPartition": true,
+    "anonymousThingRemoteReadStatus": 404,
+    "anonymousWriteAttempts": [],
+    "errors": [],
+    "earlierFixtureStops": [
+      "The normal login route redirected an authenticated session.",
+      "The synthetic admin-owned Character did not appear in the composer picker after cold reload and an option-targeted retry."
+    ],
+    "cleanup": {
+      "ownedContainersRemaining": 0,
+      "temporaryDerivativeImageRemoved": true,
+      "disposableDatabaseAndObjectStorageDestroyedWithContainer": true,
+      "disposableAdminFixtureDestroyedWithContainer": true,
+      "hostCredentialsOrProfilesUsed": false
+    }
   }
 }

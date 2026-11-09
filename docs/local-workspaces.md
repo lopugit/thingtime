@@ -5687,8 +5687,10 @@ account switch, verified that the old UI and late reply stayed hidden, and
 read back the single reply after returning. Device usage and server quota
 checks passed for the disposable Character. Direct Character password
 sign-in and its authority refusals passed through the API and in a clean
-browser at 1440 and 320 pixels. The same-profile Add account flow and the
-broader Character matrix remain open.
+browser at 1440 and 320 pixels. Settings Add account also passed in the
+same browser profile. Switching to the Character and back retained both
+accounts and separated their private posts. The anonymous post stayed local.
+The broader Character matrix remains open.
 [Character evidence](../artifacts/anonymous-release-2026-11-09/acceptance/character-baseline.json) ·
 [Identity and accounting](../artifacts/anonymous-release-2026-11-09/acceptance/character-identity.json)
 

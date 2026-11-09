@@ -21,15 +21,26 @@ reads, and independently confirmed the original reply's author, parent and
 text. A follow-up on the corrected client verified a held reply across an
 account switch, exact single reply on return, device storage readback and
 Character-only server accounting. Direct Character sign-in passed through
-the API and in a clean browser at 1440 and 320 pixels. The same-profile Add
-account fixture stopped before sign-in when its composer did not list the
-synthetic Character. [Character evidence](acceptance/character-baseline.json) ·
+the API and in a clean browser at 1440 and 320 pixels. The Settings Add
+account flow separately verified owner-to-Character-to-owner switching,
+private post isolation and an anonymous post that stayed on the device. [Character evidence](acceptance/character-baseline.json) ·
 [Identity and accounting](acceptance/character-identity.json)
 
 The combined client and server package preserved the exact browser-tested
 Settings shell and API handler. The native draft runner bytes matched the
 previous provider capture. The compiled smoke passed 17 contracts, and the
 repository unit command completed successfully.
+
+## macOS development app acceptance
+
+The separate arm64 Electron development app at `7847607fe` used its bundled
+Nitro and managed Mongo replica. The bundled bcrypt module accepted valid
+disposable credentials and refused a wrong password. An anonymous theme was
+created and edited offline, survived reloads, and exported through the macOS
+Save sheet with the same Thing ID and exact edited accent. The anonymous flow
+made zero HTTP mutations. The development bundle was retained with a clean
+profile. Stable application release acceptance remains open.
+[macOS development evidence](acceptance/macos-development.json)
 
 ## Offline update recovery and hosted worker hardening
 

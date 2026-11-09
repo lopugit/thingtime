@@ -16351,7 +16351,9 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Character library selection, reply/parent links, History-to-inspector links and quick-comment completion retain their actor through native cold reload. The principal library remains separate; leaving the actor revokes its image URL.
 - [x] Explicit API actor selection saves in the actor queue; selecting the principal clears inherited delegation. A private target in another partition is refused. Anonymous quick comments keep the anonymous facade and make no account requests.
 - [x] In a clean browser, sign in directly with a separate-password Character, verify the live identity and reopen its private post after reload at 1440 and 320px. Refuse owner selection and owner-only writes.
-- [ ] Complete same-profile Add account sign-in, remaining feature-specific Character routes and the full account/offline acceptance matrix.
+- [x] Use Settings Add account to sign in to a separate-password Character in the owner’s browser profile. Switch back through the account roster, check private posts through both sessions and verify the anonymous post remains local.
+- [x] On the separate macOS Electron development app, verify bundled bcrypt with disposable registration and sign-in, create and edit the same anonymous Theme offline, reload, then export the edited private Thing through the native Save sheet. Verify exact ID and accent with zero anonymous HTTP mutations.
+- [ ] Complete remaining feature-specific Character routes and the full account/offline acceptance matrix.
 
 ### Inherited and cached subspace audience labels (2026-10-19)
 

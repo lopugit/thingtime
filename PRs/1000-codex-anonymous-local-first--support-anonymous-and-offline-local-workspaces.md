@@ -12,11 +12,20 @@ The Character runs on `7164914063d477f4817ecd84ce12a1bde2ce86fa` verified
 library, nested links, anonymous quick comments and sibling isolation.
 The follow-up verified native account switching during a held reply, device
 usage and Character-only server accounting. Direct sign-in passed through
-the API and in a clean browser at 1440 and 320 pixels. The same-profile Add
-account flow remains open.
+the API and in a clean browser at 1440 and 320 pixels. Same-profile
+Settings Add account retained both identities and their private post
+isolation. The anonymous post stayed on the device.
 [Vault evidence](../artifacts/anonymous-release-2026-11-09/acceptance/provider-vault.json) ·
 [Character evidence](../artifacts/anonymous-release-2026-11-09/acceptance/character-baseline.json) ·
 [Identity and accounting](../artifacts/anonymous-release-2026-11-09/acceptance/character-identity.json)
+
+The isolated macOS arm64 Electron development app at `7847607fe` verified
+bundled bcrypt registration and sign-in, anonymous Theme creation and editing
+offline, and export of the same private Thing through the native Save sheet.
+The exported accent matched the edit and the anonymous flow made no HTTP
+mutations. The exact source commit passed all required GitHub checks and
+native compilation.
+[macOS development evidence](../artifacts/anonymous-release-2026-11-09/acceptance/macos-development.json)
 
 ## Offline shell and hosted worker — 2026-11-10
 
