@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
+  its glibc requirements and password hash compatibility before release.
+  **Codex (AI)**
+
 - 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
   status, start, and background replies. Enabled backups can proceed after their
   first status check, and the card can show native progress. **Codex (AI)**
