@@ -2,6 +2,7 @@
 // belong to the explicitly selected disposable replica, never a production cookie.
 // TT_RETENTION_SESSION_FILE=/private/task/session.json TT_RETENTION_DATABASE_HOST=127.0.0.1:17343
 // TT_PLAYWRIGHT_MODULE=/private/tools/node_modules/playwright/index.mjs node scripts/preview-retention-acceptance.mjs
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -150,6 +151,7 @@ try {
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 950 });
     const host = page.locator('[data-settings-document="preview-retention-settings"]');
+    await enableCurrentPageBuilder(page);
     await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
     const select = page.getByRole('combobox', { name: 'Select block', exact: true });

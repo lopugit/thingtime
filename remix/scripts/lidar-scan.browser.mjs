@@ -2,6 +2,7 @@
  * The bridge responses and layout API are synthetic. No iOS app is launched.
  * Run: TT_PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node remix/scripts/lidar-scan.browser.mjs <evidence dir>
  */
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp } from 'node:fs/promises';
@@ -151,6 +152,7 @@ async function exercise(context, profile) {
 	assert.deepEqual(await readActions(page), ['status', 'start', 'status', 'retry', 'status', 'retry']);
 
 	const host = page.locator('[data-settings-document="lidar-scan-controls"]');
+	await enableCurrentPageBuilder(page);
 	await host.getByRole('button', { name: 'Edit scan layout' }).click();
 	await host.getByRole('button', { name: 'Open Builder inspector' }).click();
 	const selector = page.getByRole('combobox', { name: 'Select block' });

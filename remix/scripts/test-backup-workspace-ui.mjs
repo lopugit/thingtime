@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -225,6 +226,7 @@ export async function runBackupWorkspaceHttpAcceptance({ origin, account, device
     await scroll('activity');
     // The same account-backed editable document persists nested ordinary blocks.
     const layout = page.locator('[data-settings-document="backup-workspace"]');
+    await enableCurrentPageBuilder(page);
     await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
     await page.locator('[data-block-id="backup-description"]').click();
     const edited = `Backup library ${label} · saved editable description`;

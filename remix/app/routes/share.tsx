@@ -8,6 +8,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { PostComposer, type PendingPostSubmission } from '~/components/Feed/PostComposer';
 import { ShareMessageDestination } from '~/components/Messenger/ShareMessageDestination';
 import { ShareSaveDestination } from '~/components/Things/ShareSaveDestination';
+import { CurrentPageBuilderToggle } from '~/components/Builder/CurrentPageBuilder';
 import { SettingsDocumentHost } from '~/components/Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '~/components/Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
@@ -121,7 +122,9 @@ function IncomingShareSession({ identity, requestId, accountId, origin }: { iden
  const summary = draft ? `${draft.files.length ? `${draft.files.length} shared ${draft.files.length === 1 ? 'file' : 'files'} · ` : ''}${draft.directories.length ? `${draft.directories.length} shared ${draft.directories.length === 1 ? 'folder' : 'folders'} · ` : ''}Your content is ready. Choose where it goes below.` : 'Your shared text, links and files stay together.';
  const message = status || (!accountId ? 'Sign in to choose an account for this share.' : !requestId || !window.thingtimeShare ? 'Open Thingtime from the system Share menu to receive content.' : !draft ? 'Opening shared content…' : '');
  return <Box ref={surface} as="main" data-testid="incoming-share" maxW="900px" mx="auto" width="100%" minH="100dvh" px={{ base: '16px', md: '28px' }} pt="24px" pb={`${toolbarHeight + 48}px`} minW={0} sx={{ 'input, textarea, button, [contenteditable="true"]': { scrollMarginBottom: 'calc(var(--tt-context-toolbar-height, 120px) + 24px)' } }} style={{ '--tt-context-toolbar-height': `${toolbarHeight}px`, '--tt-context-card-gap': compactViewport ? '8px' : '12px', '--tt-context-card-padding': compactViewport ? '8px' : '16px', '--tt-context-secondary-display': compactViewport ? 'none' : 'block' } as React.CSSProperties}>
-  <Box ref={heading}><SettingsDocumentHost showLayoutControls={!!accountId} documentKey="incoming-share-intro" defaultDocument={incomingShareBlocks} scopeKey={identity} title="Incoming share heading" clearMobileLaunchers>
+  <Box ref={heading}>
+   {accountId && <Box display="flex" justifyContent="flex-end"><CurrentPageBuilderToggle /></Box>}
+   <SettingsDocumentHost showLayoutControls={!!accountId} documentKey="incoming-share-intro" defaultDocument={incomingShareBlocks} scopeKey={identity} title="Incoming share heading" clearMobileLaunchers>
    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={identity} scope={{ share: { title, summary, status: message, signedOut: !accountId, loginDisplay: accountId ? 'none' : 'inline-flex', loginHref: `/login?redirectTo=${encodeURIComponent(window.location.pathname + window.location.search)}` } }} enabled={!editing} actions={{}}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
   </SettingsDocumentHost></Box>
   {draft && !complete && <>

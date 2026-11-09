@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -85,6 +86,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
         const savedRules = await rules.inputValue();
         await inspectLayout('ignore-editor');
         const layout = page.locator('[data-settings-document="file-sync-ignore"]');
+        await enableCurrentPageBuilder(page);
         await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await layout.locator('[data-block-id="ignore-title"]').click();
         for (const [id, text] of [['ignore-title', 'My device ignore rules'], ['ignore-help', 'Review each rule and test a relative path before saving.'], ['ignore-defaults', 'Insert my dependency defaults'], ['ignore-test-result', 'Path result: {ignore.result}'], ['ignore-test-file', 'Regular file']]) {

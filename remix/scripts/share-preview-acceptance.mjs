@@ -6,6 +6,7 @@
 // CHROMIUM_EXECUTABLE and THINGTIME_TEST_MONGOD may select installed tooling.
 // SHARE_PREVIEW_ACCEPTANCE_SCOPE=contrast runs only the final contrast/copy
 // feedback observations after previously passing the complete acceptance.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -225,6 +226,7 @@ async function browserAcceptance() {
       await open('/'); assert.match(await image.getAttribute('src'), /\/social-card\?/); await inspect(`${width}-home`); await close();
     }
     await page.setViewportSize({ width: 1440, height: 1000 }); await open('/invite#synthetic-preview-invitation');
+    await enableCurrentPageBuilder(page);
     await dialog.getByRole('button', { name: 'Edit layout', exact: true }).click();
     const edits = [
       ['share-intro-copy', 'Choose a preview from these individually editable blocks.'],

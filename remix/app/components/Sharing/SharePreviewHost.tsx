@@ -6,6 +6,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { useLopu } from '../Lopu/useLopu';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '../Nav/Drawer/useDrawer';
 import { BuilderOverlayHost } from '../Builder/BuilderOverlayHost';
+import { CurrentPageBuilderToggle } from '../Builder/CurrentPageBuilder';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
@@ -80,6 +81,7 @@ export function SharePreviewDialog({ href, scopeKey, onClose }: { href: string; 
   <ModalContent ref={overlay} data-testid="share-preview-dialog" aria-label="Share link and customise preview" containerProps={{ zIndex: DRAWER_MODAL_Z }} width="min(960px, calc(100vw - 24px))" maxW="calc(100vw - 24px)" maxH="calc(100dvh - 24px)" margin="12px" borderRadius="20px" background="var(--tt-card, #fff)">
    <ModalCloseButton aria-label="Close share preview" />
    <ModalBody minW={0} padding={{ base: '28px 18px', md: '34px' }} sx={{ '#share-preview-document button:focus-visible, #share-preview-document input:focus-visible': { outline: '2px solid var(--tt-accent, #ba256b)', outlineOffset: '3px' }, '#share-preview-document button': { borderColor: 'var(--tt-border, #e8e6ec)' }, '#share-preview-document button[aria-pressed="true"]': { borderColor: 'var(--tt-accent, #ba256b)', boxShadow: '0 0 0 1px var(--tt-accent, #ba256b)', background: 'var(--tt-accent-tint, #fff5fa)' }, '#share-preview-document button:hover': { filter: 'brightness(.97)' }, '.share-preview-workspace': { gridTemplateColumns: { base: 'minmax(0, 1fr)', md: 'minmax(0, 1.4fr) minmax(240px, 1fr)' } }, '.share-preview-spinner': { animation: 'share-preview-spin 1s linear infinite' }, '@keyframes share-preview-spin': { to: { transform: 'rotate(360deg)' } }, '@media (prefers-reduced-motion: reduce)': { '.share-preview-spinner': { animation: 'none' } } }}>
+    <CurrentPageBuilderToggle />
     <SettingsDocumentHost documentKey="share-preview-customiser" defaultDocument={sharePreviewBlocks} scopeKey={scopeKey} title="Share preview layout">
      {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={scope} actions={{ templates: ({ inputs }) => { if (SOCIAL_PREVIEW_TEMPLATES.some(item => item.id === inputs.id)) setDesign(previous => ({ ...previous, template: inputs.id as SocialPreviewDesign['template'] })); }, layouts: ({ inputs }) => { if (SOCIAL_PREVIEW_LAYOUTS.some(item => item.id === inputs.id)) setDesign(previous => ({ ...previous, layout: inputs.id as SocialPreviewDesign['layout'] })); }, copy, native: nativeShare, retry: () => setRetry(value => value + 1) }}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
     </SettingsDocumentHost>
