@@ -188,7 +188,9 @@ if (photoRecovery || mobilePanel) {
     if (rootId !== photosRoot || !row || (request.authorization?.scope.deviceId ?? device) !== deviceId)
      throw Error('Unexpected native Photos scope');
     nativeCalls.push({ action, execution: request.execution, revision: request.authorization?.updatedAt ?? request.configurationRevision });
-    const result = { roots: [], rootId, configurationId: id, deviceId };
+    // Build 53 includes the owner's scoped grant list on every successful
+    // gated folder reply. The immediate cancellation denial returns none.
+    const result = { roots: action === 'cancel-deferred-upload' ? [] : photoRoots, rootId, configurationId: id, deviceId };
     if (action === 'arm-photo-run') {
      if (request.execution !== 'native' || request.authorization.updatedAt !== row.updatedAt || row.crystal.paused)
       throw Error('Native runner was armed without exact reviewed settings');
@@ -208,10 +210,12 @@ if (photoRecovery || mobilePanel) {
       persistNativeRun();
      }
      reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision,
-      photoRunArmed: true, scheduled: true, nativeOwnsRun: true, photoRunProgress: nativeRun.progress });
+      photoRunArmed: true, scheduled: true, nativeOwnsRun: true,
+      photoRunProgress: { ...nativeRun.progress, configurationRevision: nativeRun.revision } });
     } else if (action === 'photo-run-status') {
-     reply('mobile-files-result', { ...result, configurationRevision: id === photoScope.rootId ? nativeRun?.revision ?? null : null,
-      photoRunProgress: id === photoScope.rootId ? nativeRun?.progress ?? null : null });
+     const run = id === photoScope.rootId ? nativeRun : null;
+     reply('mobile-files-result', run ? { ...result, configurationRevision: run.revision,
+      photoRunProgress: { ...run.progress, configurationRevision: run.revision } } : { ...result, photoRunProgress: null });
     } else if (action === 'run-photo-in-background') {
      if (!nativeRun || nativeRun.revision !== request.configurationRevision || row.crystal.paused || !nativeRun.progress.pendingOriginals)
       throw Error('Background request did not target current native work');
