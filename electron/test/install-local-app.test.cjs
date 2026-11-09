@@ -194,6 +194,37 @@ test('stops and restarts a registered persistent node around atomic replacement'
 	}
 });
 
+test('waits for a stopped managed node and its Electron child before replacing the app', async () => {
+	const { installLocalApp } = await installerPromise;
+	const value = fixture();
+	const events = [];
+	try {
+		const target = makeApp(value.targetDir, 'com.thingtime.desktop', 'original');
+		let childChecks = 0;
+		let nodeChecks = 0;
+		const checkOldBundle = () => {
+			assert.deepEqual(events, ['stop']);
+			assert.equal(readFileSync(path.join(target, 'marker.txt'), 'utf8'), 'original');
+		};
+		const result = installLocalApp(installOptions(value.sourceApp, value.targetDir, {
+			serviceLifecycle: registeredServiceLifecycle(value.targetDir, events),
+			runningPids: () => {
+				checkOldBundle();
+				return ++childChecks < 3 ? [321] : [];
+			},
+			nodeRunningPids: () => {
+				checkOldBundle();
+				return ++nodeChecks < 2 ? [777] : [];
+			}
+		}));
+		assert.equal(readFileSync(path.join(result.targetApp, 'marker.txt'), 'utf8'), 'new');
+		assert.equal(childChecks, 3);
+		assert.deepEqual(events, ['stop', 'start:new']);
+	} finally {
+		rmSync(value.root, { force: true, recursive: true });
+	}
+});
+
 test('restores the prior node service when the desktop app remains open after node shutdown', async () => {
 	const { installLocalApp } = await installerPromise;
 	const value = fixture();
