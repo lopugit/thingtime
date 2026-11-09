@@ -145,7 +145,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-09: Check credential handoff compatibility without reading provider input. Add scoped Connections OAuth client imports for Meta and other registered confidential clients while preserving other environment and origin entries. [Agent runbook](../docs/agent-credential-workflows.md). **Codex (AI)**
+- 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
+  status, start, and background replies. Enabled backups can proceed after their
+  first status check, and the card can show native progress. **Codex (AI)**
 
 - 2026-11-08: Add per-Thing cloud and device storage choices, private device policies, verified managed copies, and safe iOS local release/open controls. Existing storage behavior is inherited until a choice changes. Bound LiDAR archive preparation memory with per-chunk autorelease pools, verified against an 11.36 GB archive. See [Thing storage](../docs/thing-storage.md) and [PR 1427 validation](../PRs/1427-codex-thing-storage-placement-add-per-thing-cloud-and-device-storage-choices.md). — Codex (AI)
 
@@ -349,6 +351,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Deployment and real-account acceptance remain separate checks.
   See [PR 1351](../PRs/1351-codex-routes-home-performance-add-precise-collection-paging-and-progressive-maps.md).
   **Codex (AI)**
+
+### Provider credential handoff
+
+- 2026-11-09: Check credential handoff compatibility without reading provider input. Add scoped Connections OAuth client imports for Meta and other registered confidential clients while preserving other environment and origin entries. [Agent runbook](../docs/agent-credential-workflows.md). **Codex (AI)**
 
 - 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
 
