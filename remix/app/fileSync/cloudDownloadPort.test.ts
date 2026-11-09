@@ -6,6 +6,8 @@ import { createSyncRun, executeSyncRun } from './execute';
 import { planFileSync, sameSyncStamp } from './reconcile';
 import { inventorySyncEntry } from './cloudInventory';
 import { prepareCloudInventoryRun } from './cloudWrite';
+import type { CloudTransportRuntime } from './cloudTransport';
+import { AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
 import { createCloudSyncPort } from './cloudSyncPort.client';
 import { openSyncJournal } from './journal.client';
 const scope = { origin: 'https://sync.test', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'config' };
@@ -53,7 +55,7 @@ async function fixture(bytes = new Uint8Array([1, 2, 3])) {
 		activeOrigin = scope.origin;
 	const local = new Map<string, any>(),
 		receipts = new Map<string, any>();
-	const runtime = {
+	const runtime: CloudTransportRuntime = {
 		currentScope: () => scope,
 		origin: () => activeOrigin,
 		requireCapability: async () => {},
@@ -172,6 +174,25 @@ test('staged downloads reject altered source, invalid stage proof and native des
 			kind === 'remote' ? /Cloud source changed/ : kind === 'local' ? /destination CAS/ : kind === 'origin' ? /context changed/ : /Native stage/
 		);
 		assert.equal(f.counts().publishes, 1);
+		f.journal().close();
+	}
+});
+test('automatic storage exclusions refuse downloads before staging and after staged bytes are verified', async () => {
+	for (const stageFile of [false, true]) {
+		const f = await fixture();
+		f.set('none');
+		let checks = 0;
+		f.runtime.automaticStoragePlacement = {
+			rules: async () => new Map(),
+			admit: async (mutation, fresh) => {
+				if (fresh && mutation.kind === 'copy' && mutation.source.kind === 'file' && ++checks === (stageFile ? 2 : 1))
+					throw new AutomaticStoragePlacementExcluded();
+			}
+		};
+		await assert.rejects(executeSyncRun(f.run, f.port()), AutomaticStoragePlacementExcluded);
+		assert.equal(f.counts().stages, stageFile ? 2 : 1);
+		assert.equal(f.counts().publishes, 1);
+		assert.equal(f.local.has('nested/file.bin'), false);
 		f.journal().close();
 	}
 });

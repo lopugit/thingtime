@@ -20,6 +20,7 @@ import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import type { PagedCheckpointHead } from './checkpoint';
+import { automaticStoragePathAllowed } from './automaticStoragePlacement';
 
 /** Import one already complete bounded scan. Native/cloud producers still use
  * their existing limits; pages here do not turn a partial scan into a full one. */
@@ -337,10 +338,12 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		} else await importCloud(remote);
 		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline, ...(photoBaselineInstance ? { photoBaselineInstance } : {}),
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, ...(early ? { earlyRunId: early.id } : {}), excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
+		const placement = await runtime.automaticStoragePlacement?.rules(); check();
 		preparing('index-plan');
 		const result = await plans.build(spec, value => preparing(value.phase === 'indexing' ? 'index-plan' : 'plan',
 			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed),
-			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined);
+			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined,
+			placement ? row => automaticStoragePathAllowed(row, spec.policy, scope, placement) : undefined);
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&

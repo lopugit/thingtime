@@ -125,6 +125,7 @@ export type ThingsItemAction =
   | 'open-live'
   | 'preview'
   | 'inspect'
+  | 'storage-placement'
   | 'paste-into'
   | 'rename'
   | 'edit'

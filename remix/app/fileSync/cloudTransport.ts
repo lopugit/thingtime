@@ -22,6 +22,7 @@ import { contentPartPlan, equalContentFingerprints, type FingerprintSource } fro
 import { sameSyncContent, sameSyncScope, type SyncScope } from './reconcile';
 import type { SyncReceipt, SyncReceiptLookup } from './execute';
 import { EXPECTED_ACTOR_HEADER } from '../api/utils/auth/expectedActor';
+import { AUTOMATIC_STORAGE_PLACEMENT_EXCLUDED, AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 
 export const CLOUD_TRANSFER_REQUIREMENTS = {
@@ -33,6 +34,7 @@ export const CLOUD_TRANSFER_REQUIREMENTS = {
 	'api.actions-run': '1.7.0'
 } as const;
 export type CloudTransportRuntime = {
+	automaticStoragePlacement?: import('./automaticStoragePlacement').AutomaticStoragePlacement;
 	resources?: import('./resourceGovernor').SyncResourceGovernor;
 	/** Offload only when native configuration/device/network checks cover the runtime policy. */
 	nativeUploadApproval?: FileSyncApproval;
@@ -79,6 +81,8 @@ async function cloudConflict(response: Response, url: URL, mutation: boolean, ch
     const value = await readCloudFailure(response, check);
     if (guarded && url.pathname === '/api/v1/files' && mutation && value?.ok === false && value.code === SYNC_DESTINATION_CHANGED)
         return new ExactCloudSyncDestinationChanged();
+    if (url.pathname === '/api/v1/files' && mutation && value?.ok === false && value.code === AUTOMATIC_STORAGE_PLACEMENT_EXCLUDED)
+        return new AutomaticStoragePlacementExcluded();
     let code = 'conflict_unknown', retryable = false;
     if (value?.ok === false) {
         if (uploadWaitCodes.has(value.code) || value.code === 'upload_unavailable') code = value.code;
@@ -242,6 +246,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	};
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
 		const command = cloudWriteCommit(write, content);
+		if (!retained && !replayOnly) await runtime.automaticStoragePlacement?.admit(m, true);
 		if (write.guardDestination && !replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
 		check();
 		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
@@ -284,6 +289,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 		return upload;
 	};
 	const deferUpload = async (source: FingerprintSource): Promise<import('./contentFingerprint').NativeDeferredFileResult | null> => {
+		await runtime.automaticStoragePlacement?.admit(m);
 		const approval = runtime.nativeUploadApproval;
 		if (!source.deferUpload || !approval || !sameSyncScope(approval.scope, scope) ||
 			approval.configuration.sourceKind !== 'photos' || approval.configuration.mode !== 'backup' ||

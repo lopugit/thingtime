@@ -32,6 +32,8 @@ export type SyncExecutionPort = {
 	currentScope(): SyncScope;
 	read(side: SyncSide, path: string): Promise<SyncEntry | null>;
 	lookup(operationId: string, scope: SyncScope): Promise<SyncReceiptLookup>;
+	/** Admission runs only after receipt lookup proved no existing effect. */
+	admit?(operation: SyncOperation): Promise<void>;
 	apply(operation: SyncOperation, scope: SyncScope): Promise<SyncReceipt>;
 	/** Resolve changed folder stamps only from native-verified child receipts. */
 	trashExpected?(operation: SyncOperation, scope: SyncScope): Promise<SyncEntry>;
@@ -177,6 +179,8 @@ export async function executeSyncOperation(saved: SyncOperation, savedScope: Syn
 	let receipt: SyncReceipt;
 	if (previous.status === 'complete') receipt = previous.receipt;
 	else {
+		await port.admit?.(operation);
+		check();
 		const mutation = operation.mutation;
 		const expected =
 			mutation.kind === 'trash' ? (port.trashExpected ? await port.trashExpected(structuredClone(operation), scope) : mutation.expected) : null;

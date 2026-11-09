@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
+`/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
+source ownership and per-device identity, atomically fences policy revisions,
+and pages exact authorized attachment descriptors. Browser credentials are
+HttpOnly; private policy rows are excluded from generic Thing discovery. See
+[the placement contract](../thing-storage.md) and its opt-in real replica test.
+
 `api.things-metadata` 1.0.0 registers GET/POST
 `/api/v1/things/metadata` in the canonical docs registry and Nitro import map.
 GET reads authorized current measurements; same-origin owning-session POST

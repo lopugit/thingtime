@@ -164,6 +164,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // batched beacons; one flush covers a whole scroll session, so this window
   // is generous for humans and a wall for replay scripts (anon keys by IP)
   'things.views': { limit: 60, windowMs: 60_000, enabled: true },
+  // Managed replica workflows fence source/policy before and after local effects.
+  'things.storagePolicy.read': { limit: 240, windowMs: 60_000, enabled: true },
+  // The worker validates the sparse generation before transfer and publication.
+  'things.storagePolicy.automatic': { limit: 600, windowMs: 60_000, enabled: true },
   // Admin-only raw queries can still be expensive; keep accidental repeated
   // scans bounded independently from the ordinary app APIs.
   'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
