@@ -116,6 +116,45 @@ Original request (verbatim, 5 November 2026):
 - When a needed primitive, binding, repetition, or interaction is missing, extend the reusable Thingtime Builder/framework so ordinary users can compose and edit it. Keep native code limited to necessary device capabilities and data adapters; compose the visible interface with editable Thingtime blocks.
 - Verify this in the actual Builder: select and edit representative nested text, controls, icons, and repeated-card fields separately, save, reload, and confirm the live page still works. A single outer selection outline or editable JSON/HTML alone does not meet this requirement.
 
+## Agent credential and end-to-end authentication workflows
+
+Read [the credential runbook](docs/agent-credential-workflows.md) before provider
+setup, password delivery, OAuth or passkey work. It is the executable workflow
+reference; the live global credential authorization and tool boundaries remain
+authoritative.
+
+- Negotiate the selected origin and installed host's capabilities. Provider
+  configuration belongs in the admin integration vault, personal entries in
+  Password manager, OAuth grants in Connections, and passkeys in their supported
+  provider ceremony. Never store secret transport payloads in ordinary Things,
+  editable layouts, task notes, screenshots, traces or model arguments.
+- Use **Import provider credentials** or the write-only `credentials:import`
+  CLI (`api.credentials-import` 1.0.0). Select a file or protected stdin; never
+  pass a raw credential as a command argument. Open the printed approval URL in
+  the assigned authenticated browser, verify account/origin/environment/label,
+  format and exact replacement revision, and perform authorized routine approval
+  yourself through a supported tool. This does not bypass vault/device checks.
+- Google Web application JSON validates the exact Connections callback and
+  preserves other bundle scopes. Generic text/JSON imports need the consuming
+  integration's documented label and structure. Google Mail uses a separate
+  bundle. No universal provider compatibility is implied by accepting JSON.
+- On uncertain writes, keep the same operation identity and immutable bytes,
+  reconcile status/receipt before retrying, and never overwrite a new revision.
+  `TRANSFER_UNCONFIRMED` requires metadata/consumer verification; cancellation
+  after upload is not rollback. Save receipts prove vault persistence only.
+- Use supported AutoFill/scoped direct delivery from an authorized source on
+  any device; match the destination account and origin. Read the password/native
+  runbooks for the actual installed platform. Verify the resulting sign-in;
+  filled fields or copied values alone do not establish authentication.
+- OAuth acceptance includes provider consent, exact callback, requesting-client
+  account read and granted-scope action. Test separate accounts and independent
+  named grants without silently broadening scopes. Passkeys require RP/origin/
+  credential matching and any device presence; never extract private keys. TOTP
+  setup/code delivery is a distinct flow.
+- Keep retries bounded, preserve sessions and unrelated data, and report the
+  exact remaining human-only dependency after supported recovery. Record source,
+  synthetic, deployed, installed and live-provider evidence separately.
+
 ## Power users: no arbitrary product limits
 
 Thingtime is for power users and should stay simple to use at any scale. Do not

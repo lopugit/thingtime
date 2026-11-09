@@ -546,3 +546,15 @@ ceremony can consume a marker, before any session is issued.
 Personal waterfall library entries are owner-only `data` Things with `crystal.systemType: ai-waterfall-v1`; each config is its own bounded record, not an array embedded on the user. Generic Thing create/update supplies storage accounting and optimistic revision checks. No new physical collection is introduced.
 
 Incoming mail uses protected `mail-account`, `mail-folder`, `mail-message`, `mail-inbox` and `mail-operation` Things in the existing `things` collection. Message, folder and operation receipt rows are relational children of the account (`parentId`). Operation receipts fence duplicate provider mutations without storing message bodies or grants. Credentials/content use account-vault encryption; home-plane writes use the shared transactional storage ledger. See [incoming mail](docs/feature-map/incoming-mail.md).
+
+### Credential-import control state
+
+The dedicated credential-import API reuses the home `authOtps` satellite for
+`credential-import-v1` expiring intents and one-use receipts (no credential
+bytes). It reuses that satellite's challenge uniqueness and expiry indexes.
+The value is sealed into the existing `adminIntegrationSecrets` vault, whose
+label uniqueness and AES-GCM envelope remain canonical. Home transactions
+commit the vault update and receipt together, fencing the approving session
+and current administrator record against concurrent revocation/demotion.
+General Things endpoints never read or write this control state. See
+[agent credential workflows](docs/agent-credential-workflows.md).

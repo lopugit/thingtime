@@ -149,6 +149,18 @@ const designDocsStaticPlugin = () => ({
   }
 });
 
+const credentialReviewFrameGuard: Plugin = {
+  name: 'thingtime-credential-review-frame-guard',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (/^\/credentials\/import\/?$/.test(req.url?.split('?')[0] || '')) {
+        res.setHeader('X-Frame-Options', 'DENY');
+      }
+      next();
+    });
+  }
+};
+
 const embedBundleDevPlugin = () => ({
   name: 'thingtime-embed-bundle-dev',
   configureServer(server) {
@@ -288,5 +300,5 @@ export default defineConfig({
       '/api': forwardHostProxy(localApiTarget)
     }
   },
-  plugins: [automaticRoutePreviewsPlugin(), librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [credentialReviewFrameGuard, automaticRoutePreviewsPlugin(), librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

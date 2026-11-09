@@ -5,7 +5,7 @@ import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId } from 'mongodb';
+import { Binary, ObjectId, type ClientSession } from 'mongodb';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -428,6 +428,36 @@ export const findUserById = async (id: string) => {
 	]);
 	if (thing) return userThingToDoc(thing);
 	return legacy;
+};
+
+/**
+ * Serialize a credential import with changes to the authoritative admin record.
+ * A dedicated private stamp acquires the document write fence without changing
+ * profile data, edit timestamps, or a legacy twin's authorization.
+ */
+export const fenceCurrentAdminCredentialImport = async (userId: string, session: ClientSession): Promise<boolean> => {
+	const things = await getThingsCollection();
+	const thing = await things.findOne({ thingtime: 'user', shareId: userId }, {
+		session, projection: { secureAdmin: 1, 'crystal.username': 1, secureCredentialImportAt: 1 }
+	});
+	const stamp = (previous: unknown) => new Date(Math.max(Date.now(), previous instanceof Date ? previous.getTime() + 1 : 0));
+	if (thing) {
+		if (thing.secureAdmin !== true && !isEnvAdmin(thing.crystal?.username)) return false;
+		const updated = await things.updateOne({ _id: thing._id }, {
+			$set: { secureCredentialImportAt: stamp(thing.secureCredentialImportAt) }
+		}, { session });
+		return updated.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(userId)) return false;
+	const users = await getUsersCollection();
+	const legacy = await users.findOne({ _id: new ObjectId(userId) }, {
+		session, projection: { username: 1, 'meta.admin': 1, secureCredentialImportAt: 1 }
+	});
+	if (!legacy || !isAdminDoc(legacy)) return false;
+	const updated = await users.updateOne({ _id: legacy._id }, {
+		$set: { secureCredentialImportAt: stamp(legacy.secureCredentialImportAt) }
+	}, { session });
+	return updated.matchedCount === 1;
 };
 
 /** A delegated private upload publication must serialize with the current
