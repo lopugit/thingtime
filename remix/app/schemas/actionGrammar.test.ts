@@ -46,6 +46,28 @@ test('a valid program sanitizes and preserves its steps', () => {
 	}
 });
 
+test('ensure preserves its key and optional folder and declares both schema effects', () => {
+	const step = { op: 'things.ensure', schema: 'customer', key: '$input.title', values: { name: '$input.title' }, folderId: 'owned-folder' };
+	const program = { ...validBase, steps: [step], capabilities: [
+		...validBase.capabilities, { capability: 'things.read', schemas: ['customer'] }
+	] };
+	const result = sanitizeActionCrystal(program);
+	assert.equal(result.ok, true);
+	if (result.ok) {
+		assert.deepEqual(result.crystal.steps, [step]);
+		const effects = deriveActionEffects(result.crystal.steps);
+		assert.deepEqual(effects.creates, ['customer']);
+		assert.deepEqual(effects.reads, ['customer']);
+		assert.equal(effects.updates, false);
+	}
+	expectFail({ ...program, capabilities: validBase.capabilities }, /things.read/, 'missing read');
+	expectFail({ ...program, capabilities: program.capabilities.slice(1) }, /things.create/, 'missing create');
+	expectFail({ ...program, capabilities: [...validBase.capabilities, { capability: 'things.read', schemas: ['other'] }] }, /scoped to other/, 'wrong read scope');
+	expectFail({ ...program, steps: [{ ...step, key: false }] }, /needs key/, 'non-string key');
+	expectFail({ ...program, steps: [{ ...step, folderId: 8 }] }, /needs folderId/, 'non-string folder');
+	expectFail({ ...program, runtime: 'browser' }, /Browser actions use/, 'server-only runtime');
+});
+
 test('ordered exact reads, counts and ordinal pages stay read-only saved HTTP Actions', () => {
 	for (const query of [{ ids: '["one","two","one"]' }, { thingtime: 'data', count: true }, { thingtime: 'data', offset: 80, limit: 20 }]) {
 		const result = sanitizeActionCrystal({

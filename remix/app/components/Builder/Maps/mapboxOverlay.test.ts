@@ -1,6 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mapboxMarkerVisual, scaleMapboxMarker, updateMapboxOverlay } from './mapboxOverlay';
+import { mapboxPoints } from './mapboxData';
+
+test('moving excluded points stay visible without changing fitted destination bounds', () => {
+	const document = markerDocument();
+	const fitted: unknown[][] = [];
+	let added = 0;
+	const map = { getSource: () => null, fitBounds: (bounds: { coordinates: unknown[] }) => fitted.push(bounds.coordinates) };
+	const gl = {
+		LngLatBounds: class { coordinates: unknown[] = []; extend(value: unknown) { this.coordinates.push(value); } isEmpty() { return !this.coordinates.length; } },
+		Marker: class { setLngLat() { return this; } addTo() { added++; return this; } remove() {} }
+	};
+	for (const latitude of [-37, -38]) {
+		const points = mapboxPoints([{ id: 'destination', coordinates: [145, -37], label: 'Destination' }, { id: 'moving', coordinates: [146, latitude], label: 'Moving point', fitBounds: false }]);
+		updateMapboxOverlay(map, gl, [], { document, points, route: null, center: [145, -37], zoom: 10, fitBounds: true });
+	}
+	assert.equal(added, 4, 'every marker is still drawn');
+	assert.deepEqual(fitted, [[[145, -37]], [[145, -37]]]);
+	updateMapboxOverlay(map, gl, [], { document, points: mapboxPoints([{ coordinates: [146, -39], fitBounds: false }]), route: null, center: [145, -37], zoom: 10, fitBounds: true });
+	assert.equal(fitted.length, 2, 'an excluded-only overlay does not move the camera');
+});
 
 class MarkerNode {
 	children: MarkerNode[] = []; attributes: Record<string, string> = {}; textContent = ''; title = ''; src = ''; alt = ''; onError?: () => void; parent?: MarkerNode; onclick?: () => void;

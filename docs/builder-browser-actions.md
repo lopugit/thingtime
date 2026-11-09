@@ -141,3 +141,102 @@ This addition requires `api.things` 1.33.0 for creation, `api.things-update`
 1.10.0 for updates, and `api.actions-run` 1.12.0 for preparation/execution.
 The browser execution grammar remains 1.11.0; JSON data adds no executable node.
 The Web standards draft-saving suite uses `api.webpages-suites-install` 1.3.0.
+
+## Run an Action when a private page opens
+
+An owner can add an optional `activationAction` to the saved standalone
+Webpage definition. It stays separate from read sources, whose normal
+refresh rules still apply. For example:
+
+```json
+{
+  "action": "owner-saved-action-id",
+  "cadence": "day",
+  "timeZone": "Australia/Melbourne",
+  "dayInput": "day",
+  "inputs": { "collection": "my-daily-records" },
+  "queryResult": { "selectedId": "record.id" }
+}
+```
+
+Use the exact owner-private saved Action ID. `cadence: "open"` runs once per opening;
+`"day"` also runs when the configured civil date changes while the page is
+open. Day cadence requires a valid IANA timezone. Optional `dayInput` names
+a declared string input; the server supplies the stable `YYYY-MM-DD` value.
+Other inputs are literal saved scalars. Write Actions may ensure a stable
+Thing identity so a second opening, tab or explicit retry can reuse it.
+An ensure key must be literal or the bound civil-date input. Arbitrary
+writes and composed child Actions are refused.
+
+Only the full owning account viewing its saved private standalone page can
+run the binding. Builder previews, shared readers, historical branches and
+held content do not start it. Page copies and portable imports leave the
+activation opt-in unset. Remove the
+descriptor in **Edit definition** to disable it. A saved Action can also
+read an ordinary private setting and return without creating or selecting
+anything. No refresh or retry bypasses the server's live page, actor,
+revision and date checks.
+
+The optional `queryResult` maps named page-local query keys to result
+paths. Returned scalar values fill the mapped keys that the reader has not
+selected manually or set in a deep link. A result with no mapped values
+leaves selection unchanged. A page switch invalidates a late result.
+
+Authoring requires `api.things` 1.56.0 or `api.things-update` 1.22.0.
+The live viewer negotiates `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0 before activation. The canonical Actions endpoint
+accepts `source: "activation"`, `action`, `activationPageId`,
+`activationPageRevision` and `activationOnceKey` ("open" or the civil date),
+plus existing browser-execution negotiation. Do not send Action inputs in
+this request; only the saved binding may supply them.
+
+## Create or reuse an owned Data Thing
+
+In a server Action, add a `things.ensure` step through the full program
+editor. Give it a literal schema reference, a non-empty text `key`, and
+creation `values`. The key can resolve from an input or expression. An
+optional `folderId` assigns a newly created Thing to an owned folder.
+Declare `things.read` and `things.create` for the selected schema.
+
+The invoker, saved Action ID, key and selected data plane identify the
+Thing. Concurrent runs return the same private creation. Later runs return
+the readable current `{ id, crystal, schema, schemaId }` and preserve edits,
+folder moves and explicit audience changes. A mismatched schema or refused
+read fails the run. Deleting the Data Thing frees the key.
+
+## Exclude a map point from viewport fitting
+
+Map source points may set `fitBounds: false` to keep their marker and normal
+selection behavior while excluding its coordinates from automatic viewport
+fitting. Omit it to include a point when the map fits its points and route.
+This requires `api.things` 1.56.0.
+
+## Load an independent map points layer
+
+A saved `tt-mapbox` can add points from a literal Action reference in
+`pointsSource`. The existing static points, favourites and selected-route
+layers keep their own source and refresh behavior.
+
+```json
+{
+  "action": "saved-map-points-action",
+  "itemsPath": "points",
+  "refresh": "interval",
+  "intervalMs": 30000,
+  "showError": false
+}
+```
+
+Optional `inputs` can bind ordinary scalars from the current map scope.
+Use the same cursor fields as a collection source. `itemsPath`,
+`cursorPath`, `cursorInput` and `itemKey` default to `items`,
+`nextCursor`, `cursor` and `id`. The source validates and combines
+all cursor pages before publishing them. A failed read removes this layer
+and leaves the rest of the map usable. If an editable status block already
+reports the same read, set `showError: false` to suppress the map’s
+additional source warning.
+
+Authoring uses `api.things` 1.56.0 and `api.things-update` 1.22.0.
+The live map negotiates `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0. Shared composition and private copies follow
+the stored literal Action reference and apply their existing access rules.

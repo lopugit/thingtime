@@ -282,6 +282,172 @@ const run = async () => {
 	check('schema provenance is stamped', createdCrystal.schema === CUSTOMER && typeof createdCrystal.schemaId === 'string');
 	check('$$ escapes a literal dollar', createdCrystal.note === '$100 club');
 
+	// Ensure is a real accounted Data insert, with the shared unique index
+	// arbitrating concurrent runs and no edit when the intent already exists.
+	const folder = await createThing(alice.cookie, { thingtime: ['folder'], crystal: { name: 'Ensure verification' }, acl: ['tt:user'] });
+	const folderId = folder.body?.thing?.id;
+	const invoiceSchemaId = invoiceSchema.body?.thing?.id;
+	const ensureSchemas = [CUSTOMER_ID, invoiceSchemaId];
+	const ensureAction = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		acl: ['tt:all'],
+		crystal: {
+			name: 'Ensure test Data',
+			inputs: [
+				{ name: 'key', type: 'string', required: true },
+				{ name: 'name', type: 'string', required: true },
+				{ name: 'folderId', type: 'string', required: true },
+				{ name: 'useOtherSchema', type: 'boolean', default: false }
+			],
+			capabilities: [
+				{ capability: 'things.create', schemas: ensureSchemas },
+				{ capability: 'things.read', schemas: ensureSchemas }
+			],
+			steps: [
+				{ op: 'things.ensure', when: '$input.useOtherSchema', schema: invoiceSchemaId, key: '$input.key', values: { name: '$input.name' } },
+				{ op: 'return', when: '$input.useOtherSchema', value: '$step.1' },
+				{ op: 'things.ensure', schema: CUSTOMER_ID, key: '$input.key', folderId: '$input.folderId', values: { name: '$input.name' } },
+				{ op: 'return', value: '$step.3' }
+			]
+		}
+	});
+	const ensureActionId = ensureAction.body?.thing?.id;
+	check('ensure Action and owned folder save', !!ensureActionId && !!folderId, JSON.stringify(ensureAction.body).slice(0, 300));
+	const runEnsure = (cookie, inputs = {}, options = {}) => runAction(cookie, {
+		action: ensureActionId,
+		inputs: { key: 'same-intent', name: 'Original', folderId, ...inputs },
+		...options
+	});
+	const ensured = await Promise.all(Array.from({ length: 4 }, () => runEnsure(alice.cookie)));
+	const ensuredId = ensured[0].body?.result?.id;
+	check('concurrent ensure calls return one Data Thing', typeof ensuredId === 'string' &&
+		ensured.every(({ body }) => body?.status === 'ok' && body?.result?.id === ensuredId),
+		JSON.stringify(ensured.map(({ status, body }) => ({ status, runStatus: body?.status, error: body?.error }))).slice(0, 400));
+	const readEnsured = (cookie) => api(`/api/v1/things?id=${encodeURIComponent(ensuredId || 'missing')}`, { cookie });
+	const ensuredBefore = (await readEnsured(alice.cookie)).body?.thing;
+	check('ensured Thing has exact schema, private ACL and owned folder', ensuredBefore?.folderId === folderId &&
+		ensuredBefore?.crystal?.schemaId === CUSTOMER_ID && ensuredBefore?.visibility === 'private');
+	const ensuredCount = await api(`/api/v1/things?thingtime=data&count=true&schemaId=${CUSTOMER_ID}&folder=${folderId}`, { cookie: alice.cookie });
+	check('concurrent ensure persists one scoped Data row', ensuredCount.status === 200 && ensuredCount.body?.count === 1);
+	const editEnsured = await api('/api/v1/things', { cookie: alice.cookie, method: 'PATCH', body: {
+		id: ensuredId, crystal: { name: 'Edited by owner' }, folderId: null
+	} });
+	const reused = await runEnsure(alice.cookie, { name: 'Replacement seed' });
+	const ensuredAfter = (await readEnsured(alice.cookie)).body?.thing;
+	check('ensure preserves saved edits and folder moves', editEnsured.status === 200 &&
+		reused.body?.result?.id === ensuredId && reused.body?.result?.crystal?.name === 'Edited by owner' && ensuredAfter?.folderId === null);
+	const mismatch = await runEnsure(alice.cookie, { useOtherSchema: true });
+	check('same intent refuses a different schema', /incompatible Thing/.test(mismatch.body?.error || '') &&
+		(await readEnsured(alice.cookie)).body?.thing?.crystal?.schemaId === CUSTOMER_ID,
+		JSON.stringify(mismatch.body).slice(0, 260));
+	const otherOwnerFolder = await createThing(bella.cookie, { thingtime: ['folder'], crystal: { name: 'Other ensure folder' }, acl: ['tt:user'] });
+	const foreignFolder = await runEnsure(bella.cookie);
+	check('ensure refuses another account’s folder', /Folder not found/.test(foreignFolder.body?.error || ''));
+	const otherOwnerEnsure = await runEnsure(bella.cookie, { folderId: otherOwnerFolder.body?.thing?.id });
+	check('same public Action and key remain owner-scoped', otherOwnerEnsure.body?.status === 'ok' &&
+		!!otherOwnerEnsure.body?.result?.id && otherOwnerEnsure.body.result.id !== ensuredId);
+	check('ensured Data Thing is invisible to other and anonymous callers',
+		(await readEnsured(bella.cookie)).status === 404 && (await readEnsured()).status === 404);
+	const audienceEdit = await api('/api/v1/things', { cookie: alice.cookie, method: 'PATCH', body: { id: ensuredId, acl: ['tt:all'] } });
+	const reuseWithChangedAudience = await runEnsure(alice.cookie);
+	check('reuse preserves an explicit audience change', audienceEdit.status === 200 && reuseWithChangedAudience.body?.result?.id === ensuredId &&
+		(await readEnsured()).body?.thing?.visibility === 'public');
+	const sharedEnsure = await runEnsure(bella.cookie, { folderId: otherOwnerFolder.body?.thing?.id }, { sharedRoot: ensureActionId });
+	check('shared read-only runs cannot ensure a Thing', sharedEnsure.body?.status !== 'ok');
+
+	const dailyActionKey = `activation-${suffix}`;
+	const dailyAction = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		acl: ['tt:user'],
+		crystal: {
+			name: 'Ensure activation Data',
+			actionKey: dailyActionKey,
+			inputs: [{ name: 'day', type: 'string', required: true }],
+			capabilities: [
+				{ capability: 'things.read', schemas: [CUSTOMER_ID] },
+				{ capability: 'things.create', schemas: [CUSTOMER_ID] }
+			],
+			steps: [
+				{ op: 'things.ensure', schema: CUSTOMER_ID, key: '$input.day', values: { name: 'Daily fixture', day: '$input.day' } },
+				{ op: 'return', value: '$step.1' }
+			]
+		}
+	});
+	const dailyActionId = dailyAction.body?.thing?.id;
+	const timeZone = 'Australia/Melbourne';
+	const day = new Intl.DateTimeFormat('sv-SE', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+	const createActivationPage = async (action, acl = ['tt:user']) => {
+		const result = await createThing(alice.cookie, {
+			thingtime: ['webpage'],
+			acl,
+			crystal: { name: 'Activation verification', blocks: [], activationAction: { action, cadence: 'day', timeZone, dayInput: 'day' } }
+		});
+		if (!result.body?.thing) throw new Error(`Activation page did not save: ${result.body?.error}`);
+		return result.body.thing;
+	};
+	const activate = (page, user = alice, overrides = {}) => api('/api/v1/actions/run', {
+		cookie: user.cookie,
+		method: 'POST',
+		headers: { Origin: new URL(BASE).origin, 'X-Thingtime-Expected-Actor': user.id, 'X-Thingtime-Expected-Data-Plane': 'home' },
+		body: {
+			source: 'activation',
+			action: page.crystal.activationAction.action,
+			activationPageId: page.id,
+			activationPageRevision: page.updatedAt,
+			activationOnceKey: day,
+			...overrides
+		}
+	});
+	const activationPage = await createActivationPage(dailyActionId);
+	const firstActivation = await activate(activationPage);
+	const secondActivation = await activate(activationPage);
+	check('private activation supplies the verified day and reuses its Thing',
+		firstActivation.body?.status === 'ok' && firstActivation.body?.result?.crystal?.day === day &&
+		typeof firstActivation.body?.result?.id === 'string' && secondActivation.body?.result?.id === firstActivation.body.result.id,
+		JSON.stringify(firstActivation.body).slice(0, 300));
+	const copiedActivation = await api('/api/v1/things/bulk', {
+		cookie: alice.cookie, method: 'POST', body: { op: 'copy', ids: [activationPage.id] }
+	});
+	const copiedActivationId = copiedActivation.body?.results?.[0]?.newId;
+	const copiedPage = await api(`/api/v1/things?id=${encodeURIComponent(copiedActivationId || 'missing')}`, { cookie: alice.cookie });
+	check('bulk copy omits the saved page activation',
+		typeof copiedActivationId === 'string' && copiedPage.body?.thing && !('activationAction' in copiedPage.body.thing.crystal));
+	check('activation refuses stale page revisions and day keys',
+		(await activate(activationPage, alice, { activationPageRevision: 'stale-revision' })).status === 409 &&
+		(await activate(activationPage, alice, { activationOnceKey: '2000-01-01' })).status === 409);
+	check('activation refuses caller-supplied inputs and shared-root execution',
+		(await activate(activationPage, alice, { inputs: { day: '2000-01-01' } })).status === 400 &&
+		(await activate(activationPage, alice, { sharedRoot: activationPage.id })).status === 403);
+	const publicActivationPage = await createActivationPage(dailyActionId, ['tt:all']);
+	check('activation refuses another viewer or public page',
+		(await activate(activationPage, bella)).status === 409 && (await activate(publicActivationPage)).status === 409);
+	const foreignActivationAction = await createThing(bella.cookie, {
+		thingtime: ['action'], acl: ['tt:all'],
+		crystal: { name: 'Foreign activation Action', steps: [{ op: 'return', value: 'unexpected' }] }
+	});
+	const foreignActivationPage = await createActivationPage(foreignActivationAction.body?.thing?.id);
+	const aliasActivationPage = await createActivationPage(dailyActionKey);
+	const ownPublicActionPage = await createActivationPage(ensureActionId);
+	check('activation requires the exact owner-private saved Action',
+		(await activate(foreignActivationPage)).status === 403 && (await activate(aliasActivationPage)).status === 403 &&
+		(await activate(ownPublicActionPage)).status === 403);
+	const privateActivationProgram = async (step) => {
+		const saved = await createThing(alice.cookie, {
+			thingtime: ['action'], acl: ['tt:user'],
+			crystal: {
+				name: 'Automatic Action refusal fixture',
+				inputs: [{ name: 'day', type: 'string', required: true }],
+				capabilities: [{ capability: 'things.read', schemas: [CUSTOMER_ID] }, { capability: 'things.create', schemas: [CUSTOMER_ID] }],
+				steps: [{ schema: CUSTOMER_ID, values: { name: 'Unexpected' }, ...step }]
+			}
+		});
+		return createActivationPage(saved.body?.thing?.id);
+	};
+	const plainCreate = await activate(await privateActivationProgram({ op: 'things.create' }));
+	check('automatic activation refuses plain creates', plainCreate.status === 403 && /only read or ensure/.test(plainCreate.body?.error || ''));
+	const randomKey = await activate(await privateActivationProgram({ op: 'things.ensure', key: { ttConcat: ['id-', { ttExpr: ['random'] }] } }));
+	check('automatic activation refuses varying ensure keys', randomKey.status === 403 && /key/.test(randomKey.body?.error || ''));
+
 	// ---- invoice flow: create + send (get/update + $now + ttConcat) ---------
 	const generateInvoice = await createThing(alice.cookie, {
 		thingtime: ['action'],

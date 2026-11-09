@@ -10,6 +10,15 @@ uses the shared AppleFileSync managed-copy adapter. Preferences never authorize
 cloud deletion or imply a completed transfer. See [Thing storage](../thing-storage.md)
 and the Thing storage and device copies checklist in `TESTING.md`.
 
+## Idempotent Action creation
+
+Server Actions use `things.ensure` to create or reuse one owned Data Thing by
+intent. The key is scoped to the invoker and saved Action in the selected data
+plane. A protected root unique key and the canonical insert serialize
+concurrent creation. An existing readable Thing with the same schema retains
+its current fields, placement and audience. See [Action authoring](../builder-browser-actions.md)
+and the real API regression in `remix/scripts/verify-actions.mjs`.
+
 ## Derived Thing metadata
 
 `ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually

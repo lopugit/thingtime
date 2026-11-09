@@ -5,6 +5,7 @@ import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
+import { parseWebpageActivation } from './webpageActivation.ts';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
 import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
@@ -1594,6 +1595,7 @@ const webpageSchema: ThingtimeSchema = {
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a pageKey.' },
 		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the webpage this one was forked from (provenance only).' },
 		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the page canvas.' },
+		{ name: 'activationAction', type: 'record', required: false, description: 'Optional owner-only Action to run when a saved private page opens or its configured civil date changes.' },
 		{
 			name: 'blocks',
 			type: 'record',
@@ -1645,6 +1647,7 @@ export const ACTION_STEP_OPS = [
 	'http.request',
 	'lookup',
 	'things.create',
+	'things.ensure',
 	'things.get',
 	'things.search',
 	'things.update',
@@ -1774,7 +1777,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_STEPS,
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
-				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
+				'things.create { schema, values }; things.ensure { schema, key, values, folderId? }; things.get { id }; things.search { schema?, limit? }; ' +
 				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
@@ -6143,6 +6146,12 @@ const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; cry
 		crystal.previewBg = previewBg;
 	}
 
+	if (input.activationAction !== undefined && input.activationAction !== null) {
+		const activationAction = parseWebpageActivation(input.activationAction);
+		if (!activationAction) return fail(400, 'Invalid webpage activation Action');
+		crystal.activationAction = activationAction;
+	}
+
 	if (input.blocks === undefined || input.blocks === null) {
 		return fail(400, 'Webpages need a blocks list (may be empty)');
 	}
@@ -6577,11 +6586,15 @@ const sanitizeActionSteps = (
 			step.provider = raw.provider;
 			step.credentialId = raw.credentialId;
 			failure = checkRefString(raw.query, 'query');
-		} else if (op === 'things.create') {
+		} else if (op === 'things.create' || op === 'things.ensure') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
 			failure = checkValues(raw.values, 'values', true) || requireCapability(stepIndex, 'things.create', schema.ref);
+			if (!failure && op === 'things.ensure') {
+				failure = requireCapability(stepIndex, 'things.read', schema.ref) || checkRefString(raw.key, 'key')
+					|| (raw.folderId !== undefined ? checkRefString(raw.folderId, 'folderId') : null);
+			}
 		} else if (op === 'things.get') {
 			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');
 		} else if (op === 'things.search') {
@@ -6724,8 +6737,8 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		if (!entry || typeof entry !== 'object') continue;
 		const step = entry as Record<string, unknown>;
 		const schema = typeof step.schema === 'string' ? step.schema : null;
-		if (step.op === 'things.create' && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
-		if ((step.op === 'things.get' || step.op === 'things.search') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
+		if ((step.op === 'things.create' || step.op === 'things.ensure') && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
+		if ((step.op === 'things.get' || step.op === 'things.search' || step.op === 'things.ensure') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
 		// an UNSCOPED get or search is the broadest read in the vocabulary —
 		// it must surface as the '*' ("reads things") effect, never as nothing
 		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');

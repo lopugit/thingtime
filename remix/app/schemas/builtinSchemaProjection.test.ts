@@ -47,7 +47,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "scheduled-task-run": ["title", "chatId", "scheduledAt", "status", "notificationStatus"],
   "schema": ["name", "description", "fields", "forkOf", "render"],
   "component": ["name", "description", "library", "category", "source", "componentKey", "familyKey", "version", "forkOf", "previewBg", "args", "savedArgs", "render"],
-  "webpage": ["name", "description", "pageKey", "siteRoute", "version", "forkOf", "previewBg", "blocks"],
+  "webpage": ["name", "description", "pageKey", "siteRoute", "version", "forkOf", "previewBg", "activationAction", "blocks"],
   "action": ["name", "description", "runtime", "actionKey", "category", "version", "forkOf", "inputs", "steps", "capabilities", "limits"],
   "action-run": ["status", "startedAt", "durationMs", "opsUsed", "depthUsed", "childActionsUsed", "error", "inputs", "result", "trace"],
   "post-discovery": ["authorId", "linkKeyDigest", "anonymousId", "ipAddress"],

@@ -11,7 +11,7 @@ type MarkerAppearance = {
 };
 export type LngLat = [number, number];
 export type MapboxMarkerGroup = { key: string | number; count: number; selected: boolean; members: Array<{ point: MapboxPoint; item: Record<string, unknown> }> };
-export type MapboxPoint = { overlayKey?: string; markerGroup?: MapboxMarkerGroup; id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance; item?: Record<string, unknown> };
+export type MapboxPoint = { overlayKey?: string; markerGroup?: MapboxMarkerGroup; id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; fitBounds?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance; item?: Record<string, unknown> };
 
 export function publicMapboxToken(value: unknown): string | null {
 	const token = value && typeof value === 'object' ? (value as Record<string, unknown>).publicToken : null;
@@ -90,6 +90,7 @@ export function mapboxPoints(value: unknown): MapboxPoint[] {
 			...(typeof entry.markerLabel === 'string' && !appearance?.markerLabelMode ? { markerLabel: entry.markerLabel } : {}),
 			...(typeof entry.color === 'string' && /^#[a-f0-9]{6}$/i.test(entry.color) ? { color: entry.color } : {}),
 			...(typeof entry.selected === 'boolean' ? { selected: entry.selected } : {}),
+			...(entry.fitBounds === false ? { fitBounds: false } : {}),
 			...(entry.group === 'favourite' || entry.group === 'route' ? { group: entry.group } : {}),
 			...(appearance ? { appearance } : {})
 		}];

@@ -44,6 +44,12 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Sign out, switch account/API origin, disconnect, expire/release scope and quit; verify grant invalidation and task-browser/profile cleanup. Validate the Windows named pipe and actual DPAPI on a Windows runner separately from a personal-account GUI acceptance.
 - [ ] Record installed personal-account/service sign-in and required passkey presence separately. A successful synthetic API, runtime or package check is not that acceptance.
 
+## Saved private page activation
+
+- [ ] Open an owned private page with an activation binding on desktop and mobile. Ensure today's record once across refresh, reload and simultaneous tabs; an existing record keeps its edits. Verify the configured timezone's civil midnight and a manual selection made while startup is in flight. Deep links keep their selection.
+- [ ] Turn automatic setup off and reopen; no new record or selection. In Builder edit and preview, a historical branch, a shared account and signed out, no activation starts. Confirm a transient error leaves the page usable and one explicit retry uses the same civil key. Scroll to the bottom at both widths and check the inline state for overflow.
+- [ ] Run `test:webpages`, `test:schemas`, `test:api-capabilities` and the isolated `scripts/webpage-activation.browser.mjs` fixture; also verify the Action and ensure behavior through the real disposable HTTP API.
+
 ## Builder Thing navigation (2026-10-29)
 
 - [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
@@ -7905,7 +7911,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Scroll modal/page from top to bottom; Save remains reachable.
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (100 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -7913,6 +7919,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       runs refusing a foreign action by id, docs twins).
       Declared own prototype-named inputs remain ordinary data; omitted inputs
       never resolve through an inherited prototype.
+- [ ] On the disposable replica, run parallel `things.ensure` calls for the
+      same Action and key and confirm one private Data Thing ID. Edit and move
+      it, then retry with different creation values. Verify current saved
+      content and placement, schema-mismatch refusal, owner isolation,
+      foreign-folder refusal and shared read-only refusal in `verify-actions`.
+- [ ] In the same harness, activate a saved private page twice and read back
+      the same Thing stamped with the verified civil day. Refuse stale days
+      and revisions, supplied inputs, shared roots, other viewers, public
+      pages, foreign Action IDs, Action key aliases and plain creates.
+- [ ] Bind an additional map points source with cursor pages and interval
+      refresh. Confirm it updates only its own markers, retains static and
+      route markers, and clears its layer on refusal or error. With an
+      editable status block bound to the same source, set `showError: false`
+      and verify one status. Reopen a private copy and verify its source
+      reference points to the copied Action.
 - [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
       lists it, DELETE the action, and confirm the same query is now empty while
       another action keeps its own runs. action-run is protected (no route deletes

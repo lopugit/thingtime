@@ -522,6 +522,12 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 			out.props = props;
 		}
 	}
+	if (out.tag === 'tt-mapbox' && isPlainObject(out.props) && 'pointsSource' in out.props) {
+		const authoredSource = isPlainObject(template.props) ? template.props.pointsSource : undefined;
+		// Only the persisted literal Action may be invoked. The map resolves
+		// its ordinary input values against its own live scope.
+		out.props = { ...out.props, pointsSource: literalMapSourceAction(authoredSource) ? authoredSource : undefined };
+	}
 	return out;
 };
 
@@ -545,12 +551,17 @@ export const createTemplateResolver = (options: { preserveUnboundTokens?: boolea
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown => createTemplateResolver()(template, scope);
 
 // Stored map sources are executable references; map rows and source inputs are data.
+export const literalMapSourceAction = (source: unknown): string | undefined => {
+	if (!isPlainObject(source)) return undefined;
+	const action = source.action;
+	return typeof action === 'string' && action && action.length <= 128 && !/[{}$\s]/.test(action) ? action : undefined;
+};
+
 export const visitStoredMapSourceActions = (props: unknown, visit: (action: string, source: Record<string, unknown>) => void): void => {
 	if (!isPlainObject(props)) return;
-	for (const source of [props.favouritesSource, props.routeSource]) {
-		if (!isPlainObject(source)) continue;
-		const action = source.action;
-		if (typeof action === 'string' && action && action.length <= 128 && !/[{}$\s]/.test(action)) visit(action, source);
+	for (const source of [props.favouritesSource, props.routeSource, props.pointsSource]) {
+		const action = literalMapSourceAction(source);
+		if (action && isPlainObject(source)) visit(action, source);
 	}
 };
 

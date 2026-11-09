@@ -909,6 +909,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
+ if (block.tag === 'tt-mapbox') attributes.pointsSource = block.props?.pointsSource;
  const reveal = attributes['data-tt-reveal'];
  React.useLayoutEffect(() => {
   // An authored target can reveal itself when its bound selection changes.

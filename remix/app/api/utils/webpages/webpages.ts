@@ -136,6 +136,8 @@ export const validateSharedComponentAdditions = async (
 	page: ThingDoc,
 	crystal: Record<string, unknown>
 ): Promise<Fail | null> => {
+	if (JSON.stringify(page.crystal?.activationAction ?? null) !== JSON.stringify(crystal.activationAction ?? null))
+		return fail(403, 'Only the page owner can change its activation Action');
 	const previous = new Set<string>();
 	const next = new Set<string>();
 	collectComponentRefs(page.crystal?.blocks, previous);
