@@ -72,7 +72,9 @@ struct NativePhotoRunStore {
         guard data.count <= 65_536 else { throw MobileFolderStore.Failure.invalid }
         let run = try JSONDecoder().decode(NativePhotoRunRecord.self, from: data)
         try run.validate()
-        guard location(run) == url else { throw MobileFolderStore.Failure.invalid }
+        // Lookup and enumeration both use this store's directory. Foundation
+        // may resolve a parent alias while enumerating it, so check the exact key.
+        guard location(run).lastPathComponent == url.lastPathComponent else { throw MobileFolderStore.Failure.invalid }
         return run
     }
     func load() throws -> [NativePhotoRunRecord] {
