@@ -12285,6 +12285,10 @@ transfer, whole-account snapshots or production deployment.
   request never suspends the active one, an account or origin change drops
   stale queued work, and Pause still reaches native immediately. A busy status
   read may retry once. An unconfirmed arm must be checked before sending again.
+- In the mounted native Photos scenario, return the installed iOS bridge's
+  nonempty grant snapshot on successful status, arm, and continuation replies.
+  Verify an enabled connection arms after a null initial status, live progress
+  appears, and the explicit background action acknowledges the same run.
 - Let the native run authorization expire at the same saved revision. On the
   next five-minute check, verify the browser reauthorizes the exact current
   binding. A live binding returns its existing handle. An expired binding
