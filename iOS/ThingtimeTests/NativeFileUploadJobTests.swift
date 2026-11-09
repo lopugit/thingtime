@@ -13,10 +13,11 @@ private struct DeferredUploadTestScheduler: NativeDeferredUploadScheduling {
 @MainActor
 final class NativeFileUploadJobTests: XCTestCase {
     private let root = "11111111-1111-4111-8111-111111111111"
-    private func authorization() throws -> NativeUploadAuthorization {
-        let config: [String: Any] = ["configurationVersion": 1, "name": "Backup", "deviceId": "device", "localRootId": root,
+    private func authorization(sourceKind: String? = nil) throws -> NativeUploadAuthorization {
+        var config: [String: Any] = ["configurationVersion": 1, "name": "Backup", "deviceId": "device", "localRootId": root,
             "remoteFolderId": "cloud", "mode": "backup", "paused": false, "propagateDeletes": false,
             "network": "wifi", "chargingOnly": true, "excludedPaths": [String]()]
+        config["sourceKind"] = sourceKind
         return try JSONDecoder().decode(NativeUploadAuthorization.self, from: JSONSerialization.data(withJSONObject:
             ["id": "connection", "updatedAt": "2026-10-18T00:00:00Z", "configuration": config,
              "scope": ["ownerId": "owner", "origin": "https://sync.test", "dataPlane": "home", "deviceId": "device", "rootId": "connection"]]))
@@ -28,6 +29,31 @@ final class NativeFileUploadJobTests: XCTestCase {
             sha256: hash.finalize().map { String(format: "%02x", $0) }.joined())
         let source = MobileFolderReader.Entry(path: "file.bin", id: "file", version: "v1", kind: "file", size: 16 * 1024 * 1024 + 1, sha256: nil, fingerprint: fingerprint)
         return (NativeUploadFileRequest(source: source, uploadId: "upload", requestId: "operation", authorization: try authorization()), digest)
+    }
+
+    func testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey() throws {
+        let files = FileManager.default
+        let directory = files.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let real = directory.appendingPathComponent("real", isDirectory: true)
+        let alias = directory.appendingPathComponent("alias", isDirectory: true)
+        try files.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: directory) }
+        try files.createSymbolicLink(at: alias, withDestinationURL: real)
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),
+            grantRevision: String(repeating: "a", count: 64), runId: "run", expiresAt: .distantFuture, foregroundOwner: true)
+        try NativePhotoRunStore(directory: alias).write(run)
+
+        let reopened = NativePhotoRunStore(directory: alias)
+        XCTAssertEqual(try reopened.load(), [run])
+        XCTAssertEqual(try reopened.lookup(run), run)
+
+        let stored = real.appendingPathComponent("NativePhotoRuns-v1", isDirectory: true)
+        let file = try XCTUnwrap(files.contentsOfDirectory(at: stored, includingPropertiesForKeys: nil).first)
+        try files.moveItem(at: file, to: stored.appendingPathComponent("other.json"))
+        XCTAssertThrowsError(try reopened.load()) {
+            XCTAssertEqual($0 as? MobileFolderStore.Failure, .invalid)
+        }
     }
 
     func testDeviceBudgetCountsPartialRetryAndRetainsUncertainBytesAcrossRelaunch() throws {
