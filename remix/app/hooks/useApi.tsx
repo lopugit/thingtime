@@ -1,9 +1,10 @@
+import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -1331,10 +1332,9 @@ export function useApi() {
           }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
-            await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
-          }
-          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
+          if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
@@ -1419,9 +1419,9 @@ export function useApi() {
       upsert: useCallback(
         async (args) => {
           if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
-          if (args?.crystal?.activationAction !== undefined || (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure'))) {
-            await requireThingtimeCapability('api.things', '1.56.0');
-          }
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1449,10 +1449,9 @@ export function useApi() {
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
-            await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
-          }
-          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');

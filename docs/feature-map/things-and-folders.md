@@ -18,6 +18,10 @@ plane. A protected root unique key and the canonical insert serialize
 concurrent creation. An existing readable Thing with the same schema retains
 its current fields, placement and audience. See [Action authoring](../builder-browser-actions.md)
 and the real API regression in `remix/scripts/verify-actions.mjs`.
+Ordered batches reuse the same protected namespace. An optional exact
+scalar match can reuse an accessible existing Data Thing with the same
+owner and schema before a new key is created. Existing rows retain their
+fields, placement and audience.
 
 ## Derived Thing metadata
 

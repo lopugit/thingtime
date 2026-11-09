@@ -222,8 +222,12 @@ export const WebpageRuntimeProvider = ({
 			const next = merge ? localQueryParams({ ...base, ...values }) : validated;
 			if (!next) return current;
 			const manual = new Set(active?.manual ?? Object.keys(urlQuery));
-			for (const key of Object.keys(values)) manual.add(key);
-			if (!merge) for (const key of Object.keys(base)) if (!(key in values)) manual.add(key);
+			// Navigation can carry the current selection through unchanged.
+			// Only a change or removal takes manual ownership of that key.
+			for (const [key, value] of Object.entries(values)) if (value !== (base[key] ?? '')) manual.add(key);
+			if (!merge) for (const [key, value] of Object.entries(base)) {
+				if (value !== '' && !Object.prototype.hasOwnProperty.call(values, key)) manual.add(key);
+			}
 			return { identity: queryIdentity, values: Object.fromEntries(next), manual };
 		});
 	}, [enabled, pageId, queryIdentity, urlQuery]);

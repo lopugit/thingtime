@@ -12,6 +12,12 @@ export const MAP_POINTS_SOURCE_REQUIREMENTS = {
 	'api.actions-run': '1.44.0'
 } as const;
 
+export const PASSIVE_SOURCE_REQUIREMENTS = {
+	'api.things': '1.57.0',
+	'api.things-update': '1.23.0',
+	'api.webpages-resolve': '1.15.0'
+} as const;
+
 function hasAuthoredNode(value: unknown, matches: (node: Record<string, unknown>) => boolean): boolean {
 	const pending = [value];
 	const seen = new WeakSet<object>();
@@ -38,4 +44,9 @@ export function usesAuthoredControls(value: unknown): boolean {
 export function usesMapPointsSource(value: unknown): boolean {
 	return hasAuthoredNode(value, ({ tag, props }) => tag === 'tt-mapbox' && !!props && typeof props === 'object' &&
 		(props as Record<string, unknown>).pointsSource != null);
+}
+
+export function usesPassiveSource(value: unknown): boolean {
+	return hasAuthoredNode(value, ({ type, source }) => typeof type === 'string' && type !== 'component' &&
+		!!source && typeof source === 'object' && (source as Record<string, unknown>).passive === true);
 }

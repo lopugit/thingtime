@@ -21,6 +21,8 @@
 // run-time refusal. Pack calls count against the operation budget because
 // they are the only functions with non-trivial cost.
 
+import { CIVIL_DATE, civilDateEpoch, offsetCivilDate } from './civilDates';
+
 export const MAX_EXPRESSION_ARGS = 24;
 export const MAX_EXPRESSION_NODES_PER_RUN = 20_000;
 export const MAX_EXPRESSION_LIST_LENGTH = 1000;
@@ -133,6 +135,7 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	dateDiff: sig(3, 3, 'Difference b − a in unit (second/minute/hour/day/week).'),
 	dayOfYear: sig(1, 1, '1-based day of the (UTC) year.'),
 	isoDate: sig(1, 1, 'Calendar date "YYYY-MM-DD" of an ISO timestamp (UTC).'),
+	civilDateRange: sig(2, 2, 'Consecutive civil dates beginning with YYYY-MM-DD for the specified count.'),
 	formatDate: sig(2, 3, 'Format an ISO timestamp: kind "date" | "time" | "datetime" | "weekday" | "month", optional time zone.'),
 	// ── domain packs (implementations bind server-side; arities mirror
 	// api/utils/actions/packs/<pack>/index.ts *_PACK_ARITIES) ──
@@ -893,6 +896,14 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return partsIn(parseDate(args[0], ctx, 'dayOfYear'), undefined).dayOfYear;
 		case 'isoDate':
 			return parseDate(args[0], ctx, 'isoDate').toISOString().slice(0, 10);
+		case 'civilDateRange': {
+			const epoch = civilDateEpoch(args[0]);
+			const count = num(1);
+			if (epoch === null) return ctx.fail('civilDateRange needs a valid YYYY-MM-DD date');
+			if (!Number.isInteger(count) || count < 0 || count > MAX_EXPRESSION_RANGE) return ctx.fail('civilDateRange count is outside the expression range budget');
+			if (count && !CIVIL_DATE.test(offsetCivilDate(epoch, count - 1))) return ctx.fail('civilDateRange extends beyond the supported calendar');
+			return Array.from({ length: count }, (_value, index) => offsetCivilDate(epoch, index));
+		}
 		case 'formatDate': {
 			const date = parseDate(args[0], ctx, 'formatDate');
 			const kind = text(1).toLowerCase();
