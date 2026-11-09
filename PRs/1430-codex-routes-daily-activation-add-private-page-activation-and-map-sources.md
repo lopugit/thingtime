@@ -48,3 +48,8 @@ contacts, coordinates or device identities are committed here.
 
 Final integrated build, hosted preview, production rollout and private saved
 Thing acceptance are tracked separately from these source/fixture checks.
+
+Graphify: the full changed-document pass expanded to 116 semantic slices and
+was stopped as slow. The bounded refresh covers the source graph and the focused
+contract/feature-map/PR documents. The large TESTING and changelog files retain
+their prior semantic coverage; their changed text is not claimed as reindexed.
