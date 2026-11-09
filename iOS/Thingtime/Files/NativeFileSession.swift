@@ -1,4 +1,5 @@
 import AppleFileSync
+import CryptoKit
 import WebKit
 
 /// Request-owned native byte transport shared by explicit exports and sync.
@@ -85,6 +86,18 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         let identity = try await json("/api/v1/auth/me")
         guard let user = identity["user"] as? [String: Any], user["id"] as? String == scope.ownerId,
               user["accountKind"] as? String == "user", user["temporary"] as? Bool != true else { throw MobileDevicePairing.Failure.identity }
+    }
+    /// A transient comparison for a previously verified native local read.
+    /// The cookie itself never leaves this transport.
+    func currentSessionDigest() async throws -> Data {
+        try checkActive()
+        guard let pinned = pinnedCookie else { throw MobileDevicePairing.Failure.identity }
+        let all = await cookieStore.allCookies(); try checkActive()
+        let url = scope.origin.appendingPathComponent("api/v1/auth/me")
+        guard try Self.authenticationCookie(filterCookies(all, url)) == pinned else {
+            throw MobileDevicePairing.Failure.identity
+        }
+        return Data(SHA256.hash(data: Data(pinned.utf8)))
     }
     func require(_ requirements: [(String, [Int])]) async throws {
         try checkActive()
