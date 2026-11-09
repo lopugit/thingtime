@@ -86,7 +86,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
   historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
   return new AccountTimelineStore(accountTimelineScope(scope), historyBackend, new AccountTimeline(db, scope, lease));
  };
- const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore(),[themeVersionWriter(themes.themes,themes),...(algorithms ? [algorithmVersionWriter(algorithms.algorithms,true)] : [])]).request(request,signal);
+ const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore(),[themeVersionWriter(themes.themes,themes),...(algorithms ? [algorithmVersionWriter(algorithms.algorithms,true)] : [])],(id,child)=>files.verifyRecoveryBytes(id,child)).request(request,signal);
  const historyExport = (eventId: string, signal?: AbortSignal) => {
   lease.assertCurrent();
   historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);

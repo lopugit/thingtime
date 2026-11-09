@@ -167,14 +167,14 @@ test('bound deletion can be reviewed and restored at the exact device quota with
 });
 
 
-test('deleting an unsent parent cancels its media and nested comments atomically without uploading',async()=>{
+test('deleting an unsent parent hides its media and nested comments atomically while retaining private History bytes',async()=>{
  const f=fixture();try{
   const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Delete'},attachmentIds:[file.id]});
   const replyFile=await f.select('comment'),reply=await f.sync.things.savePost({thingtime:['post','comment'],targetId:post.id,crystal:{type:'text',text:'Reply'},attachmentIds:[replyFile.id]});
   await assert.rejects(f.sync.remove([file.id]),/owning editor/);
   const removed=await f.sync.remove([post.id]);assert.deepEqual(new Set(removed.deleted),new Set([post.id,file.id,reply.id,replyFile.id]));
   for(const id of [post.id,reply.id])assert.equal(await f.sync.view(id),null);
-  for(const id of [file.id,replyFile.id]){await assert.rejects(f.files.readFile(id));await f.db.transaction(f.scope,'readonly',f.lease,async tx=>assert.equal(await tx.getBytes(id),undefined));}
+  for(const id of [file.id,replyFile.id]){await assert.rejects(f.files.readFile(id));await f.db.transaction(f.scope,'readonly',f.lease,async tx=>assert.deepEqual(await tx.getBytes(id),f.bytes));}
   await f.files.sync(f.upload);await f.sync.sync(f.content);assert.deepEqual(f.uploads,[]);assert.deepEqual(f.writes,[]);
  }finally{await f.db.close();}
 });

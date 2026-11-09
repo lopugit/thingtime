@@ -145,6 +145,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10 — Restore deleted account posts, ordinary linked children and
+  retained attachments atomically through History. Preserve image validation,
+  verify retained byte integrity and mint fresh receipts after attempted file
+  deletion. Browser and separate Mac development checks passed; hosted rollout
+  remains separate. Discover MJS workspace fixtures in the normal regression
+  command. [Recovery evidence](../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
+  **Codex (AI)**
+
 - 2026-11-10 — Keep the native page mounted when a site blocks refresh fails
   or recovers. The Settings vault retains its unlocked form, current draft
   and focus during the notice. [Browser evidence](../artifacts/anonymous-release-2026-11-09/acceptance/provider-vault.json).

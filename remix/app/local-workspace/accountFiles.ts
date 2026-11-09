@@ -15,6 +15,7 @@ import { validateDraftContent, type AccountDraft, type DraftContent } from '../d
 import type { StoredDraft } from './drafts';
 import { accountSyncDeadline, type SyncState } from './accountSync';
 import { ACCOUNT_SUITE_PARTS } from './accountSuites';
+import { resolveAccountSuiteId } from './accountSuiteIdentity';
 
 const COLLECTION = 'account-files';
 const CLAIM_MS = 60_000;
@@ -48,6 +49,10 @@ type FileRecord = {
 	/** Cleanup requested by deleting the parent, not by removing a file in its editor. */
 	parentDeletion?: true;
 	deleteVersion?: string;
+	/** The accepted parent receipt, not the local editor target, proves binding. */
+	// Missing means a persisted pre-upgrade request, whose target was included.
+	// Only an explicit false can prove a newly queued file was never bound.
+	deleteTargetBound?: boolean;
 	deletingLocal?: LocalMediaAttachment;
 	cancelRequested?: true;
 	cancelled?: true;
@@ -87,6 +92,7 @@ export class AccountFileSync {
 	readonly things: LocalThings;
 	readonly metadata: AccountFileMetadata;
 	private retaining = new Map<string, Promise<{ row: LocalAttachment; changed: boolean }>>();
+	private recoveryProofs = new Map<string, { revision: string; sha256: string }>();
 	constructor(
 		private db: WorkspaceDatabase,
 		readonly scope: AccountScope,
@@ -118,16 +124,104 @@ export class AccountFileSync {
 		// Reserve bounded control space at admission, so a full workspace can
 		// still record cancellation, claim it, retry and acknowledge it. Account
 		// response/part data remain separately charged at their actual size.
-		const { state, phase, started, deleteRequested, parentDeletion, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
-		const controls = JSON.stringify({ state, phase, started, deleteRequested, parentDeletion, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim, ...(row.deletingLocal ? { deletingLocal: null } : {}) });
+		const { state, phase, started, deleteRequested, parentDeletion, deleteVersion, deleteTargetBound, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
+		const controls = JSON.stringify({ state, phase, started, deleteRequested, parentDeletion, deleteVersion, deleteTargetBound, cancelRequested, cancelled, attempts, retryAt, error, claim, ...(row.deletingLocal ? { deletingLocal: null } : {}) });
 		const controlReserve = ' '.repeat(Math.max(0, 1024 - new TextEncoder().encode(controls).length));
 		return tx.put(COLLECTION, row.id, { ...row, controlReserve });
+	}
+	/** Hash retained Blob bytes outside IndexedDB, then fence the exact binary
+	 * revision in the recovery writer's atomic transaction. Blob I/O cannot be
+	 * awaited while an IndexedDB transaction is open. */
+	async verifyRecoveryBytes(targetId: string, signal?: AbortSignal) {
+		const candidates = await this.tx('readonly', async tx => {
+			const rootId = await resolveAccountSuiteId(tx, targetId);
+			const state = await tx.get<{ cascadeChildIds?: string[] }>('thing-sync', rootId);
+			if (state?.cascadeChildIds && (!Array.isArray(state.cascadeChildIds) || state.cascadeChildIds.some(id => typeof id !== 'string')))
+				throw new WorkspaceError('ACCOUNT_HISTORY_CHILD_CHANGED', 'Linked recovery targets changed on this device.', 409);
+			const targets = new Set([rootId, ...(state?.cascadeChildIds || [])]);
+			return (await tx.list<FileRecord>(COLLECTION)).map(({ value }) => value)
+				.filter(value => value.parentDeletion && targets.has(value.deletingLocal?.targetId || '') && !!value.deletingLocal && isLocalAttachment(value.deletingLocal))
+				.map(value => value.id);
+		}, signal);
+		const verified: { id: string; revision: string; sha256: string }[] = [];
+		for (const id of candidates) {
+			// Release each Blob before fetching the next. There is no cumulative
+			// buffer and the digest streams through the established 1 MiB chunks.
+			const snapshot = await this.tx('readonly', async tx => {
+				const value = await tx.get<FileRecord>(COLLECTION, id), binary = await tx.getBinary(id);
+				if (!value?.parentDeletion || !value.deletingLocal || !isLocalAttachment(value.deletingLocal) ||
+					!binary?.revision || !value.sha256 || binarySize(binary.value) !== value.request.sizeBytes)
+					throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'The complete attached file bytes are not retained on this device.', 409);
+				return { id, revision: binary.revision, expected: value.sha256, bytes: binary.value };
+			}, signal);
+			const sha256 = await blobChecksum(binaryBlob(snapshot.bytes), () => { this.lease.assertCurrent(); signal?.throwIfAborted(); });
+			if (sha256 !== snapshot.expected)
+				throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'The retained attached file bytes changed after deletion. Device History is preserved.', 409);
+			verified.push({ id: snapshot.id, revision: snapshot.revision, sha256 });
+		}
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		for (const proof of verified) this.recoveryProofs.set(proof.id, proof);
 	}
 	/** Both writers participate in the importer's existing transaction. Only
 	 * confirmed upload receipts can rewrite a device file to an account ID. */
 	readonly contentHooks = {
 		removeBound: (tx: WorkspaceTransaction, id: string, targetId: string) => this.removeBoundInTransaction(tx, id, targetId, true),
 		releaseBoundLink: (tx: WorkspaceTransaction, id: string, targetId: string) => this.removeBoundInTransaction(tx, id, targetId),
+		recoverDeletedParent: async (tx: WorkspaceTransaction, targetId: string, expectedAttachmentIds: string[], serverDeleted: boolean, purpose: 'post' | 'comment') => {
+			const records = (await tx.list<FileRecord>(COLLECTION)).map(({value}) => value)
+				.filter(value => value.parentDeletion && value.deletingLocal?.targetId === targetId && !value.cancelRequested);
+			const restoredMedia: LocalMediaAttachment[] = [];
+			const retained = new Set(records.flatMap(value => value.remote ? [value.remote.id] : []));
+			if (expectedAttachmentIds.some(id => !retained.has(id)))
+				throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'An attached file is not completely retained on this device. Recover it through its owning editor.', 409);
+			for (const value of records) {
+				if (value.state === 'error' || value.state === 'conflict')
+					throw new WorkspaceError('ACCOUNT_HISTORY_FILE_REVIEW', 'An attached file needs account deletion review before recovery.', 409);
+				if (value.claim && value.claim.expiresAt > this.now())
+					throw new WorkspaceError('ACCOUNT_HISTORY_FILE_BUSY', 'Wait for the attached file operation before recovering this Thing.', 409);
+				const local = value.deletingLocal!;
+				const crystal = publicAttachmentCrystal(local.crystal);
+				if (!isLocalMediaAttachment(local) || local.id !== value.id || local.targetId !== targetId ||
+					localMediaInfo(local).purpose !== purpose || value.request.purpose !== purpose ||
+					!!value.linked !== isLocalLinkedAttachment(local) || localMediaExpired(local, this.now()) || !crystal ||
+					value.request.filename !== crystal.name || value.request.contentType !== crystal.contentType ||
+					value.request.sizeBytes !== crystal.size ||
+					(isLocalAttachment(local) ? value.sha256 !== local.localAttachment.sha256 :
+						value.linked?.url !== crystal.url || value.linked?.mediaKind !== crystal.mediaKind))
+					throw new WorkspaceError('ACCOUNT_HISTORY_FILE_CHANGED', 'The retained file purpose, target, or metadata changed after deletion.', 409);
+				if (await tx.get('things', value.id)) throw new WorkspaceError('ACCOUNT_HISTORY_FILE_CHANGED', 'An attached file changed after deletion. Refresh History.', 409);
+				if (isLocalAttachment(local) && !value.linked) {
+					const binary = await tx.getBinary(value.id);
+					const proof = this.recoveryProofs.get(value.id);
+					if (!binary || binarySize(binary.value) !== value.request.sizeBytes || !proof || !binary.revision ||
+						proof.revision !== binary.revision || proof.sha256 !== value.sha256)
+						throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'The complete attached file bytes are not retained on this device.', 409);
+				}
+				// A deleteVersion is persisted before the remote DELETE is dispatched.
+				// Its expired claim does not prove that the old request failed: a late
+				// DELETE can still remove the old receipt after History restores it.
+				const fresh = serverDeleted || !!value.deleteVersion || (!!value.cancelled && (!!value.remote || !!value.started));
+				const requestId = fresh ? this.uuid() : value.request.requestId;
+				if (!requestId) throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'The attached file request cannot be restored.', 409);
+				const restoredAttachment = isLocalAttachment(local) ? { ...local.localAttachment, requestId } : undefined;
+				if (fresh && restoredAttachment) delete restoredAttachment.accountFileId;
+				const restored = fresh
+					? isLocalAttachment(local)
+						? { ...local, localAttachment: restoredAttachment! }
+						: { ...local, localLinkedAttachment: { ...local.localLinkedAttachment, requestId } }
+					: local;
+				await tx.put('things', value.id, restored);
+				restoredMedia.push(restored);
+				await this.putRecord(tx, { ...value, request: { ...value.request, requestId },
+					...(fresh ? { source: undefined, remote: undefined, retainedKey: undefined, retainedVersion: undefined,
+						retainedObservedAt: undefined, retainedTargetId: undefined, started: false,
+						phase: value.linked ? 'link' as const : 'start' as const, plan: undefined, uploaded: [] } : {}),
+					parentDeletion: undefined, deleteRequested: undefined, deletingLocal: undefined, deleteVersion: undefined, deleteTargetBound: undefined,
+					cancelled: undefined, cancelRequested: undefined, state: fresh ? 'pending' as const : value.remote ? 'synced' as const : 'pending' as const,
+					claim: undefined, attempts: 0, retryAt: 0, error: undefined });
+			}
+			return {hasAny:restoredMedia.length>0,hasVisual:restoredMedia.some(row=>['image','video'].includes(String(row.crystal.mediaKind)))};
+		},
 		prepareRemove: async (tx: WorkspaceTransaction, targetId: string) => {
 			// A restored file needs explicit review before deleting its parent.
 			if ((await tx.list<LocalThing>('things')).some(({value}) => isLocalMediaAttachment(value) && value.targetId === targetId))
@@ -496,6 +590,13 @@ export class AccountFileSync {
 		);
 	}
 	private async finishCancellation(tx: WorkspaceTransaction, row: FileRecord) {
+		if (row.parentDeletion && row.deletingLocal) {
+			// An acknowledged parent cascade removes the account object, but History
+			// still needs the exact private device bytes for an explicit recovery.
+			// Keep them charged to this workspace and inaccessible as a live file.
+			await this.putRecord(tx, { ...row, cancelled: true, state: 'synced', claim: undefined, error: undefined, retryAt: 0 });
+			return;
+		}
 		await tx.deleteBytes(row.id);
 		await tx.delete('things', row.id);
 		await this.metadata.discardUnuploaded(tx, row.id);
@@ -553,9 +654,12 @@ export class AccountFileSync {
 		if (record.deleteRequested) { if (record.deletingLocal?.targetId !== targetId) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409); return; }
 		const local = await tx.get<LocalMediaAttachment>('things', id), parent = await tx.get<LocalThing>('things', targetId);
 		if (!local || !isLocalMediaAttachment(local) || local.targetId !== targetId || localMediaInfo(local).draftId || !parent?.thingtime.includes('post')) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409);
-		if (record.started === false && !record.remote && !record.claim) return this.finishCancellation(tx, record);
+		if (record.started === false && !record.remote && !record.claim && !parentDeletion) return this.finishCancellation(tx, record);
 		await tx.delete('things', id);
-		await this.putRecord(tx, { ...record, deleteRequested: true, ...(parentDeletion ? {parentDeletion: true as const} : {}), deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
+		const parentState = await tx.get<{postAttachmentIds?:string[];base?:{accountAttachmentIds?:string[]}}>('thing-sync',targetId);
+		const bound = !parentDeletion || (!!record.remote && !!(parentState?.base?.accountAttachmentIds ?? parentState?.postAttachmentIds)?.includes(record.remote.id));
+		await this.putRecord(tx, { ...record, deleteRequested: true, ...(parentDeletion ? {parentDeletion: true as const} : {}),
+			deleteTargetBound: bound, deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
 	}
 
 	async inspectDeletion(transport: FileMetadataTransport, id: string, signal = new AbortController().signal) {
@@ -681,6 +785,14 @@ export class AccountFileSync {
 			};
 			let phase = claimed.phase;
 			try {
+				if (claimed.parentDeletion && claimed.deleteRequested && !claimed.remote && claimed.started === false) {
+					await this.tx('readwrite', async tx => {
+						const row = await tx.get<FileRecord>(COLLECTION, claimed.id);
+						if (!row || row.claim?.token !== token) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
+						await this.finishCancellation(tx, row);
+					});
+					completed++; continue;
+				}
 				if (claimed.deleteRequested && claimed.remote) {
 					if (!transport.remove || !transport.get || !claimed.remote || !claimed.deletingLocal)
 						throw new WorkspaceError('DELETION_UNAVAILABLE', 'The account cannot confirm file deletion yet.', 503);
@@ -702,8 +814,8 @@ export class AccountFileSync {
 					}
 					if (claimed.source !== 'account' && !claimed.request.requestId) throw new WorkspaceError('INVALID_DELETION', 'The file deletion identity is missing.', 409);
 					const deletion: Parameters<NonNullable<AccountFileTransport['remove']>>[0] = claimed.source === 'account'
-						? { id: claimed.remote.id, expectedUpdatedAt, retainReceipt: true, ...(claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) }
-						: { id: claimed.remote.id, expectedUpdatedAt, requestId: claimed.request.requestId!, ...(claimed.linked ? { linked: true as const } : {}), ...(claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) };
+						? { id: claimed.remote.id, expectedUpdatedAt, retainReceipt: true, ...(claimed.deleteTargetBound !== false && claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) }
+						: { id: claimed.remote.id, expectedUpdatedAt, requestId: claimed.request.requestId!, ...(claimed.linked ? { linked: true as const } : {}), ...(claimed.deleteTargetBound !== false && claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) };
 					const result = await run(() => transport.remove!(deletion, controller.signal));
 					if (result?.deleted !== true || typeof result.deferred !== 'boolean') throw new WorkspaceError('INVALID_DELETION', 'The account did not confirm durable deletion.', 502);
 					await this.tx('readwrite', async tx => {

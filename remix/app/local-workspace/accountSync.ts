@@ -1,7 +1,7 @@
 import { BUILDER_THING_KIND } from '../schemas/builderThing';
 import type { AccountAlgorithmSync } from './accountAlgorithms';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
-import { captureAccountThingChanges } from './accountTimeline';
+import { captureAccountThingChanges, accountTimelineScope, readAccountTimelineRow } from './accountTimeline';
 import type { AccountThemeSync } from './accountThemes';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { isLocalMediaAttachment, type LocalMediaAttachment } from './attachments';
@@ -37,6 +37,12 @@ export type AccountSyncRecord = {
 	id: string; state: SyncState; base: AccountThing | null; audience: { acl: string[]; visibility: string };
 	/** Set only by atomic full-file retention or a confirmed local binding write. */
 	postAttachmentIds?: string[];
+	/** Ordinary target-linked descendants removed in the same local cascade. */
+	cascadeChildIds?: string[];
+	/** This client captured every bound file before deleting a post. Older
+	 * deletion records cannot prove an unsent file was not silently purged. */
+	recoveryCoverage?: true;
+	recoveryFileIds?: string[];
 	// Server-projected execution state can change without a content revision.
 	executionRead?: { at: number; held: boolean };
 	pending?: FrozenWrite | FrozenDelete; deleted?: Pick<LocalThing, 'id' | 'revision' | 'updatedAt'>; claim?: { token: string; expiresAt: number }; attempts: number; retryAt: number; error?: string;
@@ -55,6 +61,7 @@ type AccountContentFiles = {
 	removeBound?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
 	releaseBoundLink?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
 	restoreParent?(tx: WorkspaceTransaction, targetId: string, attachmentIds: string[]): Promise<void>;
+	recoverDeletedParent?(tx: WorkspaceTransaction, targetId: string, expectedAttachmentIds: string[], serverDeleted: boolean, purpose: 'post' | 'comment'): Promise<{hasAny:boolean;hasVisual:boolean}>;
 	prepareRemove?(tx: WorkspaceTransaction, targetId: string): Promise<boolean>;
 };
 const COLLECTION = 'thing-sync';
@@ -104,28 +111,89 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous), rename:(tx,row,previous)=>themes.renameIn(tx,row,previous) } : undefined, algorithms ? {import:(tx,row)=>algorithms.importIn(tx,row),move:(tx,row,previous)=>algorithms.moveIn(tx,row,previous),rename:(tx,row,previous)=>algorithms.renameIn(tx,row,previous)} : undefined, files?.releaseBoundLink);
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id, input) => this.prepareRecovery(tx, id, false, input), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous), rename:(tx,row,previous)=>themes.renameIn(tx,row,previous) } : undefined, algorithms ? {import:(tx,row)=>algorithms.importIn(tx,row),move:(tx,row,previous)=>algorithms.moveIn(tx,row,previous),rename:(tx,row,previous)=>algorithms.renameIn(tx,row,previous)} : undefined, files?.releaseBoundLink);
 	}
 	/** Recovery changes the latest device intent, never an already-sent request.
 	 * Its revision must exceed every earlier write so delayed replies cannot
 	 * overwrite it. All state changes share the History/content transaction. */
-	private async prepareRecovery(tx: WorkspaceTransaction, id: string) {
+	private async prepareRecovery(tx: WorkspaceTransaction, id: string, grouped = false, recoveryInput?: ThingWrite) {
 		if (await tx.get('things', id)) throw new WorkspaceError('WRITE_CONFLICT', 'This Thing is already present. Refresh before restoring.', 409);
 		const state = await tx.get<SyncRecord>(COLLECTION, id);
 		if (state && !state.deleted) throw new WorkspaceError('SYNC_CONFLICT', 'The account deletion changed. Refresh History before restoring.', 409);
-		if (state?.postAttachmentIds?.length || state?.base?.accountAttachmentIds?.length ||
-			(await tx.list<{parentDeletion?: unknown; deletingLocal?: {targetId?: string}}>('account-files')).some(({value}) => value.parentDeletion && value.deletingLocal?.targetId === id))
-			throw new WorkspaceError('ACCOUNT_HISTORY_REMOTE_REQUIRED', 'This deleted Thing needs its attachment recovery adapter.', 409);
+		if (!state?.recoveryCoverage) {
+			const headId = await tx.get<string>('timeline-meta', `head:${id}`);
+			const entry = headId && await readAccountTimelineRow(tx, accountTimelineScope(this.scope), headId);
+			const before = entry?.event.operation === 'delete' && entry.event.thingId === id ? entry.event.before?.value as {thingtime?:unknown} | undefined : undefined;
+			if ((Array.isArray(before?.thingtime) && before.thingtime.includes('post')) ||
+				(Array.isArray(recoveryInput?.thingtime) && recoveryInput.thingtime.includes('post')))
+				throw new WorkspaceError('ACCOUNT_HISTORY_FILE_UNVERIFIED', 'This older post deletion cannot prove every attached file was retained. Its device History is preserved.', 409);
+		}
+		if (grouped && state && (state.pending || (state.claim && state.claim.expiresAt > this.now()) || ['conflict','error'].includes(state.state)))
+			throw new WorkspaceError('ACCOUNT_HISTORY_CHILD_UNSETTLED', 'A linked Thing deletion needs review before recovering its parent.', 409);
 		const deleted = await tx.get<LocalThing>(DELETED_CONTENT, id);
+		const retainedIds = (await tx.list<{parentDeletion?: unknown; deletingLocal?: {targetId?: string}}>('account-files'))
+			.filter(({value}) => value.parentDeletion && value.deletingLocal?.targetId === id).map(({id})=>id).sort();
+		const bound = retainedIds.length > 0;
+		if (state?.recoveryCoverage) {
+			if (!Array.isArray(state.recoveryFileIds) || stable(retainedIds) !== stable([...state.recoveryFileIds].sort()))
+				throw new WorkspaceError('ACCOUNT_HISTORY_FILE_MISSING', 'A file captured by this post deletion is no longer completely retained on this device.', 409);
+		}
+		// The accepted base is the current binding. A prior postAttachmentIds hint
+		// must not resurrect a file the editor already removed and the server accepted.
+		const expectedAttachmentIds = state?.base?.accountAttachmentIds ?? state?.postAttachmentIds ?? [];
+		let postAttachments: {hasAny:boolean;hasVisual:boolean} | undefined;
+		if (bound || expectedAttachmentIds.length) {
+			if (!this.files?.recoverDeletedParent)
+				throw new WorkspaceError('ACCOUNT_HISTORY_REMOTE_REQUIRED', 'This deleted Thing needs its attachment recovery adapter.', 409);
+			if (!Array.isArray(recoveryInput?.thingtime) || !recoveryInput.thingtime.includes('post') ||
+				(deleted && !deleted.thingtime.includes('post')))
+				throw new WorkspaceError('ACCOUNT_HISTORY_FILE_CHANGED', 'A retained attachment has a different owning Thing.', 409);
+			if ((expectedAttachmentIds.length && !state) || state?.pending || (state?.claim && state.claim.expiresAt > this.now()) || (state && ['conflict', 'error'].includes(state.state)))
+				throw new WorkspaceError('ACCOUNT_HISTORY_DELETE_UNSETTLED', 'Wait for the account deletion or review its refusal before recovering attached files.', 409);
+			postAttachments = await this.files.recoverDeletedParent(tx, id, expectedAttachmentIds, !!state && !state.base && expectedAttachmentIds.length > 0, recoveryInput.thingtime.includes('comment') ? 'comment' : 'post');
+		}
+		const cascadeChildren = state?.cascadeChildIds || [];
 		const stamp = new Date(Math.max(this.now(), (Date.parse(state?.deleted?.updatedAt || deleted?.updatedAt || '') || 0) + 1)).toISOString();
 		if (state) await tx.put(COLLECTION, id, { ...state, deleted: undefined,
+			cascadeChildIds: undefined,
+			recoveryCoverage: undefined,
+			recoveryFileIds: undefined,
 			state: state.pending && ['conflict', 'error'].includes(state.state) ? state.state : 'pending',
 			...(state.pending ? {} : { claim: undefined, attempts: 0, retryAt: 0, error: undefined }) });
 		// Keep the deletion body until a frozen DELETE resolves; other late writes
 		// need only the monotonic revision, not the previous content body.
 		if (state?.pending?.method !== 'delete') await tx.delete(DELETED_CONTENT, id);
-		return { createdAt: deleted?.createdAt || stamp, updatedAt: stamp,
-			revision: Math.max(state?.deleted?.revision || 0, state?.pending?.version || 0, deleted?.revision || 0) + 1 };
+		return { createdAt: deleted?.createdAt || stamp, updatedAt: stamp, ...(postAttachments ? {postAttachments} : {}),
+			revision: Math.max(state?.deleted?.revision || 0, state?.pending?.version || 0, deleted?.revision || 0) + 1,
+			...(cascadeChildren.length ? { afterCreate: async (create: (input: ThingWrite, id: string,
+				stamp: Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> & {postAttachments?:{hasAny:boolean;hasVisual:boolean}},
+				capture: {id:string;operationId:string;operation:'create';parentIds:string[];label:string}) => Promise<LocalThing>) => {
+				const remaining = new Map<string, { input: ThingWrite; headId: string }>();
+				for (const childId of cascadeChildren) {
+					const headId = await tx.get<string>('timeline-meta', `head:${childId}`);
+					const entry = headId && await readAccountTimelineRow(tx, accountTimelineScope(this.scope), headId);
+					const before = entry?.event.before;
+					const value = before?.value as any;
+					if (!entry || entry.event.thingId !== childId || entry.event.operation !== 'delete' || before?.adapter !== 'thing-content' ||
+						!value || !Array.isArray(value.thingtime) || isProtectedThingtime(value.thingtime) ||
+						!value.targetId || (value.targetId !== id && !cascadeChildren.includes(value.targetId)))
+						throw new WorkspaceError('ACCOUNT_HISTORY_CHILD_CHANGED', 'A linked Thing changed after the deletion. Recover it through its own History.', 409);
+					remaining.set(childId, { input: { thingtime: value.thingtime, crystal: value.crystal, ...(value.extended != null ? {extended:value.extended} : {}),
+						tags: value.tags, folderId: value.folderId, targetId: value.targetId }, headId });
+				}
+				const recovered = new Set([id]);
+				while (remaining.size) {
+					let advanced = false;
+					for (const [childId, {input, headId}] of remaining) {
+						if (!recovered.has(input.targetId!)) continue;
+						const childStamp = await this.prepareRecovery(tx, childId, true, input);
+						await create(input, childId, childStamp, {id:`version-child-${this.uuid()}`,operationId:this.uuid(),
+							operation:'create',parentIds:[headId],label:'Recovered linked Thing with parent'});
+						recovered.add(childId); remaining.delete(childId); advanced = true;
+					}
+					if (!advanced) throw new WorkspaceError('ACCOUNT_HISTORY_CHILD_CHANGED', 'Linked Thing recovery contains a changed or cyclic target.', 409);
+				}
+			} } : {}) };
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	async canonicalId(id: string) { return this.tx('readonly', tx => resolveAccountSuiteId(tx, id)); }
@@ -260,6 +328,18 @@ export class AccountThingSync {
 				changed = false;
 				for (const row of all) if (row.targetId && selected.has(row.targetId) && !selected.has(row.id)) { selected.add(row.id); changed = true; }
 			}
+			// Action execution receipts are device-only evidence. Their existing
+			// cascade removes the live row, but recovery must never recreate or run
+			// one through the ordinary Thing writer.
+			const deviceActionRun = (row: LocalThing) => row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && !!row.targetId && !!byId.get(row.targetId)?.thingtime.includes('action') && selected.has(row.targetId);
+			const cascadeChildren = new Map(ids.map(id => [id, [] as string[]]));
+			for (const child of all) if (selected.has(child.id) && !isLocalMediaAttachment(child) && !deviceActionRun(child) && !ids.includes(child.id)) {
+				let parent = child.targetId; const seen = new Set<string>();
+				while (parent && selected.has(parent) && !seen.has(parent)) {
+					if (cascadeChildren.has(parent)) { cascadeChildren.get(parent)!.push(child.id); break; }
+					seen.add(parent); parent = byId.get(parent)?.targetId;
+				}
+			}
 			// Validate the entire content cascade before changing any file intent.
 			// Files stay behind their dedicated upload/deletion replay fences.
 			for (const row of all) if (selected.has(row.id)) {
@@ -270,7 +350,7 @@ export class AccountThingSync {
 					if (!await this.algorithms.viewIn(tx, row.id)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Open this algorithm in its home library before deleting it.', 409);
 				} else if (isTransferTheme(row) && this.themes) {
 					if (!await this.themes.viewIn(tx,row.id)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE','Open this theme in its home library before deleting it.',409);
-				} else if (row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && row.targetId && byId.get(row.targetId)?.thingtime.includes('action') && selected.has(row.targetId)) {
+				} else if (deviceActionRun(row)) {
 					// Device execution evidence has no remote queue or server receipt.
 				} else if (!await tx.get<SyncRecord>(COLLECTION, row.id) || isProtectedThingtime(row.thingtime))
 					throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
@@ -281,14 +361,17 @@ export class AccountThingSync {
 			for (const row of all) {
 				if (selected.has(row.id)) {
 					if (isLocalMediaAttachment(row) || (isTransferTheme(row) && this.themes) || (isTransferAlgorithm(row) && this.algorithms)) continue;
-					if (row.thingtime.includes('action-run') && row.id.startsWith('local-action-run-') && row.targetId && selected.has(row.targetId)) { await tx.delete('things', row.id); continue; }
+					if (deviceActionRun(row)) { await tx.delete('things', row.id); continue; }
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 					await tx.delete('things', row.id);
-					if (!state.base && !state.pending && !await tx.get(ACCOUNT_SUITE_PARTS,row.id)) await tx.delete(COLLECTION, row.id); // Never sent: nothing to delete remotely.
+					if (!state.base && !state.pending && !await tx.get(ACCOUNT_SUITE_PARTS,row.id) && !cascadeChildren.get(row.id)?.length && !row.thingtime.includes('post')) await tx.delete(COLLECTION, row.id); // Never sent: nothing to delete remotely.
 					else {
 						await tx.put(DELETED_CONTENT, row.id, row);
-						await tx.put(COLLECTION, row.id, { ...state, deleted: { id: row.id, revision: row.revision, updatedAt: row.updatedAt }, state: state.state === 'syncing' ? 'syncing' : 'pending', error: undefined, retryAt: 0 });
+						await tx.put(COLLECTION, row.id, { ...state, ...(cascadeChildren.get(row.id)?.length ? {cascadeChildIds:cascadeChildren.get(row.id)!.sort()} : {}),
+							...(row.thingtime.includes('post') ? {recoveryCoverage:true as const,
+								recoveryFileIds:all.filter(file=>isLocalMediaAttachment(file)&&file.targetId===row.id&&selected.has(file.id)).map(file=>file.id).sort()} : {}),
+							deleted: { id: row.id, revision: row.revision, updatedAt: row.updatedAt }, state: state.state === 'syncing' ? 'syncing' : 'pending', error: undefined, retryAt: 0 });
 					}
 				} else if (row.folderId && selected.has(row.folderId) && !(isTransferTheme(row) && this.scope.dataPlane !== 'home')) {
 					let folderId: string | null = row.folderId; const seen = new Set<string>();
@@ -409,6 +492,8 @@ export class AccountThingSync {
 			await tx.put(COLLECTION, choice.id, { id: choice.id, state: choice.keep === 'local' ? 'pending' : 'synced', base: remote,
 				...(state.executionRead ? { executionRead: state.executionRead } : {}),
 				...(choice.keep === 'local' && state.deleted ? { deleted: state.deleted } : {}),
+				...(choice.keep === 'local' && state.deleted && state.cascadeChildIds ? { cascadeChildIds: state.cascadeChildIds } : {}),
+				...(choice.keep === 'local' && state.deleted && state.recoveryCoverage ? { recoveryCoverage: state.recoveryCoverage, recoveryFileIds: state.recoveryFileIds } : {}),
 				...(choice.keep === 'local' && state.postAttachmentIds ? { postAttachmentIds: state.postAttachmentIds } : {}),
 				audience: choice.keep === 'local' ? state.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 		}, () => new Date(this.now()).toISOString(), this.uuid));
@@ -556,6 +641,8 @@ export class AccountThingSync {
 						...(latest.executionRead ? { executionRead: latest.executionRead } : {}),
 						...(this.files && Array.isArray(pending.body.attachmentIds) ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}),
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
+						...(latest.deleted && latest.cascadeChildIds ? { cascadeChildIds: latest.cascadeChildIds } : {}),
+						...(latest.deleted && latest.recoveryCoverage ? { recoveryCoverage: latest.recoveryCoverage, recoveryFileIds: latest.recoveryFileIds } : {}),
 						audience: newer ? latest.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 				});
 				completed++;

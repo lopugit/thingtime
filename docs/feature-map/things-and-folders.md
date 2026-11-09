@@ -1130,8 +1130,14 @@ and the same `LocalTimelineVersions` transaction used by anonymous recovery.
 `AccountThingSync`: preserve frozen requests, advance the local revision, and
 keep recovered content pending after a late delete acknowledgement. Regressions:
 `accountDelete.test.ts`, `accountTimelineVersions.test.ts` and opt-in
-`accountTimelineRecovery.browser.test.ts`. Attachment-bound/protected recovery
-and broader acceptance remain open; see [local workspaces](../local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+`accountTimelineRecovery.browser.test.ts`. Bound-file and ordinary linked-child
+recovery composes `AccountThingSync` and `AccountFileSync` inside the same local
+transaction. Retained file coverage and validated attachment facts feed the
+ordinary content validator; protected kinds keep their dedicated writers.
+`accountHistoryBoundRecovery.test.ts` covers atomic refusal, retained bytes,
+late acknowledgements and fresh receipts after attempted deletion. Current
+browser/native acceptance and legacy missing-byte limits are recorded in
+[the recovery evidence](../../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
 
 
 Account History names use `timeline/nameQueue.ts` with canonical name commands

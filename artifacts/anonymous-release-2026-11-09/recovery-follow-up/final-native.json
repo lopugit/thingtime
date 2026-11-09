@@ -1,0 +1,50 @@
+{
+  "build": {
+    "baseRevision": "af8c52540cb3dd81d962feb7897168d6da81ae7c",
+    "source": {
+      "remix/app/local-workspace/accountSync.ts": "0b38d51955127fc80a9d42087e39c94dfdeb4045044e54c5c3d0c8097e506474",
+      "remix/app/local-workspace/accountFiles.ts": "1f086554d3ec08538cde474d4a1da2f102fae6f69a88113620543c839ec843f6",
+      "remix/app/local-workspace/accountTimelineVersions.ts": "fe3f0172c9c77d76ac968e390e725e7e7bdbaa0aa0b0a7263f9812c32f04b59e",
+      "remix/app/local-workspace/accountApi.client.ts": "279d6cc3af5600b427928a8714db95bf6392756ceb6f988f79ed9a492b7a9f9b",
+      "remix/app/local-workspace/things.ts": "78d33751f8acb17fbd2935dddc71d8cce9b0b9582a6c97b8025055728a5dbf26"
+    },
+    "artifacts": {
+      "electron/dist/web/.output/public/index.html": "cf273daaf8e3b06264646a02f1fa4f1a5e7c5f10bc92859d1753e7e96977e402",
+      "electron/dist/web/.output/server/index.mjs": "5e7614760961af2327f633b6739e0271656bc4a188bf5e1d252adf38405b85b3",
+      "electron/dist/web/.output/public/draft-preview/runner.js": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4",
+      "electron/dist/web/.output/public/platform/runtime.js": "7a59a77625c7e7d5bf4ee46bae48bd715d5306c764ad050825b495d85831d198"
+    },
+    "serverPreset": "node_middleware",
+    "matchesFrozenStatic": true
+  },
+  "result": {
+    "exactBytes": true,
+    "private": true,
+    "authorPreserved": true,
+    "coldOfflineReload": true,
+    "groupedRecovery": true,
+    "uploads": 4,
+    "pageObservedAttachmentDeleteCalls": 0,
+    "serverConfirmedOldFileDeletions": 2,
+    "offlineWrites": [],
+    "confirmedViewport": 1440,
+    "errors": []
+  },
+  "freshParentAttachmentReceipt": true,
+  "freshChildAttachmentReceipt": true,
+  "cleanup": {
+    "devProcessesStopped": true,
+    "freshSyntheticDatabaseAndAttachmentsMovedToTrash": true,
+    "olderConflictedFixturePreservedSeparately": true,
+    "cleanEncryptedProfilePrepared": true,
+    "installedResourcesUnchanged": true,
+    "bundleAndRuntimeSignaturesVerified": true,
+    "stableAppAndNodeProcessInventoryUnchanged": true
+  },
+  "developmentBundle": "Thingtime Dev anonymous-release-pr1000.app",
+  "limitations": [
+    "Desktop native width1440 only;1440/390/320 browser acceptance is separately recorded",
+    "Existing conflicted pre-upgrade fixture was preserved and correctly refused until account deletion review",
+    "Stable production application was not modified or release-tested"
+  ]
+}

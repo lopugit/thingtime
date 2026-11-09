@@ -22,7 +22,7 @@ const fail=(message:string):never=>{throw new WorkspaceError('ACCOUNT_HISTORY_VE
 export class AccountTimelineVersions {
  private history: AccountTimeline;
  private authority: LocalVersionAuthority<LocalTimelineRow>;
- constructor(private db:WorkspaceDatabase,private scope:AccountScope,private lease:WorkspaceLease,private things:LocalThings,private store:TimelineLocalStore, private protectedWriters:LocalProtectedVersionWriter[]=[]){
+ constructor(private db:WorkspaceDatabase,private scope:AccountScope,private lease:WorkspaceLease,private things:LocalThings,private store:TimelineLocalStore, private protectedWriters:LocalProtectedVersionWriter[]=[],private recoveryPreflight?: (thingId:string,signal?:AbortSignal)=>Promise<void>){
   const timeline=accountTimelineScope(scope);
   if(workspaceScopeKey(things.scope)!==workspaceScopeKey(scope))fail('The History writer belongs to another workspace.');
   if(store.scope.ownerId!==timeline.ownerId||store.scope.dataPlane!==timeline.dataPlane||store.scope.apiOrigin!==timeline.apiOrigin)fail('History belongs to another workspace.');
@@ -84,6 +84,7 @@ export class AccountTimelineVersions {
   // Only existing canonical receipts can enter the durable account partition.
   const source=(await this.store.entries([request.eventId]))[0];check();
   if(!source)fail('This version is not retained on this device. Load it in History while connected.');
+  if(request.command==='apply-version'&&request.recover){await this.recoveryPreflight?.(source.event.thingId,signal);check();}
   const rows=await this.store.forThing(source.event.thingId);check();
   const basis=await this.db.transaction(this.scope,'readonly',this.lease,async tx=>{
    const canonical=await resolveAccountSuiteId(tx,source.event.thingId);

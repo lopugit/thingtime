@@ -1,0 +1,46 @@
+{
+  "lifecycle": {
+    "offlineBoundRemoval": true,
+    "durableDeletionReplay": true,
+    "offlineParentAndDescendantDeletion": true,
+    "reviewedConflict": false,
+    "offlineCommentMedia": true,
+    "atomicAttachmentEdit": true,
+    "offlineNativeMedia": true,
+    "exactBytes": true,
+    "anonymousReadDenied": true,
+    "uploads": 4,
+    "coldReload": true,
+    "privateSync": true,
+    "canonicalRichText": true,
+    "viewports": [
+      1440,
+      390,
+      320
+    ],
+    "offlineWrites": [],
+    "errors": []
+  },
+  "discardBeforeSubmit": {
+    "textOnly": true,
+    "noUpload": true,
+    "noOfflineWrites": true,
+    "errors": []
+  },
+  "source": {
+    "baseCommit": "af8c52540cb3dd81d962feb7897168d6da81ae7c",
+    "buildProof": "build-proof.json",
+    "test": "remix/app/local-workspace/accountBoundMedia.browser.test.ts",
+    "testSha256": "d98eb20ec552b418f509c39f3b46f3018bc79ba8ab52a2e50340de7bc3f914de"
+  },
+  "isolation": {
+    "disposableApiAndMongoReplica": true,
+    "taskOwnedSandboxedChromium": true,
+    "ownedContainersStopped": true,
+    "productionDataChanged": false
+  },
+  "limitations": [
+    "Reviewed conflict resolution was not exercised in the passing lifecycle run. An earlier run retained the expected conflict from a test-initiated remote file-order change.",
+    "This verifies the bound-media scenarios on the referenced compiled bundle; broader file retention/import has separate evidence."
+  ]
+}

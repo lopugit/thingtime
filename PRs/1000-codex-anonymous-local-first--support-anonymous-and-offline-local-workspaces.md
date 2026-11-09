@@ -2,6 +2,23 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Bound-file recovery — 2026-11-10
+
+History now restores ordinary deleted posts, linked comments and complete retained
+files through the same scoped transaction. Exact image-post validation is fed by
+verified retained attachments. Attempted late deletes force new upload identities;
+stale account file IDs are cleared. Blob checksums run outside IndexedDB and the
+atomic writer rechecks byte revision and digest before committing.
+
+The final browser and distinct macOS development app passed create/delete/recover,
+offline reload, original Thing identity, fresh file receipts, exact PNG bytes and
+private read denial. Legacy missing retention and existing deletion conflicts
+remain explicit refusals. Workspace checks passed 947 plus five shell checks,
+with 113 explicit opt-in skips; raw TypeScript, ratchet and full lint passed.
+[Build, browser, native and check receipts](../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
+The earlier hosted snapshot has a different renderer hash and must be replaced
+and verified before activation. No production configuration or stable app changed.
+
 ## Vault and Character acceptance — 2026-11-10
 
 The Settings outlet now keeps its identity as a site blocks failure notice

@@ -14674,6 +14674,33 @@ version/Timeline suites and README-enabled `accountTimelineRestore.browser.test.
 Run `accountDelete.test.ts`, `accountTimelineVersions.test.ts`, shared Timeline
 suites and README-enabled `accountTimelineRecovery.browser.test.ts`.
 
+### Bound-file and linked-child recovery (2026-11-10)
+
+- Recover an actual image post and image comment after acknowledged account
+  deletion. Restore exact retained bytes and local identities atomically; after
+  reconnect, verify fresh remote attachment receipts and private read boundaries.
+  Reload offline before and after reconnect. An empty, foreign, wrong-purpose,
+  expired or corrupt attachment must fail the ordinary validator without a
+  partial parent, child, file or History write.
+- Hold a file DELETE response after its transport starts, expire its claim,
+  recover the parent, then let that old DELETE finish. The restored content must
+  use a fresh upload receipt and must not retain the deleted account file ID.
+  Deletion that was only queued and never attempted may retain its live receipt.
+- Preserve a missing-retention refusal for legacy deleted posts whose complete
+  file coverage cannot be established. Do not reconstruct missing bytes or
+  replay device-only Action run records as ordinary recovered children.
+- Run the custom-data-plane Theme History browser fixture through normal
+  import, title, folder, delete and offline export controls. Verify Home and
+  selected-plane History separation, exact exported content and retirement of
+  the old detail reader after changing planes, at 1440, 390 and 320 pixels.
+
+Regressions: `accountHistoryBoundRecovery.test.ts`,
+`accountTimelineRecovery.browser.test.ts`, `accountBoundMedia.browser.test.ts`
+and `accountThemeHistoryCustom.browser.test.mjs`. The canonical
+`test:local-workspace` command discovers both `.test.ts` and `.test.mjs` files;
+browser cases require their explicit isolated-fixture settings. A skipped
+browser case is not acceptance evidence.
+
 
 ### Offline account History names and notes (2026-10-17)
 

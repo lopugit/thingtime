@@ -29,7 +29,15 @@ import { accountSuiteAliases, resolveAccountSuiteId } from './accountSuiteIdenti
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string; executionHeld?: boolean };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment | LocalLinkedAttachment, previous?: LocalAttachment | LocalLinkedAttachment) => Promise<void>;
-export type LocalThingRecovery = (tx: WorkspaceTransaction, id: string) => Promise<Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> | undefined>;
+type LocalRecoveredStamp = Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> & {
+	/** Supplied only by the account file recovery adapter after it restores the
+	 * exact charged device files in this same transaction. */
+	postAttachments?: { hasAny: boolean; hasVisual: boolean };
+};
+export type LocalThingRecovery = (tx: WorkspaceTransaction, id: string, input: ThingWrite) => Promise<(LocalRecoveredStamp & {
+	/** Trusted account cascade replay, after the recovered parent has passed normal validation. */
+	afterCreate?: (create: (input: ThingWrite, id: string, stamp: LocalRecoveredStamp, capture: LocalMutationCapture) => Promise<LocalThing>) => Promise<void>;
+}) | undefined>;
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
 export type ThingWrite = {
 	id?: string; thingtime?: unknown; crystal?: unknown; extended?: unknown; tags?: unknown;
@@ -111,10 +119,11 @@ export class LocalThings {
 	async create(input: ThingWrite) {
 		return this.transaction('readwrite', tx => this.createIn(tx, input));
 	}
-	private async createIn(tx: WorkspaceTransaction, input: ThingWrite, identity?: string, recovered?: Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'>) {
+	private async createIn(tx: WorkspaceTransaction, input: ThingWrite, identity?: string, recovered?: LocalRecoveredStamp) {
 		if (identity && await tx.get('things', identity)) fail('WRITE_CONFLICT', 'This Thing is already present. Refresh before restoring.', 409);
-		const checked = validated(input); const stamp = this.now();
-		const row: LocalThing = { ...checked, id: identity ?? (this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()), createdAt: stamp, updatedAt: stamp, revision: 1, ...recovered,
+		const checked = validated(input, recovered?.postAttachments); const stamp = this.now();
+		const recoveryStamp = recovered ? {createdAt:recovered.createdAt,updatedAt:recovered.updatedAt,revision:recovered.revision} : {};
+		const row: LocalThing = { ...checked, id: identity ?? (this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()), createdAt: stamp, updatedAt: stamp, revision: 1, ...recoveryStamp,
 			...(input.folderId ? { folderId: input.folderId } : {}), ...(input.targetId ? { targetId: input.targetId } : {}) };
 		await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
 	}
@@ -143,7 +152,13 @@ export class LocalThings {
 			recover: async (input, id, capture) => {
 				if (this.scope.kind === 'account' && !this.onRecover) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account recovery requires its sync adapter');
 				captures.set(id, capture);
-				return this.createIn(tx, input, id, await this.onRecover?.(tx, id));
+				const prepared = await this.onRecover?.(tx, id, input);
+				const parent = await this.createIn(tx, input, id, prepared);
+				await prepared?.afterCreate?.((childInput, childId, stamp, childCapture) => {
+					captures.set(childId, childCapture);
+					return this.createIn(tx, childInput, childId, stamp);
+				});
+				return parent;
 			},
 			update: async (input, capture) => { captures.set(input.id, capture); return this.updateIn(tx, input); }
 		}), captures, signal);
