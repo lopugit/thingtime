@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -60,6 +61,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		await page.getByRole('combobox', { name: 'Device folder', exact: true }).selectOption('11111111-1111-4111-8111-111111111111');
 		await page.getByRole('combobox', { name: 'Private cloud folder', exact: true }).selectOption('cloud-documents');
 		const layout = page.locator('[data-settings-document="file-sync-home-backup"]');
+		await enableCurrentPageBuilder(page);
 		await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.locator('[data-block-id="home-backup-title"]').click();
 		await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('My home folder backup');
@@ -143,6 +145,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
         assert.equal(await coverage.getByRole('button', { name: 'Next skipped items', exact: true }).isDisabled(), true);
         await inspectLayout('partial-coverage-last-page');
         const coverageLayout = page.locator('[data-settings-document="file-sync-backup-coverage"]');
+        await enableCurrentPageBuilder(page);
         await coverageLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await coverage.locator('[data-block-id="backup-coverage-title"]').click();
         for (const [id, text] of [['backup-skip-path', 'Skipped path: {item.path}'], ['backup-skip-reason', 'Reason: {item.reason}'], ['backup-skip-scope', 'Scope: {item.scope}'], ['backup-coverage-next', 'More skipped observations']]) {

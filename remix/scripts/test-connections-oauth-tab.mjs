@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -310,6 +311,7 @@ try {
       const namedHost = page.locator('[data-settings-document="named-auth-connections"]');
       await namedHost.getByRole('button', { name: 'Add named connection' }).waitFor();
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         await namedHost.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await namedHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');

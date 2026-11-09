@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const base = process.env.TT_SITE_EDITABLE_ORIGIN, session = process.env.TT_SITE_EDITABLE_SESSION;
 const artifacts = process.env.TT_SITE_EDITABLE_ARTIFACTS;
+const transportOutageFile = process.env.TT_SITE_EDITABLE_TRANSPORT_OUTAGE_FILE;
 
 // Run only inside the verified network-none browser/backend runtime. All fixture
 // construction and edits use native Builder controls; IndexedDB is read-only proof.
@@ -26,6 +27,7 @@ test('global and site nested blocks remain individually editable after offline s
  const page = await context.newPage(); page.setDefaultTimeout(20_000);
  const errors: string[] = [], apiRequests: { method: string; path: string }[] = [], accountMutations: string[] = [], protectedReads: string[] = [], checks: string[] = [], views: unknown[] = [];
  const identities: Record<string, { frame: string; text: string; button: string; icon: string; input: string }> = {};
+ let ownsTransportOutage = false;
  page.on('pageerror', (error: Error) => errors.push(error.message));
  page.on('request', (request: any) => {
   const url = new URL(request.url()), method = request.method(), path = url.pathname;
@@ -43,9 +45,15 @@ test('global and site nested blocks remain individually editable after offline s
  };
  const selected = () => page.getByLabel('Select block', { exact: true }).inputValue();
  const select = async (id: string) => { await open(); await page.getByLabel('Select block', { exact: true }).selectOption(id); assert.equal(await selected(), id); };
- const add = async (parent: string | null, kind: string) => {
-  const prefix = 'dropwell-' + (parent || 'root');
-  await page.locator(`[data-testid="${prefix}"], [data-testid^="${prefix}-"]`).last().click();
+ const add = async (parent: string | null, kind: string, after?: string) => {
+  if (after) {
+   await select(after);
+   await page.locator(`[data-block-id="${after}"]`).hover();
+   await page.getByTestId('inline-add-' + after).click();
+  } else {
+   const well = 'dropwell-' + (parent || 'root');
+   await page.locator(`[data-testid="${well}"], [data-testid^="${well}-"]`).last().click();
+  }
   await page.getByTestId('insert-quick-' + kind).click();
   return selected();
  };
@@ -56,6 +64,12 @@ test('global and site nested blocks remain individually editable after offline s
    const button = document.querySelector<HTMLButtonElement>('[data-testid="builder-save"]');
    return button?.disabled && button.textContent?.trim() === 'Save' && !document.querySelector('[data-testid="builder-discard"]');
   });
+ };
+ const coldReload = async () => {
+  const previousTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+  await page.goto(page.url());
+  assert.notEqual(await page.evaluate(() => performance.timeOrigin), previousTimeOrigin);
+  await open();
  };
  const pages = () => page.evaluate(async () => {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -85,24 +99,29 @@ test('global and site nested blocks remain individually editable after offline s
    for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true;
    return false;
   }, undefined, { timeout: 90_000 });
-  const cdp = await context.newCDPSession(page); await cdp.send('Network.enable');
-  await context.setOffline(true);
-  await cdp.send('Network.overrideNetworkState', { offline: true, latency: 1, downloadThroughput: 100_000_000, uploadThroughput: 100_000_000, connectionType: 'ethernet' });
+  if (transportOutageFile) {
+   // An isolated fixture can drop the actual HTTP transport. That exercises
+   // service-worker fallback without depending on Chromium's emulation.
+   await writeFile(transportOutageFile, '', { flag: 'wx' });
+   ownsTransportOutage = true;
+  } else {
+   await context.setOffline(true);
+  }
   assert.equal(await page.evaluate(async () => { try { await fetch('/api/root-data?offline-builder-probe', { cache: 'no-store' }); return false; } catch { return true; } }), true);
   for (const scope of ['global', 'site']) {
    await page.goto(base + (scope === 'global' ? '/builder?page=__global__' : '/builder?site=/ode')); await open();
    const frame = await add(null, 'column');
    const text = await add(frame, 'text'); await fillText(scope + ' initial nested text');
-   const button = await add(frame, 'button'); await fillText(scope + ' initial button');
-   const icon = await add(frame, 'button'); await page.getByLabel('Element tag', { exact: true }).fill('span'); await fillText('☆');
-   const input = await add(frame, 'input');
+   const button = await add(frame, 'button', text); await fillText(scope + ' initial button');
+   const icon = await add(frame, 'button', button); await page.getByLabel('Element tag', { exact: true }).fill('span'); await fillText('☆');
+   const input = await add(frame, 'input', icon);
    identities[scope] = { frame, text, button, icon, input };
-   await save(); await page.reload(); await open();
+   await save(); await coldReload();
    // Select siblings independently through the native inspector, not a JSON editor.
    await select(text); assert.equal(await page.getByLabel('Block text', { exact: true }).inputValue(), scope + ' initial nested text'); await fillText(scope + ' edited nested text');
    await select(button); assert.equal(await page.getByLabel('Block text', { exact: true }).inputValue(), scope + ' initial button'); await fillText(scope + ' edited button');
    await select(icon); assert.equal(await page.getByLabel('Block text', { exact: true }).inputValue(), '☆'); await fillText('★');
-   await save(); await page.reload(); await open();
+   await save(); await coldReload();
    for (const [id, expected] of [[text, scope + ' edited nested text'], [button, scope + ' edited button'], [icon, '★']]) {
     await select(id); assert.equal(await page.getByLabel('Block text', { exact: true }).inputValue(), expected);
    }
@@ -142,7 +161,11 @@ test('global and site nested blocks remain individually editable after offline s
    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
    for (const scope of ['global', 'site']) {
     await page.getByText(scope + ' edited nested text', { exact: true }).waitFor();
-    await page.locator(`[data-block-id="${identities[scope].icon}"]`).filter({ hasText: '★' }).first().waitFor();
+    const button = page.getByRole('button', { name: scope + ' edited button', exact: true });
+    // Block IDs are document-scoped. Anchor to this rendered sibling group
+    // because global and site documents can generate the same IDs.
+    const siblings = button.locator('..');
+    await siblings.locator(`[data-block-id="${identities[scope].icon}"]`).filter({ hasText: '★' }).waitFor();
     const assertHitTarget = async (control: any, label: string) => {
      await control.scrollIntoViewIfNeeded();
      const hit = await control.evaluate((el: HTMLElement) => {
@@ -154,12 +177,13 @@ test('global and site nested blocks remain individually editable after offline s
      assert.ok(hit.visible, label + ' visible in viewport'); assert.ok(hit.unobscured, label + ' hit target not covered');
      views.push({ scope, width, control: label, hit });
     };
-    const button = page.getByRole('button', { name: scope + ' edited button', exact: true });
     await assertHitTarget(button, scope + ' composed button'); await button.focus();
     assert.ok(await button.evaluate((el: HTMLElement) => document.activeElement === el));
-    const input = page.locator(`[data-block-id="${identities[scope].input}"] input, input[data-block-id="${identities[scope].input}"]`).first();
+    const inputId = `[data-block-id="${identities[scope].input}"]`;
+    const inputSelector = `:is(${inputId} input, input${inputId})`;
+    const input = siblings.locator(inputSelector);
     await page.keyboard.press('Tab');
-    assert.ok(await input.evaluate((el: HTMLElement) => document.activeElement === el), scope + ' button-to-input keyboard navigation');
+    await siblings.locator(`${inputSelector}:focus`).waitFor({ state: 'visible', timeout: 4000 });
     await assertHitTarget(input, scope + ' composed input');
     await input.fill(scope + ' functional input'); assert.equal(await input.inputValue(), scope + ' functional input');
    }
@@ -173,6 +197,17 @@ test('global and site nested blocks remain individually editable after offline s
  } catch (error) {
   await page.screenshot({ path: resolve(artifacts!, 'failure.png') }).catch(() => {});
   await writeFile(resolve(artifacts!, 'failure.txt'), await page.locator('body').innerText().catch(() => 'Unavailable'));
+  const focus = await page.evaluate(() => {
+   const active = document.activeElement;
+   return { tag: active?.tagName, block: active?.closest('[data-block-id]')?.getAttribute('data-block-id') };
+  }).catch(() => null);
+  await writeFile(resolve(artifacts!, 'partial-verification.json'), JSON.stringify({ checks, identities, views, errors, apiRequests, accountMutations, protectedReads, focus }, null, 2));
   throw error;
- } finally { await context.close(); await browser.close(); }
+ } finally {
+  try {
+   if (transportOutageFile && ownsTransportOutage) await unlink(transportOutageFile);
+  } finally {
+   await context.close(); await browser.close();
+  }
+ }
 });

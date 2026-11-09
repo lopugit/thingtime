@@ -1,0 +1,8 @@
+{
+  "sessionId": "26e6fb16-f1a7-477a-bda5-74a155a0f925",
+  "remainingOwnedContainers": [],
+  "temporaryDerivativeImage": "sha256:0b7bde3b38df250fe68d8495fca49847c4f7d16dcb31873d96b8ce73908e4e72",
+  "derivativeTagRemoved": true,
+  "privateStateRemoved": true,
+  "leaseRemoved": true
+}

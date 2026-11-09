@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -72,6 +73,7 @@ if (!process.env.TT_SYNC_PAUSE_WORKER) {
    await page.waitForFunction(()=>window.pauseFixture.state().task?.active===false);
    await resourceStatus.getByText('Last reported sync CPU: 12% of total CPU capacity.',{exact:true}).waitFor();
    await resourceStatus.getByText(/Saved observation; this is not a current CPU measurement/).waitFor();
+   await enableCurrentPageBuilder(page);
    await resourceStatus.getByRole('button',{name:'Edit layout',exact:true}).click();
    await resourceStatus.locator('[data-block-id="sync-resource-status-cpu"]').click();
    for(const [id,text]of [['sync-resource-status-cpu','Observed: {syncResources.cpu}'],['sync-resource-status-transfers','Concurrency: {syncResources.transfers}']]){
@@ -97,6 +99,7 @@ if (!process.env.TT_SYNC_PAUSE_WORKER) {
    await resources.getByRole('textbox',{name:'CPU target (%)',exact:true}).fill('25');
    const cpu=resources.getByRole('textbox',{name:'CPU target (%)',exact:true});await cpu.fill('101');
    assert.equal(await cpu.inputValue(),'101');assert.equal(await page.getByRole('button',{name:'Save connection',exact:true}).isDisabled(),true);await cpu.fill('25');assert.equal(await page.getByRole('button',{name:'Save connection',exact:true}).isEnabled(),true);
+   await enableCurrentPageBuilder(page);
    await resources.getByRole('button',{name:'Edit layout',exact:true}).click();
    await resources.locator('[data-block-id="resources-title"]').click();
    for(const [id,text]of [['resources-title','My resource limits'],['upload-label','My upload ceiling'],['upload-kbps','Kilobits per second']]){

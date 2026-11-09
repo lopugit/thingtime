@@ -6,6 +6,37 @@ Existing feature `d214a6b5a1965831febd2e5d1f2488ee3f13d1fc` plus fetched main
 `codex/anonymous-local-first` branch and [PR #1000](https://github.com/lopugit/thingtime/pull/1000).
 This is a feature-branch reconciliation, not proof of production acceptance.
 
+## Follow-up integration and hosted foundation
+
+The same branch also incorporates fetched main `f36da5c032251270c0b24a754c61a4e510633c59`,
+including current-page Builder controls. The merge preserves workspace identity
+isolation, the explicit cloud incoming-share path and the existing local UI.
+Full app compilation passes; the draft renderer bytes are unchanged from the
+accepted render below. Independent merge review found no source regression and
+the settings-document suite passed 12 checks.
+
+The canonical hosted `thingtime` MCP now contains an optional anonymous renderer
+adapter. It stays unavailable until a pinned, isolated provider snapshot passes
+the exact-origin preflight and is configured through the existing operator vault.
+Source tests cover effective sandbox policy, admission, cancellation, cleanup,
+canonical hashes, validated PNGs, diagnostics and account-tool refusals. A real
+provider snapshot and a file-returning call in the intended host remain unverified.
+
+The draft regression now supplies the browser/identity context used by incoming
+shares and verifies their explicit cloud scope (52 passed, nine opt-in skips).
+The three import-order errors are fixed. The isolated Linux runtime lock now
+matches the app's bcrypt 6.0.0; five native packaging tests pass. No installed app
+was replaced, and a rebuilt canonical runtime still needs native acceptance.
+
+[Normal importer and nested editing](builder-import/README.md) passed on `e67c4e475f`,
+including offline reload, dependency remapping, three viewport widths and zero
+account writes. Earlier intermittent `/things` offline navigation failures are
+retained with no established root cause. The additional main update also passes
+the [combined global/site browser check](builder-import/current-main/): both
+offline reloads and composed checks at 1440/390/320 pixels. Final full lint has
+zero errors and 359 warnings; the TypeScript ratchet stays at zero, and the
+compiled handler smoke verifies 17 contracts plus safe unconfigured MCP refusal.
+
 ## Accepted local checks
 
 - `corepack pnpm --dir remix run typecheck`: exit 0, no diagnostics.
@@ -47,13 +78,12 @@ network-none and read-only with its existing sandbox, seccomp and cleanup.
 
 ## Remaining acceptance and delivery
 
-- Normal importer round-trip and the corrected combined global/site nested
-  Builder editing fixture on the reconciled source; historical results do not close these.
+- Diagnose the retained intermittent offline navigation failure.
 - Remaining identity/origin/data-plane/Character and media/provider/vault/native
   device acceptance matrix in `docs/local-workspaces.md`.
 - The current one hosted `thingtime` connection advertises 37 tools and no renderer.
   Local SDK resources do not prove a downloadable artifact call from that host.
-  Implement/verify the canonical hosted adapter and its isolated worker boundary;
+  Activate/verify the canonical hosted adapter and its isolated worker boundary;
   do not add another feature-specific MCP or bypass account-tool authentication.
 - Final-head CI, reachable preview functional acceptance, and authorized release
   plus installed-native verification. No production feature acceptance is claimed here.

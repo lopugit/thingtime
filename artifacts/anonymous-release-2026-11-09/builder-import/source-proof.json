@@ -1,0 +1,15 @@
+{
+  "applicationCommit": "e67c4e475fa0aff7b838310dfdcd864063a9f05c",
+  "applicationGitTree": "b141e9292315e4f17e6340cfa5d3cf06b085fd5f",
+  "build": "Retained successful pnpm --dir remix run build; compiled Vercel HTTP handler and filesystem assets, no application rebuild for this fixture.",
+  "backendEntrySha256": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+  "clientShellSha256": "f7f86930ecddadac0565d8e5c5b34f63905a25f0672e0c5002657d21988e9b60",
+  "transferSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "initialSiteFixtureGitBlob": "18db3b86804466a21f1b391ac3c67b5cc636c75b",
+  "executedFixtureSha256": {
+    "siteSource": "d2e9d8cdf553c91e8fe338248d02d3ec7a1b3c1859139ee9e9606e0cb2950b96",
+    "siteStripped": "6956ee1a8b99e342ebb3433c86fc9eecd6cc7dcf72639e6b888ba9a1b43d562c",
+    "import": "5843b4110c55a642492dc21a0e0fa0bb3d5ee688a78aaf0aeffbd986c11d6f5c",
+    "runtimeAdapter": "a8d0cb45d243efc97fe32008555ea2cade9dd7250e71e52b099775b9aa0c685a"
+  }
+}

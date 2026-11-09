@@ -2,6 +2,8 @@
 
 ## Anonymous/local-first main reconciliation — 9 November 2026
 
+- [ ] Build the isolated browser runtime from the same app dependency lock. Run `prepare-native.cjs` against the compiled server and exercise bcrypt hash/compare in Linux; a host binary or mismatched major must fail before a browser is offered for use.
+- [ ] Run the draft submission regression with an incoming share. Its frozen identity reaches publication with the exact actor, origin, data plane and explicit cloud destination; failed or stalled draft saves cannot block normal completion.
 - [ ] Launch the render-only SDK fixture from a restrictive `umask 077`. The copied snapshot remains traversable by its non-root container user, host output stays private, all five resources return, and duplicate viewport input returns a clear error with no artifacts. Preserve network-none, read-only mounts, seccomp and cleanup.
 
 - [ ] Read restored account pages and Actions into the local cache. They stay inert while the server execution hold is active, including after reload and from an existing cache. A verified release at the same content revision enables execution; a late held read cannot undo that release or overwrite pending local edits. Refused Actions create no execution history.
@@ -4319,6 +4321,14 @@ email whose link points at the attacker.
 - [ ] A free-form data crystal with the same `voteKey` cannot squat another
       user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
 
+## Current-page Builder mode
+
+- [ ] On desktop and mobile, verify Settings, Connections, Subspaces and
+      focused layout surfaces default to view mode with no layout editing
+      controls. Toggle **Builder on current page** and check editing, draft
+      recovery, and save/reload. Switch routes and accounts to verify the
+      mode resets while content and permissions remain correct.
+
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
 - [x] 2026-10-19 isolated real API and desktop/390px acceptance: message send/read, saved views/comments, draft retention, live permission revocation, searchable moderator embeds and independent Builder control/repeated-title edits survive reload. See [PR 1045 evidence and remaining production gates](PRs/1045-subspace-messages-views-and-moderated-embeds.md).
@@ -4336,6 +4346,12 @@ email whose link points at the attacker.
       default presentation or horizontal overflow. Edit the Component's nested
       text block in Builder independently, save/reload and verify both placements.
 - [ ] Select nested view/embed control labels independently in Builder, edit/save/reload, and confirm the real controls still act on the correct subspace.
+- [ ] On desktop and mobile, open a subspace and verify Posts/Messages plus both
+      embed regions render without **Edit layout**. In the drawer, toggle
+      **Builder on current page** on and off, including while editing. Check
+      that view mode shows the saved layout while unsaved changes remain
+      available on reentry. Reload into view mode and verify that moderation
+      and embedded Thing permissions stay enforced.
 
 
 - [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.

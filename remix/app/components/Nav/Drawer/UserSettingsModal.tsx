@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay } from '@chakra-ui/react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DRAWER_MODAL_Z, useDrawer } from './useDrawer';
+import { CurrentPageBuilderToggle } from '../../Builder/CurrentPageBuilder';
 import { SettingsContent } from '~/components/Settings/SettingsContent';
 import { resolveSettingsTab, settingsTabHref, type SettingsTab } from '~/components/Settings/settingsTabs';
 
@@ -59,6 +60,7 @@ export const UserSettingsModal = () => {
 				<ModalHeader pr={12}>
 					<Flex align="center" gap={3} wrap="wrap">
 						<Heading size="md">Settings</Heading>
+						<CurrentPageBuilderToggle />
 						<Button
 							size="xs"
 							variant="link"

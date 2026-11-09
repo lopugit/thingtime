@@ -1,8 +1,9 @@
 import { deleteAlgorithm, getOwnedAlgorithmTransfer, importAlgorithmTransfer } from '../algorithms/algorithms';
 import { validateTransferAlgorithm } from '../../../utils/thingTransfer/algorithm';
-export { isTransferAlgorithm, validateTransferAlgorithm } from '../../../utils/thingTransfer/algorithm';
 import type { JsonValue, TransferThing } from '../../../utils/thingTransfer/format';
 import { readManagedContentFolder } from './managedPlacement';
+
+export { isTransferAlgorithm, validateTransferAlgorithm } from '../../../utils/thingTransfer/algorithm';
 
 export const readTransferAlgorithm = async (ownerId: string | undefined, id: string): Promise<TransferThing | null> => {
   if (!ownerId) return null;

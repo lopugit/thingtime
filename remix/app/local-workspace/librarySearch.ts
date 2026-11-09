@@ -1,13 +1,13 @@
 import { isLocalLibraryThing, type LocalThing } from './things';
 import { localSearchConditionMatcher } from './structuredSearch';
 import { WorkspaceError } from './storage';
+import { localSearchText } from './searchText';
 
 export type LibrarySearchQuery = { q?: unknown; thingtime?: unknown; cursor?: unknown; limit?: unknown; conditions?: unknown; mode?: unknown };
 const invalid = (message: string): never => { throw new WorkspaceError('INVALID_LOCAL_SEARCH', message); };
 const fold = (text: string) => text.normalize('NFKC').toLowerCase();
 
 export { localSearchText } from './searchText';
-import { localSearchText } from './searchText';
 
 /** A library-only literal text search. Public/structured discovery retains its
  * own API contract; this helper grants no identity, ACL or remote authority. */

@@ -1,5 +1,18 @@
 # API endpoints and capabilities
 
+## Hosted anonymous draft render and export
+
+The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
+2.2.0. Exact-origin ChatGPT discovery advertises `chatgpt.render-export`
+1.0.0 and `thingtime_render_and_export` only with the verified snapshot
+configuration. `plugin.ts` dispatches only this exact tool without account
+resolution; `hostedRender.server.ts` enforces the canonical in-bundle validator,
+distributed admission and nonpersistent deny-all worker lifecycle. Keep the
+HTTP resource and local stdio formats on the shared renderer contract in
+`MCP/src/renderContract.ts`. Run `test:chatgpt`, `test:api-capabilities`, the
+built MCP manifest smoke and the [operator preflight and deployed
+acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
+
 ## Anonymous/local-first contracts after main reconciliation
 
 Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.

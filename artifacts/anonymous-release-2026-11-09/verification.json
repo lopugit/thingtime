@@ -34,5 +34,61 @@
   },
   "hostedRenderAvailable": false,
   "productionAccepted": false,
-  "notes": "Targeted suite counts overlap; skipped cases are not passes."
+  "notes": "Targeted suite counts overlap; skipped cases are not passes.",
+  "followup": {
+    "mainParent": "f36da5c032251270c0b24a754c61a4e510633c59",
+    "fullBuild": {
+      "exit": 0
+    },
+    "drafts": {
+      "pass": 52,
+      "skip": 9,
+      "fail": 0
+    },
+    "settingsDocuments": {
+      "pass": 12,
+      "fail": 0
+    },
+    "nativePackaging": {
+      "pass": 5,
+      "fail": 0
+    },
+    "hostedConnector": {
+      "pass": 54,
+      "fail": 0
+    },
+    "mcp": {
+      "pass": 63,
+      "skip": 3,
+      "fail": 0
+    },
+    "apiCapabilities": {
+      "pass": 184,
+      "fail": 0
+    },
+    "hostedAdapterImplemented": true,
+    "hostedProviderPreflight": false,
+    "currentMainBrowserAcceptance": "passed",
+    "intermittentOfflineNavigation": "unresolved",
+    "typecheck": {
+      "exit": 0,
+      "diagnostics": 0
+    },
+    "typecheckRatchet": {
+      "exit": 0,
+      "diagnostics": 0,
+      "baseline": 0
+    },
+    "fullLint": {
+      "exit": 0,
+      "errors": 0,
+      "warnings": 359
+    },
+    "compiledManifest": {
+      "contracts": 17,
+      "exit": 0
+    },
+    "currentMainBrowserEvidence": "builder-import/current-main",
+    "draftRendererSha256": "ca0f7c236cba1bad9a64ca1214f68bb8d3ad26c5be1d4dae7fca5a30ce9b2a2b"
+  }
 }

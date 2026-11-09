@@ -1,0 +1,643 @@
+{
+  "checks": [
+    "global: native nested text/button/icon independently edited and saved through two offline reloads",
+    "site: native nested text/button/icon independently edited and saved through two offline reloads",
+    "native /ode renders both saved scopes with button-to-input keyboard navigation and editable live inputs at desktop/390/320px; no Action execution or input-value persistence is claimed"
+  ],
+  "identities": {
+    "global": {
+      "frame": "box-1",
+      "text": "text-2",
+      "button": "button-3",
+      "icon": "button-4",
+      "input": "input-5"
+    },
+    "site": {
+      "frame": "box-1",
+      "text": "text-2",
+      "button": "button-3",
+      "icon": "button-4",
+      "input": "input-5"
+    }
+  },
+  "views": [
+    {
+      "scope": "global",
+      "width": 1440,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 1137,
+          "right": 1424,
+          "top": 391,
+          "bottom": 423
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "global",
+      "width": 390,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 87,
+          "right": 374,
+          "top": 391,
+          "bottom": 423
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "global",
+      "width": 320,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 73,
+          "right": 304,
+          "top": 391.5,
+          "bottom": 423.5
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "site",
+      "width": 1440,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 1137,
+          "right": 1424,
+          "top": 391,
+          "bottom": 423
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "site",
+      "width": 390,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 87,
+          "right": 374,
+          "top": 391,
+          "bottom": 423
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "site",
+      "width": 320,
+      "focus": {
+        "tag": "INPUT",
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 73,
+          "right": 304,
+          "top": 391.5,
+          "bottom": 423.5
+        }
+      },
+      "overflow": {
+        "document": false,
+        "containers": []
+      }
+    },
+    {
+      "scope": "global",
+      "width": 1440,
+      "control": "global composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 240,
+          "right": 1200,
+          "top": 110.390625,
+          "bottom": 134.390625
+        }
+      }
+    },
+    {
+      "scope": "global",
+      "width": 1440,
+      "control": "global composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 240,
+          "right": 1200,
+          "top": 190.390625,
+          "bottom": 214.390625
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 1440,
+      "control": "site composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 396,
+          "right": 1044,
+          "top": 487.78125,
+          "bottom": 511.78125
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 1440,
+      "control": "site composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 396,
+          "right": 1044,
+          "top": 567.78125,
+          "bottom": 591.78125
+        }
+      }
+    },
+    {
+      "scope": "native /ode composition",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "scope": "global",
+      "width": 390,
+      "control": "global composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 374,
+          "top": 110.390625,
+          "bottom": 134.390625
+        }
+      }
+    },
+    {
+      "scope": "global",
+      "width": 390,
+      "control": "global composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 374,
+          "top": 190.390625,
+          "bottom": 214.390625
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 390,
+      "control": "site composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 374,
+          "top": 409.78125,
+          "bottom": 433.78125
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 390,
+      "control": "site composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 374,
+          "top": 489.78125,
+          "bottom": 513.78125
+        }
+      }
+    },
+    {
+      "scope": "native /ode composition",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "scope": "global",
+      "width": 320,
+      "control": "global composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 304,
+          "top": 110.390625,
+          "bottom": 134.390625
+        }
+      }
+    },
+    {
+      "scope": "global",
+      "width": 320,
+      "control": "global composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 304,
+          "top": 190.390625,
+          "bottom": 214.390625
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 320,
+      "control": "site composed button",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 304,
+          "top": 409.78125,
+          "bottom": 433.78125
+        }
+      }
+    },
+    {
+      "scope": "site",
+      "width": 320,
+      "control": "site composed input",
+      "hit": {
+        "visible": true,
+        "unobscured": true,
+        "rect": {
+          "left": 16,
+          "right": 304,
+          "top": 489.78125,
+          "bottom": 513.78125
+        }
+      }
+    },
+    {
+      "scope": "native /ode composition",
+      "width": 320,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "apiRequests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/components/browse"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    }
+  ],
+  "accountMutations": [],
+  "protectedReads": []
+}

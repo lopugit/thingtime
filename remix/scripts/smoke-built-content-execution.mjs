@@ -36,7 +36,8 @@ if (process.argv[2] !== '--worker') {
 		['attachment-link', 'attachments/link', '1.3.0', ['POST']],
 		['attachment-upload-abort', 'attachments/uploads/abort', '1.3.0', ['POST']],
 		['attachment-annotate', 'attachments/annotate', '1.4.0', ['POST']],
-		['attachment-delete', 'attachments/delete', '1.8.0', ['POST']]
+		['attachment-delete', 'attachments/delete', '1.8.0', ['POST']],
+		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.2.0', ['POST']]
 	];
 	const readJson = async path => {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
@@ -60,5 +61,23 @@ if (process.argv[2] !== '--worker') {
 		assert.equal(body.docs.id, id, endpoint);
 		assert.equal(body.docs.contractVersion, version, endpoint);
 	}
+	const connector = await readJson('/.well-known/thingtime-chatgpt-capabilities.json');
+	assert.equal(connector.origin, 'https://thingtime.test');
+	assert.equal(connector.features['chatgpt.mcp'], '2.1.0');
+	assert.equal(connector.features['chatgpt.render-export'], undefined, 'An unconfigured build must not advertise rendering');
+	const mcp = (method, params) => app.fetch(new Request('https://thingtime.test/api/v1/integrations/chatgpt/mcp', {
+		method: 'POST', headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+	}), { waitUntil() {} });
+	const list = await mcp('tools/list', {});
+	assert.equal(list.status, 200);
+	const tools = (await list.json()).result.tools;
+	assert.ok(tools.some(tool => tool.name === 'login_thingtime'));
+	assert.ok(!tools.some(tool => tool.name === 'thingtime_render_and_export'));
+	const unavailable = await mcp('tools/call', { name: 'thingtime_render_and_export', arguments: { content: '{}' } });
+	assert.equal(unavailable.status, 200);
+	assert.equal(unavailable.headers.get('cache-control'), 'no-store');
+	assert.equal((await unavailable.json()).result.structuredContent.code, 'RENDER_UNAVAILABLE');
+	assert.equal((await mcp('tools/call', { name: 'get_thingtime_thing', arguments: {} })).status, 401);
 	console.log(`PASS: compiled Vercel manifests and docs agree on ${contracts.length} content execution, restore, attachment and transfer contracts.`);
 }

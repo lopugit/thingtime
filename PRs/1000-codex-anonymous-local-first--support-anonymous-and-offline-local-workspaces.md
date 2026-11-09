@@ -4,6 +4,16 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Main reconciliation — 2026-11-09
 
+Follow-up: merged main through `f36da5c032`, retaining the local workspace provider
+around current-page Builder controls and the cloud-only incoming share path.
+Full app build passes. Fixed the CI draft harness's missing browser/identity
+context, three lint import-order errors, and the isolated runtime's bcrypt major
+mismatch. The canonical hosted MCP now includes the optional render adapter,
+effective sandbox checks, distributed admission and validated embedded artifacts.
+It remains disabled until provider snapshot preflight, exact-origin configuration
+and real host artifact acceptance succeed. [Current evidence](../artifacts/anonymous-release-2026-11-09/README.md)
+separates the e67 importer/Builder passes, newer source checks and remaining gates.
+
 Reconciled feature `d214a6b5` with fetched main `c0d1ae9c`, preserving independent
 post/draft/file completion and adopting main's restore execution restrictions,
 Builder/map behavior and uncapped ordinary Timeline/transfer contracts. Cached

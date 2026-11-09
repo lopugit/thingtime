@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -189,6 +190,7 @@ try {
 	await page.getByText('Handoff cancelled.').waitFor();
 	assert.deepEqual(calls, ['inspect', 'inspect-label', 'inspect-label', 'direct', 'inspect-label', 'direct', 'inspect-label', 'inspect-label', 'inspect-label', 'direct', 'approve', 'revoke']);
 
+	await enableCurrentPageBuilder(page);
 	await page.getByRole('button', { name: 'Edit import layout' }).click();
 	await page.getByRole('button', { name: 'Open Builder inspector' }).click();
 

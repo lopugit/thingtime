@@ -1,0 +1,124 @@
+[
+  {
+    "thingtime": [
+      "webpage",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Global blocks",
+      "pageKey": "site-global",
+      "version": 2,
+      "blocks": [
+        {
+          "id": "box-1",
+          "type": "container",
+          "direction": "column",
+          "gap": 4,
+          "children": [
+            {
+              "id": "text-2",
+              "type": "text",
+              "text": "global edited nested text",
+              "style": "body"
+            },
+            {
+              "id": "button-3",
+              "type": "element",
+              "tag": "button",
+              "text": "global edited button",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "button-4",
+              "type": "element",
+              "tag": "span",
+              "text": "★",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "input-5",
+              "type": "element",
+              "tag": "input",
+              "props": {
+                "name": "value",
+                "placeholder": "Enter a value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "id": "local-a07d1892-e866-4309-b0b7-fb4bc3798643",
+    "createdAt": "2026-11-09T12:24:57.275Z",
+    "updatedAt": "2026-11-09T12:25:00.013Z",
+    "revision": 2
+  },
+  {
+    "thingtime": [
+      "webpage",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Ode",
+      "pageKey": "route-ode",
+      "siteRoute": "/ode",
+      "version": 2,
+      "blocks": [
+        {
+          "id": "native-ode-poem",
+          "type": "native",
+          "native": "ode-poem"
+        },
+        {
+          "id": "box-1",
+          "type": "container",
+          "direction": "column",
+          "gap": 4,
+          "children": [
+            {
+              "id": "text-2",
+              "type": "text",
+              "text": "site edited nested text",
+              "style": "body"
+            },
+            {
+              "id": "button-3",
+              "type": "element",
+              "tag": "button",
+              "text": "site edited button",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "button-4",
+              "type": "element",
+              "tag": "span",
+              "text": "★",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "input-5",
+              "type": "element",
+              "tag": "input",
+              "props": {
+                "name": "value",
+                "placeholder": "Enter a value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "id": "local-d9927a92-74f3-4775-9e1a-3c8c4938410a",
+    "createdAt": "2026-11-09T12:25:07.715Z",
+    "updatedAt": "2026-11-09T12:25:10.169Z",
+    "revision": 2
+  }
+]

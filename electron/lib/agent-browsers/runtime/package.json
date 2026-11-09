@@ -5,7 +5,7 @@
   "dependencies": {
     "@puppeteer/browsers": "3.2.5",
     "@resvg/resvg-js": "2.6.2",
-    "bcrypt": "5.1.1",
+    "bcrypt": "6.0.0",
     "cbor-extract": "2.2.2",
     "mongodb": "6.21.0",
     "playwright-core": "1.64.0",

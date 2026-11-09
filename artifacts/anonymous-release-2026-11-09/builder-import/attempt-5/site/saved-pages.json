@@ -1,0 +1,124 @@
+[
+  {
+    "thingtime": [
+      "webpage",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Ode",
+      "pageKey": "route-ode",
+      "siteRoute": "/ode",
+      "version": 2,
+      "blocks": [
+        {
+          "id": "native-ode-poem",
+          "type": "native",
+          "native": "ode-poem"
+        },
+        {
+          "id": "box-1",
+          "type": "container",
+          "direction": "column",
+          "gap": 4,
+          "children": [
+            {
+              "id": "text-2",
+              "type": "text",
+              "text": "site edited nested text",
+              "style": "body"
+            },
+            {
+              "id": "button-3",
+              "type": "element",
+              "tag": "button",
+              "text": "site edited button",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "button-4",
+              "type": "element",
+              "tag": "span",
+              "text": "★",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "input-5",
+              "type": "element",
+              "tag": "input",
+              "props": {
+                "name": "value",
+                "placeholder": "Enter a value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "id": "local-19d770e4-6c28-49cc-a623-3b2ed955ec6a",
+    "createdAt": "2026-11-09T12:23:42.750Z",
+    "updatedAt": "2026-11-09T12:23:45.455Z",
+    "revision": 2
+  },
+  {
+    "thingtime": [
+      "webpage",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Global blocks",
+      "pageKey": "site-global",
+      "version": 2,
+      "blocks": [
+        {
+          "id": "box-1",
+          "type": "container",
+          "direction": "column",
+          "gap": 4,
+          "children": [
+            {
+              "id": "text-2",
+              "type": "text",
+              "text": "global edited nested text",
+              "style": "body"
+            },
+            {
+              "id": "button-3",
+              "type": "element",
+              "tag": "button",
+              "text": "global edited button",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "button-4",
+              "type": "element",
+              "tag": "span",
+              "text": "★",
+              "props": {
+                "type": "button"
+              }
+            },
+            {
+              "id": "input-5",
+              "type": "element",
+              "tag": "input",
+              "props": {
+                "name": "value",
+                "placeholder": "Enter a value"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "id": "local-eebb8996-2967-4016-8d22-1c622cc6f0d7",
+    "createdAt": "2026-11-09T12:23:31.349Z",
+    "updatedAt": "2026-11-09T12:23:33.945Z",
+    "revision": 2
+  }
+]

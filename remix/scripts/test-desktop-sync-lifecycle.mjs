@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -207,6 +208,7 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
 		assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans), 0);
 		await page.getByRole('button', { name: 'Reopen Files screen', exact: true }).click();
 		const automationLayout = page.locator('[data-settings-document="file-sync-automation"]');
+		await enableCurrentPageBuilder(page);
 		await automationLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.locator('[data-block-id="automation-title"]').click();
 		await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Automatic folder sync');

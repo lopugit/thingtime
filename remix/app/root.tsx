@@ -11,6 +11,7 @@ import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
+import { Box } from '@chakra-ui/react';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
 import { pageTitle } from './utils/pageTitle';
@@ -28,6 +29,7 @@ import { SharePreviewHost } from './components/Sharing/SharePreviewHost';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { ThingReplicaSyncHost } from './storage/ThingReplicaSyncHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
+import { CurrentPageBuilderProvider, CurrentPageBuilderToggle } from './components/Builder/CurrentPageBuilder';
 import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
@@ -155,6 +157,7 @@ export default function App() {
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
       <WorkspaceThingtimeProvider>
+        <CurrentPageBuilderProvider>
         <ThingDraftsProvider>
          <TimelineProvider>
          <LidarScanProvider ownerId={nativeOwner} generation={identity.generation}>
@@ -179,14 +182,20 @@ export default function App() {
         {isAuthorizePopup ? null : <Nav />}
         <div id="lopuPageScroll">
         {isAuthorizePopup ? (
-          pathname === '/share' ? <LocalApiView.Provider value={incomingShareApiView}><Outlet /></LocalApiView.Provider> : <Outlet />
+          <>
+            {pathname === '/passwords/provider' && nativeOwner ? (
+              <Box display="flex" justifyContent="flex-end" px={4} pt={2}>
+                <CurrentPageBuilderToggle />
+              </Box>
+            ) : null}
+            {pathname === '/share' ? <LocalApiView.Provider value={incomingShareApiView}><Outlet /></LocalApiView.Provider> : <Outlet />}
+          </>
         ) : (
           <Main>
             <AccountSyncStatus />
             <LopuInstructionsSync />
             <LocalMediaDiagnostics />
-            {/* every page is a block-based site: per-route + global blocks
-                render around the native screen; the ✏️ pill enters edit mode */}
+            {/* Per-route and global blocks render around the native screen. */}
             <SiteBlocksHost>
               <CharacterContentRoute><Outlet /></CharacterContentRoute>
             </SiteBlocksHost>
@@ -210,6 +219,7 @@ export default function App() {
          </LidarScanProvider>
          </TimelineProvider>
         </ThingDraftsProvider>
+        </CurrentPageBuilderProvider>
       </WorkspaceThingtimeProvider>
       <ScrollRestoration />
       {/* Only Vercel deployments serve the insights script. Local/fork and

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { renderViewports, type RenderInput, type RenderOutput } from './renderExport.js';
+import { RENDER_OUTPUT_MAX_BYTES, renderViewports, type RenderInput, type RenderOutput } from './renderContract.js';
 
 process.once('message', async (input: RenderInput) => {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -77,7 +77,7 @@ process.once('message', async (input: RenderInput) => {
       const save = async (name: string, clip?: { x: number; y: number; width: number; height: number }) => {
         const png = await page.screenshot({ type: 'png', fullPage: false, ...(clip ? { clip } : {}) });
         outputBytes += png.length * 2; // PNG appears as both image and embedded resource.
-        if (outputBytes > 6 * 1024 * 1024) throw new Error('Output limit exceeded (6 MiB before base64)');
+        if (outputBytes > RENDER_OUTPUT_MAX_BYTES) throw new Error('Output limit exceeded (6 MiB before base64)');
         result.images.push({ name, data: png.toString('base64'), width: png.readUInt32BE(16), height: png.readUInt32BE(20) });
       };
       await save(`viewport-${viewport.width}x${viewport.height}.png`);

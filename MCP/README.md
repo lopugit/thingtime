@@ -117,6 +117,12 @@ the supplied extractor with this shared server, select it with
 tool call or host artifact delivery. See the unified-host checklist in
 [`TESTING.md`](../TESTING.md#unified-local-mcp-draft-rendering--26-october-2026).
 
+The optional hosted `thingtime` capability uses the same tool and input
+contract. When its exact origin advertises `chatgpt.render-export` 1.0.0, it
+returns embedded resources once with per-file integrity metadata and no
+download URL. See the [hosted runbook](../docs/no-login-draft-preview.md#hosted-thingtime-mcp)
+for the isolated snapshot setup and acceptance boundary.
+
 Set `crop: { enabled: false }` to export only the canonical JSON and viewport
 PNGs. The response's `cropEnabled` boolean determines whether `card.png` is
 included; `viewports[].crop` retains measured geometry for diagnostics even

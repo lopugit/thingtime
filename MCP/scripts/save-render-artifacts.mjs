@@ -4,7 +4,8 @@ import { open, mkdir, writeFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { inflateSync } from 'node:zlib';
+import { checkRendererPng } from '../src/pngArtifact.mjs';
+export { crc32 } from '../src/pngArtifact.mjs';
 
 export const MAX_INPUT_BYTES = 64 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
@@ -12,39 +13,6 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function requireThat(condition, message) { if (!condition) throw new Error(message); }
 function parseJson(value) {
   try { return JSON.parse(value); } catch { throw new Error('Invalid JSON (raw input withheld)'); }
-}
-export function crc32(bytes) {
-  let crc = 0xffffffff;
-  for (const byte of bytes) { crc ^= byte; for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-function checkPng(bytes) {
-  requireThat(bytes.length >= 45 && bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')), 'Malformed PNG signature');
-  let offset = 8, width, height, channels, ended = false;
-  const compressed = [];
-  while (offset < bytes.length) {
-    requireThat(offset + 12 <= bytes.length, 'Truncated PNG chunk');
-    const length = bytes.readUInt32BE(offset), end = offset + 12 + length;
-    requireThat(end <= bytes.length, 'Truncated PNG chunk');
-    const type = bytes.toString('ascii', offset + 4, offset + 8);
-    requireThat(crc32(bytes.subarray(offset + 4, end - 4)) === bytes.readUInt32BE(end - 4), 'PNG checksum mismatch');
-    if (offset === 8) {
-      requireThat(type === 'IHDR' && length === 13, 'Missing PNG header');
-      width = bytes.readUInt32BE(offset + 8); height = bytes.readUInt32BE(offset + 12);
-      const depth = bytes[offset + 16], color = bytes[offset + 17];
-      requireThat(width > 0 && width <= 1920 && height > 0 && height <= 1440 && depth === 8 && [2, 6].includes(color) && bytes.subarray(offset + 18, offset + 21).every(x => x === 0), 'Unsupported renderer PNG header');
-      channels = color === 6 ? 4 : 3;
-    } else requireThat(type !== 'IHDR', 'Duplicate PNG header');
-    if (type === 'IDAT') compressed.push(bytes.subarray(offset + 8, end - 4));
-    if (type === 'IEND') { requireThat(length === 0 && end === bytes.length, 'Invalid PNG end'); ended = true; }
-    offset = end;
-  }
-  requireThat(ended && compressed.length > 0, 'Incomplete PNG');
-  const expected = height * (1 + width * channels);
-  const pixels = inflateSync(Buffer.concat(compressed), { maxOutputLength: expected });
-  requireThat(pixels.length === expected, 'Incomplete PNG pixels');
-  for (let row = 0; row < height; row++) requireThat(pixels[row * (1 + width * channels)] <= 4, 'Invalid PNG filter');
-  return { width, height };
 }
 function decode64(value) {
   requireThat(typeof value === 'string' && value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value), 'Invalid base64');
@@ -81,6 +49,12 @@ export function decodeRenderResult(result, provenance) {
   // Older workers only advertised crop geometry. New workers explicitly say
   // whether a card was requested; geometry remains useful even without a card.
   const cropEnabled = metadata.cropEnabled ?? !!metadata.viewports[0].crop;
+  const resourceOnly = metadata.delivery === 'embedded-resources';
+  if (resourceOnly) {
+    requireThat(Array.isArray(metadata.artifactFiles) && metadata.artifactFiles.length === metadata.artifacts.length &&
+      new Set(metadata.artifactFiles.map(file => file?.name)).size === metadata.artifacts.length &&
+      result.content.every(item => item.type === 'text' || item.type === 'resource'), 'Invalid embedded artifact manifest');
+  }
   requireThat(!cropEnabled || !!metadata.viewports[0].crop, 'Missing crop geometry');
   const expectedNames = ['thingtime-draft.json', ...metadata.viewports.map(v => `viewport-${v.width}x${v.height}.png`), ...(cropEnabled ? ['card.png'] : [])];
   requireThat(new Set(expectedNames).size === expectedNames.length && expectedNames.length === metadata.artifacts.length && expectedNames.every(name => metadata.artifacts.includes(name)), 'Incomplete artifact manifest');
@@ -104,15 +78,22 @@ export function decodeRenderResult(result, provenance) {
     } else {
       requireThat(resource.mimeType === 'image/png' && resource.text === undefined, 'Invalid PNG resource');
       bytes = decode64(resource.blob);
-      dimensions = checkPng(bytes);
+      dimensions = checkRendererPng(bytes);
       const viewport = name === 'card.png' ? metadata.viewports[0]?.crop : metadata.viewports.find(v => name === `viewport-${v.width}x${v.height}.png`);
       requireThat(viewport && dimensions.width === Math.round(viewport.width) && dimensions.height === Math.round(viewport.height) && dimensions.width > 0 && dimensions.width <= 1920 && dimensions.height > 0 && dimensions.height <= 1440, 'PNG dimensions mismatch');
-      requireThat(result.content.some(c => c.type === 'image' && c.mimeType === 'image/png' && c.data === resource.blob), 'PNG image/resource mismatch');
+      if (!resourceOnly) requireThat(result.content.some(c => c.type === 'image' && c.mimeType === 'image/png' && c.data === resource.blob), 'PNG image/resource mismatch');
     }
     total += bytes.length;
     requireThat(total <= MAX_OUTPUT_BYTES, 'Artifact output limit exceeded');
+    const sha256 = hash(bytes);
+    if (resourceOnly) {
+      const descriptor = metadata.artifactFiles.find(file => file?.name === name);
+      requireThat(descriptor?.bytes === bytes.length && descriptor.sha256 === sha256 &&
+        (dimensions ? descriptor.width === dimensions.width && descriptor.height === dimensions.height
+          : descriptor.width === undefined && descriptor.height === undefined), 'Embedded artifact descriptor mismatch');
+    }
     files.set(name, bytes);
-    checks.push({ name, bytes: bytes.length, sha256: hash(bytes), ...dimensions });
+    checks.push({ name, bytes: bytes.length, sha256, ...dimensions });
   }
   requireThat(files.has('thingtime-draft.json') && metadata.artifacts.every(name => files.has(name)), 'Incomplete artifact set');
   return { files, verification: { ...provenance, tool: 'thingtime_render_and_export', metadata, artifacts: checks } };
@@ -149,10 +130,12 @@ async function saveDecodedArtifacts(decoded, outputPath) {
   return decoded.verification;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+async function cli() {
   try {
     requireThat([4, 5].includes(process.argv.length), 'Usage: node MCP/scripts/save-render-artifacts.mjs PRIVATE_EVENTS.jsonl NEW_OUTPUT_DIRECTORY [SERVER_NAME]');
     const result = await saveRenderArtifacts(process.argv[2], process.argv[3], process.argv[4]);
     console.log(`Verified and saved ${result.artifacts.length} artifacts in ${resolve(process.argv[3])}`);
   } catch (error) { console.error(`Artifact extraction failed: ${error.message}`); process.exitCode = 1; }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) void cli();

@@ -20,7 +20,7 @@ export type TransferSpeedTrackersProps = {
  accountTransport?: SettingsDocumentHostProps['accountTransport'];
 };
 export function TransferSpeedTrackers(props: TransferSpeedTrackersProps) {
- return <SettingsDocumentHost documentKey="file-sync-speed-trackers" defaultDocument={transferSpeedBlocks} scopeKey={props.scopeKey} title="Transfer speed trackers" accountTransport={props.accountTransport}>
+ return <SettingsDocumentHost previewRuntimeLayoutDraft documentKey="file-sync-speed-trackers" defaultDocument={transferSpeedBlocks} scopeKey={props.scopeKey} title="Transfer speed trackers" accountTransport={props.accountTransport}>
   {document => <TrackerDocument key={props.scopeKey} {...props} document={document} />}
  </SettingsDocumentHost>;
 }

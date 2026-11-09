@@ -24,9 +24,10 @@ Verified against main `b9ffa847e64f667a74a91070a39ae51d0ceebdbc`:
   along with `validateThingtimeCrystal`, the component argument resolver,
   `HtmlThingRenderer` and `WebpageBlocksRenderer`. This is an additional isolated
   host for those primitives, not a new Thing format or an HTML imitation.
-- `MCP/src/server.ts` already provides stdio MCP. The hosted ChatGPT integration
-  keeps account tools protected and its existing anonymous login bootstrap.
-  This feature adds a local stdio tool; it does not weaken hosted OAuth.
+- `MCP/src/server.ts` provides stdio MCP. The hosted ChatGPT integration
+  uses the same `thingtime_render_and_export` tool name and native renderer.
+  Its optional anonymous path reads caller content only. Account tools,
+  stored resources and the existing host-native login keep their OAuth rules.
 
 The earlier shared design history and offline references are not proof of an
 import or render. The committed acceptance fixture is validated by current
@@ -338,11 +339,122 @@ contains per-file hashes and render metadata, never the raw event stream.
 node --test MCP/test/save-render-artifacts.test.mjs
 ```
 
-A web-only ChatGPT host that cannot launch stdio servers is **not connected by
-this change**. It needs a separately approved hosted MCP connector and artifact
-transport, or a local host bridge supporting stdio and inline-resource saving.
-An ordinary HTTP URL alone does not solve that connection. This PR neither
-installs a connector into an existing host nor deploys a remote server.
+## Hosted Thingtime MCP
+
+Use the existing **Thingtime** Streamable HTTP MCP at
+`https://<selected-origin>/api/v1/integrations/chatgpt/mcp`. The host should
+negotiate `chatgpt.render-export` 1.x (minimum 1.0.0) at that origin's
+`/.well-known/thingtime-chatgpt-capabilities.json` and confirm
+`thingtime_render_and_export` in `tools/list`. The tool has a `noauth`
+security scheme. No second connector, Docker socket, account session or
+login is required for rendering. Absence from either catalogue means the
+selected origin cannot render; the server refuses direct calls to the
+unavailable tool without launching a job.
+
+Send the same `content`, optional `root`, `viewports` and `crop` as local
+stdio using a JSON-RPC `tools/call` request with `Content-Type: application/json`.
+The gateway runs the canonical dependency validator before admitting a job,
+then compares the returned draft hash with its own validated result. Only the
+isolated worker renders pixels. Successful responses include the canonical
+`thingtime-draft.json`, one PNG per viewport, and optional `card.png` as
+embedded MCP file resources; `artifactFiles` carries per-file byte counts,
+SHA-256 and PNG dimensions. Save the resource bytes with the host's file
+support or the existing artifact extractor. No retrieval URL, account state,
+public upload, or server artifact store is created. The response is
+`no-store`. HTTP delivers the PNG bytes once, unlike the local image plus
+resource format. The full JSON-RPC reply is limited to 4,400,000 bytes to fit
+the [Vercel response limit](https://vercel.com/docs/functions/limitations).
+Errors contain no partial files.
+
+### Runtime activation and acceptance
+
+The source adapter is default-off. It does not deploy a worker, create a
+provider resource, or install a connector. To activate an authorized origin:
+
+1. Build the canonical draft assets and MCP distribution as above. Stage
+   only the renderer files in a new private context, then build the pinned
+   Ubuntu/Playwright image with
+   [`hosted-render.Dockerfile`](../MCP/scripts/hosted-render.Dockerfile):
+
+   ```sh
+   render_context=$(mktemp -d)
+   mkdir -p "$render_context/MCP" "$render_context/remix/dist"
+   cp MCP/package.json MCP/package-lock.json "$render_context/MCP/"
+   cp -R MCP/dist "$render_context/MCP/dist"
+   cp -R remix/dist/draft-preview "$render_context/remix/dist/draft-preview"
+   shasum -a 256 "$render_context/remix/dist/draft-preview/runner.js"
+   docker buildx build --platform linux/amd64 --load --tag thingtime-hosted-render:preflight \
+     --file MCP/scripts/hosted-render.Dockerfile "$render_context"
+   ```
+
+   Push that exact image to the authorized project's
+   [Vercel Container Registry](https://vercel.com/kb/guide/docker#store-images-in-vercel-container-registry)
+   only when provisioning is authorized. Pin the returned OCI digest
+   (`vcr.vercel.com/<team>/<project>/<repository>@sha256:<digest>`); do
+   not activate a mutable tag. With the project's supported identity,
+   use the already installed Sandbox SDK to create the separate user
+   and immutable snapshot from that image. For example, run this
+   snippet from `remix/` with `node --input-type=module`; supply the
+   pinned image through `TT_HOSTED_RENDER_IMAGE`:
+
+   ```js
+   import { Sandbox } from '@vercel/sandbox';
+   const image = process.env.TT_HOSTED_RENDER_IMAGE;
+   if (!/^vcr\.vercel\.com\/[^@]+@sha256:[a-f0-9]{64}$/.test(image ?? '')) {
+     throw new Error('Pin the exact VCR image digest.');
+   }
+   const vm = await Sandbox.create({
+     image, ports: [], env: {}, networkPolicy: 'deny-all',
+     persistent: false, timeout: 120_000, resources: { vcpus: 1 }
+   });
+   let snapshot;
+   try {
+     await vm.createUser('thingtime-renderer');
+     snapshot = await vm.snapshot({ expiration: 30 * 24 * 60 * 60 * 1000 });
+   } finally {
+     await vm.delete();
+   }
+   console.log(snapshot.snapshotId);
+   ```
+
+   The snapshot must contain no prior caller bytes, credentials, sudo
+   privilege for the renderer user, or other workloads. Use the exact
+   `snap_…` ID and the staged `runner.js` SHA-256 for preflight.
+2. With the authorized Vercel project identity and quota, from `remix/` run
+   `node --import tsx scripts/hosted-render-preflight.ts <https-origin> <snap-id> <renderer-sha256>`.
+   This operator-only check starts two bounded, nonpersistent VMs. It verifies
+   native render, exact artifact bytes and a refused crop, and requires
+   provider stop/delete before printing the activation JSON. It performs no
+   vault write. Save its exact successful descriptor under the fixed admin
+   integration vault label `thingtime-hosted-render` for the selected origin.
+   Never put provider or account credentials in the descriptor or snapshot.
+3. Verify exact-origin manifest and tools discovery, then call the tool
+   without credentials through the deployed gateway and save the actual files
+   using the intended MCP host. Check the JSON/PNG hashes and dimensions,
+   known text and editable dependencies. Refuse bad input and account tools
+   anonymously, then confirm the ordinary authenticated account call still
+   works. Check provider cleanup after success, refusal and cancellation.
+   Revoke activation by removing the descriptor from the vault.
+
+The hosted gateway uses the existing Vercel project identity for provider
+control-plane calls. It checks the immutable snapshot still exists, then
+requires the exact snapshot, no port, nonpersistent VM and
+[deny-all network policy](https://vercel.com/docs/sandbox) before sending
+caller bytes. The fixed worker command runs non-root with no effective
+capabilities and no-new-privileges, with Chromium's sandbox enabled. It
+receives a minimal clean environment. No provider credentials, Docker daemon,
+host filesystem, private Thing, or application store enters the VM. A shared,
+fail-closed admission window permits at most two validation attempts per IP
+per minute and four worker starts globally within any rolling two-minute window. The fixed admission
+rules are non-configurable; their counters use a sliding window. The
+independent provider lifetime is 70 seconds. Work has a 45-second gateway deadline and 33-second command
+deadline; cleanup has its own 10-second budget. A worker allocation with an
+uncertain result is recovered only by its own exact generated name. An
+unverified stop/delete withholds artifacts.
+
+These are source and test contracts. They do not establish that any particular
+origin has an accepted snapshot, provider access, active vault descriptor,
+verified deployment, or actual web/Codex artifact delivery.
 
 ## Supported draft scope and bounds
 

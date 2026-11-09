@@ -12,8 +12,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
-- 2026-11-09: Continue PR #1000 against current main, retaining protected execution holds through account caches and local Actions, reconciling receipt capability versions and preserving both branches’ tests/build entrypoints. The isolated render snapshot now works with restrictive host permissions without exposing its private parent directory. Fresh native renderer and final release acceptance remain separately tracked. [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
-
 - 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
   keeping live 25-second change reads during uploads instead of repeated
   two-second polling. Retain fresh admission, cancellation and native revision
@@ -146,6 +144,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-09: Reconcile PR #1000 with main through `f36da5c032`, preserving
+  workspace isolation around the new current-page Builder controls. Correct the
+  incoming-share test context and align isolated Linux bcrypt with the compiled
+  app. Native render/import/editing evidence and remaining host/release gates are
+  tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
+- 2026-11-09: Add optional no-login rendering to the canonical hosted Thingtime
+  MCP. Isolated snapshot activation remains off until the exact origin passes
+  the [hosted render preflight](../docs/no-login-draft-preview.md#hosted-thingtime-mcp).
+  Account tools keep their existing OAuth requirements. **Codex (AI)**
 
 - 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
   its glibc requirements and password hash compatibility before release.
