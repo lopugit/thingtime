@@ -8542,6 +8542,20 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       the same Thing stamped with the verified civil day. Refuse stale days
       and revisions, supplied inputs, shared roots, other viewers, public
       pages, foreign Action IDs, Action key aliases and plain creates.
+- [ ] In the same harness, change a private cutoff source and verify stale
+      schedule revision refusal. Run overlapping 7-, 14- and 30-date
+      ensure batches, including concurrent opens. Verify old keyed rows,
+      manual matching rows, scope and ordered IDs. Revoke the source
+      audience and verify automatic activation refuses it. Unit checks
+      cover the exact cutoff and local daylight-saving gaps and folds.
+- [ ] Leave a private scheduled page open through a cutoff. Verify navigation
+      that carries the same selection still allows the scheduled change and
+      an explicit different selection stays pinned. Change settings in another
+      tab, then verify stale activation refresh and an explicit fresh-read retry.
+- [ ] In the local-first account viewer, verify a pending or unverified device
+      page cannot activate and that a verified saved page forwards the page and
+      schedule revisions to the server. No-login drafts refuse passive sources
+      and activation descriptors before rendering or exporting.
 - [ ] Bind an additional map points source with cursor pages and interval
       refresh. Confirm it updates only its own markers, retains static and
       route markers, and clears its layer on refusal or error. With an

@@ -4,6 +4,15 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Main reconciliation — 2026-11-09
 
+The branch also incorporates main `d82ed71557418a617e094437c6dfe1e673e08747`.
+The combined Things contract publishes 1.58.0; 1.57.0 meant receipt support
+on the older feature build and schedule authoring on main. Ordered ensure
+batches use the shared policy-fenced interpreter. Automatic activation needs
+a fresh saved account revision and follows the existing server ownership path;
+device Actions and no-login draft export cannot run it.
+[Final main evidence](../artifacts/anonymous-release-2026-11-09/final-main/README.md)
+records fresh compiled API, browser and native render checks.
+
 Follow-up: merged main through `f36da5c032`, retaining the local workspace provider
 around current-page Builder controls and the cloud-only incoming share path.
 Full app build passes. Fixed the CI draft harness's missing browser/identity

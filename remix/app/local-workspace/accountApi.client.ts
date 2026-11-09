@@ -1,3 +1,4 @@
+import { isPrivateActivationPage, parseWebpageActivation } from '../schemas/webpageActivation';
 import { pruneAccountConversation } from './accountReadRevocation';
 import { themeVersionWriter } from './themeVersions';
 import { algorithmVersionWriter } from './algorithmVersions';
@@ -652,6 +653,18 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
   actions: { ...online.actions,
    run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}, options?: { signal?: AbortSignal }) => {
     options?.signal?.throwIfAborted();
+    if (args.source === 'activation') {
+     const authority = accountRemoteWorkspaceLease(scope), retired = new AbortController();
+     authority.assertCurrent();
+     const release = authority.onInvalidate(() => retired.abort());
+     const signal = options?.signal ? AbortSignal.any([options.signal, retired.signal]) : retired.signal;
+     try {
+      const outcome = await online.actions.run(args, { signal });
+      authority.assertCurrent();
+      signal.throwIfAborted();
+      return outcome;
+     } finally { release(); }
+    }
     const service = worker(), actions = new LocalActions(service.db, scope, service.lease, service.sync);
     if (typeof args.action !== 'string' || !await actions.canRunLocally(args.action)) return online.actions.run(args, options);
     options?.signal?.throwIfAborted();
@@ -1172,6 +1185,9 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
  if (target.kind === 'id') target = { ...target, id: await sync.canonicalId(target.id) };
  const args = target.kind === 'id' ? { id: target.id, ...(target.key ? { key: target.key } : {}) } : target.kind === 'path' ? { path: target.path } : { global: '1' };
  if (target.kind === 'id' && target.key) return transport.resolve(args);
+ const activationAllowed = (saved: any) => target.kind === 'id' && !target.key && scope.delegatedBy === undefined &&
+  saved?.author?.id === scope.ownerId && !saved.executionHeld && isPrivateActivationPage(saved.acl) &&
+  !!parseWebpageActivation(saved.crystal?.activationAction);
  const refresh = async () => {
   const startedAt = Date.now();
   const result = await transport.resolve(args);
@@ -1188,7 +1204,7 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
    });
    await db.transaction(scope, 'readwrite', lease, tx => tx.put('page-components', result.page.id, { components, refs: result.refs || {} }));
   }
-  return result;
+  return { ...result, activationReady: activationAllowed(result.page) };
  };
  const local = resolveWorkspacePage(await sync.things.snapshot(), target, scope.ownerId);
  const canRefresh = navigator.onLine !== false && canSyncAccountWorkspace(scope);
@@ -1197,8 +1213,13 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
   if (target.kind === 'id' && await sync.isDeleted(target.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
   return refresh();
  }
- if (canRefresh && (local.page.executionHeld || local.components.some(row => row.executionHeld))) {
-  try { await refresh(); }
+ // A locally edited or stale binding cannot start an automatic server Action.
+ // Verify the exact saved page on this load; never persist its private schedule.
+ const needsActivation = target.kind === 'id' && !target.key && scope.delegatedBy === undefined &&
+  !!parseWebpageActivation(local.page.crystal.activationAction);
+ let verified: Awaited<ReturnType<typeof refresh>> | undefined;
+ if (canRefresh && (needsActivation || local.page.executionHeld || local.components.some(row => row.executionHeld))) {
+  try { verified = await refresh(); }
   catch (error) { if ([403, 404, 410].includes(Number((error as any)?.status))) throw error; }
  } else if (canRefresh) void refresh().catch(() => {});
  const dependencies = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ components: any[]; refs: Record<string, string | null> }>('page-components', local.page!.id));
@@ -1209,5 +1230,10 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
  }
  const missing = Object.entries(local.refs).filter(([, id]) => !id).map(([ref]) => ref);
  if (missing.length) throw new WorkspaceError('MISSING_DEPENDENCY', `This page needs components that are not saved on this device: ${missing.join(', ')}`);
- return { ok: true, page: await sync.view(local.page.id), source: 'user' as const, components: [...components.values()], refs: local.refs };
+ const page = await sync.view(local.page.id);
+ const saved = verified?.page;
+ const activationReady = !!(needsActivation && page?.syncState === 'synced' && !page.executionHeld &&
+  verified?.activationReady && saved?.id === page.id && saved.updatedAt === page.updatedAt);
+ return { ok: true, page, source: 'user' as const, components: [...components.values()], refs: local.refs, activationReady,
+  ...(activationReady ? { activationSchedule: verified?.activationSchedule } : {}) };
 }

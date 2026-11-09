@@ -25,7 +25,7 @@ export type ActionRuntimeHost = {
 		options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
 	): Promise<Fail | ActionProgram>;
 	resolveSchemaRef(reference: string): Promise<{ id: string; name: string }>;
-	ensureThing?(identity: { actionId: string; key: string }, schema: { id: string; name: string }, values: Record<string, unknown>, folderId?: string): Promise<Fail | { ok: true; doc: { shareId: string; crystal?: unknown } }>;
+	ensureThing?(identity: { actionId: string; key: string }, schema: { id: string; name: string }, values: Record<string, unknown>, folderId?: string, match?: Record<string, string | number | boolean>): Promise<Fail | { ok: true; doc: { shareId: string; crystal?: unknown } }>;
 	getThing(id: string): Promise<Fail | { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown; author?: { id: string } } }>;
 	createThing(input: Record<string, unknown>): Promise<Fail | { ok: true; doc: { shareId: string; crystal?: unknown } }>;
 	updateThing(id: string, input: { crystal: Record<string, unknown> }): Promise<Fail | { ok: true; thing: { id: string; crystal: unknown } }>;
@@ -355,30 +355,64 @@ export const executeProgram = async (
 				runError(typeof message === 'string' && message.trim() ? message.slice(0, MAX_ACTION_RUN_ERROR_CHARS) : `Step ${label} refused the run`);
 			} else if (step.op === 'things.ensure') {
 				if (budget.operationPolicy) runError(`Step ${label} cannot ensure Things in a restricted Action run`);
-				const ensure = host.ensureThing;
-				if (!ensure) return runError(`Step ${label} cannot ensure Things in this workspace`);
+				const ensureThing = host.ensureThing;
+				if (!ensureThing) return runError(`Step ${label} cannot ensure Things in this workspace`);
 				const schema = await host.resolveSchemaRef(String(step.schema));
 				for (const capability of ['things.create', 'things.read']) {
-					const allowed = capabilityOf(effective, capability);
-					if (!allowed || !schemaScopeAllows(allowed, [schema.name, schema.id])) {
+					const entry = capabilityOf(effective, capability);
+					if (!entry || !schemaScopeAllows(entry, [schema.name, schema.id])) {
 						runError(`Step ${label} ensures "${schema.name}" outside the declared ${capability} schema scope`);
 					}
 				}
-				const key = resolveValue(step.key, scope);
-				if (typeof key !== 'string' || !key.trim() || key.length > MAX_ACTION_STEP_STRING_CHARS) {
-					return runError(`Step ${label} key must resolve to non-empty text within the Action value budget`);
+				const prepare = (itemLabel: string, lambda?: ExpressionLambdaScope) => {
+					const key = resolveValue(step.key, scope, lambda);
+					if (typeof key !== 'string' || !key.trim() || key.length > MAX_ACTION_STEP_STRING_CHARS) {
+						return runError(`Step ${itemLabel} key must resolve to non-empty text within the Action value budget`);
+					}
+					const resolved = resolveValue(step.values, scope, lambda);
+					if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
+						return runError(`Step ${itemLabel} values resolved to non-object data`);
+					}
+					const values = resolved as Record<string, unknown>;
+					const folderId = resolveValue(step.folderId, scope, lambda);
+					if (step.folderId !== undefined && (typeof folderId !== 'string' || !folderId.trim())) {
+						return runError(`Step ${itemLabel} folderId resolved to a non-string or empty id`);
+					}
+					const match = Array.isArray(step.matchFields) ? Object.fromEntries(step.matchFields.map(field => {
+						const value = Object.prototype.hasOwnProperty.call(values, field) ? values[field] : undefined;
+						if (typeof value !== 'string' && typeof value !== 'boolean' && (typeof value !== 'number' || !Number.isFinite(value))) {
+							return runError(`Step ${itemLabel} matching field ${field} needs a scalar creation value`);
+						}
+						return [field, value];
+					})) as Record<string, string | number | boolean> : undefined;
+					return { label: itemLabel, key: key.trim(), values, folderId: typeof folderId === 'string' ? folderId.trim() : undefined, match };
+				};
+				const ensure = async (entry: ReturnType<typeof prepare>) => {
+					const ensured = await ensureThing({ actionId: program.id, key: entry.key }, schema, entry.values, entry.folderId, entry.match);
+					if (ensured.ok === false) return runError(`Step ${entry.label} ensure failed: ${ensured.error}`);
+					const doc = ensured.doc;
+					return { id: doc.shareId, crystal: doc.crystal, schema: schema.name, schemaId: schema.id };
+				};
+				if (step.each === undefined) {
+					const result = await ensure(prepare(label));
+					target = result.id;
+					scope.steps[index] = result;
+				} else {
+					const items = resolveValue(step.each, scope);
+					if (!Array.isArray(items)) return runError(`Step ${label} each must resolve to a list`);
+					if (items.length > budget.opsRemaining) return runError(`Step ${label} exceeds the remaining operation budget; use smaller batches`);
+					const entries = items.map((item, position) => prepare(`${label}[${position}]`, { item, index: position }));
+					if (new Set(entries.map(entry => entry.key)).size !== entries.length) return runError(`Step ${label} has duplicate ensure keys`);
+					const results = [];
+					for (const entry of entries) {
+						await budget.assertAuthorized?.();
+						consumeOp(budget);
+						results.push(await ensure(entry));
+						if (jsonBytes(results) > budget.maxResultBytes) return runError(`Step ${entry.label} batch result exceeds the Action result budget`);
+					}
+					scope.steps[index] = results;
+					note = `${results.length} items`;
 				}
-				const values = resolveValue(step.values, scope);
-				if (!values || typeof values !== 'object' || Array.isArray(values)) return runError(`Step ${label} values resolved to non-object data`);
-				const folderId = resolveValue(step.folderId, scope);
-				if (step.folderId !== undefined && (typeof folderId !== 'string' || !folderId.trim())) {
-					return runError(`Step ${label} folderId resolved to a non-string or empty id`);
-				}
-				const ensured = await ensure({ actionId: program.id, key: key.trim() }, schema, values as Record<string, unknown>, typeof folderId === 'string' ? folderId.trim() : undefined);
-				if (ensured.ok === false) return runError(`Step ${label} ensure failed: ${ensured.error}`);
-				const doc = ensured.doc;
-				target = doc.shareId;
-				scope.steps[index] = { id: doc.shareId, crystal: doc.crystal, schema: schema.name, schemaId: schema.id };
 			} else if (step.op === 'things.create') {
 				const schema = await host.resolveSchemaRef(String(step.schema));
 				// Save-time coverage proves the program's OWN declaration; this

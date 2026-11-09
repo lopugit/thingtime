@@ -21,11 +21,11 @@ if (process.argv[2] !== '--worker') {
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = [
-		['things', 'things', '1.57.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
-		['things-update', 'things/update', '1.22.0', ['POST']],
-		['actions-run', 'actions/run', '1.44.0', ['POST']],
+		['things', 'things', '1.58.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+		['things-update', 'things/update', '1.23.0', ['POST']],
+		['actions-run', 'actions/run', '1.45.0', ['POST']],
 		['components-browse', 'components/browse', '1.1.0', ['GET']],
-		['webpages-resolve', 'webpages/resolve', '1.14.0', ['GET', 'POST']],
+		['webpages-resolve', 'webpages/resolve', '1.15.0', ['GET', 'POST']],
 		['files', 'files', '1.12.2', ['GET', 'POST']],
 		['things-bulk', 'things/bulk', '1.7.2', ['POST']],
 		['things-delete', 'things/delete', '1.1.1', ['POST']],

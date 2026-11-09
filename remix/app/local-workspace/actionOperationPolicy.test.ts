@@ -76,3 +76,31 @@ test('ensure uses only the authorized server adapter and does not run in a restr
  assert.deepEqual(await executeProgram({ id: 'owner' }, action, inputs, budget(undefined), '', server), { id: 'confirmed', crystal: { text: 'saved' }, schema: 'schema', schemaId: 'schema' });
  assert.deepEqual(calls, ['schema', 'ensure']);
 });
+
+test('ordered ensure batches prepare unique keys and recheck authority before each write', async () => {
+ const action: ActionProgram = { ...program, steps: [
+  { op: 'things.ensure', schema: 'schema', each: '$input.days', key: '$item', values: { day: '$item' }, matchFields: ['day'] },
+  { op: 'return', value: '$step.1' }
+ ] };
+ const written: string[] = [];
+ const unexpected = async (): Promise<never> => { throw Error('unexpected host call'); };
+ const host: ActionRuntimeHost = {
+  resolveActionProgram: unexpected, resolveSchemaRef: async () => ({ id: 'schema', name: 'schema' }),
+  getThing: unexpected, createThing: unexpected, updateThing: unexpected, deleteThing: unexpected,
+  search: unexpected, lookup: unexpected, packs: () => ({}),
+  ensureThing: async ({ key }, _schema, values, _folder, match) => {
+   assert.deepEqual(match, { day: key });
+   written.push(key);
+   return { ok: true, doc: { shareId: key, crystal: values } };
+  }
+ };
+ const invoke = (days: string[], limits = budget(undefined)) => executeProgram({ id: 'owner' }, action, { days }, limits, '', host);
+ await assert.rejects(invoke(['second', 'second']), /duplicate ensure keys/);
+ assert.deepEqual(written, []);
+ await assert.rejects(invoke(['second', 'first'], { ...budget(undefined), assertAuthorized: async () => {
+  if (written.length === 1) throw Error('Page revision changed');
+ } }), /Page revision changed/);
+ assert.deepEqual(written.splice(0), ['second']);
+ const results = await invoke(['second', 'first']) as { id: string }[];
+ assert.deepEqual(results.map(entry => entry.id), ['second', 'first']);
+});

@@ -6,6 +6,13 @@ Existing feature `d214a6b5a1965831febd2e5d1f2488ee3f13d1fc` plus fetched main
 `codex/anonymous-local-first` branch and [PR #1000](https://github.com/lopugit/thingtime/pull/1000).
 This is a feature-branch reconciliation, not proof of production acceptance.
 
+## Scheduled activation integration
+
+[Final main evidence](final-main/README.md) covers the integration of main
+`d82ed71557418a617e094437c6dfe1e673e08747`: scheduled activation, the combined
+Things capability, and fresh isolated browser and no-login renderer checks.
+Earlier importer and global/site evidence below remains tied to its tested tree.
+
 ## Follow-up integration and hosted foundation
 
 The same branch also incorporates fetched main `f36da5c032251270c0b24a754c61a4e510633c59`,

@@ -18,7 +18,7 @@ acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
 Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.
 
 The combined contract distinguishes main’s existing features from the local-first
-receipt additions: `api.things` 1.57.0, `api.attachment-content` 1.19.0,
+receipt additions: `api.things` 1.58.0, `api.attachment-content` 1.19.0,
 `api.attachment-link` 1.3.0, `api.attachment-upload-abort` 1.3.0 and
 `api.attachment-annotate` 1.4.0. Clients that require retained-byte reads,
 request-ID replay or conditional metadata writes reject the older colliding
@@ -475,6 +475,16 @@ HTTP catch-all checks `expectedActor.ts` before endpoint execution. Browser
 transport/interpreter live in `components/Actions/browserActionHost.ts` and
 `browserActionRuntime.ts`; no endpoint-specific UI behavior lives there.
 See [authoring and verification](../builder-browser-actions.md).
+
+Private webpage cutoff settings use `api.webpages-resolve` 1.15.0 and
+`api.actions-run` 1.45.0. The ordinary owning-account resolve projects a
+revision and validated local wall time from an exact private Data Thing.
+The Action route verifies the settings, page and Action revisions before
+automatic writes. Ordered ensure batches use the same existing Action
+authorization, operation budget and protected intent keys. Saved definitions
+require `api.things` 1.58.0 or `api.things-update` 1.23.0 in this combined build.
+The older main and feature builds both advertised 1.57.0 for different behavior. See the
+[cutoff and batch contracts](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
 
 JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
 `api.things-update` 1.10.0, `api.actions-run` 1.12.0 and
@@ -1087,5 +1097,7 @@ Saved private page activation uses `schemas/webpageActivation.ts`,
 `components/Builder/WebpageActivation.tsx` and the existing Actions run
 route. The route verifies the exact private owner/page/revision/action/date
 and uses the literal saved inputs; the viewer protects manual page query
-selection and keeps preview/edit/shared execution inert. See
+selection and keeps preview/edit/shared execution inert. The account-local
+viewer accepts activation only for a freshly verified, synced page revision,
+and always dispatches automatic runs through the saved-account server route. See
 [Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).

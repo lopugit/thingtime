@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { createServer } from 'vite';
+import { platformRuntimePlugin } from './platform-runtime-plugin.mjs';
 
 const require = createRequire(import.meta.url);
 const { ports } = require('./worktree-ports.cjs').resolveDevContext();
@@ -21,7 +22,7 @@ const vite = await createServer({
 	root, configFile: false, envDir: false, publicDir: false,
 	resolve: { alias: { '~': join(root, 'app') } },
 	server: { host: '127.0.0.1', port: ports.web, strictPort: true, hmr: false },
-	plugins: [{ name: 'webpage-activation-fixture', configureServer(server) {
+	plugins: [platformRuntimePlugin({ external: true }), { name: 'webpage-activation-fixture', configureServer(server) {
 		server.middlewares.use(async (request, response, next) => {
 			if (!request.url?.startsWith('/p/fixture-activation') && !request.url?.startsWith('/builder')) return next();
 			try {
@@ -58,7 +59,7 @@ async function exercise(context, mode) {
 	let preference = true, failNext = false, blockNext;
 	const pagePath = origin + '/p/fixture-activation';
 	await page.route(origin + '/.well-known/thingtime-capabilities.json', route => route.fulfill({ json: {
-		schemaVersion: 1, origin, features: { 'api.webpages-resolve': { version: '1.14.0' }, 'api.actions-run': { version: '1.44.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } }
+		schemaVersion: 1, origin, features: { 'api.webpages-resolve': { version: '1.15.0' }, 'api.actions-run': { version: '1.45.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } }
 	} }));
 	await page.route(origin + '/api/v1/actions/run', async route => {
 		const body = route.request().postDataJSON();
@@ -118,12 +119,12 @@ async function exercise(context, mode) {
 	await page.getByRole('status', { name: 'Preparing this page' }).waitFor({ state: 'hidden' });
 	await page.getByText('Selection: linked', { exact: true }).waitFor();
 	const beforeInert = requests.length;
-	for (const url of [pagePath + '?unconfigured=1', pagePath + '?shared=1', pagePath + '?branch=1', origin + '/builder?mode=builder']) {
+	for (const url of [pagePath + '?unconfigured=1', pagePath + '?shared=1', pagePath + '?branch=1', pagePath + '?unverified-device=1', origin + '/builder?mode=builder']) {
 		await page.goto(url);
 		await page.getByRole('heading', { name: 'Daily workspace' }).waitFor();
 		await page.clock.runFor(150);
 	}
-	assert.equal(requests.length, beforeInert, 'preview, shared, branch and unconfigured pages are inert');
+	assert.equal(requests.length, beforeInert, 'preview, shared, branch, unverified device and unconfigured pages are inert');
 
 	preference = false;
 	await page.goto(pagePath);

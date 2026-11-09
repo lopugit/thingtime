@@ -14,10 +14,24 @@ test('account local facade and native page resolution work offline without uploa
  const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
  Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async () => { throw new Error('Unexpected network'); } });
  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+ const activationRequests: unknown[] = [];
+ let holdActivation: (() => void) | undefined;
+ let admittedActivation: Promise<void> | undefined;
+ const remoteAction = async (args: unknown, options?: { signal?: AbortSignal }) => {
+  activationRequests.push(args);
+  if (admittedActivation) {
+   holdActivation?.();
+   await new Promise<void>((_resolve, reject) => {
+    if (options?.signal?.aborted) reject(options.signal.reason);
+    else options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true });
+   });
+  }
+  return { ok: true };
+ };
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api: any = accountApi({ timeline: { exportVersion: remote }, actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api: any = accountApi({ timeline: { exportVersion: remote }, actions: { run: remoteAction }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -102,6 +116,24 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await api.actions.runs({action:action.id})).runs[0].id,outcome.runId);
   assert.equal((await historyWorker.sync.status()).find(row=>row.id===outcome.result)?.state,'pending');
   assert.equal(remoteCalls,1,'account Action uses local interpreter, not remote run');
+  const activation = { action: action.id, source: 'activation', activationPageRevision: 'saved', activationScheduleRevision: 'cutoff' };
+  await assert.rejects(api.actions.run(activation), /offline/);
+  assert.equal(activationRequests.length, 0);
+  assert.equal((await api.actions.runs({action:action.id})).runs.length, 1, 'offline activation cannot execute the local Action');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+  try {
+   await api.actions.run(activation);
+   assert.deepEqual(activationRequests, [activation], 'activation retains the original server revision fences');
+   admittedActivation = new Promise(resolve => { holdActivation = resolve; });
+   const retired = assert.rejects(api.actions.run(activation), { name: 'AbortError' });
+   await admittedActivation;
+   bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
+   await retired;
+  } finally {
+   bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
+   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+  }
   await assert.rejects(async () => api.actions.run({}), /offline/);
   let refusal: Promise<unknown> | undefined;
   assert.doesNotThrow(() => { refusal = api.actions.run({}); });

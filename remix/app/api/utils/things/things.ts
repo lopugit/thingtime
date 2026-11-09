@@ -1,6 +1,8 @@
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
 import { sanitizeTags } from '../../../schemas/thingTags';
-import { contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
+import { contentExecutionHeld, contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
+import { isCivilTime } from '../../../schemas/civilDates';
+import { isPrivateActivationPage, parseWebpageActivation, type WebpageActivation } from '../../../schemas/webpageActivation';
 import { THING_METADATA_KIND } from '../../../utils/thingMetadata';
 import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../../../utils/thingStoragePolicy';
 import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
@@ -1439,6 +1441,9 @@ export const createThing = async (
 		postAttachments: hooks.postAttachments
 	});
   if (isFail(validated)) return validated;
+	const activation = validated.thingtime.includes('webpage') ? parseWebpageActivation(validated.crystal.activationAction) : null;
+	if (activation && typeof activation.cutoffTime === 'object' && (app || !(await readWebpageActivationCutoff(asOwner, activation.cutoffTime, hooks.transaction?.session))))
+		return fail(400, 'The activation cutoff must reference an exact private settings Thing you can read');
 
   // system kinds are written ONLY by their dedicated utils (register, themes,
   // algorithms, waitlist — each a direct insert with the right secure/uniqueKeys
@@ -1801,7 +1806,8 @@ export const ensureOwnedDataThing = async (
 	intent: { actionId: string; key: string },
 	schema: { id: string; name: string },
 	values: Record<string, unknown>,
-	folderId?: string
+	folderId?: string,
+	match?: Record<string, string | number | boolean>
 ): Promise<CreateThingResult> => {
 	const ownerId = viewer.id;
 	const digest = createHash('sha256').update(JSON.stringify([ownerId, intent.actionId, intent.key])).digest('hex');
@@ -1819,6 +1825,23 @@ export const ensureOwnedDataThing = async (
 	};
 	const existing = await findExisting();
 	if (existing) return existing;
+	if (match) {
+		// The Action grammar validates plain field names and scalar equality.
+		// The match never adopts a foreign schema, app, sandbox or owner row,
+		// and never attaches a protected key to manually authored content.
+		const entries = Object.entries(match);
+		const matches = Object.fromEntries(entries.map(([field, value]) => [`crystal.${field}`, { $eq: value }]));
+		// An indexed scalar equality can also match an array element. The
+		// expression requires equality to the whole field before adoption.
+		const exact = entries.map(([field, value]) => ({ $eq: [`$crystal.${field}`, { $literal: value }] }));
+		const candidate = await things.findOne({ ownerId, thingtime: 'data', 'crystal.schemaId': schema.id,
+			appId: null, sandboxSpace: null, sandboxExpiresAt: null, ...matches, $expr: { $and: exact } }, { sort: { createdAt: 1, shareId: 1 } }) as ThingDoc | null;
+		if (candidate) {
+			if (genericThingReadBlocked(candidate) || await contentExecutionHeld(candidate) || !(await canViewInherited(candidate, viewer)))
+				return fail(409, 'The matching Thing is unavailable');
+			return { ok: true, doc: candidate };
+		}
+	}
 	const created = await createThing(ownerId, {
 		thingtime: ['data'],
 		acl: [ACL_OWNER],
@@ -3244,6 +3267,25 @@ const findThing = async (shareId: unknown, session?: any): Promise<ThingDoc | nu
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   const things = await getThingsCollection();
   return (await things.findOne({ shareId: shareId.trim() } as any, session ? { session } : {})) as any as ThingDoc | null;
+};
+
+/** Read the single opted-in clock field, through the same current owner,
+ * audience and execution fences for authoring, resolving and activation. */
+export const readWebpageActivationCutoff = async (
+	viewer: Viewer,
+	source: Exclude<WebpageActivation['cutoffTime'], string | undefined>,
+	session?: any
+): Promise<{ cutoffTime: string; revision: string } | null> => {
+	if (!viewer?.id) return null;
+	const doc = await findThing(source.thingId, session);
+	if (!doc || doc.shareId !== source.thingId || doc.ownerId !== viewer.id || !thingtimeOf(doc).includes('data') ||
+		crystalOf(doc).schemaId !== source.schemaId || !isPrivateActivationPage(aclOf(doc)) || genericThingReadBlocked(doc) ||
+		doc.appId != null || doc.sandboxSpace != null || doc.sandboxExpiresAt != null || patSandboxBlocks(viewer, doc) ||
+		!(await canViewInherited(doc, viewer)) || await contentExecutionHeld(doc, undefined, session)) return null;
+	const crystal = crystalOf(doc);
+	const cutoffTime = Object.prototype.hasOwnProperty.call(crystal, source.field) ? crystal[source.field] : '00:00';
+	if (!isCivilTime(cutoffTime)) return null;
+	return { cutoffTime, revision: new Date(doc.updatedAt).toISOString() };
 };
 
 // exported for the dedicated engagement utils that live outside this module
@@ -5673,6 +5715,11 @@ export const updateThing = async (
 	}
   const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
+	const activation = validated.thingtime.includes('webpage') ? parseWebpageActivation(validated.crystal.activationAction) : null;
+	const previousActivation = parseWebpageActivation(crystalOf(doc).activationAction);
+	if (activation && typeof activation.cutoffTime === 'object' && !isDeepStrictEqual(activation.cutoffTime, previousActivation?.cutoffTime) &&
+		(app || doc.ownerId !== viewer.id || !(await readWebpageActivationCutoff(viewer, activation.cutoffTime))))
+		return fail(400, 'The activation cutoff must reference an exact private settings Thing you can read');
 	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
 		const { validateSharedComponentAdditions } = await import('../webpages/webpages');
 		const denied = await validateSharedComponentAdditions(viewer, doc, validated.crystal);

@@ -39,6 +39,15 @@ test('bounded input and explicit root validation', async () => {
   await assert.rejects(() => prepareDraft(fixture(), 'account-thing'), /not in the supplied/);
 });
 
+test('scheduled activation and passive private sources cannot enter the canonical no-login export', async () => {
+  const activation = fixture();
+  activation.things[0].crystal.activationAction = { action: 'private-action', cadence: 'day', timeZone: 'UTC', cutoffTime: '05:00' };
+  await assert.rejects(() => prepareDraft(activation), /Unsupported draft field: activationAction/);
+  const passive = fixture();
+  passive.things[0].crystal.blocks[0].source = { action: 'private-action', passive: true };
+  await assert.rejects(() => prepareDraft(passive), /Unsupported draft field: source/);
+});
+
 test('new editable and transient block types cannot enable Actions in anonymous export previews', async () => {
   for (const type of ['element', 'collection', 'condition']) {
     const input = fixture();

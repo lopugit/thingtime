@@ -10,7 +10,7 @@ import {
 	type ActionRuntimeHost,
 	type ActionRunTraceEntry
 } from '../../../actions/runtime';
-import { isPrivateActivationPage, stableActivationEnsureKey } from '~/schemas/webpageActivation';
+import { isPrivateActivationPage, stableActivationEnsureBatch, stableActivationEnsureKey } from '~/schemas/webpageActivation';
 import { contentExecutionHeld, type ContentExecutionHold } from '../things/contentExecutionGate';
 import { validateRunInputs } from './actionInputs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
@@ -341,7 +341,7 @@ const serverActionHost = (viewer: Viewer): ActionRuntimeHost => ({
 	resolveActionProgram: (reference, options) => resolveActionProgram(viewer, reference, options),
 	resolveSchemaRef: (reference) => resolveSchemaRef(viewer, reference),
 	getThing: (id) => getThing(viewer, id),
-	ensureThing: (identity, schema, values, folderId) => ensureOwnedDataThing(viewer!, identity, schema, values, folderId),
+	ensureThing: (identity, schema, values, folderId, match) => ensureOwnedDataThing(viewer!, identity, schema, values, folderId, match),
 	createThing: (input) => createThing(viewer!.id, input, viewer),
 	updateThing: (id, input) => updateThing(viewer, id, input),
 	deleteThing: (id) => deleteThing(viewer, id),
@@ -497,8 +497,10 @@ const executeActionRun = async (
 		!(step.op === 'http.request' && step.method === 'GET')))
 		return fail(403, 'Page activation can only read or ensure saved data');
 	if (activation && program.steps.some(step => step.op === 'things.ensure' &&
-		!stableActivationEnsureKey(step.key, context?.activation?.dayInput)))
-		return fail(403, 'Page activation ensure needs a literal key or the saved civil-date input');
+		!(step.each === undefined
+			? stableActivationEnsureKey(step.key, context?.activation?.dayInput)
+			: stableActivationEnsureBatch(step.key, step.each, context?.activation?.dayInput))))
+		return fail(403, 'Page activation ensure needs a literal key, the saved civil-date input, or keys from its civil-date range');
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
 	// Walk the CEILINGS, never the merged object: an unrecognised declared key

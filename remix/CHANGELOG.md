@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Reconcile PR #1000 with scheduled private webpage activation.
+  Combine the versioned Things contracts, keep activation on the verified
+  owning-account server route, and refuse activation and passive sources in
+  no-login draft export. **Codex (AI)**
+
 - 2026-11-09: Reconcile PR #1000 with main through `f36da5c032`, preserving
   workspace isolation around the new current-page Builder controls. Correct the
   incoming-share test context and align isolated Linux bcrypt with the compiled
@@ -156,6 +161,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   MCP. Isolated snapshot activation remains off until the exact origin passes
   the [hosted render preflight](../docs/no-login-draft-preview.md#hosted-thingtime-mcp).
   Account tools keep their existing OAuth requirements. **Codex (AI)**
+
+- 2026-11-09 — Add private webpage cutoff settings, ordered idempotent Action
+  batches and passive data sources. Preserve existing form ownership, manual
+  selection and cutoff rollover. [Verification](../PRs/1437-codex-routes-planning-preferences-support-scheduled-private-webpage-activation.md). **Codex (AI)**
 
 - 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
   its glibc requirements and password hash compatibility before release.

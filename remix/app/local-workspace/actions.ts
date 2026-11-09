@@ -138,7 +138,7 @@ export class LocalActions {
 			if (seen.size >= 100) return false;
 			seen.add(program.id);
 			for (const step of program.steps) {
-				if (step.op === 'lookup' || (step.op === 'things.search' && ['public', 'system'].includes(String(step.scope)))) return false;
+				if (step.op === 'things.ensure' || step.op === 'lookup' || (step.op === 'things.search' && ['public', 'system'].includes(String(step.scope)))) return false;
 				if (step.op === 'http.request') {
 					if (!localActionRequestSupported(step, this.scope)) return false;
 					if (step.path === '/api/v1/actions/run') {
@@ -242,6 +242,7 @@ export class LocalActions {
 	}
 	async run(request: { action: string; inputs?: unknown; source?: string }, signal?: AbortSignal) {
 		this.assert();
+		if (request.source === 'activation') return fail('Page activation requires a verified saved account page.', 403);
 		const count = activeRuns.get(this.db) || 0;
 		if (count >= 4) return fail('Four local Actions are already running. Wait for one to finish.', 429);
 		activeRuns.set(this.db, count + 1);
