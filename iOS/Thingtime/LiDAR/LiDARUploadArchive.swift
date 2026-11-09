@@ -25,14 +25,9 @@ struct LiDARUploadArchive: Sendable {
                 var checksums: [Data] = []
                 var composite = SHA256()
                 for index in 0..<plan.count {
-                    var remaining = min(plan.partSize, capture.byteCount - Int64(index) * plan.partSize)
+                    let length = min(plan.partSize, capture.byteCount - Int64(index) * plan.partSize)
                     var part = SHA256()
-                    while remaining > 0 {
-                        try Task.checkCancellation()
-                        let data = try read(file, maximum: remaining)
-                        remaining -= Int64(data.count)
-                        part.update(data: data)
-                    }
+                    try readChunks(file, length: length) { part.update(data: $0) }
                     let digest = Data(part.finalize())
                     checksums.append(digest)
                     composite.update(data: digest)
@@ -52,12 +47,7 @@ struct LiDARUploadArchive: Sendable {
                 let part = try FileUploadPart.capture(size: capture.byteCount, partNumber: number,
                                                       offset: offset, length: length) { offset, count, receive in
                     try file.seek(toOffset: UInt64(offset))
-                    var remaining = Int64(count)
-                    while remaining > 0 {
-                        let data = try Self.read(file, maximum: remaining)
-                        try receive(data)
-                        remaining -= Int64(data.count)
-                    }
+                    try Self.readChunks(file, length: Int64(count), receive)
                     return capture.byteCount
                 }
                 guard Data(base64Encoded: part.checksumSha256) == checksums[number - 1] else {
@@ -68,11 +58,20 @@ struct LiDARUploadArchive: Sendable {
         }
     }
 
-    private static func read(_ file: FileHandle, maximum: Int64) throws -> Data {
-        guard let data = try file.read(upToCount: Int(min(65_536, maximum))), !data.isEmpty else {
-            throw LiDARUploadOutbox.Failure.archiveChanged
+    private static func readChunks(_ file: FileHandle, length: Int64, _ consume: (Data) throws -> Void) throws {
+        var remaining = length
+        while remaining > 0 {
+            try Task.checkCancellation()
+            // Foundation can keep read and write buffers alive in the task's
+            // autorelease pool. Drain them after each chunk, even for large scans.
+            try autoreleasepool {
+                guard let data = try file.read(upToCount: Int(min(65_536, remaining))), !data.isEmpty else {
+                    throw LiDARUploadOutbox.Failure.archiveChanged
+                }
+                try consume(data)
+                remaining -= Int64(data.count)
+            }
         }
-        return data
     }
 
     private static func withArchive<T>(_ capture: LiDARCapture, _ work: (FileHandle) throws -> T) throws -> T {

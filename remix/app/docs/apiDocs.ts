@@ -6303,10 +6303,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-		id: 'file-sync-transfer-admissions', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments',
+		id: 'file-sync-transfer-admissions', contractVersion: '1.3.1', featureVersion: '1.3.1', group: 'attachments',
 		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
 		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
-		detail: 'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run.',
+		detail: 'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
 		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete, publish when explicitly admitted, or revoke only its own admission.' },
 		methods: ['POST'],
 		steps: [
@@ -6348,10 +6348,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Ordered independent results; inspect every status before recording progress.', body: { ok: true, version: 1, batchId: 'original UUID', digest: 'sha256', results: [] } }]
   }),
 	endpoint({
-    id: 'files', contractVersion: '1.12.1', featureVersion: '1.12.1', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    id: 'files', contractVersion: '1.12.2', featureVersion: '1.12.2', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
     group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
-    detail: 'Version 1.12.1 fences canonical file writes through an active reviewed creation epoch so interrupted account-file restores cannot release stale verified state. Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
+    detail: 'Version 1.12.2 fences automatic File publication against a paused cloud sync preference in the same transaction. Version 1.12.1 fences canonical file writes through an active reviewed creation epoch so interrupted account-file restores cannot release stale verified state. Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
     steps: [
       'In 1.10.0, optional syncDestination:{rootId,path} on file-copy commits and folder creates requires a transactional match of the private selected root, exact parent path, filename namespace and expected destination revision or absence. Negotiate this feature before attempting an early two-way upload. Ordinary commits and immutable receipt replays retain their existing contract.',
@@ -9643,8 +9643,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.54.0',
-    contractVersion: '1.54.0',
+    featureVersion: '1.55.0',
+    contractVersion: '1.55.0',
 
 
     group: 'things',
@@ -9654,6 +9654,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
       'Version 1.53 adds exact single-ID reads of saved derived metadata Things, rechecking the source audience and recalculating viewer-visible attachment bytes. Metadata stays outside generic list, batch, search, export and mutation surfaces. ' +
       'Version 1.49.2 corrects Timeline capture for valid Webpages exceeding 1,200 authored blocks or 24 nested containers; saved content and Component authorization remain unchanged. Version 1.49 preserves generic authored Collection source offsetInput/limitInput/totalPath mappings, explicit total and selected-row presentation, and Map query-parameter selection bindings. Authenticated GET ?ids=<JSON array of Thing IDs> returns { ok: true, things: [PublicThing|null,...] } in exact input order, including duplicates. It reuses canonical exact-read ACLs, PAT visibility, app namespace/liveness and protected-record gates, batches DB and public projection work, and does not hydrate discussions or write discovery state. Missing, denied and protected IDs are indistinguishable nulls. ids cannot be combined with list/id/projection parameters; the existing optional hidden-link key remains supported. The operation has no product item cap, but GET URL and response transport limits still apply; clients must process large selections in encoded-byte-aware chunks and reduce the chunk on a transport refusal instead of truncating the dataset. It adds authenticated GET ?count=true over the ordinary Things list filters, returning { ok: true, count } after the same owner, namespace, PAT visibility, moderation and inherited ACL checks. Counts reject paging, exact-ID and discussion-projection parameters, return no partial total on failure or cancellation, and are observations rather than transactionally reserved snapshots. Ordinary list and count reads accept excludeArchived=true, excluding only crystal.archived=true before pagination. Optional list offset is a nonnegative visible-row ordinal; it cannot be combined with a cursor or discussion projection and returns offset plus nextOffset (null at the end). Offset reads scan authorization metadata and project only the requested window, without promising constant-time random access. Safe ordinary owner data uses native database counts; exceptional rows stream authorization metadata only. No raw query language, new index, item limit or public data projection is added. ' +
       'Version 1.48 supports saved map marker child templates, including ordinary Component references bound to each point, and authored detail reveal controls. Normal composition and authorization checks remain. ' +
@@ -11709,6 +11710,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [{ name: 'Read sizes', description: 'Measure one visible Thing.', method: 'GET', query: { id: 'source_thing' } }],
     responseExamples: [{ status: 200, description: 'Current facts and metadata persistence status.', body: { ok: true, canSave: true,
       metadata: { id: null, targetId: 'source_thing', sourceHash: 'a'.repeat(64), canonicalVersion: 1, jsonBytes: 128, attachedBytes: 0, knownAttachedBytes: 0, attachmentCount: 0, unavailableAttachmentCount: 0 } } }]
+  }),
+  endpoint({
+    id: 'things-storage-policy',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'things',
+    title: 'Thing storage policy',
+    endpoint: '/api/v1/things/storage-policy',
+    summary: 'Reads and updates private cloud sync and device-local availability preferences for an exact Thing.',
+    detail: 'GET id with optional key or paired deviceId reads a current source revision and owner-private policy. Missing policy and device records inherit existing behavior. A visible source shared with a non-owner returns default policy and canEdit false. POST requires a full owning same-origin session on the home data plane and uses expectedSourceRevision, expectedPolicyRevision and any expectedDeviceRevision as compare-and-set fences. Owner-wide cloudSync, defaultLocalAvailability and automaticDownloadDeviceId are independent of a device-local inherit, keep or cloud-only preference. POST action register-browser issues or renews an owner- and origin-bound HttpOnly browser installation. It does not pair or grant access to a native device. Saved policy expresses desired placement only and never deletes cloud content or certifies a local copy. GET attachments=1 with optional cursor enumerates direct owned bound originals and canonical Builder media references in working pages. Each descriptor has id, exact version, size and an upload-verified multipart fingerprint, or nulls when unavailable. The source revision and hash accompany every page. GET automatic=1 with an active paired deviceId returns sparse rule pages and an owner revision. Pass revision on continuation or to request an unchanged response for a known snapshot. The original-byte read must independently match that fingerprint before marking a copy complete.',
+    auth: { mode: 'optional', description: 'The exact source audience gates default reads. Private policy, attachments and mutations require the full owning account.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.things-storage-policy 1.0.0 on the selected origin.', 'GET an exact Thing id and selected device scope.', 'POST only the intended changes with the current source and policy revisions.', 'Verify the exact cloud and local copy before eviction.'],
+    requestExamples: [{ name: 'Read storage policy', description: 'Read the current source and inherited or explicit placement preferences.', method: 'GET', query: { id: 'source_thing' } }],
+    responseExamples: [{ status: 200, description: 'The exact source and private placement preferences.', body: { ok: true, canEdit: true,
+      source: { id: 'source_thing', revision: 'a'.repeat(64), sourceHash: 'b'.repeat(64) },
+      policy: { revision: null, cloudSync: true, defaultLocalAvailability: 'inherit', automaticDownloadDeviceId: null }, device: null } }]
   }),
   endpoint({
     id: 'things-update',

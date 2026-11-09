@@ -46,6 +46,20 @@ final class LiDARUploadTests: XCTestCase {
         XCTAssertEqual(try fixture.outbox().entries(scope: scope).first?.receipt, receipt)
         XCTAssertEqual(try Data(contentsOf: recovered.archiveURL), bytes)
         XCTAssertEqual(try Data(contentsOf: originalURL), original)
+
+        let readback = try await server.json("/api/v1/files?id=\(receipt.fileThingId)&operationId=\(receipt.fileThingId)",
+            body: nil, statuses: [200])
+        let committed = try XCTUnwrap((readback["receipt"] as? [String: Any])?["file"] as? [String: Any])
+        let file = try JSONDecoder().decode(NativeCloudFile.self, from: JSONSerialization.data(withJSONObject: committed))
+        let candidate = try fixture.outbox().replicaOriginal(for: file, scope: scope)
+        XCTAssertEqual(candidate.url, recovered.archiveURL)
+        XCTAssertTrue(candidate.retainedOriginal)
+        let other = try FileSyncOwnerScope(ownerId: "other", url: scope.origin)
+        XCTAssertNil(try fixture.outbox().replicaOriginal(for: file, scope: other).url)
+        let verified = try XCTUnwrap(ManagedFileReplica.verify(at: recovered.archiveURL, request: file.download))
+        try ManagedFileReplica.evict(verified) {}
+        XCTAssertNil(try fixture.outbox().replicaOriginal(for: file, scope: scope).url)
+        XCTAssertEqual(try Data(contentsOf: originalURL), original)
     }
 
     func testChangedAccountOriginAndTransportCannotAccessCapture() async throws {

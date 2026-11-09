@@ -10,6 +10,8 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { attachmentContentVersion } from '../attachments/contentFingerprint';
 import { attachmentIsBlocked } from '../moderation/moderationCore';
 import { getAttachmentFingerprint } from '../attachments/attachments';
+import { AUTOMATIC_STORAGE_PLACEMENT_EXCLUDED, AutomaticStoragePlacementExcluded } from '../../../utils/thingStoragePolicy';
+import { automaticThingCloudSyncAllowed } from '../things/thingStoragePolicy';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION, StorageMutationError } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { lockFolderDestination } from '../things/folderPlacement';
@@ -64,7 +66,8 @@ export function createCloudFileService(overrides: Partial<{
 		return validateReceipt(entry, ownerId, id, operationId, retained);
 	};
 	const errorResult = (error: unknown) => error instanceof ExactCloudSyncDestinationChanged
-		? { ...failure(409, error.message), code: SYNC_DESTINATION_CHANGED } : error instanceof StorageMutationError ? failure(error.status, error.message) :
+		? { ...failure(409, error.message), code: SYNC_DESTINATION_CHANGED } : error instanceof AutomaticStoragePlacementExcluded
+		? { ...failure(409, error.message), code: AUTOMATIC_STORAGE_PLACEMENT_EXCLUDED } : error instanceof StorageMutationError ? failure(error.status, error.message) :
 		(error as any)?.code === 11000 ? failure(409, 'File changed before publication; reconcile and retry with the original operation') : failure(503, 'File storage is temporarily unavailable');
 	return {
         async readReceipts(ownerId: string, requests: { id: string; operationId: string }[], signal?: AbortSignal) {
@@ -143,6 +146,10 @@ export function createCloudFileService(overrides: Partial<{
             const origin = parseFileSyncUploadOrigin(attachment.attachmentFileSyncOrigin);
             if (origin.fileId !== input.id || origin.folderId !== input.folderId || origin.path.split('/').at(-1) !== input.name) conflict('Sync upload publication differs from its recorded destination');
           }
+					if (!retained && before?.storagePolicyFence && (input.syncDestination || context?.syncSourceGrant ||
+						(attachment.targetId == null && attachment.attachmentFileSyncOrigin)) &&
+						!(await automaticThingCloudSyncAllowed(things, ownerId, input.id, session)))
+						throw new AutomaticStoragePlacementExcluded('Cloud sync is paused for this file');
 					await deps.lockFolder(things, ownerId, input.folderId, session);
 					if (input.syncDestination)
 						await assertCloudSyncDestination(things, session, ownerId, input.syncDestination, input.folderId!,

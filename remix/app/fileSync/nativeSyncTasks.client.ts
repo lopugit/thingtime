@@ -30,6 +30,7 @@ import { readCloudFolderInventory } from './cloudInventory.client';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS } from './cloudSyncDestination';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
+import { createAutomaticStoragePlacement } from './automaticStoragePlacement';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
 import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
@@ -180,7 +181,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const request = host.request, capabilities = host.capabilities;
 			if (reviewed.configuration.ignoreRules && !supportsNativeIgnoreRules(capabilities)) throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
-			const runtime = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
+			const transport = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
+			const runtime = { ...transport, automaticStoragePlacement: createAutomaticStoragePlacement(transport, binding, signal) };
 			const readConfiguration = async () => {
 				const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
 				const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
