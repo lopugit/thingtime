@@ -20,6 +20,7 @@ import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
 import { SharePreviewHost } from './components/Sharing/SharePreviewHost';
 import { TimelineHost } from './components/Timeline/TimelineHost';
+import { ThingReplicaSyncHost } from './storage/ThingReplicaSyncHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
 import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
@@ -148,7 +149,7 @@ export default function App() {
         <ThingDraftsProvider>
          <TimelineProvider>
          <LidarScanProvider ownerId={nativeOwner} generation={identity.generation}>
-         {mounted && !isAuthorizePopup ? <><TimelineHost /><SharePreviewHost /></> : null}
+         {mounted && !isAuthorizePopup ? <><TimelineHost /><ThingReplicaSyncHost ownerId={nativeOwner} generation={identity.generation} dataPlane={rootData.dataPlane} /><SharePreviewHost /></> : null}
         <VisualSettingsHost />
         {mounted ? <BrowserExtensionAccountBridge /> : null}
         <LopuPageTracker />

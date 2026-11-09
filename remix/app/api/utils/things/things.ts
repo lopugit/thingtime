@@ -1,5 +1,6 @@
 import { contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
 import { THING_METADATA_KIND } from '../../../utils/thingMetadata';
+import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../../../utils/thingStoragePolicy';
 import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
 import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
@@ -2303,10 +2304,14 @@ const resolvePostAttachments = async (
 // Bound attachments are server-authored state, so live presence is exactly as
 // trustworthy as the create-time inspection, and an attachment-only post must
 // stay editable (its content IS the bound media).
-const boundAttachmentPresence = async (ownerId: string, targetId: string): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
+const boundAttachmentPresence = async (ownerId: string, targetId: string, prospective: readonly unknown[] = [], session?: any): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
 	const things = await getThingsCollection();
+	const requested = prospective.filter((id): id is string => typeof id === 'string').map(id => id.trim());
+	const target = requested.length ? { $or: [{ targetId }, { shareId: { $in: requested } }] } : { targetId };
+	// Prospective rows inform validation only. The guarded transaction binds
+	// them through the exact attachment lifecycle before publishing any change.
 	const docs = (await things
-		.find({ thingtime: 'attachment', targetId, ownerId, attachmentState: 'ready' } as any)
+		.find({ thingtime: 'attachment', ...target, ownerId, attachmentState: 'ready' } as any, session ? { session } : {})
 		.project({ 'crystal.mediaKind': 1 })
 		.toArray()) as any[];
 	return {
@@ -2909,14 +2914,15 @@ const isPrivateConnectionThing = (doc: ThingDoc) => {
 // carries another schema marker. No generic owner, shared, inherited, export
 // or reference read may turn those records into ordinary editable content.
 const isBackupControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === 'backup-job' || kind === 'backup-job-event');
+const isThingStorageControl = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === THING_STORAGE_POLICY_KIND || kind === THING_DEVICE_STORAGE_POLICY_KIND || kind === THING_STORAGE_POLICY_INDEX_KIND);
 
 // Single and batched exact reads share the same protected-record exclusion.
 const genericThingReadBlocked = (doc: ThingDoc) => isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
-  thingtimeOf(doc).includes(THING_METADATA_KIND) ||
+  thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc) ||
   thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind));
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
-  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc)) return false;
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
@@ -3019,7 +3025,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc)) return false;
   if (isBackupControlThing(doc) || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
@@ -5376,7 +5382,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; storageCloudWrite?: { expectedRevision: string | null; attachmentIds?: readonly unknown[] }; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -5386,6 +5392,12 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  const storageCloudWrite = options.storageCloudWrite;
+  const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
+  if (storageCloudWrite && (app || viewer.pat || isCustomMongoEndpointActive() ||
+      (!ownsPlacement && storageCloudWrite.expectedRevision !== null) ||
+      (doc.ownerId !== viewer.id && storageCloudWrite.attachmentIds)))
+    return fail(404, 'Thing not found');
   if (options.timeline && (doc.ownerId !== viewer.id || doc.timelineHeadId !== options.timeline.expectedHeadId)) return fail(409, 'Thing changed after the version preview. Refresh and compare again.');
   if (String(doc.ownerId) !== viewer.id) {
     // Shared editing — custom audiences may grant WRITE to picked users or
@@ -5468,7 +5480,7 @@ export const updateThing = async (
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".
 	const postAttachments =
-		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId, storageCloudWrite?.attachmentIds) : undefined;
   const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
@@ -5699,10 +5711,25 @@ export const updateThing = async (
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
+		if (storageCloudWrite || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
 			await withMongoTransaction(async (session) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
+        if (storageCloudWrite) {
+          if (ownsPlacement) {
+            const { assertThingStorageCloudWrite } = await import('./thingStoragePolicy');
+            await assertThingStorageCloudWrite(things, doc.ownerId, doc.shareId, storageCloudWrite.expectedRevision, session);
+          }
+          if (storageCloudWrite.attachmentIds) {
+            const { syncBoundTargetAttachments } = await import('../attachments/attachmentStore');
+            await syncBoundTargetAttachments(doc.ownerId, doc.shareId, storageCloudWrite.attachmentIds, session);
+            if (postAttachments) {
+              const bound = await boundAttachmentPresence(doc.ownerId, doc.shareId, [], session);
+              if ((postAttachments.hasAny && !bound.hasAny) || (postAttachments.hasVisual && !bound.hasVisual))
+                throw new StorageMutationError(409, 'storage_conflict', 'Attachments changed while the Thing was being updated');
+            }
+          }
+        }
         await options.timeline?.beforeCommit?.({ session, afterCommit: effect => afterCommit.push(effect) });
 				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
@@ -5714,7 +5741,7 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
-						...((timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
+						...((storageCloudWrite || timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
 					} as any,
 					{ $set: set, $unset: unset } as any,
 					{ session }

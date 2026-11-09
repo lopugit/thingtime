@@ -92,12 +92,16 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 
 	return {
 		currentScope: input.currentScope,
+		...(version === 1 && runtime.automaticStoragePlacement ? {
+			admit: async (operation: SyncOperation) => runtime.automaticStoragePlacement!.admit(operation.mutation, true)
+		} : {}),
 		deferUpload: async operation => {
 			const m = operation.mutation;
 			if (version !== 1 || operation.confirmed || m.kind !== 'copy' || m.from !== 'local' ||
 				m.source.kind !== 'file' || m.source.size <= 0 || !m.source.fingerprint || m.path.includes('/')) return null;
 			const { write } = await get(operation.id, scope);
 			if (JSON.stringify(operation) !== JSON.stringify(write.operation)) throw Error('Deferred operation changed.');
+			await runtime.automaticStoragePlacement?.admit(m, true);
 			const file = createCloudFileTransport(runtime, write, input.signal);
 			if (!sameSyncStamp(m.source, await input.readLocal(m.path)) || !sameSyncStamp(m.expectedTarget, await file.read()))
 				return null;
@@ -140,6 +144,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			const { write, trashContext } = await get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
+			if (version === 1) await runtime.automaticStoragePlacement?.admit(operation.mutation);
 			appliedId = operation.id;
 
 			if (isLocalTrash(write)) {
@@ -167,6 +172,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				if (source) await source.verify!();
 				if (!sameSyncStamp(m.source, await readLocalSource(write))) throw Error('Cloud path changed before local publication.');
 				check();
+				await runtime.automaticStoragePlacement?.admit(m, true);
 				await input.beforeLocalPublication?.(operation.id);
 				check();
 				const result = await input.localTarget!.publish(structuredClone(operation), { ...scope }, structuredClone(staged));

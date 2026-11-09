@@ -15552,3 +15552,31 @@ private readback while an unrelated Home fixture remains paused.
   account and hidden-link access. Metadata must never grant access to its source.
 - Check JSON-only, failed/retried refresh and account/origin changes. Keep good
   same-account measurements during a transient refresh; clear inaccessible data.
+## Thing storage and device copies
+
+- On desktop and narrow mobile, open Storage from a Thing page and from its
+  context menu; scroll to the bottom, open every choice, edit a nested label
+  and control in Builder, save and reload.
+- Keep an owned JSON Thing and a real file on this device. Independently compare
+  the downloaded bytes and hash, reload offline, and verify the retained data.
+  Switch accounts and verify no prior account's data or status appears.
+- Pause automatic cloud sync, edit enrolled JSON, and verify the cloud copy is
+  unchanged. Re-enable sync, read the exact Thing back, and test a lost reply
+  and a conflicting cloud edit without dropping the local pending change.
+- Select Cloud and this device, then use a second independently paired device
+  or browser installation. Verify catalog access without an automatic original
+  download; explicit online opening remains available.
+- Select Cloud only. Verify exact cloud identity and bytes before local release.
+  Interrupt an upload, modify local bytes, reverse the policy during transfer,
+  revoke access and simulate quota/fingerprint errors. Each must preserve the
+  last good copy or pending edit and offer an accurate retry state.
+- Exercise existing folder sync: policy exclusions must not become cloud Trash,
+  false copy receipts, unrelated-file stalls or repeated automatic downloads.
+- On an installed iPhone build, keep/open a real File and retry a known LiDAR
+  archive. Verify its exact receipt and local fingerprint before cloud-only
+  removal; retain and disclose any unuploaded recovery original. Photos,
+  picker files and user exports must remain untouched.
+- Prepare and stage a multi-gigabyte LiDAR archive while sampling resident
+  memory. Growth must remain bounded across the entire archive, with exact
+  fingerprints and unchanged original bytes. Keep simulator/build evidence,
+  a physical app exit, and an actual iOS crash/termination report distinct.

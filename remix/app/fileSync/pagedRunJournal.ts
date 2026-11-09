@@ -1196,14 +1196,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Only for an executor's preflight failure AFTER receipt lookup returned
 		 * missing. Pending/uncertain publications must retain the original ID. */
-		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false) {
+		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false, firstPlacementDispatchExcluded = false) {
 			const spec = parsePagedRunSpec(value);
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (!h.stream || h.scheduling?.reserved !== operationId) throw Error('Only the reserved unpublished streaming operation can be superseded.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
 					if (r.operation.confirmed || r.receipt !== null ||
-						(r.canonicalDispatched === true && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
+						(r.canonicalDispatched === true && !firstPlacementDispatchExcluded && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
 						throw Error('Preserve the published or uncertain revision receipt.');
 					if (h.scheduling?.batch) throw Error('Recover the reserved batch before replanning a member.');
 					const retire = () => {
@@ -2056,6 +2056,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
 					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
 					h.scheduling!.reserved = null; if (!target) h.photoSourceChanged = true;
+					if (h.confirmed === h.operations) h.phase = 'complete';
+					h.revision++; save(h, tx); done(progress(h));
+				} catch (error) { fail(error); } };
+			});
+		},
+		/** A policy refusal after a missing receipt can remove only an original
+		 * operation that has never crossed the durable dispatch boundary. */
+		async omitStoragePlacementOperation(value: PagedRunSpec, supplied: SyncOperation, firstPlacementDispatchExcluded = false): Promise<PagedRunProgress> {
+			const spec = parsePagedRunSpec(value), expected = structuredClone(supplied);
+			return withHeader(spec, 'readwrite', (h, tx, done, fail) => {
+				if (h.stream || h.phase !== 'running' || h.scheduling?.reserved !== expected.id || cloudProgress(h).phase !== 'ready')
+					throw Error('The excluded storage operation is no longer reserved.');
+				const ops = tx.objectStore(PAGED_RUN_STORES[1]), primary = [key, spec.id, ...orderKey(expected, spec)], get = ops.get(primary);
+				get.onsuccess = () => { try {
+					check(); const saved = row(get.result, spec);
+					if ((!firstPlacementDispatchExcluded && saved.canonicalDispatched !== false) || saved.operation.confirmed || saved.receipt || JSON.stringify(saved.operation) !== JSON.stringify(expected))
+						throw Error('Preserve the original storage operation until its effect is known.');
+					ops.delete(primary);
+					if (h.directions) removeUnconfirmedSyncDirection(h.directions, expected);
+					h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
+					h.scheduling!.reserved = null; h.scheduling!.canonical = false;
 					if (h.confirmed === h.operations) h.phase = 'complete';
 					h.revision++; save(h, tx); done(progress(h));
 				} catch (error) { fail(error); } };

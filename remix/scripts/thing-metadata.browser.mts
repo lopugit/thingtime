@@ -8,13 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+type ThingBrowserScenario = {
+  evidenceDir: string;
+  marker: string;
+  run(input: { page: any; context: any; profile: string; base: string; evidence: string }): Promise<void>;
+};
+
 export async function runThingMetadataBrowser(input: {
   owner: Record<string, unknown>; cookie: string; sourceId: string; jsonId: string; unavailableId?: string;
-}) {
+}, scenario?: ThingBrowserScenario) {
   assert.match(process.env.MONGODB_CONNECTION_STRING || '', /^mongodb:\/\/127\.0\.0\.1:\d+\/thingtime\?replicaSet=thing-metadata$/);
   assert.ok(process.env.THINGTIME_METADATA_TEST_DIRECTORY);
   const root = fileURLToPath(new URL('../', import.meta.url));
-  const evidence = resolve(process.env.THINGTIME_METADATA_BROWSER_EVIDENCE || '/tmp/thingtime-metadata-evidence/browser');
+  const evidence = resolve(scenario?.evidenceDir ?? process.env.THINGTIME_METADATA_BROWSER_EVIDENCE ?? '/tmp/thingtime-metadata-evidence/browser');
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   const base = 'http://127.0.0.1:11500';
   assert.equal(process.env.APP_URL, base);
@@ -79,6 +85,11 @@ export async function runThingMetadataBrowser(input: {
       const errors: string[] = [];
       page.on('pageerror', (error: Error) => errors.push(error.message));
       try {
+        if (scenario) {
+          await scenario.run({ page, context, profile, base, evidence });
+          assert.deepEqual(errors, []);
+          continue;
+        }
         await page.goto(`${base}/thing/${input.sourceId}`);
         const panel = page.locator('[aria-label="Thing metadata"]');
         await panel.getByRole('heading', { name: 'Thing metadata' }).waitFor();
@@ -137,6 +148,11 @@ export async function runThingMetadataBrowser(input: {
         await writeFile(join(evidence, `${profile}-failure.txt`), JSON.stringify({ errors, requests, text: await page.locator("body").innerText() }, null, 2), { mode: 0o600 });
         throw error;
       } finally { await context.close(); }
+    }
+    if (scenario) {
+      await writeFile(join(evidence, 'result.json'), JSON.stringify({ passed: true, scenario: scenario.marker, requests }, null, 2), { mode: 0o600 });
+      console.log(scenario.marker);
+      return;
     }
     await writeFile(join(evidence, 'result.json'), JSON.stringify({ passed: true, sourceId: input.sourceId, fileBytes: 5632,
       views: ['desktop', 'mobile', 'expanded details', 'saved metadata reference', 'JSON-only', 'edited layout reload', 'unavailable attachment size', 'transient refresh and retry'], requests }, null, 2), { mode: 0o600 });

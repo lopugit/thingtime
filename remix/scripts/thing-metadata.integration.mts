@@ -148,6 +148,14 @@ const deletedMetadata = (await save(deleted.id)).metadata.id;
 await ok(things.action, sourcePath(deleted.id), { cookie, method: 'DELETE' });
 assert.equal((await call(things.loader, sourcePath(deletedMetadata), { cookie })).response.status, 404);
 assert.equal((await call(metadata.loader, metaPath(deleted.id), { cookie })).response.status, 404);
+if (process.env.THINGTIME_STORAGE_POLICY_TEST === '1') {
+  const { runThingStoragePolicyProof } = await import('./thing-storage-policy.integration.mts');
+  await runThingStoragePolicyProof({ base, cookie, otherCookie: other.cookie, file });
+}
+if (process.env.THINGTIME_STORAGE_BROWSER_TEST === '1') {
+  const { runThingStorageBrowser } = await import('./thing-storage.browser.mts');
+  await runThingStorageBrowser({ owner: owner.user, cookie, sourceId: file.id, jsonId: source.id, unavailableId: unavailable.id });
+}
 if (process.env.THINGTIME_METADATA_BROWSER === '1') {
   const { runThingMetadataBrowser } = await import('./thing-metadata.browser.mts');
   await runThingMetadataBrowser({ owner: owner.user, cookie, sourceId: file.id, jsonId: source.id, unavailableId: unavailable.id });

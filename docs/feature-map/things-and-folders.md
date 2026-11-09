@@ -1,5 +1,15 @@
 # Things and folders
 
+## Thing storage choices
+
+`ThingStoragePanel` and the shared Thing context menu expose individually editable
+storage controls. `thingStoragePolicy.ts` in the Things utility layer owns private,
+revision-fenced owner and device preferences; `storage/thingReplicaStore.ts` and
+`thingReplicas.client.ts` own browser JSON and byte copies. iOS `FileReplicaBridge`
+uses the shared AppleFileSync managed-copy adapter. Preferences never authorize
+cloud deletion or imply a completed transfer. See [Thing storage](../thing-storage.md)
+and the Thing storage and device copies checklist in `TESTING.md`.
+
 ## Derived Thing metadata
 
 `ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually

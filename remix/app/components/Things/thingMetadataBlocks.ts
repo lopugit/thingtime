@@ -147,10 +147,13 @@ export const thingMetadataBlocks: WebpageBlock[] = [panel([
   show('metrics-visible', 'ready', [metrics]),
   show('actions-visible', 'showActions', [
     element('actions', 'div', { css: { display: 'flex', 'flex-wrap': 'wrap', gap: '8px' }, children: [
+      show('storage-visible', 'storageHref', [
+        element('storage-link', 'a', { text: 'Storage settings', props: { href: '{storageHref}' }, css: buttonStyle }),
+      ]),
       show('reference-visible', 'metadataHref', [
         element('reference', 'a', { text: 'Open metadata Thing', props: { href: '{metadataHref}' }, css: buttonStyle }),
       ]),
-      refresh,
+      show('refresh-visible', 'canRefreshMetadata', [refresh]),
     ] }),
   ]),
   show('facts-visible', 'ready', [

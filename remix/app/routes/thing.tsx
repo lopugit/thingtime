@@ -46,6 +46,8 @@ import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
 import { ThingMetadataPanel } from '~/components/Things/ThingMetadataPanel';
+import { ThingStoragePanel } from '~/components/Things/ThingStoragePanel';
+import { thingStorageHref } from '~/components/Things/thingStorageNavigation';
 import { isThingMetadataReference, THING_METADATA_KIND } from '~/utils/thingMetadata';
 import { ThingParentPaths } from '~/components/Things/ThingParentPaths';
 import { ThingFileLocation } from '~/components/Things/ThingFileLocation';
@@ -985,10 +987,15 @@ function GenericThingPage() {
 						{thing && isMetadataThing ? (
 							<ThingRenderComponent thing={{ ...thing.crystal, sourceHref: metadataSourceHref }} />
 						) : thing ? (
-							<ThingMetadataPanel id={thing.id} revision={String(thing.updatedAt || '')} sourceVerified={!loading && !error} sourceLoading={loading} linkKey={linkKey} />
+							<ThingMetadataPanel id={thing.id} revision={String(thing.updatedAt || '')} sourceVerified={!loading && !error} sourceLoading={loading} linkKey={linkKey}
+								storageHref={thingStorageHref(thing.id, { dataPlane, key: linkKey, fromThings: searchParams.get('from') === 'things' })} />
 						) : diagnostic ? (
 							<ThingMetadataPanel id={diagnostic.id} sourceVerified={false} unavailable="This diagnostic is a protected report. Thing data and file data sizes are unavailable." />
 						) : null}
+
+						{thing && !isMetadataThing ? <ThingStoragePanel id={thing.id} ownerId={thing.author?.id}
+							kind={kinds.includes('file') ? 'file' : primaryKind} revision={String(thing.updatedAt || '')}
+							sourceVerified={!loading && !error} sourceLoading={loading} /> : null}
 
 						{sections.viewToggles ? (
 							<Flex

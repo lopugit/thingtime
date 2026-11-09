@@ -21,6 +21,7 @@ type PanelProps = {
   linkKey?: string;
   archive?: boolean;
   unavailable?: string;
+  storageHref?: string;
 };
 
 export function ThingMetadataPanel(props: PanelProps) {
@@ -36,7 +37,7 @@ export function ThingMetadataPanel(props: PanelProps) {
 }
 
 function MetadataSession({
-  id, revision, sourceVerified, sourceLoading = false, archive = false, linkKey = '', unavailable, scopeKey, origin, actor, character, plane, generation, canEdit,
+  id, revision, sourceVerified, sourceLoading = false, archive = false, linkKey = '', unavailable, storageHref, scopeKey, origin, actor, character, plane, generation, canEdit,
 }: PanelProps & { scopeKey: string; origin: string; actor?: string; character?: string; plane: string | null; generation: number; canEdit: boolean }) {
   const [metadata, setMetadata] = React.useState<ThingMetadata | null>(null);
   const [busy, setBusy] = React.useState(!unavailable);
@@ -101,7 +102,8 @@ function MetadataSession({
     : '';
   const scope = {
     ...(metadata ?? {}), ready: metadata !== null, reserveSpace: metadata === null && busy, metadataHref, busy,
-    error, unavailable: unavailable ?? '', showActions: !unavailable && (metadata !== null || hasFailed),
+    error, storageHref, unavailable: unavailable ?? '', showActions: !unavailable && (metadata !== null || hasFailed || !!storageHref),
+    canRefreshMetadata: metadata !== null || hasFailed,
     refreshLabel: error ? 'Retry' : 'Refresh metadata',
     referenceStatus: metadataHref ? 'Saved metadata reference available' : 'Live measurements',
   };
