@@ -56,6 +56,15 @@ const makeContext = (scope: Record<string, unknown> = {}, random = () => 0.5): E
 const run = (expression: unknown[], scope?: Record<string, unknown>, random?: () => number): any =>
 	evaluateExpression(expression, makeContext(scope, random));
 
+test('civil date ranges validate exact dates and cross months, leap days and years', () => {
+	assert.deepEqual(run(['civilDateRange', '2028-02-28', 3]), ['2028-02-28', '2028-02-29', '2028-03-01']);
+	assert.deepEqual(run(['civilDateRange', '2026-12-31', '2']), ['2026-12-31', '2027-01-01']);
+	assert.deepEqual(run(['civilDateRange', '2026-12-31', 0]), []);
+	assert.throws(() => run(['civilDateRange', '2026-02-29', 1]), /valid YYYY-MM-DD/);
+	assert.throws(() => run(['civilDateRange', '2026-03-01', 1.5]), /range budget/);
+	assert.throws(() => run(['civilDateRange', '9999-12-31', 2]), /supported calendar/);
+});
+
 test('math functions compute over numbers and numeric strings', () => {
 	assert.equal(run(['add', 1, 2, '3']), 6);
 	assert.equal(run(['sub', 10, 4]), 6);

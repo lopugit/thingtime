@@ -1777,7 +1777,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_STEPS,
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
-				'things.create { schema, values }; things.ensure { schema, key, values, folderId? }; things.get { id }; things.search { schema?, limit? }; ' +
+				'things.create { schema, values }; things.ensure { schema, key, values, folderId?, each?, matchFields? }; things.get { id }; things.search { schema?, limit? }; ' +
 				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
@@ -5614,7 +5614,7 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
-const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
+const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true; source: Record<string, unknown> } | Fail => {
 	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
 	const rawSource = input as Record<string, unknown>;
 	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
@@ -5622,6 +5622,10 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
 	}
 	const source: Record<string, unknown> = { action };
+	if (rawSource.passive !== undefined && (typeof rawSource.passive !== 'boolean' || (rawSource.passive && !allowPassive))) {
+		return fail(400, 'Passive sources belong on ordinary webpage blocks');
+	}
+	if (rawSource.passive) source.passive = true;
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
 			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
@@ -5886,7 +5890,7 @@ const sanitizeWebpageBlock = (
 	// Source bindings can scope any editable subtree. Execution retains the
 	// same viewer-owned Action authorization as a component source.
 	if (raw.source != null) {
-		const checked = sanitizeSourceBinding(raw.source);
+		const checked = sanitizeSourceBinding(raw.source, type !== 'component');
 		if (isFail(checked)) return checked;
 		block.source = checked.source;
 	}
@@ -6544,15 +6548,15 @@ const sanitizeActionSteps = (
 		// object ({ ttExpr } / { ttConcat }) that resolves at run time
 		const isExpressionObject = (value: unknown): boolean =>
 			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
-		const checkRefString = (value: unknown, field: string): Fail | null => {
+		const checkRefString = (value: unknown, field: string, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
 			if (isExpressionObject(value)) {
-				const checked = validateActionValue(value, stepIndex);
+				const checked = validateActionValue(value, stepIndex, 0, scope);
 				if (isFail(checked)) return checked;
 				step[field] = value;
 				return null;
 			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
-			const checked = validateActionValue(value.trim(), stepIndex);
+			const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
 			if (isFail(checked)) return checked;
 			step[field] = value.trim();
 			return null;
@@ -6590,10 +6594,22 @@ const sanitizeActionSteps = (
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
-			failure = checkValues(raw.values, 'values', true) || requireCapability(stepIndex, 'things.create', schema.ref);
-			if (!failure && op === 'things.ensure') {
-				failure = requireCapability(stepIndex, 'things.read', schema.ref) || checkRefString(raw.key, 'key')
-					|| (raw.folderId !== undefined ? checkRefString(raw.folderId, 'folderId') : null);
+			const ensure = op === 'things.ensure';
+			const batch = ensure && raw.each !== undefined;
+			const itemScope = batch ? { itemDepth: 1 } : TOP_SCOPE;
+			failure = checkValues(raw.values, 'values', true, itemScope) || requireCapability(stepIndex, 'things.create', schema.ref);
+			if (!failure && ensure) {
+				failure = requireCapability(stepIndex, 'things.read', schema.ref) || checkRefString(raw.key, 'key', itemScope)
+					|| (raw.folderId !== undefined ? checkRefString(raw.folderId, 'folderId', itemScope) : null)
+					|| (batch ? checkAnyValue(raw.each, 'each') : null);
+				if (!failure && raw.matchFields !== undefined) {
+					if (!Array.isArray(raw.matchFields) || !raw.matchFields.length || raw.matchFields.length > MAX_ACTION_SEARCH_WHERE_KEYS ||
+						raw.matchFields.some(field => typeof field !== 'string' || !ACTION_SEARCH_FIELD_PATTERN.test(field) ||
+							ACTION_BANNED_SEGMENTS.has(field) || field === 'schema' || field === 'schemaId')) {
+						return fail(400, `Step ${stepIndex} matchFields needs plain crystal field names`);
+					}
+					step.matchFields = [...new Set(raw.matchFields)];
+				}
 			}
 		} else if (op === 'things.get') {
 			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');

@@ -1,6 +1,7 @@
+import { isCivilTime } from '~/schemas/civilDates';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
-import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesPassiveSource } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -40,6 +41,7 @@ export type ResolvedWebpage = {
 	page: { id: string; executionHeld?: boolean; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
+	activationSchedule?: { cutoffTime: string; revision: string };
 };
 
 const targetQuery = (target: WebpageTarget): string => {
@@ -56,7 +58,7 @@ export type WebpageLoadResult =
 	| { status: 'missing' }
 	| { status: 'error' };
 
-export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageLoadResult> => {
+export const loadWebpageClient = async (target: WebpageTarget, signal?: AbortSignal): Promise<WebpageLoadResult> => {
 	// SiteBlocksHost resolves EVERY route a signed-in viewer lands on, and many
 	// of them can never be a siteRoute: /post/<id>, /docs/api/<group>/<docId>
 	// and the `*` thing-tree catch-all routinely carry characters the server
@@ -66,7 +68,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
 		await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
-		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
+		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include', signal });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
 		const data = await response.json();
@@ -76,7 +78,9 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 			data: {
 				page: data.page || null,
 				source: data.source || null,
-				componentsByRef: buildComponentsByRef(data)
+				componentsByRef: buildComponentsByRef(data),
+				...(isCivilTime(data.activationSchedule?.cutoffTime) && typeof data.activationSchedule?.revision === 'string'
+					? { activationSchedule: data.activationSchedule } : {})
 			}
 		};
 	} catch {
@@ -396,6 +400,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
 				if (usesAuthoredControls(blocks)) {
 					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
 					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);

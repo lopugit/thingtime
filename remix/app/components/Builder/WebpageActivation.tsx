@@ -1,25 +1,51 @@
 import React from 'react';
 import { Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { ThingtimeApiError } from '~/hooks/apiFailure';
 import { useApi } from '~/hooks/useApi';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { BROWSER_ACTION_EXPANDED_LIMITS } from '~/schemas/browserActions';
 import {
 	nextWebpageActivationBoundary, webpageActivationKey, webpageActivationQuery,
-	WEBPAGE_ACTIVATION_REQUIREMENTS, type WebpageActivation as ActivationBinding
+	WEBPAGE_ACTIVATION_REQUIREMENTS, type ResolvedWebpageActivation as ActivationBinding
 } from '~/schemas/webpageActivation';
+import { loadWebpageClient } from './useWebpage';
 import { useWebpageRuntime } from './webpageRuntime';
 
-type State = { identity: object; binding: string; key: string; phase: 'running' | 'error' | 'done'; attempts: number };
+type State = { identity: object; binding: string; key: string; phase: 'running' | 'error' | 'done'; attempts: number; scheduleChanged?: boolean };
 
-export function WebpageActivation({ binding, revision }: { binding: ActivationBinding; revision: string }) {
+export function RefreshWebpageActivationSchedule({ refresh }: { refresh: () => void }) {
+	const { last } = useWebpageRuntime();
+	const refreshed = React.useRef<typeof last>(null);
+	React.useEffect(() => {
+		if (!last?.ok || refreshed.current === last) return;
+		refreshed.current = last;
+		refresh();
+	}, [last, refresh]);
+	React.useEffect(() => {
+		const visible = () => { if (document.visibilityState !== 'hidden') refresh(); };
+		const restored = (event: PageTransitionEvent) => { if (event.persisted) visible(); };
+		document.addEventListener('visibilitychange', visible);
+		window.addEventListener('pageshow', restored);
+		return () => {
+			document.removeEventListener('visibilitychange', visible);
+			window.removeEventListener('pageshow', restored);
+		};
+	}, [refresh]);
+	return null;
+}
+
+export function WebpageActivation({ binding, revision, scheduleRevision, refreshSchedule }: {
+	binding: ActivationBinding; revision: string; scheduleRevision?: string; refreshSchedule?: () => void
+}) {
 	const runtime = useWebpageRuntime();
 	const dataPlane = useDataPlane();
 	const api = useApi();
-	const bindingKey = JSON.stringify(binding);
+	const bindingKey = JSON.stringify([binding, revision, scheduleRevision]);
 	const [visibleState, setVisibleState] = React.useState<State | null>(null);
 	const runState = React.useRef<State | null>(null);
 	const attempted = React.useRef<{ identity: object; binding: string; keys: Set<string> } | null>(null);
+	const recoveredSchedule = React.useRef<object | null>(null);
 	const current = React.useRef({ runtime, binding, bindingKey, api, revision });
 	current.current = { runtime, binding, bindingKey, api, revision };
 	const retry = React.useRef<(() => void) | undefined>(undefined);
@@ -38,7 +64,7 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 		let timer = 0;
 		const stillCurrent = () => !controller.signal.aborted && current.current.runtime.identity === identity &&
 			current.current.bindingKey === bindingKey && window.location.origin === origin;
-		const begin = (manual = false) => {
+		const begin = (manual = false, reconciled = false) => {
 			if (!stillCurrent() || document.visibilityState === 'hidden') return;
 			const { binding, revision, api, runtime } = current.current;
 			const key = webpageActivationKey(binding);
@@ -48,14 +74,34 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 			// create another run. The only same-key retry is explicit.
 			if (manual ? !before || before.phase !== 'error' || before.attempts >= 2 : attemptedKeys.has(key)) return;
 			if (stored?.identity === identity && stored.binding === bindingKey && stored.phase === 'running') return;
+			if (manual && before && refreshSchedule && !reconciled) {
+				const checking: State = { ...before, phase: 'running' };
+				runState.current = checking;
+				setVisibleState(checking);
+				const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]);
+				void loadWebpageClient({ kind: 'id', id: pageId }, signal).then(fresh => {
+					if (!stillCurrent() || runState.current !== checking) return;
+					const sameSchedule = fresh.status === 'ready' && fresh.data.page?.id === pageId &&
+						fresh.data.page.updatedAt === revision && fresh.data.activationSchedule?.revision === scheduleRevision &&
+						fresh.data.activationSchedule?.cutoffTime === binding.cutoffTime;
+					const next = { ...before, attempts: sameSchedule && !before.scheduleChanged ? before.attempts : before.attempts + 1 };
+					runState.current = next;
+					setVisibleState(next);
+					if (sameSchedule && !before.scheduleChanged) {
+						if (webpageActivationKey(binding) === key) begin(true, true);
+						else schedule();
+					} else if (!sameSchedule && fresh.status !== 'error') refreshSchedule();
+				});
+				return;
+			}
 			const state: State = { identity, binding: bindingKey, key, phase: 'running', attempts: (before?.attempts ?? 0) + 1 };
 			attemptedKeys.add(key);
 			runState.current = state;
 			setVisibleState(state);
 			const active = () => stillCurrent() && runState.current === state;
-			const finish = (phase: State['phase']) => {
+			const finish = (phase: State['phase'], scheduleChanged = false) => {
 				if (!active()) return;
-				const next = { ...state, phase };
+				const next = { ...state, phase, scheduleChanged };
 				runState.current = next;
 				setVisibleState(next);
 			};
@@ -68,10 +114,13 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 					}
 					const result = await api.v1.actions.run({
 						source: 'activation', action: binding.action, activationPageId: pageId,
-						activationPageRevision: revision, activationOnceKey: key
+						activationPageRevision: revision, activationScheduleRevision: scheduleRevision, activationOnceKey: key
 					}, { signal });
 					if (!active()) return;
-					if (result?.status !== 'ok') { finish('error'); return; }
+					if (result?.status !== 'ok') {
+						finish('error', result?.reason === 'activation-schedule-changed');
+						return;
+					}
 					if (webpageActivationKey(binding) === key) {
 						// This captured setter cannot affect a different navigation
 						// generation; it also ignores manually selected query keys.
@@ -80,8 +129,16 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 						current.current.runtime.refresh();
 					}
 					finish('done');
-				} catch {
-					finish('error');
+				} catch (error) {
+					const scheduleChanged = error instanceof ThingtimeApiError && error.status === 409 && error.reason === 'activation-schedule-changed';
+					const recover = active() && scheduleChanged && refreshSchedule && recoveredSchedule.current !== identity;
+					finish('error', scheduleChanged);
+					if (recover) {
+						recoveredSchedule.current = identity;
+						// The server refused the stale revision before executing. A
+						// newly resolved revision can arm a run with current inputs.
+						refreshSchedule();
+					}
 				} finally {
 					if (stillCurrent() && webpageActivationKey(binding) !== key) schedule();
 				}
@@ -113,7 +170,7 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 				runState.current = { ...pending, phase: 'error' };
 			}
 		};
-	}, [identity, pageId, bindingKey, dataPlane, runtime.viewer.signedIn, runtime.sharedRun]);
+	}, [identity, pageId, bindingKey, scheduleRevision, refreshSchedule, dataPlane, runtime.viewer.signedIn, runtime.sharedRun]);
 
 	const state = visibleState?.identity === identity && visibleState.binding === bindingKey ? visibleState : null;
 	if (!state || state.phase === 'done') return null;
@@ -123,7 +180,7 @@ export function WebpageActivation({ binding, revision }: { binding: ActivationBi
 				<span role="status" aria-label="Preparing this page"><Spinner size="xs" aria-hidden sx={{ '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }} /></span>
 			) : (
 				<>
-					<Text role="status" fontSize="sm">Couldn’t run the page setup.</Text>
+					<Text role="status" fontSize="sm">{state.scheduleChanged ? 'The page schedule changed. Refresh it to continue.' : 'Couldn’t run the page setup.'}</Text>
 					{state.attempts < 2 && <Button size="xs" variant="ghost" onClick={() => retry.current?.()}>Retry</Button>}
 				</>
 			)}
