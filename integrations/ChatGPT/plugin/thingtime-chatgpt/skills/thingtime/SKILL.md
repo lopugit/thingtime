@@ -39,6 +39,16 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
+For authorized provider provisioning, use the Thingtime checkout's
+`docs/agent-credential-workflows.md`. From that checkout run
+`npm --silent --prefix remix run credentials:import -- --preflight --origin <origin> --format <format>`
+before opening the credential source. Use `google-oauth` for a Google web
+client export and `oauth-client` for a scoped Meta Connections client update.
+The root administrator reviews the exact destination and revision in the
+assigned Thingtime browser. Provider bytes go directly from an authorized
+file or protected pipe to the encrypted vault. Connected Things permissions
+do not grant vault access. Keep secrets out of MCP arguments and saved Things.
+
 Private agent task lifecycle reporting has dedicated tools:
 `prepare_thingtime_agent_task`, `get_thingtime_agent_task`, and
 `report_thingtime_agent_task`. Select the exact connected account and preserve
