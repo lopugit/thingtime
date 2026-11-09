@@ -2,7 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 import { getScopedActor } from '~/api/utils/auth/scopedUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { runAction } from '~/api/utils/actions/execute';
-import { getThing, isFail, viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
+import { getThing, isFail, readWebpageActivationCutoff, viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
 import { resolveSharedComposition } from '~/api/utils/actions/sharedComposition';
 import { EXPECTED_ACTOR_HEADER } from '~/api/utils/auth/expectedActor';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
@@ -30,7 +30,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (!user && !sharedRoot) return json({ ok: false, error: 'Sign in to run actions' }, { status: 401 });
 	if (body?.source === 'activation') {
 		const headers = { 'Cache-Control': 'private, no-store' };
-		const refuse = (status: number, error: string) => json({ ok: false, error }, { status, headers });
+		const refuse = (status: number, error: string, reason?: string) => json({ ok: false, error, ...(reason ? { reason } : {}) }, { status, headers });
 		if (sharedRoot !== undefined || actor?.kind !== 'account' || !user || user.accountKind !== 'user' || user.temporary || user.isCharacter ||
 			request.headers.get(EXPECTED_ACTOR_HEADER) !== user.id || !isSameOriginAttachmentRequest(request))
 			return refuse(403, 'Page activation requires your full owning account');
@@ -50,7 +50,12 @@ export const action = async ({ request }: { request: Request }) => {
 		};
 		const binding = await getBinding();
 		if (!binding) return refuse(409, 'The saved page activation is no longer available. Reopen the page.');
-		const onceKey = webpageActivationKey(binding);
+		const cutoffSource = typeof binding.cutoffTime === 'object' ? binding.cutoffTime : null;
+		const schedule = cutoffSource ? await readWebpageActivationCutoff(viewer, cutoffSource) : null;
+		if ((cutoffSource && !schedule) || schedule?.revision !== body.activationScheduleRevision)
+			return refuse(409, 'The saved activation schedule changed or is unavailable.', 'activation-schedule-changed');
+		const cutoffTime = typeof binding.cutoffTime === 'string' ? binding.cutoffTime : schedule?.cutoffTime;
+		const onceKey = webpageActivationKey({ ...binding, cutoffTime });
 		if (onceKey !== body.activationOnceKey) return refuse(409, 'The activation date changed. Reopen the page.');
 		const getActionRevision = async () => {
 			const result = await getThing(viewer, binding.action);
@@ -63,15 +68,24 @@ export const action = async ({ request }: { request: Request }) => {
 		if (!actionRevision) return refuse(403, 'Page activation requires your exact private Action');
 		request.signal.throwIfAborted();
 		const inputs = { ...binding.inputs, ...(binding.dayInput ? { [binding.dayInput]: onceKey } : {}) };
+		let scheduleChangedDuringRun = false;
 		const result = await runAction(viewer, { action: binding.action, inputs, source: 'activation', execution: body.execution, executionVersion: body.executionVersion }, undefined, {
 			firstPartyActorId: user.id, activation: { actionRevision, dayInput: binding.dayInput }, assertAuthorized: async () => {
 				request.signal.throwIfAborted();
-				const [currentBinding, currentActionRevision] = await Promise.all([getBinding(), getActionRevision()]);
+				const [currentBinding, currentActionRevision, currentSchedule] = await Promise.all([
+					getBinding(), getActionRevision(), cutoffSource ? readWebpageActivationCutoff(viewer, cutoffSource) : null
+				]);
 				request.signal.throwIfAborted();
+				if (currentSchedule?.revision !== schedule?.revision || currentSchedule?.cutoffTime !== schedule?.cutoffTime) {
+					scheduleChangedDuringRun = true;
+					throw new Error('The saved activation schedule changed while the Action was running');
+				}
 				if (!currentBinding || currentActionRevision !== actionRevision) throw new Error('The saved page activation changed before the Action finished');
 			}
 		});
-		return isFail(result) ? refuse(result.status, result.error) : json(result, { headers });
+		return isFail(result) ? refuse(result.status, result.error) : json({
+			...result, ...(scheduleChangedDuringRun ? { reason: 'activation-schedule-changed' } : {})
+		}, { headers });
 	}
 	const viewer = await withFriendIds(withLinkKeys(user ? viewerOf(user) : null, [typeof body?.key === 'string' ? body.key : '']));
 	const shared = sharedRoot ? await resolveSharedComposition(viewer, sharedRoot, { contentRoot: true }) : undefined;

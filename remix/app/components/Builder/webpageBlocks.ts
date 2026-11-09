@@ -11,6 +11,8 @@ export type WebpageMediaKind = 'image' | 'video' | 'audio';
 
 export interface WebpageBlockSource {
 	action: string;
+	// Bind data without creating a local form, click or event boundary.
+	passive?: boolean;
 	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
 	inputs?: Record<string, string | number | boolean>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.

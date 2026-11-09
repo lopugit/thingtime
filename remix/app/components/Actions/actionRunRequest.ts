@@ -27,6 +27,7 @@ export type ActionRunArgs = {
 	execution?: unknown;
 	activationPageId?: unknown;
 	activationPageRevision?: unknown;
+	activationScheduleRevision?: unknown;
 	activationOnceKey?: unknown;
 };
 
@@ -37,6 +38,7 @@ export const buildActionRunBody = (args?: ActionRunArgs | null): Record<string, 
 		delete body.inputs;
 		body.activationPageId = args.activationPageId;
 		body.activationPageRevision = args.activationPageRevision;
+		if (args.activationScheduleRevision !== undefined) body.activationScheduleRevision = args.activationScheduleRevision;
 		body.activationOnceKey = args.activationOnceKey;
 	}
 	if (args?.execution === 'browser') { body.execution = 'browser'; body.executionVersion = '1.40.0'; }

@@ -177,6 +177,24 @@ test('a component block keeps a well-formed source binding and refuses malformed
 	if (suiteKey.ok) assert.equal(suiteKey.crystal.suiteKey, 'pokeworld');
 });
 
+test('ordinary webpage blocks can bind a passive source without changing source input rules', () => {
+	const source = { action: 'read-settings', passive: true, inputs: { selected: '{query.selected}' } };
+	const valid = validateThingtimeCrystal(['webpage'], { name: 'Passive page', blocks: [
+		{ id: 'settings', type: 'element', tag: 'main', source, children: [
+			{ id: 'active', type: 'element', tag: 'section', source: { action: 'read-rows' } }
+		] }
+	] });
+	assert.ok(valid.ok);
+	const [block] = valid.crystal.blocks as Array<{ source: unknown; children: Array<{ source: unknown }> }>;
+	assert.deepEqual(block.source, source);
+	assert.deepEqual(block.children[0].source, { action: 'read-rows' });
+	for (const invalid of [
+		{ id: 'invalid', type: 'element', source: { ...source, passive: 'true' } },
+		{ id: 'invalid', type: 'element', source: { ...source, inputs: { selected: {} } } },
+		{ id: 'invalid', type: 'component', component: 'existing', source }
+	]) assert.equal(validateThingtimeCrystal(['webpage'], { name: 'Invalid', blocks: [invalid] }).ok, false);
+});
+
 
 test('live sources preserve registered adapter contracts and reject arbitrary authenticated destinations', () => {
   const stream = { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' };

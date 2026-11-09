@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09 — Add private webpage cutoff settings, ordered idempotent Action
+  batches and passive data sources. Preserve existing form ownership, manual
+  selection and cutoff rollover. [Verification](../PRs/1437-codex-routes-planning-preferences-support-scheduled-private-webpage-activation.md). **Codex (AI)**
+
 - 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
   its glibc requirements and password hash compatibility before release.
   **Codex (AI)**

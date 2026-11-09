@@ -410,6 +410,15 @@ transport/interpreter live in `components/Actions/browserActionHost.ts` and
 `browserActionRuntime.ts`; no endpoint-specific UI behavior lives there.
 See [authoring and verification](../builder-browser-actions.md).
 
+Private webpage cutoff settings use `api.webpages-resolve` 1.15.0 and
+`api.actions-run` 1.45.0. The ordinary owning-account resolve projects a
+revision and validated local wall time from an exact private Data Thing.
+The Action route verifies the settings, page and Action revisions before
+automatic writes. Ordered ensure batches use the same existing Action
+authorization, operation budget and protected intent keys. Saved definitions
+require `api.things` 1.57.0 or `api.things-update` 1.23.0. See the
+[cutoff and batch contracts](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
+
 JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
 `api.things-update` 1.10.0, `api.actions-run` 1.12.0 and
 `api.webpages-suites-install` 1.3.0. Both manifests and client negotiation cover

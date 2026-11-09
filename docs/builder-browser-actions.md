@@ -163,9 +163,24 @@ Use the exact owner-private saved Action ID. `cadence: "open"` runs once per ope
 `"day"` also runs when the configured civil date changes while the page is
 open. Day cadence requires a valid IANA timezone. Optional `dayInput` names
 a declared string input; the server supplies the stable `YYYY-MM-DD` value.
+An optional `cutoffTime` of `"HH:mm"` advances that date to tomorrow at the
+configured local time. Omit it or use `"00:00"` to follow the ordinary local
+calendar date. A skipped wall time takes effect at the clock jump. A repeated
+wall time takes effect at its first occurrence.
+
+To use a saved preference, set `cutoffTime` to
+`{ "thingId": "settings-id", "schemaId": "settings-schema-id", "field": "cutoffTime" }`.
+The source must be the owner's exact readable private Data Thing with that
+schema. An absent field defaults to midnight. An invalid field or unavailable
+source prevents activation. The viewer re-resolves this setting after a
+successful authored Action, when the tab becomes visible, and on reopening.
+A stale schedule revision returns a conflict before execution. The viewer
+checks the current schedule once and re-arms when it receives a new revision.
+
 Other inputs are literal saved scalars. Write Actions may ensure a stable
 Thing identity so a second opening, tab or explicit retry can reuse it.
-An ensure key must be literal or the bound civil-date input. Arbitrary
+An ensure key must be literal, the bound civil-date input, or `$item` in an
+ordered ensure batch whose `civilDateRange` starts at that input. Arbitrary
 writes and composed child Actions are refused.
 
 Only the full owning account viewing its saved private standalone page can
@@ -182,13 +197,13 @@ paths. Returned scalar values fill the mapped keys that the reader has not
 selected manually or set in a deep link. A result with no mapped values
 leaves selection unchanged. A page switch invalidates a late result.
 
-Authoring requires `api.things` 1.56.0 or `api.things-update` 1.22.0.
-The live viewer negotiates `api.webpages-resolve` 1.14.0 and
-`api.actions-run` 1.44.0 before activation. The canonical Actions endpoint
+Authoring a cutoff or batch requires `api.things` 1.57.0 or
+`api.things-update` 1.23.0. The live viewer negotiates `api.webpages-resolve`
+1.15.0 and `api.actions-run` 1.45.0 before activation. The canonical Actions endpoint
 accepts `source: "activation"`, `action`, `activationPageId`,
 `activationPageRevision` and `activationOnceKey` ("open" or the civil date),
-plus existing browser-execution negotiation. Do not send Action inputs in
-this request; only the saved binding may supply them.
+plus `activationScheduleRevision` from the owner-only resolve response for a
+sourced cutoff. The request takes its Action inputs from the saved binding.
 
 ## Create or reuse an owned Data Thing
 
@@ -203,6 +218,32 @@ Thing. Concurrent runs return the same private creation. Later runs return
 the readable current `{ id, crystal, schema, schemaId }` and preserve edits,
 folder moves and explicit audience changes. A mismatched schema or refused
 read fails the run. Deleting the Data Thing frees the key.
+
+Use `each` to ensure an ordered list in the same saved Action and key
+namespace. `key`, `values` and `folderId` can read `$item` or `$index`.
+For example, `{ "ttExpr": ["civilDateRange", "$input.day", 7] }` in `each`
+with `"key": "$item"` addresses seven consecutive dates. The step returns
+an array of ordinary ensure results. An empty list returns an empty array.
+Every item consumes the existing Action operation budget. An oversized batch
+fails before it writes, and a later per-item failure can leave completed keys
+in place. Retrying with the same keys reuses those Things.
+
+Set `matchFields` to plain crystal field names to reuse an existing owned
+Thing when the intent has no protected key yet. Each field must have a scalar
+creation value. Matching checks the exact schema and current access, and
+prefers the oldest matching record. It leaves that record and its identity
+as saved. Only newly created records carry the Action's protected key.
+
+## Bind data without a local form boundary
+
+An ordinary webpage block can opt in to `source.passive: true`. Its source
+uses the existing Action access checks, inputs, effects and refresh behavior.
+The block and its children receive the bound `result` in their data scope.
+Their existing DOM, click, form and event boundaries handle interaction.
+
+The setting requires `api.things` 1.57.0 or `api.things-update` 1.23.0 for
+saving and `api.webpages-resolve` 1.15.0 for loading. Component sources use
+their existing control surface.
 
 ## Exclude a map point from viewport fitting
 
