@@ -214,7 +214,10 @@ export const importTransfer = async (
       if (thing.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
       // Import is content creation, never site publication or posting back
       // into the original community just because the source carried a route.
-      if (thing.thingtime.includes('webpage')) delete crystal.siteRoute;
+      if (thing.thingtime.includes('webpage')) {
+        delete crystal.siteRoute;
+        delete crystal.activationAction;
+      }
       if (thing.thingtime.includes('post')) { delete crystal.subspaceId; delete crystal.flairId; }
       const bound = attachments.filter((file) => file.targetId === thing.id).map((file) => files.get(file.id)!);
       const inspected = inspections.get(thing.id);

@@ -15,7 +15,7 @@ import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMa
 import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
@@ -23,6 +23,7 @@ import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withM
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
+import { toBin } from '../auth/binary';
 import {
 	CONTROL_PLANE_STORAGE_THINGTIMES,
 	StorageMutationError,
@@ -1389,6 +1390,7 @@ export type ThingWriteTransaction = { session: any; afterCommit: (effect: () => 
 export type CreateThingHooks = {
 	/** Trusted creation coordinator only; never copied from input/snapshots. */
 	executionHold?: ContentExecutionHold;
+	uniqueKeys?: Binary[];
 	transaction?: ThingWriteTransaction;
 	timelineCapture?: ThingMutationCapture;
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
@@ -1675,6 +1677,7 @@ export const createThing = async (
     createdAt: now,
     updatedAt: now,
 		...(hooks.executionHold ? { executionHold: contentExecutionHold(hooks.executionHold) } : {}),
+		...(hooks.uniqueKeys?.length ? { uniqueKeys: hooks.uniqueKeys } : {}),
 		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
 		...(hooks?.sourceDeviceId ? { sourceDeviceId: hooks.sourceDeviceId } : {})
 	};
@@ -1812,6 +1815,41 @@ export const createThing = async (
   if (hooks.transaction) hooks.transaction.afterCommit(afterCommit);
   else await afterCommit();
   return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
+};
+
+/** Bind an invoker's Action intent to one Data Thing in the selected data plane. */
+export const ensureOwnedDataThing = async (
+	viewer: NonNullable<Viewer>,
+	intent: { actionId: string; key: string },
+	schema: { id: string; name: string },
+	values: Record<string, unknown>,
+	folderId?: string
+): Promise<CreateThingResult> => {
+	const ownerId = viewer.id;
+	const digest = createHash('sha256').update(JSON.stringify([ownerId, intent.actionId, intent.key])).digest('hex');
+	const uniqueKey = toBin(`actionEnsure:${digest}`);
+	const things = await getThingsCollection();
+	const findExisting = async (): Promise<CreateThingResult | null> => {
+		const doc = await things.findOne({ uniqueKeys: uniqueKey }) as ThingDoc | null;
+		if (!doc) return null;
+		if (doc.ownerId !== ownerId || !thingtimeOf(doc).includes('data') || crystalOf(doc).schemaId !== schema.id
+			|| genericThingReadBlocked(doc) || doc.appId != null || doc.sandboxSpace != null || doc.sandboxExpiresAt != null
+			|| !(await canViewInherited(doc, viewer))) {
+			return fail(409, 'The intent is bound to an unavailable or incompatible Thing');
+		}
+		return { ok: true, doc };
+	};
+	const existing = await findExisting();
+	if (existing) return existing;
+	const created = await createThing(ownerId, {
+		thingtime: ['data'],
+		acl: [ACL_OWNER],
+		folderId,
+		crystal: { ...values, schema: schema.name, schemaId: schema.id }
+	}, viewer, null, { uniqueKeys: [uniqueKey] });
+	// The unique index serializes concurrent creates. Re-read after a failed
+	// create in case a winner committed while this request was being admitted.
+	return isFail(created) ? (await findExisting()) ?? created : created;
 };
 
 // Posts land in followers'/friends' notification feeds, capped — big accounts
@@ -6005,6 +6043,7 @@ export const bulkThings = async (
   const copyOne = async (doc: ThingDoc, destination: string | null, nameHint: boolean) => {
     const thingtime = thingtimeOf(doc);
     const crystal: Record<string, any> = { ...crystalOf(doc) };
+    if (thingtime.includes('webpage')) delete crystal.activationAction;
     if (nameHint && typeof crystal.name === 'string' && crystal.name.trim()) {
       crystal.name = `Copy of ${crystal.name}`.slice(0, 120);
     }

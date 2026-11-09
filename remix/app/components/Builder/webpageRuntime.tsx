@@ -54,6 +54,7 @@ export type WebpageRuntime = {
 	viewer: WebpageRuntimeViewer;
 	query: Record<string, string>;
 	setPageQuery: (params: unknown, merge?: boolean) => void;
+	applyActivationQuery: (params: Record<string, string | number | boolean>) => void;
 	version: number;
 	// Explicit Refresh/Retry requests, separate from completed control reports.
 	refreshVersion: number;
@@ -87,6 +88,7 @@ const INERT_RUNTIME: WebpageRuntime = {
 	viewer: INERT_VIEWER,
 	query: {},
 	setPageQuery: () => {},
+	applyActivationQuery: () => {},
 	version: 0,
 	refreshVersion: 0,
 	last: null,
@@ -204,7 +206,9 @@ export const WebpageRuntimeProvider = ({
 	const queryIdentity = React.useMemo(() => ({}), [identity, location.key, location.pathname, location.search]);
 	const activeQueryIdentity = React.useRef(queryIdentity);
 	activeQueryIdentity.current = queryIdentity;
-	const [localQuery, setLocalQuery] = React.useState<{ identity: object; values: Record<string, string> } | null>(null);
+	const [localQuery, setLocalQuery] = React.useState<{
+		identity: object; values: Record<string, string>; manual: Set<string>;
+	} | null>(null);
 	const query = localQuery?.identity === queryIdentity ? localQuery.values : urlQuery;
 	const setPageQuery = React.useCallback((params: unknown, merge = false) => {
 		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
@@ -212,10 +216,27 @@ export const WebpageRuntimeProvider = ({
 		if (!validated) return;
 		const values = Object.fromEntries(validated);
 		setLocalQuery((current) => {
-			if (!merge) return { identity: queryIdentity, values };
-			const base = current?.identity === queryIdentity ? current.values : urlQuery;
-			const next = localQueryParams({ ...base, ...values });
-			return next ? { identity: queryIdentity, values: Object.fromEntries(next) } : current;
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const active = current?.identity === queryIdentity ? current : null;
+			const base = active?.values ?? urlQuery;
+			const next = merge ? localQueryParams({ ...base, ...values }) : validated;
+			if (!next) return current;
+			const manual = new Set(active?.manual ?? Object.keys(urlQuery));
+			for (const key of Object.keys(values)) manual.add(key);
+			if (!merge) for (const key of Object.keys(base)) if (!(key in values)) manual.add(key);
+			return { identity: queryIdentity, values: Object.fromEntries(next), manual };
+		});
+	}, [enabled, pageId, queryIdentity, urlQuery]);
+	const applyActivationQuery = React.useCallback((params: Record<string, string | number | boolean>) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity || !Object.keys(params).length) return;
+		setLocalQuery((current) => {
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const active = current?.identity === queryIdentity ? current : null;
+			const manual = active?.manual ?? new Set(Object.keys(urlQuery));
+			const values = Object.fromEntries(Object.entries(params).filter(([key]) => !manual.has(key)));
+			if (!Object.keys(values).length) return current;
+			const next = localQueryParams({ ...(active?.values ?? urlQuery), ...values });
+			return next ? { identity: queryIdentity, values: Object.fromEntries(next), manual } : current;
 		});
 	}, [enabled, pageId, queryIdentity, urlQuery]);
 	const sharedRun = React.useCallback(
@@ -289,6 +310,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			setPageQuery,
+			applyActivationQuery,
 			version,
 			refreshVersion,
 			last,
@@ -308,6 +330,7 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			setPageQuery,
+			applyActivationQuery,
 			version,
 			refreshVersion,
 			last,

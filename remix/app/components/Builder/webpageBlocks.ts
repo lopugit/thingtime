@@ -1,3 +1,5 @@
+import type { WebpageActivation } from '~/schemas/webpageActivation';
+
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
 
@@ -66,6 +68,7 @@ export interface WebpageCrystal {
 	version?: number;
 	forkOf?: string;
 	previewBg?: string;
+	activationAction?: WebpageActivation;
 	// the behaviour suite (installable app bundle) this page belongs to
 	suiteKey?: string;
 	blocks: WebpageBlock[];
