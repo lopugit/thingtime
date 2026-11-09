@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
+  status, start, and background replies. Enabled backups can proceed after their
+  first status check, and the card can show native progress. **Codex (AI)**
+
 - 2026-11-08: Show referenced Thing metadata with canonical JSON hashing, human-readable JSON and verified attachment sizes, editable layouts and access-aware refresh. Preserve original LiDAR archives during recovery and refuse empty captures. [Contract](../docs/thing-metadata.md) · [PR 1425 validation](../PRs/1425-codex-thing-metadata-sizes-show-thing-metadata-sizes-and-preserve-original-lidar-scans.md). **Codex (AI)**
 
 - 2026-11-08: Resume enabled iPhone Photos backup on launch and after temporary
