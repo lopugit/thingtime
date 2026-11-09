@@ -152,7 +152,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-08: Add per-Thing cloud and device storage choices, private device policies, verified managed copies, and safe iOS local release/open controls. Existing storage behavior is inherited until a choice changes. Bound LiDAR archive preparation memory with per-chunk autorelease pools, verified against an 11.36 GB archive. See [Thing storage](../docs/thing-storage.md) and [PR 1427 validation](../PRs/1427-codex-thing-storage-placement-add-per-thing-cloud-and-device-storage-choices.md). — Codex (AI)
 
 - 2026-11-09: Add atomic create-or-reuse to saved server Actions, private page
-  activation, independent map point sources, and optional per-point map fitting. [Builder Action contract](../docs/builder-browser-actions.md). **Codex (AI)**
+  activation, independent map point sources, and optional per-point map fitting. [Builder Action contract](../docs/builder-browser-actions.md) · [PR 1430 validation](../PRs/1430-codex-routes-daily-activation-add-private-page-activation-and-map-sources.md). **Codex (AI)**
 
 - 2026-11-08: Show referenced Thing metadata with canonical JSON hashing, human-readable JSON and verified attachment sizes, editable layouts and access-aware refresh. Preserve original LiDAR archives during recovery and refuse empty captures. [Contract](../docs/thing-metadata.md) · [PR 1425 validation](../PRs/1425-codex-thing-metadata-sizes-show-thing-metadata-sizes-and-preserve-original-lidar-scans.md). **Codex (AI)**
 
