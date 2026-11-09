@@ -6381,6 +6381,48 @@ Thingtime implements the public [Sign in with ChatGPT flow](https://developers.o
 
 ### Electron local setup
 
+The new account-linked desktop path is off by default. OpenAI documents this
+flow for [eligible open-source tools and locally running personal projects](https://developers.openai.com/cookbook/articles/sign-in-with-chatgpt).
+Paid or remotely hosted distribution needs separate OpenAI access; a public
+source tree without an open-source license does not establish eligibility. This
+path does not claim OpenAI approval or offer a hosted ChatGPT connector. Use it
+only for eligible personal operation, with the official browser consent and
+[OpenAI's terms](https://openai.com/policies/sign-in-with-chatgpt-terms/).
+
+For a supported personal installation, launch Thingtime with the exact selected
+HTTPS account origin and the verified Thingtime owner ID. These values are
+identifiers, not tokens or passwords. For example, after quitting the app:
+
+```sh
+THINGTIME_DESKTOP_PERSONAL_CHATGPT_PLAN_ORIGIN=https://thingtime.example \
+THINGTIME_DESKTOP_PERSONAL_CHATGPT_PLAN_OWNER='<verified-thingtime-owner-id>' \
+"$HOME/Applications/Thingtime.app/Contents/MacOS/Thingtime"
+```
+
+Replace the example values before running the command. The opt-in must be present
+on launch; it never enables another account or origin. With that account already
+signed in to the desktop app, open
+**Lopu settings → Manage saved credentials, models and endpoints → ChatGPT plan**.
+If your selected account API does not itself run ChatGPT plan connections, the
+desktop can authorize on this computer without switching API or databases. Its
+operating-system protected store keeps the grant scoped to the signed-in account
+and exact account API. Choose this device's provider in a new Lopu text chat.
+Chat messages are saved to your Thingtime account; provider credentials and
+inference stay on the device and are not sent to Thingtime's cloud. Open that
+chat on the same device to reply. This path supports text without attachments or
+Actions and never falls back to API credits. It saves only in your account's
+home storage, with no automatic switch from a custom database. An interrupted
+save keeps the completed text encrypted on the device for the same request to
+retry without another model call. Saved rows identify unverified device
+transcripts; they are not cloud provider or billing receipts. No paid Thingtime
+plan or credits are required for this path. It does not export or move device
+grants. Keep distinct authorized profiles separate; do not rotate profiles or
+accounts to avoid OpenAI usage limits. The selected account API must advertise
+`api.lopu-chats-device-turns` 1.0.0.
+
+The following local API setup instead runs the whole Thingtime account backend
+on this computer, with its own accounts and a separate session store.
+
 Desktop rebuilds preserve the selected session store and content origin. When recovering from an older build that used random loopback ports, **Desktop session storage** accepts the verified original HTTPS API origin and exact historical loopback content URL. Native confirmation binds those origins and reopens the old cookie/localStorage/IndexedDB store in place after restart. It retains the newer isolated workspace separately with an explicit switch-back control. It does not guess the prior backend, copy credentials, merge historical ports, or fall back to another port if the selected port is occupied. Recovery is available through the logged-out/offline connection controls.
 
 In **Settings → Things → Thingtime desktop**, enable the optional local API. If the account session cannot load, open the desktop connection controls on the recovery screen; local setup does not require a working cloud account. macOS builds include MongoDB Community Server 8.0.34 for Apple Silicon or Intel. Fresh installations select the bundled server automatically; no Homebrew or separate MongoDB installation is needed. Existing saved executable selections and database files are preserved. You can still choose another compatible `mongod` executable or supply your own MongoDB replica-set connection. The bundled server requires macOS 14 or later; remote API mode remains available on macOS 13. Restart to apply the choice.

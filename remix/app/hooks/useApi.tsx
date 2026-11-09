@@ -483,13 +483,34 @@ export function useApi() {
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
       models: useCallback(async () => {
+        const owner = actionActor.current;
         const result = await getJson('/api/v1/ai/models');
+        // The signed desktop's loopback route contributes the redacted plan
+        // catalogue. A website or another desktop cannot expose these records.
+        if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && owner && !character && planeRef.current === 'home') {
+          try {
+            await requireThingtimeCapability('api.ai-chatgpt-plan', '1.2.0');
+            const plan = await fetch('/api/v1/ai/chatgpt-plan', { credentials: 'same-origin', cache: 'no-store', headers: {
+              'X-Thingtime-Expected-Actor': owner, 'X-Thingtime-Expected-User': owner, [EXPECTED_DATA_PLANE_HEADER]: 'home'
+            } });
+            if (plan.ok) {
+              const status = await plan.json();
+              if (status.storageMode === 'device' && status.deviceChatAvailable === true && actionActor.current === owner && planeRef.current === 'home' && Array.isArray(status.accounts)) {
+                return { ...result, vaultProviders: [...(result.vaultProviders ?? []), ...status.accounts.filter((account: any) => typeof account?.id === 'string').map((account: any) => ({
+                  id: account.id, name: `ChatGPT plan · this device · ${account.id.slice(-8)} · ${account.label}`, kind: 'openai', model: account.model, endpointHost: 'api.openai.com',
+                  available: account.connected === true && !!account.model, planChatEligible: account.connected === true && !!account.model,
+                  realtimeModels: []
+                }))] };
+              }
+            }
+          } catch { /* Keep the ordinary model catalogue usable during device loss. */ }
+        }
         if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
           try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;
-      }, []),
+      }, [getJson, character]),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
@@ -763,7 +784,9 @@ export function useApi() {
       },
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
-      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, {
+        ...options, ownerId: actionActor.current, dataPlane: planeRef.current
+      }), []),
       // direct voice (design note §6.1): the provider-minted five-minute
       // realtime credential for one of the viewer's own Secure Vault
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a

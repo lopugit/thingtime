@@ -244,6 +244,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/lopu/chats/delete': () => import('../../../app/routes/api/v1/lopu/chats/delete/_delete'),
   'v1/lopu/live-activity': () => import('../../../app/routes/api/v1/lopu/live-activity/_live-activity'),
   'v1/lopu/chats/reply': () => import('../../../app/routes/api/v1/lopu/chats/reply/_reply'),
+  'v1/lopu/chats/device-turns': () => import('../../../app/routes/api/v1/lopu/chats/device-turns/_device-turns'),
 	'v1/lopu/vault': () => import('../../../app/routes/api/v1/lopu/vault/_vault'),
 	'v1/lopu/voice/reply': () => import('../../../app/routes/api/v1/lopu/voice/reply/_reply'),
 	'v1/lopu/voice/session': () => import('../../../app/routes/api/v1/lopu/voice/session/_session'),
@@ -432,6 +433,12 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/lopu/chats/reply' && event.req.headers.get('X-Thingtime-Device-Inference') === '1') {
+      const origin = getApiFallbackOrigin();
+      if (!origin) return unavailableLocalApiResponse();
+      const { desktopChatGPTReply } = await import('../../utils/desktopChatGPTReply');
+      return desktopChatGPTReply(event.req, origin);
+    }
     if (path === 'v1/files/sync-transfer-admissions') return jsonResponse({ ok: false, error: 'File transfer admissions require this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
@@ -461,6 +468,11 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
       if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
         return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      if (path === 'v1/ai/chatgpt-plan') {
+        const { desktopChatGPTPlan } = await import('../../utils/desktopChatGPTPlan');
+        const device = await desktopChatGPTPlan(event.req, configured);
+        if (device) return device;
+      }
       // Nitro's lazy request is not a native Request; preserve its body API
       // while pinning the selected origin across asynchronous negotiation.
       return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });

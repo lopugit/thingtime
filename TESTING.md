@@ -13288,6 +13288,19 @@ separate from deterministic discovery/lease tests.
 
 ## ChatGPT plan connections (local/self-hosted)
 
+- [ ] In the installed desktop app, keep the selected production API and existing
+      personal account. Connect via Secure Vault → ChatGPT plan, complete OpenAI
+      consent and the exact localhost callback, select a discovered model, and
+      verify the connected account after reload and restart. Keep account access,
+      encrypted device storage, provider response, and saved chat evidence separate.
+- [ ] Start a Lopu text chat with the device connection, complete a real reply,
+      and reload the account conversation. Send a follow-up using the same pin.
+      From another installation, the chat must remain readable while its missing
+      device connection refuses inference without billing fallback. Switch owner
+      or origin during the callback, generation or save; refuse or suppress the
+      stale result. Verify text-only refusal for an attachment or Action, and that
+      the cloud transcript route cannot execute anything or grant inference.
+
 - [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
       repeated model option and transfer-dialog text through Builder; save and reload.
       Verify the layout persists while private fields, OAuth URLs and transfer files
