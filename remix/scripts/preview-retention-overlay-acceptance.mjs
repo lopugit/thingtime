@@ -1,4 +1,5 @@
 // Focused real-page hit testing; use only this task's disposable local session.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,6 +20,7 @@ try {
     await page.setViewportSize({ width, height: 950 });
     await page.goto(fixture.origin + '/admin/preview-retention', { waitUntil: 'domcontentloaded' });
     const host = page.locator('[data-settings-document="preview-retention-settings"]');
+    await enableCurrentPageBuilder(page);
     await host.getByRole('button', { name: 'Edit layout', exact: true }).waitFor({ timeout: 90000 });
     await page.locator('.lopuLauncher').waitFor({ state: 'visible', timeout: 60000 });
     const launchersBefore = await page.locator('.lopuLauncher,[class~="tt.devKit"]').evaluateAll(nodes => nodes.filter(node => getComputedStyle(node).display !== 'none').length);

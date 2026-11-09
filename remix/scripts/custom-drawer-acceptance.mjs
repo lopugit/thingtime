@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Disposable real API acceptance. All application/backend network is OS fenced.
 // Only replica-set initialization uses the Mongo driver; product data uses APIs.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -226,6 +227,7 @@ async function browserAcceptance(fixturePath) {
     await page.getByText('Top-level items',{exact:true}).locator('../..').getByRole('button',{name:'−',exact:true}).click();
 
     // Actual Builder controls edit individually selectable nested blocks and the repeated template.
+    await enableCurrentPageBuilder(page);
     await settings.getByRole('button',{name:'Edit layout',exact:true}).click();await settings.getByRole('button',{name:'Open Builder inspector',exact:true}).click();
     const select=page.getByRole('combobox',{name:'Select block',exact:true});await select.waitFor();
     for(const [id,text] of [['custom-drawer-heading','My drawer links'],['custom-drawer-add-label','Add shortcut +'],['custom-drawer-icon','{item.emoji} ✨'],['custom-drawer-title','{item.title} ✓'],['drawer-title-label','Link title']]) {
@@ -240,6 +242,7 @@ async function browserAcceptance(fixturePath) {
     await note('Builder nested heading, button label, icon, repeated title and field label selectable; saved layout survives reload');
     await page.locator('summary').filter({hasText:'Drawer menu template'}).click();
     const menuTemplate=page.locator('[data-settings-document="custom-drawer-menu"]');
+    await enableCurrentPageBuilder(page);
     await menuTemplate.getByRole('button',{name:'Edit layout',exact:true}).click();await menuTemplate.getByRole('button',{name:'Open Builder inspector',exact:true}).click();
     for(const [id,text] of [['custom-drawer-add-icon','✨'],['custom-drawer-add-label','Add menu shortcut +'],['custom-drawer-icon','{item.emoji} ✨'],['custom-drawer-title','{item.title} menu']]){
       await select.selectOption(id);await page.getByLabel('Block text',{exact:true}).fill(text);
@@ -417,6 +420,7 @@ async function nestedAcceptance({page,context,fixture,note,capture,openDrawer,er
  await note('Account isolation clears nested selection/data and original account restores its old root entries and moved branch');
  // Save constituent blocks with the actual Builder, then independently read its private Thing.
  await openSettings();await page.locator('summary').filter({hasText:'Drawer menu template'}).click();
+ await enableCurrentPageBuilder(page);
  const template=page.locator('[data-settings-document="custom-drawer-menu"]');await template.getByRole('button',{name:'Edit layout',exact:true}).click();await template.getByRole('button',{name:'Open Builder inspector',exact:true}).click();
  const blockSelect=page.getByRole('combobox',{name:'Select block',exact:true});await blockSelect.waitFor();
  await blockSelect.selectOption('custom-drawer-children');await blockSelect.selectOption('drawer-parent');

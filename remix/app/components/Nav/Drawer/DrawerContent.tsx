@@ -18,6 +18,7 @@ import { applyDrawerOrdering, drawerBuiltinNodes, buildDrawerSubSections, drawer
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
+import { CurrentPageBuilderToggle } from '../../Builder/CurrentPageBuilder';
 import { LopuActivityBadge } from '../../Lopu/LopuActivityBadge';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
@@ -671,6 +672,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					</Text>
 				)}
 				</Flex>
+				{variant === 'panel' && <CurrentPageBuilderToggle onToggle={dismissAfterNavigate} />}
 				<Center
 					as="a"
 					href="/settings"

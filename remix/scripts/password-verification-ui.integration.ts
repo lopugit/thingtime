@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
@@ -135,6 +136,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.setViewportSize({width:375,height:812});
   // Normal Builder selection exposes the repeated card's individual text block.
   const cards=page.locator('[data-settings-document="password-preview-cards"]');
+  await enableCurrentPageBuilder(page);
   await cards.getByRole('button',{name:'Edit layout',exact:true}).click();
   await cards.locator('[data-block-id="pp-username"]').last().click();
   await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Account: {item.usernameLabel}');
@@ -165,6 +167,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   assert.equal(await page.locator('[data-block-id="pp-icon"]').first().evaluate((img:HTMLElement)=>getComputedStyle(img).padding),'5px','Saved authored icon style survives migration and reload');
 
   const preferences=page.locator('[data-settings-document="password-verification-default"]');
+  await enableCurrentPageBuilder(page);
   await preferences.getByRole('button',{name:'Edit layout',exact:true}).click();
   await preferences.locator('[data-block-id="pv-reuse"]').last().click();
   await page.getByRole('textbox',{name:'Element title',exact:true}).fill('Controls repeated password verification');

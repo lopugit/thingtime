@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import React from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
 import { createRoot } from 'react-dom/client';
@@ -13,7 +14,7 @@ function Fixture() {
 	</Box>;
 }
 
-const router = createMemoryRouter([{ id: 'root', path: '/', Component: Fixture }], {
+const router = createMemoryRouter([{ id: 'root', path: '/', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }], {
 	hydrationData: { loaderData: { root: {
 		user: { id: 'synthetic-admin', isAdmin: true },
 		dataEnvironment: { id: 'development' }, dataPlane: 'home'

@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import { readDeviceSyncHistory } from '../app/fileSync/deviceSyncHistory.client';
 import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
 import type { MobileFolder } from '../app/fileSync/mobileFolders.client';
@@ -556,7 +557,7 @@ function Fixture() {
 }
 const initialRootData = { user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' };
 const router = createMemoryRouter([
-	{ id: 'root', path: '/', loader: () => initialRootData, element: <Fixture /> }
+	{ id: 'root', path: '/', loader: () => initialRootData, element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }
 ], { hydrationData: { loaderData: { root: initialRootData } } });
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
