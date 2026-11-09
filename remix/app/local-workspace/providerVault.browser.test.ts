@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { measureProviderVaultScroll, waitForProviderVaultOfflineShell } from './providerVaultBrowserFixture';
 const base = process.env.TT_LOCAL_PROVIDER_VAULT_URL, playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH, artifacts = process.env.TT_LOCAL_PROVIDER_VAULT_ARTIFACTS;
 const phrase = 'Disposable provider vault phrase 🦄', secret = ' synthetic private environment value 🦄 ', token = 'synthetic-private-provider-token', name = 'Offline environment secret';
 
 test('anonymous Settings vault creates and retains encrypted environments and providers offline without account requests', { skip: !base || !playwrightPath || !artifacts, timeout: 180_000 }, async () => {
  assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname));
  const { chromium } = await import(playwrightPath!);
- const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true });
+ const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }), page = await context.newPage();
  const writes: string[] = [], protectedRequests: string[] = [], errors: string[] = [];
  context.on('request', (request: any) => { const path = new URL(request.url()).pathname; if (!['GET','HEAD','OPTIONS'].includes(request.method())) writes.push(path); if (/\/api\/v1\/(lopu\/vault|vault\/reveal|passwords)/.test(path)) protectedRequests.push(path); });
@@ -27,7 +28,7 @@ test('anonymous Settings vault creates and retains encrypted environments and pr
   await mkdir(artifacts!, { recursive: true });
   const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data').then(async (response: any) => { assert.equal(response.status(), 200); return response.json(); });
   const [, initial] = await Promise.all([page.goto(new URL('/settings/security#secure-vault', base).href), root]); assert.equal(initial.user, null);
-  await page.waitForFunction(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) return false; for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true; return false; });
+  const offlineReadiness = await waitForProviderVaultOfflineShell(page);
   await context.setOffline(true);
   assert.equal(await page.evaluate(async () => { try { await fetch('/api/root-data', { cache: 'no-store' }); return false; } catch { return true; } }), true);
   await page.getByLabel('Device vault passphrase', { exact: true }).fill(phrase); await page.getByLabel('Confirm device vault passphrase', { exact: true }).fill(phrase);
@@ -50,11 +51,15 @@ test('anonymous Settings vault creates and retains encrypted environments and pr
   await page.getByRole('button', { name: 'Lock provider vault', exact: true }).click();
   await page.getByRole('button', { name: 'Unlock device vault', exact: true }).waitFor(); assert.equal(await page.getByText(name, { exact: true }).count(), 0);
   await unlock('wrong disposable passphrase'); await page.getByRole('alert').filter({ hasText: 'could not be unlocked' }).waitFor(); await unlock();
-  const bounds = [];
+  const bounds = [], scroll = [];
   for (const [width, height] of [[1440,1000],[390,844],[320,844]]) {
    await page.setViewportSize({ width, height }); await page.reload(); await page.getByRole('button', { name: 'Unlock device vault', exact: true }).waitFor();
    await unlock(); await page.getByRole('button', { name: `Show ${name}`, exact: true }).waitFor();
    const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth })); assert.equal(measured.width, measured.scrollWidth); bounds.push(measured);
+   const regions = await measureProviderVaultScroll(page);
+   assert.ok(regions.some(region => region.max > 0));
+   assert.ok(regions.every(region => region.top === 0 && Math.abs(region.max - region.bottom) <= 2), JSON.stringify({ width, regions }));
+   scroll.push({ width, regions });
    await page.locator('#secure-vault').screenshot({ path: resolve(artifacts!, `provider-vault-${width}.png`), animations: 'disabled' });
   }
   await page.getByRole('button', { name: `Change environment for ${name}`, exact: true }).click(); await page.getByLabel(`Environment for ${name}`, { exact: true }).selectOption(''); await page.getByRole('button', { name: 'Save environment', exact: true }).click();
@@ -64,7 +69,7 @@ test('anonymous Settings vault creates and retains encrypted environments and pr
   await secretRow().getByRole('button', { name: 'Delete', exact: true }).click(); await page.getByText(name, { exact: true }).waitFor({ state: 'detached' });
   const stored = await inspect(); assert.deepEqual(stored, { plaintextFound: false, accountRecords: 0, commands: 0, entries: 1 });
   assert.deepEqual(writes, []); assert.deepEqual(protectedRequests, []); assert.deepEqual(errors, []);
-  await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ anonymous: true, offline: true, encryptedStorage: true, createMoveDelete: true, wrongPhraseRefused: true, lockAndColdReload: true, selectedRevealAndBlurClear: true, timedRevealClear: true, nonemptyGroupPreserved: true, bounds, stored, writes, protectedRequests, errors }, null, 2));
+  await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ anonymous: true, offline: true, encryptedStorage: true, createMoveDelete: true, wrongPhraseRefused: true, lockAndColdReload: true, selectedRevealAndBlurClear: true, timedRevealClear: true, nonemptyGroupPreserved: true, offlineReadiness, bounds, scroll, stored, writes, protectedRequests, errors }, null, 2));
  } catch (error) {
   await writeFile(resolve(artifacts!, 'failure.json'), JSON.stringify({ writes, protectedRequests, errors }, null, 2)); await page.screenshot({ path: resolve(artifacts!, 'failure.png'), fullPage: true }); throw error;
  } finally { await browser.close(); }

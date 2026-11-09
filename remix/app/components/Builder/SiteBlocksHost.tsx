@@ -167,15 +167,11 @@ const SiteBlocksView = ({ path, children, cache, binding, revision, refresh }: {
 					</Box>
 				</Box>
 			) : null}
-			{hasInjectedAbove ? (
-				// content already starts below the fixed nav, so the page's own
-				// clearance would be pure gap — shrink it for the whole subtree
-				<Box width="100%" sx={{ '--tt-nav-clearance': '12px' }}>
-					{children}
-				</Box>
-			) : (
-				children
-			)}
+			{/* Keep the outlet mounted when decorations or a refresh error come
+			    and go. Only the box and its nav clearance change. */}
+			<Box display={hasInjectedAbove ? 'block' : 'contents'} width="100%" sx={hasInjectedAbove ? { '--tt-nav-clearance': '12px' } : undefined}>
+				{children}
+			</Box>
 			{after.length ? (
 				<Box width="100%" paddingBottom={8} paddingX={4} background="var(--tt-surface, #fafafb)">
 					<Box maxWidth="960px" marginX="auto" whiteSpace="normal">

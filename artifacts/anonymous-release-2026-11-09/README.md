@@ -6,6 +6,31 @@ Existing feature `d214a6b5a1965831febd2e5d1f2488ee3f13d1fc` plus fetched main
 `codex/anonymous-local-first` branch and [PR #1000](https://github.com/lopugit/thingtime/pull/1000).
 This is a feature-branch reconciliation, not proof of production acceptance.
 
+## Vault and Character browser acceptance
+
+When page blocks failed to load during a connection change, Settings used to
+replace the unlocked vault's outlet. The outlet now stays mounted while the
+notice changes its layout and clearance. The anonymous and account vault
+browser suites passed on the corrected client at 1440, 390 and 320 pixels.
+[Provider Vault evidence](acceptance/provider-vault.json)
+
+The isolated Character runs at `7164914063d477f4817ecd84ce12a1bde2ce86fa`
+passed library, nested reply links, History and anonymous quick-comment
+checks. The sibling audit verified library separation, denied post and reply
+reads, and independently confirmed the original reply's author, parent and
+text. A follow-up on the corrected client verified a held reply across an
+account switch, exact single reply on return, device storage readback and
+Character-only server accounting. Direct Character sign-in passed through
+the API and in a clean browser at 1440 and 320 pixels. The same-profile Add
+account fixture stopped before sign-in when its composer did not list the
+synthetic Character. [Character evidence](acceptance/character-baseline.json) ·
+[Identity and accounting](acceptance/character-identity.json)
+
+The combined client and server package preserved the exact browser-tested
+Settings shell and API handler. The native draft runner bytes matched the
+previous provider capture. The compiled smoke passed 17 contracts, and the
+repository unit command completed successfully.
+
 ## Offline update recovery and hosted worker hardening
 
 The offline worker now uses the last verified cache after an incomplete shell

@@ -1,0 +1,161 @@
+{
+  "baselineCommit": "7164914063d477f4817ecd84ce12a1bde2ce86fa",
+  "fixedSiteBlocksHostBlob": "8f37060aa7f0a9ece93eebaea5385f2d68683fe1",
+  "testedStaticIndexSha256": "f634b86fe86cac9dff1579b387480fb570b68b6b2631d5c38b6c6178890593f8",
+  "testedClientEntrySha256": "871ca38d99d1e3592d7a4728b181c8ae78fc03d767cb2e103b83ffc9b413af80",
+  "testedApiHandlerSha256": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+  "chrome": "Chrome for Testing 158.0.8127.18",
+  "disposableLoopbackReplica": true,
+  "realVaultApi": true,
+  "originalFailure": {
+    "controlledReadFailure": true,
+    "outletInputRemounted": true,
+    "vaultUnlockWasRequiredAgain": true,
+    "clearanceBefore": "54px",
+    "clearanceAfter": "12px"
+  },
+  "fixedAccount": {
+    "offline": true,
+    "encrypted": true,
+    "selectedFreshRetention": true,
+    "coldReload": true,
+    "reviewedEnvironmentCopy": true,
+    "originalAccountPreserved": true,
+    "pageBlockFailurePreservedVault": true,
+    "bounds": [
+      {
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "width": 320,
+        "scrollWidth": 320
+      }
+    ],
+    "scroll": [
+      {
+        "width": 1440,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 1565,
+            "max": 1565
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 2548,
+            "max": 2548
+          }
+        ]
+      },
+      {
+        "width": 320,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 2852,
+            "max": 2852
+          }
+        ]
+      }
+    ],
+    "offlineWrites": 0,
+    "errors": 0
+  },
+  "fixedAnonymous": {
+    "anonymous": true,
+    "offline": true,
+    "encryptedStorage": true,
+    "createMoveDelete": true,
+    "wrongPhraseRefused": true,
+    "lockAndColdReload": true,
+    "selectedRevealAndBlurClear": true,
+    "timedRevealClear": true,
+    "nonemptyGroupPreserved": true,
+    "bounds": [
+      {
+        "width": 1440,
+        "scrollWidth": 1440
+      },
+      {
+        "width": 390,
+        "scrollWidth": 390
+      },
+      {
+        "width": 320,
+        "scrollWidth": 320
+      }
+    ],
+    "scroll": [
+      {
+        "width": 1440,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 1404,
+            "max": 1404
+          }
+        ]
+      },
+      {
+        "width": 390,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 2281,
+            "max": 2281
+          }
+        ]
+      },
+      {
+        "width": 320,
+        "regions": [
+          {
+            "tag": "HTML",
+            "top": 0,
+            "bottom": 2555,
+            "max": 2555
+          }
+        ]
+      }
+    ],
+    "stored": {
+      "plaintextFound": false,
+      "accountRecords": 0,
+      "commands": 0,
+      "entries": 1
+    },
+    "writes": 0,
+    "protectedRequests": 0,
+    "errors": 0
+  },
+  "browserChecks": {
+    "passed": 2,
+    "skipped": 0
+  },
+  "focusedChecks": {
+    "passed": 29,
+    "browserOptInsSkipped": 2
+  },
+  "cleanup": {
+    "disposableReplicasTerminated": true,
+    "loopbackAppTerminated": true,
+    "taskDatabaseAndProfileDirectoriesRemoved": true,
+    "finalAccountVaultReadBackEmpty": true,
+    "sanitizedEvidenceOnly": true
+  }
+}

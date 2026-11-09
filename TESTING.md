@@ -15043,6 +15043,11 @@ Unit transports are not proof of server or deployed behavior.
 
 ## Account provider device workspace (2026-10-17)
 
+- [ ] With the vault unlocked and an environment draft focused, interrupt an
+  in-flight page blocks refresh as the browser goes offline. Verify the retry
+  notice preserves the exact input, draft, focus and unlocked vault. Save the
+  environment and confirm that the notice clears without remounting Settings.
+  Run `accountProviders.browser.test.ts` against the disposable loopback API.
 - [ ] In a disposable account, open Security → Secure Vault, set a separate device
   passphrase, and confirm account metadata arrives without credential values.
   Verify one selected value with the current password/passkey and explicitly
@@ -16332,7 +16337,7 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Reopen event, branch, note and name queues with the same principal/Character; reject cross-principal, direct-login, origin and plane reuse.
 - [x] Preserve canonical authored History identities and ancestry from the old proven workspace partition; never adopt the ambiguous shared cache.
 - [x] Retire stale readers after account or generation changes; direct-account cache keys remain unchanged.
-- [x] Native delegated Character post/file creation, cold reload, History UI and private reconnect pass at 1440/390/320px; separate draft failure does not block completion. Library/nested navigation remains open.
+- [x] Native delegated Character post/file creation, cold reload, History UI and private reconnect pass at 1440/390/320px; separate draft failure does not block completion. The later Character integration below covers library and nested navigation.
 - Regression: `characterTimeline.test.ts`, `test:local-workspace`, `test:timeline`; `accountTimelineNames.browser.test.ts` requires a verified isolated runtime.
 - [x] Native ordinary-account History names/notes: offline save/reload and reconnect at 1440/390/320px; server audit uses an independent disposable browser login; replay after removal returns 409. This does not close delegated Character UI acceptance.
 
@@ -16345,7 +16350,8 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Native delegated post, attachment, cold reload, History, reconnect and draft-failure checks pass. Exact downloaded attachment bytes, guest and principal-only denial, zero offline writes, centered sync panels and 1440/390/320px scrolling are asserted. See `characterWorkspace.browser.test.ts` and the progress plan.
 - [x] Character library selection, reply/parent links, History-to-inspector links and quick-comment completion retain their actor through native cold reload. The principal library remains separate; leaving the actor revokes its image URL.
 - [x] Explicit API actor selection saves in the actor queue; selecting the principal clears inherited delegation. A private target in another partition is refused. Anonymous quick comments keep the anonymous facade and make no account requests.
-- [ ] Complete remaining feature-specific Character routes and the full account/offline acceptance matrix.
+- [x] In a clean browser, sign in directly with a separate-password Character, verify the live identity and reopen its private post after reload at 1440 and 320px. Refuse owner selection and owner-only writes.
+- [ ] Complete same-profile Add account sign-in, remaining feature-specific Character routes and the full account/offline acceptance matrix.
 
 ### Inherited and cached subspace audience labels (2026-10-19)
 

@@ -4103,10 +4103,9 @@ Settings at 1440/390/320px, encrypted storage, reload/unlock, selected reveals,
 move/delete/nonempty-environment handling and zero account Vault requests or
 mutations. Default test runs skip this fixture unless its inputs are supplied.
 
-Account provider/environment local UI, ordered conditional account sync,
-explicit fresh-reveal retention of existing server values and the remaining
-full-feature matrix are still open. This anonymous authoring increment does
-not complete that matrix or establish provider execution/native integration.
+The later account Settings workspace below covers conditional account sync
+and explicit retention after fresh verification. Provider execution and the
+wider origin, data plane and installed-device matrix remain open.
 
 ### Account Vault metadata and selected retention (implementation in progress)
 
@@ -4292,6 +4291,12 @@ fixture exercises native Settings, explicit fresh retention, actual offline
 network emulation, cold reload at 1440/390/320px and reviewed conflict copies.
 Only disposable loopback accounts are used; fixture Vault entries are cleaned
 through the ordinary API. Account creation itself has no deletion API.
+
+The 10 November browser rerun verified a controlled page-block refresh failure
+while the account vault was unlocked. The existing input, focus and draft
+survived the error and Settings kept the same outlet through recovery. The
+normal account and anonymous fixtures both passed at 1440, 390 and 320 pixels.
+[Provider Vault evidence](../artifacts/anonymous-release-2026-11-09/acceptance/provider-vault.json)
 
 These fixtures are local evidence, not proof of all account/origin/plane races,
 History/native integration, CI or deployed delivery. The full feature matrix
@@ -5674,8 +5679,18 @@ discovery and normal resumption. This does not change server permissions or API
 contracts.
 
 Validation and remaining acceptance are recorded in the HTML progress plan.
-Full Character library discovery, nested-link context, quick-comment actor
-selection and the broader local-first matrix remain separate open work.
+A later isolated browser run on `7164914063d477f4817ecd84ce12a1bde2ce86fa`
+verified the Character library, nested reply and History links, and anonymous
+quick comments. It also verified sibling library separation and denied
+sibling post and reply reads. A follow-up held a real reply response across an
+account switch, verified that the old UI and late reply stayed hidden, and
+read back the single reply after returning. Device usage and server quota
+checks passed for the disposable Character. Direct Character password
+sign-in and its authority refusals passed through the API and in a clean
+browser at 1440 and 320 pixels. The same-profile Add account flow and the
+broader Character matrix remain open.
+[Character evidence](../artifacts/anonymous-release-2026-11-09/acceptance/character-baseline.json) ·
+[Identity and accounting](../artifacts/anonymous-release-2026-11-09/acceptance/character-identity.json)
 
 Validation: 730 workspace checks plus four offline-shell checks pass (79 opt-ins skipped); the new native Character post/file/History fixture ran explicitly and passes at 1440/390/320 CSS pixels. It independently verifies exact remote attachment bytes, private author/ACL, guest and principal-only denial, cold offline reload, zero offline writes and post completion during three forced draft-save 503 responses. The task runtime used network:none, no mounts or exposed ports, disposable credentials/data and a read-only root; it was released after capture. Client/server builds and changed-file lint pass. Timeline has 259 passes; TypeScript retains the same 91 baseline diagnostics. See `tmp/character-local-native/native/verification.json` through the HTML progress plan. These are local checks, not deployed acceptance.
 

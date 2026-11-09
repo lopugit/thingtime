@@ -336,7 +336,9 @@ values arrive only through explicit fresh selected-value retention.
 
 `providerVault.test.ts` covers atomic group membership, replay, quota, lock and
 corruption. `providerVault.browser.test.ts` is the opt-in actual offline Settings
-fixture. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
+fixture. The opt-in `accountProviders.browser.test.ts` interrupts a page
+blocks refresh and verifies that the unlocked vault, focused field and draft
+survive. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
 validation and rejection of malformed replacement tokens (`api.lopu-vault`
 1.2.1). See [local provider setup and verification](../local-workspaces.md#anonymous-provider-vault).
 

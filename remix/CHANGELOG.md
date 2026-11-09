@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10 — Keep the native page mounted when a site blocks refresh fails
+  or recovers. The Settings vault retains its unlocked form, current draft
+  and focus during the notice. [Browser evidence](../artifacts/anonymous-release-2026-11-09/acceptance/provider-vault.json).
+  **Codex (AI)**
+
 - 2026-11-10 — Keep the last verified offline shell available when a service
   worker update cannot finish downloading its replacement. Verify the cache
   before simulating a transport outage in Builder acceptance. **Codex (AI)**

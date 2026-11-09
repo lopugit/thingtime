@@ -1,0 +1,196 @@
+{
+  "compiledProvenance": {
+    "sourceBase": "7164914063d477f4817ecd84ce12a1bde2ce86fa",
+    "stableOutletSourceBlob": "8f37060aa7f0a9ece93eebaea5385f2d68683fe1",
+    "nitroEntrySha256": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+    "clientIndexSha256": "f634b86fe86cac9dff1579b387480fb570b68b6b2631d5c38b6c6178890593f8",
+    "offlineManifestSha256": "8061dd67e9f98aa679426bf652c3ba40fc7240986231988973a44c5e671a655b",
+    "vercelConfigSha256": "723f83bdbe7b80c09fb806a99bb6026275f9c90a902f452ccfa4f355f4ff336d"
+  },
+  "api": {
+    "directPasswordAccepted": true,
+    "ownerPasswordForSeparateCharacterStatus": 401,
+    "directCannotSelectOwnerOrSiblingStatus": 403,
+    "directForgedOwnerWriteStatus": 401,
+    "directReadOwnPrivatePost": true,
+    "principalAndSiblingPrivateReadStatus": 404,
+    "independentAdminVerified": true,
+    "ownerPlanNoteExcluded": true,
+    "zeroQuotaWriteStatus": 507,
+    "before": {
+      "owner": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "actor": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "sibling": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      }
+    },
+    "afterDelegated": {
+      "owner": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "actor": {
+        "status": "ready",
+        "usedBytes": 270,
+        "allowanceBytes": 524288000
+      },
+      "sibling": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      }
+    },
+    "afterRefusal": {
+      "owner": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 0
+      },
+      "actor": {
+        "status": "ready",
+        "usedBytes": 270,
+        "allowanceBytes": 0
+      },
+      "sibling": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 0
+      }
+    }
+  },
+  "nativeDeviceStorage": {
+    "logicalBytes": 33763,
+    "rows": 21,
+    "distinctCharacters": 2,
+    "retainedFile": [
+      {
+        "collection": "@bytes",
+        "bytes": 2351
+      },
+      {
+        "collection": "account-drafts",
+        "bytes": 147
+      },
+      {
+        "collection": "account-files",
+        "bytes": 1350
+      },
+      {
+        "collection": "drafts",
+        "bytes": 1333
+      },
+      {
+        "collection": "things",
+        "bytes": 523
+      }
+    ],
+    "offlineRequests": 0,
+    "views": [
+      {
+        "width": 1440,
+        "height": 1000,
+        "scrollWidth": 1440
+      },
+      {
+        "width": 390,
+        "height": 844,
+        "scrollWidth": 390
+      },
+      {
+        "width": 320,
+        "height": 844,
+        "scrollWidth": 320
+      }
+    ]
+  },
+  "nativeLedger": {
+    "ledgerBefore": {
+      "owner": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "a": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "b": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      }
+    },
+    "ledgerAfter": {
+      "owner": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      },
+      "a": {
+        "status": "ready",
+        "usedBytes": 1051,
+        "allowanceBytes": 524288000
+      },
+      "b": {
+        "status": "ready",
+        "usedBytes": 0,
+        "allowanceBytes": 524288000
+      }
+    }
+  },
+  "heldAccountSwitch": {
+    "heldServerWriteBeforeSwitch": true,
+    "oldPostAndComposerHidden": true,
+    "lateReplyAndActorHidden": true,
+    "foreignReadStatus": 404,
+    "foreignGrantStatus": 403,
+    "exactSingleReplyAfterSwitchBack": true
+  },
+  "cleanup": {
+    "ownedContainersRemaining": 0,
+    "temporaryDerivativeImageRemoved": true,
+    "disposableDatabaseAndObjectStorageDestroyedWithContainer": true,
+    "disposableAdminFixtureDestroyedWithContainer": true,
+    "hostCredentialsOrProfilesUsed": false
+  },
+  "nativeDirectSignIn": {
+    "testsPassed": 1,
+    "testsSkipped": 0,
+    "cleanBrowserContext": true,
+    "anonymousBeforeLogin": true,
+    "normalLoginForm": true,
+    "loginStatus": 200,
+    "loginReturnedExactActor": true,
+    "liveProfileMatches": true,
+    "characterIsNotAdmin": true,
+    "ownerIdentityAbsentFromCharacterRoster": true,
+    "privatePostExactAuthorAndText": true,
+    "privatePostRenderedAndReloaded": true,
+    "ownerPrivateReadStatus": 404,
+    "ownerSelectionStatus": 403,
+    "ownerOverrideStatus": 401,
+    "ownerSessionUnchanged": true,
+    "views": [
+      1440,
+      320
+    ],
+    "errors": []
+  },
+  "sameProfileAddAccount": {
+    "verified": false,
+    "authenticatedLoginRoute": "The normal login route redirected an authenticated session.",
+    "fixtureStop": "The synthetic admin-owned Character did not appear in the composer picker after cold reload and an option-targeted retry."
+  }
+}

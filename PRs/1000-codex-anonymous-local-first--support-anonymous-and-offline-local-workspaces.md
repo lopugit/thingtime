@@ -2,6 +2,22 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Vault and Character acceptance — 2026-11-10
+
+The Settings outlet now keeps its identity as a site blocks failure notice
+appears and clears. Both isolated Vault browser suites passed with the
+corrected client. They cover the unlocked form, encrypted offline saves,
+fresh retention, reload and conflict review at 1440, 390 and 320 pixels.
+The Character runs on `7164914063d477f4817ecd84ce12a1bde2ce86fa` verified
+library, nested links, anonymous quick comments and sibling isolation.
+The follow-up verified native account switching during a held reply, device
+usage and Character-only server accounting. Direct sign-in passed through
+the API and in a clean browser at 1440 and 320 pixels. The same-profile Add
+account flow remains open.
+[Vault evidence](../artifacts/anonymous-release-2026-11-09/acceptance/provider-vault.json) ·
+[Character evidence](../artifacts/anonymous-release-2026-11-09/acceptance/character-baseline.json) ·
+[Identity and accounting](../artifacts/anonymous-release-2026-11-09/acceptance/character-identity.json)
+
 ## Offline shell and hosted worker — 2026-11-10
 
 A failed worker update now falls back to the previous complete offline shell.
