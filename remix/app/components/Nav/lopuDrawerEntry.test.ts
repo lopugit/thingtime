@@ -171,7 +171,8 @@ test('floating launcher visibility preserves settings, minimisation, mobile shee
 			const context = { hiddenOnPath, settings: { launcher, dock }, minimised, open, isMobile };
 			const actual = runInNewContext(code, context);
 			const windowOpen = !hiddenOnPath && open && !minimised;
-			const expectedLauncher = !hiddenOnPath && (launcher || minimised) && !(windowOpen && (isMobile || dock !== 'free'));
+			// Minimise does not override the user's explicit launcher opt-in setting.
+			const expectedLauncher = !hiddenOnPath && launcher && !(windowOpen && (isMobile || dock !== 'free'));
 			assert.equal(actual.showWindow, windowOpen, JSON.stringify(context));
 			assert.equal(actual.launcherVisible, expectedLauncher, JSON.stringify(context));
 		}

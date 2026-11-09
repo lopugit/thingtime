@@ -6,6 +6,20 @@ Existing feature `d214a6b5a1965831febd2e5d1f2488ee3f13d1fc` plus fetched main
 `codex/anonymous-local-first` branch and [PR #1000](https://github.com/lopugit/thingtime/pull/1000).
 This is a feature-branch reconciliation, not proof of production acceptance.
 
+## Offline update recovery and hosted worker hardening
+
+The offline worker now uses the last verified cache after an incomplete shell
+update. An isolated Chromium follow-up reproduced the failure, verified the
+exact cached document during a TCP outage, and reopened the normal importer
+with both saved records and exact rendered text. The retained historical
+traces cannot establish which mechanism caused each earlier failure.
+[Controlled offline evidence](builder-import/offline-navigation-verification.json)
+
+The hosted adapter uses a fixed non-root image identity and checks the pinned
+session, privilege flags, work directory and renderer hash before writing draft
+bytes. The [combined verification](final-main/README.md) separates local
+checks, provider results and deployed host acceptance.
+
 ## Scheduled activation integration
 
 [Final main evidence](final-main/README.md) covers the integration of main
@@ -85,7 +99,8 @@ network-none and read-only with its existing sandbox, seccomp and cleanup.
 
 ## Remaining acceptance and delivery
 
-- Diagnose the retained intermittent offline navigation failure.
+- Historical offline traces do not establish the cause of each earlier failure.
+  The two controlled reproduction paths now have focused coverage.
 - Remaining identity/origin/data-plane/Character and media/provider/vault/native
   device acceptance matrix in `docs/local-workspaces.md`.
 - The current one hosted `thingtime` connection advertises 37 tools and no renderer.

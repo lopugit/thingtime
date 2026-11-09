@@ -2,6 +2,16 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Offline shell and hosted worker — 2026-11-10
+
+A failed worker update now falls back to the previous complete offline shell.
+Isolated Chromium recovered the exact cached document and verified the normal
+importer during a TCP outage. The hosted renderer uses a fixed non-root image
+identity and checks the verified session before accepting draft bytes. The
+combined build and checks passed. The live provider bootstrap failed its
+identity guard before creating a snapshot or running a render.
+[Verification and limits](../artifacts/anonymous-release-2026-11-09/final-main/README.md#offline-shell-and-hosted-worker--10-november-2026).
+
 ## Installer follow-up — 2026-11-10
 
 Merged main `cc248ed5336b21948bccfd9b6ebe486239421189`, which allows the

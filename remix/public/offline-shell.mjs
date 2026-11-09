@@ -81,6 +81,23 @@ export async function pruneOfflineShells() {
 	completed.sort((a, b) => b.time - a.time);
 	for (const previous of completed.slice(1)) await caches.delete(previous.name);
 }
+async function matchCompleteOfflineAsset(cacheStorage, current, path) {
+	const match = async name => {
+		try {
+			const cache = await cacheStorage.open(name);
+			if (await cache.match(COMPLETE)) return await cache.match(path);
+		} catch {
+			// An unreadable cache does not make another verified build unusable.
+		}
+	};
+	const currentAsset = await match(current);
+	if (currentAsset) return currentAsset;
+	for (const name of await cacheStorage.keys()) {
+		if (!name.startsWith(PREFIX) || name === current) continue;
+		const previousAsset = await match(name);
+		if (previousAsset) return previousAsset;
+	}
+}
 export async function handleOfflineShell(request, manifest = offlineShellManifest, cacheStorage = caches, fetcher = fetch) {
 	const url = new URL(request.url);
 	const current = cacheName(manifest);
@@ -90,8 +107,9 @@ export async function handleOfflineShell(request, manifest = offlineShellManifes
 			// Unreachable storage says nothing about the navigation. Report the
 			// original network failure rather than masking it with a cache error.
 			try {
-				const cache = await cacheStorage.open(current);
-				if (await cache.match(COMPLETE)) { const shell = await cache.match('/offline-shell.html'); if (shell) return shell; }
+				// A worker can activate even if its new shell failed to install.
+				const shell = await matchCompleteOfflineAsset(cacheStorage, current, '/offline-shell.html');
+				if (shell) return shell;
 			} catch {}
 			throw error;
 		}
@@ -101,10 +119,8 @@ export async function handleOfflineShell(request, manifest = offlineShellManifes
 	// This worker intercepts every build asset, so unreachable or damaged
 	// CacheStorage must degrade to the network instead of failing the request.
 	try {
-		for (const name of [current, ...(await cacheStorage.keys()).filter(name => name.startsWith(PREFIX) && name !== current)]) {
-			const cache = await cacheStorage.open(name);
-			if (await cache.match(COMPLETE)) { const cached = await cache.match(url.pathname); if (cached) return cached; }
-		}
+		const cached = await matchCompleteOfflineAsset(cacheStorage, current, url.pathname);
+		if (cached) return cached;
 	} catch {}
 	return fetcher(request);
 }

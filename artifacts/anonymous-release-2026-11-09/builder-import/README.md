@@ -32,13 +32,25 @@ integration and requires its own built acceptance.
   with no published ports or host mounts. [Boundary](boundary.json) ·
   [Replica and capabilities](health.json) · [Cleanup](cleanup.json)
 
-The earlier offline `/things` navigation failure remains unresolved.
-[CDP emulation](attempt-3/import/failure.json) and
-[one transport outage](attempt-5/import/failure.json) returned
-`net::ERR_FAILED` despite the verified service-worker controller and complete
-shell cache before the import. The final transport-outage test passed without
-reconnection or a navigation fallback. There is no post-failure service-worker
-trace or established root cause. The Builder fixture now uses the empty-list
+The earlier offline `/things` navigation failures returned `net::ERR_FAILED`
+during [CDP emulation](attempt-3/import/failure.json) and
+[a transport outage](attempt-5/import/failure.json). The importer used an
+asynchronous Playwright readiness predicate, which can resolve with a false
+value before the worker controls the page or the shell is complete. The
+earlier traces lack a direct cache readback and a post-failure worker trace,
+so the cause of those specific failures remains uncertain. The earlier final
+transport-outage test did pass without reconnecting.
+
+A controlled follow-up reproduced premature readiness and a separate case
+where a replacement worker activated after its shell download failed and
+ignored the previous verified shell. With the worker fix, the same failed
+update served the exact cached document during a TCP outage. With readiness
+verified directly, the normal importer also reopened `/things`, retained both
+anonymous records and rendered the exact exported text during the outage. The
+follow-up used the retained compiled client and an isolated loopback fixture
+with a synthetic anonymous root response. [Browser evidence](offline-navigation-verification.json)
+
+The Builder fixture now uses the empty-list
 insertion control for its first child and the sibling insertion control for
 subsequent children. It scopes the composed DOM assertions to each document's
 rendered sibling group because separate documents can generate the same IDs.

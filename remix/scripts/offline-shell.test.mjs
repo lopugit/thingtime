@@ -71,3 +71,30 @@ test('mixed deployments, oversized responses and missing assets never produce a 
 		assert.equal(caches.size, 0);
 	}
 });
+test('offline navigation uses a previous complete shell when the active build could not install', async () => {
+	const { manifest: previous, files } = fixture();
+	const shellPath = '/offline-shell.html';
+	const newShell = '<div id="root">New build</div>';
+	const current = {
+		...previous, hash: 'e'.repeat(64),
+		assets: previous.assets.map(asset => asset.path === shellPath
+			? { ...asset, bytes: Buffer.byteLength(newShell), sha256: createHash('sha256').update(newShell).digest('hex') }
+			: asset)
+	};
+	const { storage } = memoryCaches();
+	await prepareOfflineShell(previous, storage, async path => new Response(files.get(path)));
+	await assert.rejects(prepareOfflineShell(current, storage, async () => new Response(null, { status: 503 })));
+	const currentCacheName = 'thingtime:offline-shell:v1:' + current.hash;
+	const currentCache = await storage.open(currentCacheName);
+	await currentCache.put(shellPath, new Response('unverified partial shell'));
+	const navigation = { url: origin + '/things?view=grid', mode: 'navigate', method: 'GET', headers: new Headers() };
+	const offline = () => { throw new TypeError('Failed to fetch'); };
+	assert.equal(await (await handleOfflineShell(navigation, current, storage, offline)).text(), files.get(shellPath));
+	const unreadableCurrent = { ...storage, open: async name => {
+		if (name === currentCacheName) throw new DOMException('Cache unavailable', 'UnknownError');
+		return storage.open(name);
+	} };
+	assert.equal(await (await handleOfflineShell(navigation, current, unreadableCurrent, offline)).text(), files.get(shellPath));
+	await prepareOfflineShell(current, storage, async path => new Response(path === shellPath ? newShell : files.get(path)));
+	assert.equal(await (await handleOfflineShell(navigation, current, storage, offline)).text(), newShell);
+});

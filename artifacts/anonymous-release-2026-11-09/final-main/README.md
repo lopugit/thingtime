@@ -47,3 +47,32 @@ service when either process stays open. Syntax validation and all 21 local
 and cached installer fixture tests passed. A live signed installation remains
 unverified. The source trees under `remix` and `MCP` are byte-identical to
 `ab72a52a9`, so the earlier build and renderer results apply to those files.
+
+## Offline shell and hosted worker — 10 November 2026
+
+The offline worker can serve a previous complete build after a failed update.
+Five offline-shell tests passed. Isolated Chromium reproduced the incomplete
+replacement cache, recovered the exact cached document during a TCP outage
+and reopened the normal importer with two anonymous records and the exact
+rendered text. The older failures lacked the cache and worker traces needed
+to determine their cause. [Controlled Chromium evidence](../builder-import/offline-navigation-verification.json)
+
+The hosted image declares a locked non-root renderer. The adapter verifies
+the session, Linux identity, privilege flags, clean paths and pinned runner
+hash before writing a mode-0600 draft. The connector suite passed all 55 tests,
+the navigation suite passed all 36 tests, and the combined Vercel build, zero
+TypeScript ratchet and full lint passed with zero errors and 359 warnings.
+The compiled smoke exercised 17 contracts and confirmed that the unconfigured
+hosted adapter refuses safely. The emitted offline worker matches the tested
+module, and the rebuilt renderer hash matches the earlier real isolated SDK
+capture.
+
+The live Vercel bootstrap verified the exact ready image and a nonpersistent
+session with deny-all networking, no routes or ports, one vCPU, 2048 MiB and a
+120-second bootstrap deadline. The guest exited 1 during the fixed identity
+guard without returning the proof hash or the failed predicate. It stopped
+before transferring draft bytes, creating a snapshot or running a render.
+Independent provider reads returned HTTP 404 for all three disposable
+bootstrap sessions, and the project snapshot inventory was empty. Hosted
+activation and artifact delivery through the connected MCP host remain
+unverified.

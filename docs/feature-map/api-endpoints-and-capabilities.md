@@ -7,8 +7,11 @@ The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
 1.0.0 and `thingtime_render_and_export` only with the verified snapshot
 configuration. `plugin.ts` dispatches only this exact tool without account
 resolution; `hostedRender.server.ts` enforces the canonical in-bundle validator,
-distributed admission and nonpersistent deny-all worker lifecycle. Keep the
-HTTP resource and local stdio formats on the shared renderer contract in
+distributed admission and nonpersistent deny-all worker lifecycle. The
+adapter checks the fixed non-root identity, privilege flags, clean work
+directory and runner hash before writing the private input. Probe, command
+and file transfer stay on the same verified Session.
+Keep the HTTP resource and local stdio formats on the shared renderer contract in
 `MCP/src/renderContract.ts`. Run `test:chatgpt`, `test:api-capabilities`, the
 built MCP manifest smoke and the [operator preflight and deployed
 acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).

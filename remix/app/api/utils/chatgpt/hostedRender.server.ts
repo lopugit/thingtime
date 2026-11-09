@@ -16,24 +16,64 @@ const SNAPSHOT_CHECK_MS = 3000;
 const READINESS_CACHE_MS = 15_000;
 const VM_MAX_MS = 70_000;
 const WORK_MAX_MS = 45_000;
+const IDENTITY_MAX_MS = 4_000;
 const COMMAND_MAX_MS = 33_000;
 const RECOVERY_MAX_MS = 2_000;
 const STOP_MAX_MS = 4_000;
 const DELETE_MAX_MS = 4_000;
 const WORKER_RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
-const workerUser = 'thingtime-renderer';
 const workerHome = '/home/thingtime-renderer';
+const runnerPath = '/opt/thingtime/remix/dist/draft-preview/runner.js';
 const inputPath = workerHome + '/render-input.json';
 const outputPath = workerHome + '/render-output.json';
-// Everything the shell sees is an audited constant. Caller data only enters
-// the fixed stdin file after the VM, routes and network policy are verified.
-const workerCommand =
-  'umask 022; exec 2>/dev/null; mkdir render-job.lock || exit 75; exec /usr/bin/setpriv --no-new-privs /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/home/thingtime-renderer TMPDIR=/tmp PLAYWRIGHT_BROWSERS_PATH=/ms-playwright /usr/local/bin/node /opt/thingtime/MCP/dist/renderJob.js < render-input.json > render-output.json';
+// The image owns this fixed identity. The ordinary Session commands and file
+// APIs must already run as it: there is no sudo, root setup or resumed session.
+const workerIdentity = [
+  'test "$(/usr/bin/id -u):$(/usr/bin/id -g):$(/usr/bin/id -un)" = 10001:10001:thingtime-renderer',
+  'test "$(/usr/bin/id -ru):$(/usr/bin/id -rg)" = 10001:10001',
+  'test "$(/usr/bin/id -G)" = 10001',
+  'test -d "$HOME"',
+  'test ! -L "$HOME"',
+  'test "$(pwd -P)" = "$HOME"',
+  'test "$(/usr/bin/stat -c %u:%g:%a "$HOME")" = 10001:10001:700',
+  'test -r /opt/thingtime/MCP/dist/renderJob.js',
+  'test ! -w /opt/thingtime/MCP/dist/renderJob.js',
+  'test -d /ms-playwright',
+  'test ! -w /ms-playwright',
+  'test "$(/usr/bin/grep -Ec "^(Uid|Gid):([[:space:]]+10001){4}$" /proc/self/status)" = 2',
+  'test "$(/usr/bin/grep -Ec "^Cap(Inh|Prm|Eff|Amb):[[:space:]]+0+$" /proc/self/status)" = 4',
+  '/usr/bin/grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status'
+].join('\n');
+const workerProbe = [workerIdentity,
+  'test ! -e render-input.json', 'test ! -L render-input.json',
+  'test ! -e render-output.json', 'test ! -L render-output.json',
+  'test ! -e render-job.lock', 'test ! -L render-job.lock',
+  'test -r ' + runnerPath,
+  'test ! -w ' + runnerPath,
+  '/usr/bin/sha256sum ' + runnerPath + ' | /usr/bin/cut -d " " -f 1'
+].join('\n');
+// Only fixed constants reach the shell. The private regular input file is
+// checked again in the same launch that opens it as stdin.
+const workerCommand = [workerIdentity,
+  'test -f render-input.json', 'test ! -L render-input.json',
+  'test "$(/usr/bin/stat -c %u:%g:%a render-input.json)" = 10001:10001:600',
+  'test ! -e render-output.json', 'test ! -L render-output.json',
+  'umask 077', 'exec 2>/dev/null', 'mkdir render-job.lock',
+  'exec /usr/local/bin/node /opt/thingtime/MCP/dist/renderJob.js < render-input.json > render-output.json'
+].join('\n');
+
+const workerInvocation = (script: string, timeoutMs: number, signal: AbortSignal) => ({
+  cmd: '/usr/bin/setpriv',
+  args: ['--no-new-privs', '/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin',
+    'HOME=' + workerHome, 'TMPDIR=/tmp', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright', '/bin/sh', '-ec', script],
+  cwd: workerHome, signal, timeoutMs
+});
 
 export type HostedRenderConfig = { origin: string; snapshotId: string; rendererHash: string; protocol: typeof RENDER_WORKER_PROTOCOL };
 type RpcId = string | number;
 type WorkerReply = { protocol: string; result: RenderOutput | { ok: false; code: string; error: string } };
-type Vm = Pick<Sandbox, 'name' | 'persistent' | 'routes' | 'currentSession' | 'asUser' | 'readFile' | 'stop' | 'delete'>;
+type Vm = Pick<Sandbox, 'name' | 'persistent' | 'routes' | 'currentSession' | 'stop' | 'delete'>;
+type VmSession = ReturnType<Vm['currentSession']>;
 type WorkerDependencies = { create: (name: string, config: HostedRenderConfig, signal: AbortSignal) => Promise<Vm>; recover: (name: string, signal: AbortSignal) => Promise<Vm>; workTimeoutMs?: number };
 const workerDependencies: WorkerDependencies = {
   create: (name, config, signal) => Sandbox.create({
@@ -99,16 +139,21 @@ export const hostedRenderReady = createHostedRenderReadiness();
 const unavailable = (id: RpcId) => hostedRenderFailure(id, 'RENDER_UNAVAILABLE', 'No verified isolated renderer is available on this Thingtime origin.');
 const workerFailed = (id: RpcId) => hostedRenderFailure(id, 'RENDER_FAILED', 'The isolated renderer could not complete; no artifacts returned.');
 
-const verifyVm = (vm: Vm, config: HostedRenderConfig, expectedName: string) => {
-  const session = vm.currentSession();
+const verifyVm = (vm: Vm, session: VmSession, config: HostedRenderConfig, expectedName: string) => {
   return vm.name === expectedName && vm.persistent === false && vm.routes.length === 0 &&
     session.status === 'running' && session.sourceSnapshotId === config.snapshotId && session.networkPolicy === 'deny-all' &&
     session.routes.length === 0 && Number.isFinite(session.timeout) && session.timeout > 0 && session.timeout <= VM_MAX_MS &&
     session.vcpus === 1 && Number.isFinite(session.memory) && session.memory > 0 && session.memory <= 2048;
 };
 
-async function readWorkerReply(vm: Vm, signal: AbortSignal): Promise<WorkerReply> {
-  const stream = await vm.readFile({ path: outputPath }, { signal });
+export async function verifyHostedRenderWorkerIdentity(session: Pick<VmSession, 'runCommand'>, rendererHash: string, signal: AbortSignal) {
+  if (!/^[0-9a-f]{64}$/.test(rendererHash)) return false;
+  const result = await session.runCommand(workerInvocation(workerProbe, IDENTITY_MAX_MS, signal));
+  return result.exitCode === 0 && (await result.stdout()) === rendererHash + '\n';
+}
+
+async function readWorkerReply(session: VmSession, signal: AbortSignal): Promise<WorkerReply> {
+  const stream = await session.readFile({ path: outputPath }, { signal });
   if (!(stream instanceof Readable)) throw new Error('missing output');
   let bytes = 0;
   const chunks: Buffer[] = [];
@@ -138,13 +183,15 @@ export async function executeHostedRender(
     signal.throwIfAborted();
     attempted = true;
     vm = await dependencies.create(vmName, config, signal);
-    if (!verifyVm(vm, config, vmName)) throw new Error('isolation refused');
+    // Sandbox-level operations can resume a stopped VM; these operations stay
+    // on the one session whose snapshot and isolation were just checked.
+    const session = vm.currentSession();
+    if (!verifyVm(vm, session, config, vmName) || !await verifyHostedRenderWorkerIdentity(session, config.rendererHash, signal)) throw new Error('isolation refused');
     signal.throwIfAborted();
-    const user = vm.asUser(workerUser);
-    await user.writeFiles([{ path: inputPath, content: JSON.stringify(input), mode: 0o640 }], { signal });
-    const command = await user.runCommand({ cmd: '/bin/sh', args: ['-c', workerCommand], cwd: workerHome, signal, timeoutMs: COMMAND_MAX_MS });
+    await session.writeFiles([{ path: inputPath, content: Buffer.from(JSON.stringify(input)), mode: 0o600 }], { signal });
+    const command = await session.runCommand(workerInvocation(workerCommand, COMMAND_MAX_MS, signal));
     if (command.exitCode !== 0) throw new Error('worker exited');
-    const { result } = await readWorkerReply(vm, signal);
+    const { result } = await readWorkerReply(session, signal);
     if (result.ok === true) response = expectedDraftHash && result.hash !== expectedDraftHash
       ? hostedRenderFailure(id, 'RENDER_INVALID_OUTPUT', 'The worker did not return the exact validated draft; no artifacts returned.')
       : formatHostedRenderResponse(id, result, input, config.rendererHash);

@@ -94,11 +94,16 @@ test('global and site nested blocks remain individually editable after offline s
  await mkdir(artifacts!, { recursive: true });
  try {
   await page.goto(base + '/builder?page=__global__'); await open();
-  await page.waitForFunction(async () => {
-   await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) return false;
-   for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true;
+  await page.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated', undefined, { timeout: 90_000 });
+  const shellReady = await page.evaluate(async () => {
+   for (const key of await caches.keys()) {
+    if (!key.startsWith('thingtime:offline-shell:v1:')) continue;
+    const cache = await caches.open(key);
+    if (await cache.match('/__thingtime_offline_shell_complete__') && await cache.match('/offline-shell.html')) return true;
+   }
    return false;
-  }, undefined, { timeout: 90_000 });
+  });
+  assert.equal(shellReady, true, 'the activated service worker has a complete offline shell');
   if (transportOutageFile) {
    // An isolated fixture can drop the actual HTTP transport. That exercises
    // service-worker fallback without depending on Chromium's emulation.

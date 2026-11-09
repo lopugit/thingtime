@@ -145,6 +145,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10 — Keep the last verified offline shell available when a service
+  worker update cannot finish downloading its replacement. Verify the cache
+  before simulating a transport outage in Builder acceptance. **Codex (AI)**
+
+- 2026-11-10 — Run hosted draft jobs as the renderer image's fixed non-root
+  identity and check the session and runner before receiving draft bytes.
+  [Verification](../artifacts/anonymous-release-2026-11-09/final-main/README.md).
+  **Codex (AI)**
+
 - 2026-11-09: Reconcile PR #1000 with scheduled private webpage activation.
   Combine the versioned Things contracts, keep activation on the verified
   owning-account server route, and refuse activation and passive sources in

@@ -207,6 +207,12 @@ first, without loading real configuration. Pass an independently verified local
 **Linux isolated anonymous/offline acceptance** for commands and prerequisites.
 This proves the native web renderer in an isolated Linux browser. Installed Mac
 app controls, native runtime claims and deployed previews need separate evidence.
+
+The offline service worker serves a previous complete shell when a replacement
+worker activates before its new cache is ready. Both document and asset reads
+check the cache completion marker. Run `node --test remix/scripts/offline-shell.test.mjs`
+and verify the worker controller, cached document and shell assets before taking
+the transport offline in browser acceptance.
 ## Commander native background indexing
 
 `Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;

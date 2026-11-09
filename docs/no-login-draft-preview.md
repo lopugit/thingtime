@@ -392,16 +392,21 @@ provider resource, or install a connector. To activate an authorized origin:
    only when provisioning is authorized. Pin the returned OCI digest
    (`vcr.vercel.com/<team>/<project>/<repository>@sha256:<digest>`); do
    not activate a mutable tag. With the project's supported identity,
-   use the already installed Sandbox SDK to create the separate user
-   and immutable snapshot from that image. For example, run this
-   snippet from `remix/` with `node --input-type=module`; supply the
-   pinned image through `TT_HOSTED_RENDER_IMAGE`:
+   use the installed Sandbox SDK to verify the locked image user and create
+   an immutable snapshot. Use ordinary commands on the captured VM session;
+   no sudo or runtime user creation is needed. For example, run this snippet
+   from `remix/` with `node --import tsx --input-type=module`. Supply the pinned
+   image through `TT_HOSTED_RENDER_IMAGE` and the staged runner's SHA-256 through
+   `TT_HOSTED_RENDER_HASH`:
 
    ```js
    import { Sandbox } from '@vercel/sandbox';
+   import { verifyHostedRenderWorkerIdentity } from './app/api/utils/chatgpt/hostedRender.server.ts';
    const image = process.env.TT_HOSTED_RENDER_IMAGE;
-   if (!/^vcr\.vercel\.com\/[^@]+@sha256:[a-f0-9]{64}$/.test(image ?? '')) {
-     throw new Error('Pin the exact VCR image digest.');
+   const rendererHash = process.env.TT_HOSTED_RENDER_HASH;
+   if (!/^vcr\.vercel\.com\/[^@]+@sha256:[a-f0-9]{64}$/.test(image ?? '') ||
+       !/^[a-f0-9]{64}$/.test(rendererHash ?? '')) {
+     throw new Error('Pin the exact VCR image and renderer digests.');
    }
    const vm = await Sandbox.create({
      image, ports: [], env: {}, networkPolicy: 'deny-all',
@@ -409,8 +414,14 @@ provider resource, or install a connector. To activate an authorized origin:
    });
    let snapshot;
    try {
-     await vm.createUser('thingtime-renderer');
-     snapshot = await vm.snapshot({ expiration: 30 * 24 * 60 * 60 * 1000 });
+     const session = vm.currentSession();
+     if (![image, image.replace('vcr.vercel.com/', ''), image.split('/').at(-1)].includes(vm.image) ||
+         vm.persistent || vm.routes.length || session.routes.length ||
+         session.status !== 'running' || session.networkPolicy !== 'deny-all' ||
+         !await verifyHostedRenderWorkerIdentity(session, rendererHash, AbortSignal.timeout(5_000))) {
+       throw new Error('Renderer isolation or image digest verification failed.');
+     }
+     snapshot = await session.snapshot({ expiration: 30 * 24 * 60 * 60 * 1000 });
    } finally {
      await vm.delete();
    }
@@ -439,9 +450,11 @@ provider resource, or install a connector. To activate an authorized origin:
 The hosted gateway uses the existing Vercel project identity for provider
 control-plane calls. It checks the immutable snapshot still exists, then
 requires the exact snapshot, no port, nonpersistent VM and
-[deny-all network policy](https://vercel.com/docs/sandbox) before sending
-caller bytes. The fixed worker command runs non-root with no effective
-capabilities and no-new-privileges, with Chromium's sandbox enabled. It
+[deny-all network policy](https://vercel.com/docs/sandbox). On that same
+session it verifies the locked image user and exact renderer SHA-256 before
+sending caller bytes. The fixed command checks the private input file before
+opening it and runs non-root without Linux capabilities and with no new
+privileges. Chromium's sandbox stays enabled. It
 receives a minimal clean environment. No provider credentials, Docker daemon,
 host filesystem, private Thing, or application store enters the VM. A shared,
 fail-closed admission window permits at most two validation attempts per IP

@@ -32,23 +32,32 @@ const artifacts = async () => {
   return { ...metadata, json, images } as RenderOutput;
 };
 
-function worker(reply: () => Readable | null, options: { blocked?: boolean; cleanupFails?: boolean; onRun?: (signal: AbortSignal) => Promise<void> } = {}) {
+function worker(reply: () => Readable | null, options: {
+  blocked?: boolean; cleanupFails?: boolean; rendererHash?: string;
+  probe?: { exitCode: number; stdout: string }; onRun?: (signal: AbortSignal) => Promise<void>
+} = {}) {
   const events: string[] = [];
-  const calls: { content?: string; command?: unknown; cleanupSignal?: AbortSignal } = {};
+  const calls: { content?: string; inputMode?: number; probe?: unknown; command?: unknown; cleanupSignal?: AbortSignal } = {};
+  const session = {
+    sourceSnapshotId: config.snapshotId, networkPolicy: options.blocked ? 'allow-all' : 'deny-all',
+    routes: [], timeout: 70_000, status: 'running', vcpus: 1, memory: 2048,
+    async writeFiles(files: { content: Buffer; mode: number }[]) {
+      events.push('write'); calls.content = files[0].content.toString(); calls.inputMode = files[0].mode;
+    },
+    async runCommand(command: { signal: AbortSignal }) {
+      if (!calls.probe) {
+        events.push('probe'); calls.probe = command;
+        const probe = options.probe ?? { exitCode: 0, stdout: (options.rendererHash ?? config.rendererHash) + '\n' };
+        return { exitCode: probe.exitCode, stdout: async () => probe.stdout };
+      }
+      events.push('execute'); calls.command = command; await options.onRun?.(command.signal);
+      return { exitCode: 0 };
+    },
+    async readFile() { events.push('read'); return reply(); }
+  };
   const vm = {
     name: '', persistent: false, networkPolicy: 'deny-all', routes: [],
-    currentSession: () => ({
-      sourceSnapshotId: config.snapshotId, networkPolicy: options.blocked ? 'allow-all' : 'deny-all',
-      routes: [], timeout: 70_000, status: 'running', vcpus: 1, memory: 2048
-    }),
-    asUser(user: string) {
-      events.push('user:' + user);
-      return {
-        async writeFiles(files: { content: string }[]) { events.push('write'); calls.content = files[0].content; },
-        async runCommand(command: { signal: AbortSignal }) { events.push('execute'); calls.command = command; await options.onRun?.(command.signal); return { exitCode: 0 }; }
-      };
-    },
-    async readFile() { events.push('read'); return reply(); },
+    currentSession: () => session,
     async stop() { events.push('stop'); return { status: 'stopped' }; },
     async delete({ signal }: { signal: AbortSignal }) {
       events.push('delete'); calls.cleanupSignal = signal;
@@ -80,14 +89,18 @@ test('origin readiness requires a current immutable snapshot and shares one boun
 test('isolated render returns real JSON and PNG bytes once, after exact VM cleanup', async () => {
   const rendered = await artifacts();
   const scoped = { ...config, rendererHash: rendered.rendererHash };
-  const fixture = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]));
+  const fixture = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]), { rendererHash: rendered.rendererHash });
   const reply = await executeHostedRender(scoped, 7, input, active, fixture.dependencies);
   const result = outcome(reply);
   assert.equal(result.isError, undefined);
-  assert.deepEqual(fixture.events, ['create', 'user:thingtime-renderer', 'write', 'execute', 'read', 'stop', 'delete']);
+  assert.deepEqual(fixture.events, ['create', 'probe', 'write', 'execute', 'read', 'stop', 'delete']);
   assert.deepEqual(JSON.parse(fixture.calls.content!), input);
-  assert.doesNotMatch(JSON.stringify(fixture.calls.command), /caller-content|authorization|token/i);
+  assert.equal(fixture.calls.inputMode, 0o600);
+  assert.doesNotMatch(JSON.stringify([fixture.calls.probe, fixture.calls.command]), /caller-content|authorization|token|sudo/i);
+  assert.match(JSON.stringify(fixture.calls.probe), /10001:10001:thingtime-renderer/);
+  assert.match(JSON.stringify(fixture.calls.probe), /sha256sum/);
   assert.match(JSON.stringify(fixture.calls.command), /no-new-privs/);
+  assert.match(JSON.stringify(fixture.calls.command), /10001:10001:600/);
   assert.match(JSON.stringify(fixture.calls.command), /mkdir render-job\.lock/);
   assert.equal(JSON.parse(reply).id, 7);
   assert.ok(Buffer.byteLength(reply) < HOSTED_RENDER_RESPONSE_MAX_BYTES);
@@ -100,7 +113,7 @@ test('isolated render returns real JSON and PNG bytes once, after exact VM clean
     assert.equal(hash(bytes), artifact.sha256);
   }
   assert.equal(result.structuredContent.hash, hash(rendered.json));
-  const mismatch = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]));
+  const mismatch = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]), { rendererHash: rendered.rendererHash });
   assert.equal(code(await executeHostedRender(scoped, 8, input, active, mismatch.dependencies, 'b'.repeat(64))), 'RENDER_INVALID_OUTPUT');
   assert.deepEqual(mismatch.events.slice(-2), ['stop', 'delete']);
   assert.deepEqual(result.structuredContent.diagnostics, rendered.diagnostics);
@@ -144,10 +157,24 @@ test('refused VM boundary, overlong output and uncertain cleanup fail closed', a
   assert.equal(code(await executeHostedRender(config, 1, input, active, excessive.dependencies)), 'RENDER_OUTPUT_LIMIT');
   assert.deepEqual(excessive.events.slice(-2), ['stop', 'delete']);
   const rendered = await artifacts();
-  const uncertain = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]), { cleanupFails: true });
+  const uncertain = worker(() => Readable.from([Buffer.from(JSON.stringify({ protocol: RENDER_WORKER_PROTOCOL, result: rendered }))]), { cleanupFails: true, rendererHash: rendered.rendererHash });
   const reply = await executeHostedRender({ ...config, rendererHash: rendered.rendererHash }, 1, input, active, uncertain.dependencies);
   assert.equal(code(reply), 'RENDER_CLEANUP_UNVERIFIED');
   assert.doesNotMatch(reply, /provider private response|thingtime-draft:\/\//);
+});
+
+test('failed image-user probe or unverified runner bytes cannot receive caller data', async () => {
+  for (const probe of [
+    { exitCode: 1, stdout: config.rendererHash + '\n' },
+    { exitCode: 0, stdout: '' },
+    { exitCode: 0, stdout: 'b'.repeat(64) + '\n' },
+    { exitCode: 0, stdout: config.rendererHash + '\nextra output\n' }
+  ]) {
+    const fixture = worker(() => null, { probe });
+    assert.equal(code(await executeHostedRender(config, 1, input, active, fixture.dependencies)), 'RENDER_FAILED');
+    assert.deepEqual(fixture.events, ['create', 'probe', 'stop', 'delete']);
+    assert.equal(fixture.calls.content, undefined);
+  }
 });
 
 test('caller cancellation and deadline still clean the owned VM with an independent signal', async () => {

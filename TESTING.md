@@ -11401,6 +11401,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   inline JSON/PNG resources; validate the JSON and dependency closure. Capture
   1440×1000, 390×844, 320×844 and the first viewport's card-only crop. Check
   400×560 desktop card bounds, 24px phone margins, no overflow and stable hash.
+- For hosted activation, build the pinned Linux renderer image and verify its
+  locked nonroot user is the real SDK session identity without sudo. Confirm the
+  exact renderer SHA-256, no routes, denied outbound network, no Linux capabilities
+  and no new privileges before sending bytes. On a real snapshot clone, verify
+  private input ownership, exact JSON/PNG readback and a refused bad crop, with
+  both workers deleted. Reject missing or wrong identity evidence before upload.
 - Reject malformed/oversized input, duplicate/ambiguous/missing references,
   unknown schema, remote CSS/assets, Actions in inactive branches, unsafe props,
   expansion exhaustion, invisible/overflowing content (including zero font size
@@ -13924,6 +13930,19 @@ resume unfinished Android gates only when requested.
   must preserve its original network error, and partial installs must never be
   served as verified content. Run `node --test remix/scripts/offline-shell.test.mjs`;
   account API/media authorization and cache exclusions must remain unchanged.
+
+- [ ] Delay the shell download in a fresh Chromium context. Wait for an
+  activated document controller with a synchronous Playwright predicate, then
+  read the completion marker and shell together with an awaited CacheStorage
+  check. Interrupt the HTTP transport only after both checks pass and cold-load
+  `/things`. Verify the document came from CacheStorage and the anonymous
+  workspace still opens. An asynchronous `waitForFunction` predicate can
+  resolve with a false value without polling again.
+
+- [ ] With a complete shell cached, let a new worker activate after its shell
+  download fails. Cold-load `/things` during a transport outage and verify the
+  previous verified shell and its build assets open the workspace. After a
+  complete new install, verify offline navigation uses that shell.
 
 
 ## Local schema workflow and independent draft saving (2026-10-16)
