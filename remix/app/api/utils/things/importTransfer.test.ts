@@ -344,3 +344,18 @@ test('import service persists late bindings only after normal ready-upload check
   const crystal = writes[0].input.crystal;
   assert.equal((resolveTemplate(crystal.render, crystal.savedArgs) as any).props.src, '/api/v1/attachments/content?id=uploaded_copy');
 });
+
+test('a portable webpage imports without its automatic Action opt-in', async () => {
+  const { writes, deps } = harness();
+  const manifest = fixture();
+  const activationAction = { action: 'existing-private-action', cadence: 'open' };
+  const blocks = [{ id: 'title', type: 'text', text: 'Imported page' }];
+  manifest.things.push({ id: 'page', folderId: 'folder', thingtime: ['webpage'],
+    crystal: { name: 'Imported page', blocks, activationAction } });
+
+  const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, deps);
+  assert.equal(result.ok, true);
+  const page = writes.find(row => row.input.thingtime.includes('webpage'));
+  assert.deepEqual(page?.input.crystal, { name: 'Imported page', blocks });
+  assert.deepEqual(manifest.things.find(thing => thing.id === 'page')?.crystal.activationAction, activationAction);
+});

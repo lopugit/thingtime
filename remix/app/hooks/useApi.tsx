@@ -3,7 +3,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -1308,6 +1308,11 @@ export function useApi() {
           }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
+            await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
+          }
+          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
@@ -1391,6 +1396,10 @@ export function useApi() {
       upsert: useCallback(
         async (args) => {
           if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (args?.crystal?.activationAction !== undefined || (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure'))) {
+            await requireThingtimeCapability('api.things', '1.56.0');
+          }
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1417,6 +1426,11 @@ export function useApi() {
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
+            await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
+          }
+          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1832,17 +1846,20 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => {
+      run: useCallback(async (args, options?: { signal?: AbortSignal }) => {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
         await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane, signal: options?.signal });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
-        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+        options?.signal?.throwIfAborted();
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current, undefined, undefined, args?.source === 'activation' ? {
+          signal: options?.signal, expectedDataPlane: expectedPlane, currentDataPlane: () => planeRef.current
+        } : undefined));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
