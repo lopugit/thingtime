@@ -77,7 +77,7 @@ export async function updateCharacter(owner: any, input: any) {
     if (input.operation === 'disable') {
       await (await getSessionsCollection()).updateMany({ userId: String(user._id) }, revokedSessionPipeline(new Date()));
       // Owner sessions keep their principal; stop acting as the disabled Character.
-      await (await getSessionsCollection()).updateMany({ userId: String(owner._id), 'meta.activeCharacterId': String(user._id) }, { $unset: { 'meta.activeCharacterId': '' } });
+      await (await getSessionsCollection()).updateMany({ userId: String(owner._id), 'meta.activeCharacterId': String(user._id) }, { $unset: { 'meta.activeCharacterId': '' }, $set: { 'meta.characterSelectionRevision': randomUUID() } });
     }
   } else return fail(400, 'Unknown Character operation');
   return { ok: true as const, character: await descriptor(await findUserById(String(user._id))) };
@@ -87,8 +87,18 @@ export async function selectSessionCharacter(principal: any, session: any, chara
   const id = characterId === null ? String(principal._id) : characterId;
   const target = typeof id === 'string' ? await findUserById(id) : null;
   if (!characterSelectionAllowed(principal, target)) return fail(403, 'That identity is not available to this session');
-  const result = await (await getSessionsCollection()).updateOne({ jti: session.jti, userId: String(principal._id), revokedAt: null },
-    id === String(principal._id) ? { $unset: { 'meta.activeCharacterId': '' } } : { $set: { 'meta.activeCharacterId': id } });
+  const owner = String(principal._id);
+  const selection = id === owner ? null : id;
+  const existing = { $ifNull: ['$meta.activeCharacterId', null] };
+  const unchanged = selection === null ? { $in: [existing, [null, owner]] } : { $eq: [existing, selection] };
+  // Every actual identity transition invalidates credentials bound to this
+  // session selection, even if the principal later switches back.
+  const result = await (await getSessionsCollection()).updateOne({ jti: session.jti, userId: owner, revokedAt: null }, [{
+    $set: {
+      'meta.activeCharacterId': selection ?? '$$REMOVE',
+      'meta.characterSelectionRevision': { $cond: [unchanged, '$meta.characterSelectionRevision', randomUUID()] }
+    }
+  }]);
   if (!result.matchedCount) return fail(401, 'Session expired');
   return { ok: true as const, user: await toPublicUserWithStorage(target) };
 }

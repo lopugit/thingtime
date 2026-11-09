@@ -14678,6 +14678,45 @@ the isolated real-API/browser command and the metadata-only session boundary.
   Escape closes it, and focus returns to its button. A real site sign-in and a
   native-provider operation require separate acceptance.
 
+## Agent provider-credential import
+
+- On an isolated replica-set API, exercise the real browser approval plus Node
+  file handoff and the direct file/paste importer. Verify the exact root admin,
+  origin, environment, label, format and create/replace revision, then reload
+  metadata and compare the receipt. Use synthetic credentials only.
+- Import Google web JSON with the exact callback; refuse installed-client,
+  wrong callback and malformed files. Replace one environment/origin entry and
+  independently verify other scopes remain unchanged. Refuse stale revisions,
+  duplicate labels and foreign account/Character/bearer approvals.
+- Run the CLI's read-only preflight for `oauth-client`. Version 1.0 accepts
+  the existing Google format and refuses the scoped format before a handoff or
+  input read. Approve a synthetic Facebook scoped replacement, verify the
+  callback and exact vault revision in the browser, then read the receipt and
+  verify the other origin survived.
+- Cancel, expire, revoke/logout and switch account during work; protected drafts
+  must clear and stale completions must not save. Test proof mismatch, replay
+  with different bytes, concurrent save/revoke, and lost initial/retry responses.
+  A committed receipt must not turn into duplicate creation or false failure.
+- Switch the approving session to a Character and back without polling in
+  between; the previous approval must remain revoked. An owner header must not
+  override persisted Character selection. Load approval inside a same-origin
+  iframe: headers and client guards must refuse its controls and requests.
+- Reconcile a lost write, intermediary HTTP 500, partial receipt and JSON-null
+  status without duplicate saves or false success. Replacement receipts must
+  match the approved credential ID, including when their other fields match.
+- CLI stdout/errors must contain only allowlisted status/metadata, including
+  base64url IDs with underscores and canonical dates; raw remote errors, bytes
+  and verifier headers never appear. Ctrl-C must close a stalled local pipe.
+- At desktop/mobile sizes, scroll fully, use keyboard file selection/review,
+  open paste/replace/approval states and verify one inline loading indicator,
+  no overflow, focus preservation and retry. Edit nested heading/control blocks
+  separately, save and reload without persisting transient secret input.
+- Verify capability discovery, all executable registrations, signed gateway
+  header integrity and refused cross-origin fallback. Run `test:credentials-import`,
+  `test:credentials-import:browser`, and after building the real
+  `test:credentials-import:acceptance`. A passed fixture does not establish a
+  real provider credential or installed device acceptance; test the consuming
+  provider operation separately on the authorized deployed account.
 ## Device sync live and historical resources — 2026-11-04
 
 - [ ] Hold a native upload longer than two recorder intervals. The live and
