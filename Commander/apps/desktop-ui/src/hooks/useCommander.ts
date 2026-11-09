@@ -30,6 +30,7 @@ export interface CommanderState {
   error: string | null;
   notice: string | null;
   activeView: CommanderViewId | null;
+  activeViewSession: number;
   setQuery(value: string): void;
   setSelectedIndex(value: number): void;
   setActionsOpen(value: boolean): void;
@@ -54,7 +55,11 @@ export function useCommander(): CommanderState {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<CommanderViewId | null>(null);
+  const [{ id: activeView, session: activeViewSession }, setView] = useState<{
+    id: CommanderViewId | null;
+    session: number;
+  }>({ id: null, session: 0 });
+  const viewSession = useRef(0);
   const [searchRefresh, setSearchRefresh] = useState(0);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
@@ -62,6 +67,12 @@ export function useCommander(): CommanderState {
   const recentSearchesRef = useRef<RecentSearch[]>([]);
   const knownIndexTimeouts = useRef(new Set<string>());
   const indexTimeoutsHydrated = useRef(false);
+
+  const setActiveView = useCallback((id: CommanderViewId | null) => {
+    // Native reopen and shortcut events can commit together while the same view
+    // is still mounted. Treat the new opening as a new view instance.
+    setView({ id, session: ++viewSession.current });
+  }, []);
 
   const setQuery = useCallback((value: string) => {
     if (value !== queryRef.current) {
@@ -163,7 +174,7 @@ export function useCommander(): CommanderState {
     };
     window.addEventListener('commander:launcher-opened', handleLauncherOpened);
     return () => window.removeEventListener('commander:launcher-opened', handleLauncherOpened);
-  }, [rememberRecentSearch, setQuery]);
+  }, [rememberRecentSearch, setActiveView, setQuery]);
 
   useEffect(() => {
     if (!bootstrap) return;
@@ -236,7 +247,9 @@ export function useCommander(): CommanderState {
         return;
       }
       let nativeRequestMethod: string | undefined;
+      const requestedViewSession = viewSession.current;
       const response = await api.execute(itemId, actionId, searchQuery);
+      if (response.view && requestedViewSession !== viewSession.current) return;
       if (response.notice) setNotice(response.notice);
       if (response.view) setActiveView(response.view.id);
       if (response.nativeRequest) {
@@ -276,7 +289,7 @@ export function useCommander(): CommanderState {
       setActionsOpen(false);
       setError(null);
     },
-    [bootstrap, refresh, refreshSearch],
+    [bootstrap, refresh, refreshSearch, setActiveView],
   );
 
   useEffect(() => {
@@ -305,6 +318,7 @@ export function useCommander(): CommanderState {
       error,
       notice,
       activeView,
+      activeViewSession,
       setQuery,
       setSelectedIndex,
       setActionsOpen,
@@ -329,6 +343,8 @@ export function useCommander(): CommanderState {
       error,
       notice,
       activeView,
+      activeViewSession,
+      setActiveView,
       setQuery,
       rememberRecentSearch,
       executeCommand,
