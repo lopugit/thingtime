@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import { openSyncJournal, syncScopeKey } from '../app/fileSync/journal.client';
 import { writeStampedCache } from '../app/hooks/localCache';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
@@ -529,7 +530,7 @@ const nativeFixtureHost = {
  fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
+ element: <CurrentPageBuilderFixture><ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
   {autoPhotos && <NativeSyncBootstrap ownerId={ownerId} generation={0} />}
   {editPhotos && <Box aria-label="Account settings"><RemoteDeviceSync ownerId={ownerId} deviceId={deviceId} devicePlatform="ios" /></Box>}
   <Box aria-label="Local sync">{nativeOnly ? <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} /> :
@@ -537,5 +538,5 @@ const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ use
  </> : params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <>
   <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} devicePlatform={mobile ? 'ios' : 'macos'} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />
   {mobilePanel && <MobileDeviceSetupCard ownerId={ownerId} syncAnchor />}
- </>}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }, { path: '/things', element: <h1>Folder opened</h1> }]);
+ </>}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider></CurrentPageBuilderFixture> }, { path: '/things', element: <h1>Folder opened</h1> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
@@ -12,7 +13,7 @@ const evidence=process.env.TT_REVIEW_EVIDENCE || join(tmpdir(),'thingtime-editab
 const port=28188;
 if(!process.env.TT_REVIEW_WORKER){
  const dir=await mkdtemp(join(tmpdir(),'thingtime-review-qa-')); const req=createRequire(root+'/remix/package.json');
- await createRequire(req.resolve('tsx/package.json'))('esbuild').build({entryPoints:[join(root,'remix/scripts/editable-sync-review.browser.tsx')],bundle:true,format:'esm',platform:'browser',tsconfig:join(root,'remix/tsconfig.json'),outfile:join(dir,'fixture.js'),define:{'process.env.NODE_ENV':'"development"'},loader:{'.png':'dataurl','.svg':'dataurl'},logLevel:'error'});
+ await createRequire(req.resolve('tsx/package.json'))('esbuild').build({entryPoints:[join(root,'remix/scripts/editable-sync-review.browser.tsx')],bundle:true,format:'esm',platform:'browser',tsconfig:join(root,'remix/tsconfig.json'),outfile:join(dir,'fixture.js'),define:{'process.env.NODE_ENV':'"development"'},loader:{'.png':'dataurl','.svg':'dataurl','.wasm':'file'},logLevel:'error'});
  const env={PATH:process.env.PATH,HOME:process.env.HOME,TMPDIR:dir,TT_REVIEW_WORKER:dir,TT_REVIEW_EVIDENCE:evidence,...(process.env.TT_PLAYWRIGHT_MODULE?{TT_PLAYWRIGHT_MODULE:process.env.TT_PLAYWRIGHT_MODULE}:{})};
  await verifyAccountBackupIsolation(port,env);const child=isolatedAccountBackupProcess(process.execPath,[import.meta.filename],{env,stdio:'inherit'},port,true);const timer=setTimeout(()=>child.kill('SIGTERM'),180000);
  try{const [code]=await once(child,'exit');assert.equal(code,0);}finally{clearTimeout(timer);await rm(dir,{recursive:true,force:true});}
@@ -35,6 +36,7 @@ if(!process.env.TT_REVIEW_WORKER){
   await page.getByRole('alert').filter({hasText:'Synthetic interrupted'}).waitFor();assert.equal(await fields.count(),20);
   assert.equal(await page.getByRole('button',{name:'Save versions and ignore',exact:true}).isEnabled(),false);
   await page.getByRole('button',{name:'Reload review',exact:true}).click();await page.getByRole('alert').filter({hasText:'Synthetic interrupted'}).waitFor({state:'hidden'});
+  await enableCurrentPageBuilder(page);
   await page.getByRole('button',{name:'Edit layout',exact:true}).click();
   await page.locator('[data-block-id="review-retention"]').click();
   await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Both versions can be saved in your private Timeline. {review.retentionMessage}');
