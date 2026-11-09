@@ -9687,8 +9687,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.55.0',
-    contractVersion: '1.55.0',
+    featureVersion: '1.56.0',
+    contractVersion: '1.56.0',
 
 
     group: 'things',
@@ -9699,6 +9699,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
+      'Version 1.56 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction descriptors. Execution requires api.actions-run 1.44.0. Saved map pointsSource descriptors load a separate optional cursor-paged points layer with interval refresh. Source points may set fitBounds:false to retain the marker and exclude it from automatic viewport fitting. ' +
       'Version 1.53 adds exact single-ID reads of saved derived metadata Things, rechecking the source audience and recalculating viewer-visible attachment bytes. Metadata stays outside generic list, batch, search, export and mutation surfaces. ' +
       'Version 1.49.2 corrects Timeline capture for valid Webpages exceeding 1,200 authored blocks or 24 nested containers; saved content and Component authorization remain unchanged. Version 1.49 preserves generic authored Collection source offsetInput/limitInput/totalPath mappings, explicit total and selected-row presentation, and Map query-parameter selection bindings. Authenticated GET ?ids=<JSON array of Thing IDs> returns { ok: true, things: [PublicThing|null,...] } in exact input order, including duplicates. It reuses canonical exact-read ACLs, PAT visibility, app namespace/liveness and protected-record gates, batches DB and public projection work, and does not hydrate discussions or write discovery state. Missing, denied and protected IDs are indistinguishable nulls. ids cannot be combined with list/id/projection parameters; the existing optional hidden-link key remains supported. The operation has no product item cap, but GET URL and response transport limits still apply; clients must process large selections in encoded-byte-aware chunks and reduce the chunk on a transport refusal instead of truncating the dataset. It adds authenticated GET ?count=true over the ordinary Things list filters, returning { ok: true, count } after the same owner, namespace, PAT visibility, moderation and inherited ACL checks. Counts reject paging, exact-ID and discussion-projection parameters, return no partial total on failure or cancellation, and are observations rather than transactionally reserved snapshots. Ordinary list and count reads accept excludeArchived=true, excluding only crystal.archived=true before pagination. Optional list offset is a nonnegative visible-row ordinal; it cannot be combined with a cursor or discussion projection and returns offset plus nextOffset (null at the end). Offset reads scan authorization metadata and project only the requested window, without promising constant-time random access. Safe ordinary owner data uses native database counts; exceptional rows stream authorization metadata only. No raw query language, new index, item limit or public data projection is added. ' +
       'Version 1.48 supports saved map marker child templates, including ordinary Component references bound to each point, and authored detail reveal controls. Normal composition and authorization checks remain. ' +
@@ -10410,6 +10411,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/bulk',
     summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
     detail:
+      'Copying a webpage omits its optional automatic Action opt-in, including pages nested inside copied folders. ' +
       'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
       'Owned standalone personal emojis can be moved through the dedicated placement writer; community-bound emojis cannot be filed. ' +
@@ -11777,8 +11779,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.21.0',
-    contractVersion: '1.21.0',
+    featureVersion: '1.22.0',
+    contractVersion: '1.22.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11787,6 +11789,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Version 1.22 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction and map pointsSource descriptors under ordinary revision checks. Execution requires api.actions-run 1.44.0. ' +
       'Version 1.18.1 corrects page Component discovery and identity comparison for large/deep valid authored block trees using cycle-safe iterative traversal. Existing Component ACL/capture and revision contracts remain unchanged. Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
       'Version 1.16 accepts individually editable tt-upload Webpage blocks, preserving the shared uploader, ownership, attachment access and storage validation. ' +
       'Version 1.15.1 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
@@ -13385,6 +13388,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.13.0',
     contractVersion: '1.13.0',
     notes: [
+      'Imported webpages preserve editable content and omit any optional automatic Action opt-in.',
       'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
       'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
       'The importer replaces the self participant. Other participants are archived snapshots, never live user accounts. Only roots can have folderId; archive records cannot carry extended fields, tags, roles, source user IDs or ACLs. File avatars require one fresh stored PNG/JPEG/GIF/WebP file; deleted message tombstones cannot carry text or media. Custom reaction tokens require an included custom-emoji definition. Each complete archive is inserted and file-bound atomically on the home plane after its folders and emoji dependencies. No memberships, messages to real recipients, invitations or notifications are created.',
@@ -13414,7 +13418,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
-    detail: 'Version 1.8.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+    detail: 'Forked webpages omit the optional automatic Action opt-in. Version 1.8.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Version 1.8 also rewrites literal map source Actions to their copied IDs without changing map input data. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
 
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
@@ -13427,8 +13431,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.43.0',
-    contractVersion: '1.43.0',
+    featureVersion: '1.44.0',
+    contractVersion: '1.44.0',
 
     notes: ['Version1.42 combines full shared-content Data values with the authored-descriptor contract introduced independently in1.41. Clients requiring complete shared values reject1.41-only origins.', "Version1.41 accepts typed Action descriptors above the former fixed count while retaining names, type validation, scoped capabilities and serialized input/execution budgets. Saved rich-text forms await their latest Editor.js snapshot before confirmation/dispatch."],
     group: 'actions',
@@ -13436,6 +13440,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.44 adds saved private webpage activation: source=activation, exact action, activationPageId, activationPageRevision and activationOnceKey. The server requires the full owning account, expected actor and expected database, rechecks the current private page and exact private Action revision, derives all inputs from that binding, and permits only read or ensure steps. An ensure key must be literal or the bound civil-date input. No shared, temporary, Character or held execution. ' +
+      'Version 1.44 adds server Action things.ensure {schema, key, values, folderId?}. Declare things.read and things.create for the schema. A non-empty text key binds one Data Thing per invoker, saved Action ID, and selected data plane. First creation validates the optional owned folder and uses owner-private ACL. Reuse returns the readable current Thing with the exact resolved schema and preserves its content, placement, and audience. Deleting the Thing frees its key. Shared read-only, restricted, and browser runtimes refuse this operation. ' +
       'Version 1.43 refuses direct, named, shared, delegated and child Action admission, including browser program preparation, while its server-stamped reviewed creation graph lacks the exact server completion receipt. Current ACL and first-party browser-session rules still apply. ' +
       'Version 1.40 adds the unary ttExpr:["encodeURIComponent",value] expression in ordinary saved Action and Component expressions. It accepts text and maps null/undefined to an empty string; other types and malformed UTF-16 surrogate text are refused without exposing the value. Standard JavaScript URI-component UTF-8 escaping applies, within the existing expression output budget. The operation performs no evaluation, HTTP request or other side effect. Browser programs containing it require execution protocol 1.40 and api.actions-run >=1.40.0 on the selected origin. ' +
       'Version 1.39 recognizes the literal saved source Actions of a map as stored shared composition dependencies, subject to the same audience and read-only Action checks. Runtime row values and source inputs grant no Action access. ' +
@@ -13652,14 +13658,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.13.0',
-    featureVersion: '1.13.0',
+    contractVersion: '1.14.0',
+    featureVersion: '1.14.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.14 resolves the optional saved activationAction descriptor for private standalone pages. Only the full owning account in live mode can activate it; editor, branch, shared, gallery and held surfaces remain inert. It also preserves independent map pointsSource bindings for their normal authorized Action path. ' +
       'Version 1.13 includes server-derived executionHeld on the page and resolved Components. A held page or Component renders as an inert preview until its exact creation operation completes. ' +
       'Version 1.11 resolves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams through the canonical editable composition renderer. Existing source negotiation, access and dependency checks remain. ' +
       'Version 1.9 resolves editable tt-upload controls alongside guarded map blocks. The page runtime supports opt-in local query state, marker selection, custom plain-text icons, title/custom labels, icon lists and authorized attachment avatars without page navigation. These presentation bindings grant no data or media access. ' +

@@ -834,6 +834,13 @@ not satisfy clients requiring complete shared Data values. Both generators
 read the canonical version; shared-content Action clients require 1.42.0, while
 older authored-control-only minima remain valid for their narrower contract.
 
+Optional saved map `pointsSource` descriptors use `api.things` 1.56.0,
+`api.things-update` 1.22.0, `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0. Existing source authorization and cursor paths
+apply. `mapboxSource.ts` publishes the completed points layer, and a failed
+refresh clears only that layer. The shared composition visitor and copy
+rewriter follow its literal Action ID. See [map source authoring](../builder-browser-actions.md#load-an-independent-map-points-layer).
+
 `api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
 broad content. Existing snapshot parts handle breadth beyond inline processing
 windows; no total-content node cap remains. Full-content checkout, merge,
@@ -895,3 +902,10 @@ stage over retained exact-timestamp descriptors. Browser reads never obtain
 provider configuration, session references, execution leases or writable intents.
 See the first-party backup workspace checklist in TESTING for real HTTP/Builder
 acceptance and the separate deployed scheduler/provider gates.
+
+Saved private page activation uses `schemas/webpageActivation.ts`,
+`components/Builder/WebpageActivation.tsx` and the existing Actions run
+route. The route verifies the exact private owner/page/revision/action/date
+and uses the literal saved inputs; the viewer protects manual page query
+selection and keeps preview/edit/shared execution inert. See
+[Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).

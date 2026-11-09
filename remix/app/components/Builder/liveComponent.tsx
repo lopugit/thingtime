@@ -4,7 +4,9 @@ import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
-import { loadMapboxSourcePages } from './Maps/mapboxSource';
+import { loadMapboxPointPages, loadMapboxSourcePages } from './Maps/mapboxSource';
+import type { CollectionSource } from './collectionSource';
+import { MAP_POINTS_SOURCE_REQUIREMENTS } from '~/schemas/authoredControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
@@ -84,6 +86,7 @@ export const useThingSource = ({
 	argValues,
 	interactive,
 	loadAllPages = false,
+	pointPages,
 	resolvedInputs = false,
 	executionHeld = false
 }: {
@@ -95,6 +98,7 @@ export const useThingSource = ({
 	interactive: boolean;
 	// Map overlays consume every page, using the same delegated read/cache boundary.
 	loadAllPages?: boolean;
+	pointPages?: CollectionSource;
 	resolvedInputs?: boolean;
 	executionHeld?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
@@ -106,7 +110,7 @@ export const useThingSource = ({
 	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const sourceKey = JSON.stringify(loadAllPages ? { source: source || null, allPages: true } : source || null);
+	const sourceKey = JSON.stringify(pointPages ? { source, pointPages: true } : loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
@@ -255,14 +259,15 @@ export const useThingSource = ({
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			if (failure.clear) clearSourceCache(viewerId, pageId, cacheId);
-			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }));
+			const clear = failure.clear || !!pointPages;
+			if (clear) clearSourceCache(viewerId, pageId, cacheId);
+			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(clear ? { result: undefined } : {}) }));
 		};
 
 		(async () => {
 			try {
 				const run = (cursor?: string) => {
-					const pageInputs = cursor ? { ...inputs, cursor } : inputs;
+					const pageInputs = cursor ? { ...inputs, [pointPages?.cursorInput || 'cursor']: cursor } : inputs;
 					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
 					return runtime.load(shareKey, () =>
 					runtime.sharedRun
@@ -270,7 +275,12 @@ export const useThingSource = ({
 						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
 					) as Promise<any>;
 				};
-				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
+				if (pointPages) {
+					await requireThingtimeCapability('api.webpages-resolve', MAP_POINTS_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+					await requireThingtimeCapability('api.actions-run', MAP_POINTS_SOURCE_REQUIREMENTS['api.actions-run']);
+					if (stale()) return;
+				}
+				const response: any = pointPages ? await loadMapboxPointPages(pointPages, run, stale) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
 					if (stale()) return;
 					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
 					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });

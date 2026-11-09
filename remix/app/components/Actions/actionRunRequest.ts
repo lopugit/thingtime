@@ -25,11 +25,20 @@ export type ActionRunArgs = {
 	// later source cannot vanish the same way this one did.
 	source?: unknown;
 	execution?: unknown;
+	activationPageId?: unknown;
+	activationPageRevision?: unknown;
+	activationOnceKey?: unknown;
 };
 
 export const buildActionRunBody = (args?: ActionRunArgs | null): Record<string, unknown> => {
 	const body: Record<string, unknown> = { action: args?.action, inputs: args?.inputs };
 	if (typeof args?.source === 'string' && args.source) body.source = args.source;
+	if (args?.source === 'activation') {
+		delete body.inputs;
+		body.activationPageId = args.activationPageId;
+		body.activationPageRevision = args.activationPageRevision;
+		body.activationOnceKey = args.activationOnceKey;
+	}
 	if (args?.execution === 'browser') { body.execution = 'browser'; body.executionVersion = '1.40.0'; }
 	return body;
 };

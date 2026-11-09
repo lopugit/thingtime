@@ -384,6 +384,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				...(pageKey ? { pageKey } : {}),
 				...(siteRoute ? { siteRoute } : {}),
 				...(crystalBase.previewBg ? { previewBg: crystalBase.previewBg } : {}),
+				...(resolved?.source === 'user' && crystalBase.activationAction ? { activationAction: crystalBase.activationAction } : {}),
 				version: (Number(crystalBase.version) || 0) + 1,
 				...(resolved?.source === 'user'
 					? crystalBase.forkOf
