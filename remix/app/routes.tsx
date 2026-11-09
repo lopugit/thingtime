@@ -190,6 +190,7 @@ export const router = createBrowserRouter([
       { path: 'email', lazy: lazyRoute(() => import('./routes/mail')) },
       { path: 'passwords/provider', lazy: lazyRoute(() => import('./routes/passwords.provider')) },
       { path: 'passwords', lazy: lazyRoute(() => import('./routes/passwords')) },
+      { path: 'credentials/import', lazy: lazyRoute(() => import('./routes/credential-import')) },
       { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
       { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },

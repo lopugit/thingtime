@@ -140,3 +140,33 @@ test('a request cannot opt a proxy deployment into dedicated connections', async
   assert.ok(response instanceof Response); assert.deepEqual(await response.json(), { handler: 'gateway' });
   await assert.rejects(requireGatewayDatabaseAccess());
 }));
+
+test('credential relay binds import headers and omits proofs and payloads from gateway errors', async t => fixture(async () => {
+  const settings = getGatewaySettings()!;
+  const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(aliasManifest()) }).current();
+  const proof = 'synthetic-verifier-not-a-credential', body = 'synthetic-private-body';
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    requests++;
+    const incoming = new Request(url, init);
+    const relay = incoming.headers.get(GATEWAY_RELAY_HEADER)!;
+    assert.equal(Buffer.from(relay, 'base64url').toString('utf8').includes(proof), false);
+    for (const field of ['x-thingtime-import-request', 'x-thingtime-import-verifier', 'x-thingtime-import-target', 'x-thingtime-gateway-signature']) {
+      const modified = new Request(incoming.url, { method: 'POST', headers: incoming.headers, body });
+      modified.headers.set(field, 'modified');
+      assert.equal(restoreGatewayRequest(modified, settings), null);
+    }
+    const restored = restoreGatewayRequest(incoming, settings)!;
+    assert.equal(restored.headers.get('x-thingtime-import-verifier'), proof);
+    assert.equal(restored.url, follower + '/api/v1/credentials/import/upload');
+    assert.equal(await restored.text(), body);
+    throw Error('synthetic transport failure ' + proof + body);
+  });
+  const response = await proxyEnvironmentRequest(new Request(follower + '/api/v1/credentials/import/upload', {
+    method: 'POST', body, headers: { 'content-type': 'application/octet-stream', 'x-thingtime-import-request': 'fixture', 'x-thingtime-import-verifier': proof }
+  }), authority!);
+  assert.equal(requests, 1);
+  assert.equal(response.status, 502);
+  const diagnostic = await response.text();
+  assert.equal(diagnostic.includes(proof) || diagnostic.includes(body), false);
+}));

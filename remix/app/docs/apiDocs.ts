@@ -1,6 +1,7 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
+import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_OPERATIONS, CREDENTIAL_IMPORT_VERSION } from '../credentials/importContract';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -759,7 +760,40 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	})
 ];
 
+const credentialImportDocs = CREDENTIAL_IMPORT_OPERATIONS.map(operation => {
+  const browser = ['inspect', 'approve', 'revoke', 'direct'].includes(operation);
+  const definitions = {
+    start: ['Prepare an agent credential import', 'Send JSON with client-generated UUIDv4 requestId, expectedAccountId, S256 challenge and immutable target. No credential bytes. Pending metadata expires in ten minutes; request and aggregate byte admission can return 429 with Retry-After. Completed receipts remain for one hour. Exact retries reuse the same request; a changed request with the same ID is refused. Returns requestId, expiresAt and verificationUrl.'],
+    status: ['Check agent import approval or receipt', 'Send a JSON status control message up to 1 KiB containing the UUID requestId and the 43-character verifier. This bound does not apply to import labels or credentials. Returns pending, approved, revoked, expired or completed plus a metadata-only receipt when completed. Keep the verifier out of URLs and logs.'],
+    upload: ['Send the credential after approval', 'POST the original UTF-8 bytes as application/octet-stream with X-Thingtime-Import-Request and X-Thingtime-Import-Verifier headers. Write and receipt commit atomically after live approval checks. An identical replay in the approval window returns its original receipt; changed bytes are rejected.'],
+    inspect: ['Review a pending agent credential import', 'Send JSON with requestId to see the immutable target and approval state for the intended administrator, or send label alone for an exact lookup of vault record id, label and update revision. No values are returned. A duplicate label is refused.'],
+    approve: ['Approve the exact agent import', 'Send JSON with requestId after the administrator reviews the immutable destination and overwrite precondition. Approval is bound to the current browser session and expires after ten minutes.'],
+    revoke: ['Withdraw an uncompleted import', 'Send JSON with requestId. Revocation prevents a pending or approved transfer from writing. A completed vault write is not undone.'],
+    direct: ['Import a credential directly from the browser', 'POST application/octet-stream UTF-8 bytes and a base64url-encoded UTF-8 JSON target in X-Thingtime-Import-Target. The live administrator session and exact overwrite precondition are checked at commit.']
+  };
+  const [title, detail] = definitions[operation];
+  return endpoint({
+    id: `credentials-import-${operation}`, group: 'admin', title,
+    contractVersion: CREDENTIAL_IMPORT_VERSION, featureVersion: CREDENTIAL_IMPORT_VERSION,
+    endpoint: `${CREDENTIAL_IMPORT_API_PATH}/${operation}`,
+    summary: 'Transfer a write-only credential to the platform provider vault.',
+    detail,
+    auth: browser
+      ? { mode: 'session', description: 'Requires an exact same-origin administrator browser cookie and X-Thingtime-Expected-Actor matching its active principal.' }
+      : { mode: 'none', description: operation === 'start' ? 'Rate-limited intent creation. Grants no access or session.' : 'Requires proof of the request verifier, scoped to this origin and import only.' },
+    methods: ['POST'],
+    steps: [
+      'Negotiate api.credentials-import at the exact intended origin. Existing formats require 1.0.0. The oauth-client format requires 1.1.0.',
+      'The target specifies the admin-provider-vault destination, format, label, current data-environment id, and create or replace mode with the exact expectedId and expectedUpdatedAt for replacement.',
+      'Google Web JSON uses google-oauth. Registered confidential Connections clients such as Facebook accept oauth-client with clientId, clientSecret and redirectUri. Both require the exact callback and merge only the selected environment and origin. Generic text and JSON retain literal replacement semantics.',
+      'Credentials are never returned; responses are private and no-store. HTTP ingress and MongoDB single-document limits still apply.'
+    ],
+    requestExamples: [], responseExamples: []
+  });
+});
+
 export const apiEndpointDocs: ApiEndpointDoc[] = [
+  ...credentialImportDocs,
   endpoint({
     id: 'social-card', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'root',
     title: 'Public social card', endpoint: '/social-card', summary: 'Renders an anonymous public social preview PNG.',
@@ -836,9 +870,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
-    id: 'auth-characters', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    id: 'auth-characters', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
     summary: 'Create private proxy identities and select a session Character.',
-    detail: 'GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+    detail: 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
     methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
     steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
     requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
@@ -14991,7 +15025,8 @@ export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.repl
 
 /** Shared contracts spanning multiple registered operations, not extra routes. */
 export const apiSharedFeatureVersions = {
-	'api.storage-accounting': '1.0.0'
+	'api.storage-accounting': '1.0.0',
+	[CREDENTIAL_IMPORT_FEATURE]: CREDENTIAL_IMPORT_VERSION
 } as const;
 
 /**
