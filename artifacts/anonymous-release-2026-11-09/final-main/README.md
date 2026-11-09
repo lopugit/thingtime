@@ -36,3 +36,14 @@ provider snapshot and intended-host downloadable-file delivery remain
 unverified; this test does not establish hosted configuration, installation
 or release. Graphify refresh is structural; the bounded semantic attempts
 timed out and changed documents were not semantically reindexed.
+
+## Installer follow-up — 10 November 2026
+
+The branch incorporated main `cc248ed5336b21948bccfd9b6ebe486239421189`
+over `ab72a52a9760e2098d8325387d853414b9704c80`. The imported installer waits
+up to two seconds for the stopped managed Node service and its Electron child
+before replacing a bundle. It preserves the prior bundle and restarts its
+service when either process stays open. Syntax validation and all 21 local
+and cached installer fixture tests passed. A live signed installation remains
+unverified. The source trees under `remix` and `MCP` are byte-identical to
+`ab72a52a9`, so the earlier build and renderer results apply to those files.

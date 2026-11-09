@@ -2,6 +2,14 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Installer follow-up — 2026-11-10
+
+Merged main `cc248ed5336b21948bccfd9b6ebe486239421189`, which allows the
+stopped managed Node service and Electron child to exit before the installer
+replaces the verified bundle. All 21 installer fixture checks passed. The
+web and MCP source trees are identical to the prior verified checkpoint.
+[Installer evidence and limits](../artifacts/anonymous-release-2026-11-09/final-main/README.md#installer-follow-up--10-november-2026).
+
 ## Main reconciliation — 2026-11-09
 
 The branch also incorporates main `d82ed71557418a617e094437c6dfe1e673e08747`.
