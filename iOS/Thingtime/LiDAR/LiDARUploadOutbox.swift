@@ -137,6 +137,21 @@ final class LiDARUploadOutbox {
         return entry
     }
 
+    /// A cloud file ID is also the scan ID. Only this native outbox can
+    /// identify a recorder-owned original and its verified upload receipt.
+    func replicaOriginal(for file: NativeCloudFile, scope: FileSyncOwnerScope) throws -> (url: URL?, retainedOriginal: Bool) {
+        guard let id = UUID(uuidString: file.id), let entry = try read(id), entry.scope == scope,
+              try !isDiscarded(entry), let capture = entry.capture else { return (nil, false) }
+        let local = capture.archiveURL
+        let raw = archiveFolder(id).appendingPathComponent("scan.tar")
+        let unmatchedRaw = local != raw && FileManager.default.fileExists(atPath: raw.path)
+        let exists = FileManager.default.fileExists(atPath: local.path)
+        guard entry.receipt?.fileThingId == file.id, entry.staged == file.content else {
+            return (nil, exists || unmatchedRaw)
+        }
+        return (exists ? local : nil, unmatchedRaw)
+    }
+
     func entries(scope: FileSyncOwnerScope) throws -> [Entry] {
         let urls: [URL]
         do { urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) }

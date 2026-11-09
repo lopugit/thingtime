@@ -40,6 +40,7 @@ import { readThingNumericSummary } from '~/api/utils/things/numericSummary';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
 import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
 import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
+import { isStoragePolicyRevision } from '~/api/utils/things/thingStoragePolicyCore';
 import { isThingMetadataReference } from '~/utils/thingMetadata';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
@@ -318,6 +319,19 @@ export const action = async ({ request }: { request: Request }) => {
     );
   }
 
+  const expectedStoragePolicyRevision: unknown = body?.expectedStoragePolicyRevision;
+  const guardedStorageWrite = Object.prototype.hasOwnProperty.call(body || {}, 'expectedStoragePolicyRevision');
+  if (guardedStorageWrite) {
+    if (method !== 'PATCH' || !isStoragePolicyRevision(expectedStoragePolicyRevision)) {
+      return json({ ok: false, error: 'Invalid storage policy revision for Thing update' }, { status: 400, headers: cors });
+    }
+    const site = request.headers.get('Sec-Fetch-Site')?.trim().toLowerCase();
+    if (actor.kind !== 'user' || user.accountKind !== 'user' || (site && site !== 'same-origin' && site !== 'none') ||
+        !isSameOriginAttachmentRequest(request) || isCustomMongoEndpointActive()) {
+      return json({ ok: false, error: 'Storage policy writes require a same-origin owner session on the home data plane' }, { status: 403, headers: cors });
+    }
+  }
+
   const isUnifiedPostBody =
     method === 'POST' && body && typeof body === 'object' && ('thingtime' in body || 'crystal' in body);
   const attachmentRequest = postAttachmentRequest(method, body, !!isUnifiedPostBody);
@@ -439,7 +453,7 @@ export const action = async ({ request }: { request: Request }) => {
     // validates the crystal. The sync is idempotent (owner-fenced bind +
     // order stamp of the full desired list), so a failed updateThing after
     // it leaves nothing inconsistent and a retry re-applies the same list.
-    if (attachmentRequest.present && attachmentRequest.kind === 'sync') {
+    if (!guardedStorageWrite && attachmentRequest.present && attachmentRequest.kind === 'sync') {
       const synced = await syncReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
       if (synced.ok === false) {
         return json({ ok: false, error: synced.error }, { status: synced.status, headers: cors });
@@ -449,7 +463,14 @@ export const action = async ({ request }: { request: Request }) => {
       viewer,
       body?.id,
       bodyForCreate,
-      { replaceCrystal: body?.replaceCrystal === true, expectedUpdatedAt: body?.expectedUpdatedAt },
+      {
+        replaceCrystal: body?.replaceCrystal === true,
+        expectedUpdatedAt: body?.expectedUpdatedAt,
+        ...(guardedStorageWrite && isStoragePolicyRevision(expectedStoragePolicyRevision) ? { storageCloudWrite: {
+          expectedRevision: expectedStoragePolicyRevision,
+          ...(attachmentRequest.present && attachmentRequest.kind === 'sync' ? { attachmentIds: attachmentRequest.attachmentIds } : {})
+        } } : {})
+      },
       app
     );
     if (result.ok === false) {
