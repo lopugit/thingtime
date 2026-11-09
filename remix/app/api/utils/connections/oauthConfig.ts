@@ -20,6 +20,8 @@ const labels: Record<string, string> = {
   LINKEDIN_CLIENT_ID: 'connections-linkedin-oauth', SPOTIFY_CLIENT_ID: 'connections-spotify-oauth',
   CHATGPT_OAUTH_CLIENT_ID: 'connections-chatgpt-oauth'
 };
+export const isScopedOAuthImportLabel = (label: string) =>
+	label !== labels.GOOGLE_CLIENT_ID && label !== labels.CHATGPT_OAUTH_CLIENT_ID && Object.values(labels).includes(label);
 const object = (value: unknown): value is Record<string, any> => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 const own = (value: unknown, key: string) => object(value) && Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined;
 export const exactOAuthOrigin = (value: unknown): string | null => {

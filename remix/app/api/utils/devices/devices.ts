@@ -1,4 +1,7 @@
+import { deviceFolderIdentity } from '../../../fileSync/deviceFolders';
+import { mongoDataPlane } from '../mongodb/dataPlane';
 import { randomUUID } from 'node:crypto';
+import { normalizeDeviceDescriptorPatch } from './deviceDescriptorPatch';
 import { isDevicePlatform } from '../../../devices/platform';
 import { normalizeCapabilities, safeCapabilities } from './deviceCapabilities';
 
@@ -54,6 +57,9 @@ export const DEVICE_CONTROL_EVENT_MAX_ROW_BYTES = 16 * 1024;
 type DeviceThingKind =
 	| 'device'
 	| 'device-state'
+	| 'device-observation'
+	| 'device-alert-sound'
+	| 'device-observation-cleanup'
 	| 'device-connector'
 	| 'device-command'
 	| 'device-command-event'
@@ -64,6 +70,9 @@ type DeviceThingKind =
 const DEVICE_UNIQUE_KEY_FIELDS = [
 	'deviceKey',
 	'deviceStateKey',
+	'deviceObservationKey',
+	'deviceAlertSoundKey',
+	'deviceObservationCleanupKey',
 	'deviceConnectorKey',
 	'deviceCommandKey',
 	'deviceEventKey',
@@ -128,6 +137,8 @@ export type PublicDeviceConnector = DeviceConnectorSnapshot & {
 
 export type PublicDevice = {
 	id: string;
+	/** Reserved normal folder reference, materialized by api.devices-folders. */
+	rootFolderId?: string | null;
 	name: string;
 	platform: DeviceDescriptor['platform'];
 	model: string | null;
@@ -613,7 +624,8 @@ export const readDeviceIdentity = async (ownerId: string, deviceId: string): Pro
 
 export const listDevices = async (
 	ownerId: string,
-	requestedDeviceId?: unknown
+	requestedDeviceId?: unknown,
+	origin?: string
 ): Promise<DeviceFail | { ok: true; devices: PublicDevice[]; device?: PublicDevice }> => {
 	const deviceId = typeof requestedDeviceId === 'string' ? requestedDeviceId.trim() : '';
 	const things = await getHomeThingsCollection();
@@ -759,13 +771,14 @@ export const listDevices = async (
 		recentByDevice.set(id, bucket);
 	}
 
-	const publicDevices = docs.map((doc: any) => {
+	const publicDevices = await Promise.all(docs.map(async (doc: any) => {
 		const base = minimalPublicDevice(doc);
 		const state = publicDeviceState(stateByDevice.get(base.id));
 		const lastSeenAt = lastSeenByDevice.get(base.id) ?? null;
 		const lastSync = lastSyncByDevice.get(base.id) ?? null;
 		return {
 			...base,
+			...(origin ? { rootFolderId: await deviceFolderIdentity({ origin, ownerId, deviceId: base.id, dataPlane: mongoDataPlane() }, 'root') } : {}),
 			online: !!lastSeenAt && Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS,
 			lastSeenAt: lastSeenAt?.toISOString() ?? null,
 			lastSyncAt: lastSync?.at.toISOString() ?? null,
@@ -783,11 +796,12 @@ export const listDevices = async (
 			pendingCommandCount: commandCounts.get(base.id) ?? 0,
 			pendingApprovalCount: approvalCounts.get(base.id) ?? 0
 		};
-	});
+	}));
 	return deviceId ? { ok: true, devices: publicDevices, device: publicDevices[0] } : { ok: true, devices: publicDevices };
 };
 
 type UpdateDeviceStateInput = {
+	descriptorPatch?: unknown;
 	capabilities?: unknown;
 	revision?: unknown;
 	state?: unknown;
@@ -799,6 +813,8 @@ export const updateDeviceState = async (
 	deviceId: string,
 	input: UpdateDeviceStateInput
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	const descriptorPatch = input?.descriptorPatch === undefined ? undefined : normalizeDeviceDescriptorPatch(input.descriptorPatch);
+	if (descriptorPatch === null) return deviceFail(400, 'descriptorPatch requires model and only optional osVersion/appVersion strings');
 	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
 	if (capabilities === null) return deviceFail(400, 'capabilities must be a bounded list of identifiers');
 	const revision = Number(input?.revision);
@@ -818,7 +834,7 @@ export const updateDeviceState = async (
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
-	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities);
+	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities, descriptorPatch);
 	const stateDecision = decideDeviceRevision(
 		Number.isSafeInteger(existingState?.crystal?.revision) ? Number(existingState.crystal.revision) : null,
 		typeof existingState?.crystal?.snapshotHash === 'string' ? existingState.crystal.snapshotHash : null,
@@ -853,7 +869,8 @@ export const updateDeviceState = async (
 						targetId: deviceId,
 						crystal: { deviceStateKey: stateKey, revision, stateHash, snapshotHash, state, observedAt: now }
 					}),
-					{ ...HOME_ACCOUNTING, session }
+					// Match the logical JSON byte stamp. BSON otherwise stores undefined telemetry as null.
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 			} else if (stateDecision === 'update') {
 				const updated = await updateAccountedThing(
@@ -875,9 +892,12 @@ export const updateDeviceState = async (
 							updatedAt: now
 						}
 					},
-					{ ...HOME_ACCOUNTING, session }
+					{ ...HOME_ACCOUNTING, session, ignoreUndefined: true }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
+			}
+			if (descriptorPatch) {
+				await updateAccountedThing(things,{shareId:deviceId,ownerId,thingtime:'device'} as any,{$set:{...Object.fromEntries(Object.entries(descriptorPatch).map(([key,value])=>[`crystal.${key}`,value])),updatedAt:now}},{...HOME_ACCOUNTING,session});
 			}
 			if (capabilities !== undefined) {
 				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,

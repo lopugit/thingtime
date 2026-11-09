@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 const approvalWorkspace = page => page.locator('[data-settings-document="provider-credential-handoff"]');
 const importWorkspace = page => page.locator('[data-settings-document="provider-credential-import"]');
-const formatLabel = { 'google-oauth': 'Google OAuth client', json: 'Provider JSON', text: 'Provider text' };
+const formatLabel = { 'google-oauth': 'Google OAuth client', 'oauth-client': 'Connections OAuth client', json: 'Provider JSON', text: 'Provider text' };
 
 function assertLocalOrigin(origin) {
 	const url = new URL(origin);

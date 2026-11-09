@@ -219,6 +219,7 @@ struct Command {
     #[serde(default)]
     resources: Vec<photo::ResourceKey>,
     total_entries: Option<u64>,
+    total_gaps: Option<u64>,
     limit: Option<usize>,
     after_sequence: Option<i64>,
 }
@@ -503,11 +504,19 @@ pub fn serve_with_cancellation(
                 &status(&database.connection, &scope, Some(generation))?,
             )
         }
+        "appendPhotoCloudGaps" => {
+            photo::append_cloud_gaps(&mut database.connection, &current, &command.paths)?;
+            write_value(
+                &mut output,
+                &status(&database.connection, &scope, Some(generation))?,
+            )
+        }
         "sealPhotoCapture" => {
             if current.mode != "photo"
                 || !matches!(current.coverage.as_str(), "scanning" | "sealed")
                 || command.resource_revision.as_deref() != Some(current.root_stamp.as_str())
                 || command.total_entries != Some(current.entry_count)
+                || command.total_gaps.unwrap_or(0) != current.gap_count
             {
                 return Err(failure("generation_unavailable"));
             }
@@ -1898,7 +1907,8 @@ fn page(
     write_value(
         output,
         &json!({"generation":current.generation,"entries":entries,"nextAfter":if more {last} else {None},
-        "nextOffset":(more && after.is_none()).then_some(offset+entries.len()),"coverage":current.coverage,"totalEntries":total,"rootVersion":current.root_stamp}),
+        "nextOffset":(more && after.is_none()).then_some(offset+entries.len()),"coverage":current.coverage,"totalEntries":total,"rootVersion":current.root_stamp,
+        "status":current}),
     )
 }
 

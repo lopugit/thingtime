@@ -304,7 +304,9 @@ function HandoffReview({ authority, requestId }: { authority: Authority; request
 	const target = intent?.target;
 	const scope = { result: {
 		origin: authority.origin, hasIntent: !!intent, requestId: intent?.requestId, account: intent?.expectedAccountId, environment: target?.environment,
-		format: target ? importFormatLabel(target.format) : '', label: target?.label, google: target?.format === 'google-oauth', callbackUrl: target?.callbackUrl,
+		format: target ? importFormatLabel(target.format) : '', label: target?.label, callbackUrl: target?.callbackUrl,
+		// The saved handoff layout's existing callback block binds to this flag.
+		google: !!target?.callbackUrl,
 		operation: target?.overwrite.mode === 'replace' ? `Replace ${target.overwrite.expectedId} at revision ${target.overwrite.expectedUpdatedAt}` : 'Create a credential',
 		expiresAt: intent ? new Date(intent.expiresAt).toLocaleString() : '',
 		status: intent ? handoffStatus[intent.status] : '', hasReceipt: intent?.status === 'completed' && !!intent.receipt,

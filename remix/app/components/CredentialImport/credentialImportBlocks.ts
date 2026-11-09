@@ -5,8 +5,9 @@ const element = (id: string, tag: string, text = '', props: Record<string, unkno
 const show = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock =>
 	({ id, type: 'condition', condition: { arg: `result.${arg}`, equals: true }, children } as WebpageBlock);
 const action = (operation: string) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation } });
+const lineCss = { 'font-size': '13px', 'line-height': '1.55', margin: '4px 0', 'overflow-wrap': 'anywhere' };
 const line = (id: string, text: string, props: Record<string, unknown> = {}) =>
-	element(id, 'p', text, props, undefined, { 'font-size': '13px', 'line-height': '1.55', margin: '4px 0', 'overflow-wrap': 'anywhere' });
+	element(id, 'p', text, props, undefined, lineCss);
 const heading = (id: string, title: string) => element(id, 'h2', title, {}, undefined, { 'font-weight': '650', 'font-size': '16px', margin: '0 0 4px' });
 const row = (id: string, children: WebpageBlock[]) =>
 	element(id, 'div', '', {}, children, { display: 'flex', 'flex-wrap': 'wrap', gap: '8px', 'align-items': 'center', margin: '8px 0 0' });
@@ -92,7 +93,9 @@ export const credentialHandoffBlocks = [stack('credential-handoff-review', [
 		line('handoff-vault', 'Destination: encrypted integration vault · {result.environment}'),
 		line('handoff-format', 'Credential format: {result.format}'),
 		line('handoff-label', 'Vault label: {result.label}'),
-		show('handoff-google', 'google', [line('handoff-callback', 'Callback: {result.callbackUrl}')]),
+		show('handoff-google', 'google', [
+			element('handoff-callback', 'p', 'Callback: {result.callbackUrl}', {}, undefined, { ...lineCss, 'word-break': 'break-all' })
+		]),
 		line('handoff-write', '{result.operation}'),
 		line('handoff-expiry', 'Expires: {result.expiresAt}'),
 		line('handoff-state', '{result.status}', { role: 'status' }),

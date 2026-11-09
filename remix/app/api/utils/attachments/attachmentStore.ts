@@ -11,6 +11,8 @@ import { applyUserStorageDelta, markUserStorageNeedsReconcile } from '../storage
 import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
+  EMPTY_ATTACHMENT_PURPOSES,
+  attachmentPurposeAllowsEmpty,
 	ATTACHMENT_THINGTIME,
 	applyAttachmentAnnotationPatch,
 	isAttachmentFinalizationLeaseId,
@@ -68,6 +70,8 @@ export type AttachmentDoc = {
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
 	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
+	// Canonical scoped publication records the verified native source separately from reservation input.
+	fileSyncSourceGrant?: { localRootId: string; grantRevision: string };
 	attachmentPurpose?: AttachmentPurpose;
 	// Server-only import lifecycle marker; never copied from portable content.
 	attachmentImportDraft?: true;
@@ -431,7 +435,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'pending',
 				targetId: { $exists: false },
 				attachmentExpiresAt: { $gt: now },
-				$or: [{ uploadId: { $type: 'string' } }, { objectSizeBytes: 0, attachmentPurpose: 'file' }]
+				$or: [{ uploadId: { $type: 'string' } }, { objectSizeBytes: 0, attachmentPurpose: { $in: [...EMPTY_ATTACHMENT_PURPOSES] } }]
 			} as any,
 			{ $set: { attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId, updatedAt: now } },
 			{ returnDocument: 'after' }
@@ -525,7 +529,7 @@ export const attachmentStore: AttachmentStore = {
 				// Quarantine every newly durable object until analysis either clears/
 				// flags it or deliberately marks it skipped. This lands before complete
 				// returns, so a fast bind cannot expose unscreened bytes during outage.
-				moderation: before.objectSizeBytes === 0 && before.attachmentPurpose === 'file'
+				moderation: before.objectSizeBytes === 0 && attachmentPurposeAllowsEmpty(before.attachmentPurpose)
                     ? { status: 'skipped' as const, provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: new Date() }
                     : { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
 				attachmentExpiresAt: expiresAt,

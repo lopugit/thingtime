@@ -5,7 +5,7 @@ import test from 'node:test';
 import { GOOGLE_OAUTH_CREDENTIAL_LABEL, type CredentialImportTarget } from '../../../credentials/importContract';
 import { parseOAuthClientConfig } from '../connections/oauthConfig';
 import {
-	challengeForImportVerifier, fingerprintImportPayload, mergeGoogleCredentialImport, parseImportProof, parseImportTarget,
+	challengeForImportVerifier, fingerprintImportPayload, mergeScopedOAuthImport, parseImportProof, parseImportTarget,
 	prepareCredentialImport, validateImportOrigin
 } from './importCore';
 
@@ -40,7 +40,7 @@ test('the target binds the deployment, exact callback and overwrite metadata', (
 });
 
 test('Google web downloads must explicitly register the exact current callback', () => {
-	assert.deepEqual(prepareCredentialImport(target, utf8(JSON.stringify(sample()))), { type: 'google', client: {
+	assert.deepEqual(prepareCredentialImport(target, utf8(JSON.stringify(sample()))), { type: 'oauth-client', client: {
 		clientId: 'fixture.apps.googleusercontent.com', clientSecret: 'synthetic-provider-value', redirectUri: callback
 	} });
 	assert.throws(() => prepareCredentialImport(target, utf8(JSON.stringify(sample([callback + '/', callback + '?alternate=1'])))), code('redirect_mismatch'));
@@ -56,9 +56,9 @@ test('Google writes the canonical runtime bundle and preserves other scopes and 
 		development: { origins: { 'http://localhost:28427': { opaque: 'retain' } } }
 	}, metadata: ['retain'] };
 	const prepared = prepareCredentialImport(target, utf8(JSON.stringify(sample())));
-	assert.equal(prepared.type, 'google');
-	if (prepared.type !== 'google') return;
-	const updated = mergeGoogleCredentialImport(JSON.stringify(previous), environment, origin, prepared.client);
+	assert.equal(prepared.type, 'oauth-client');
+	if (prepared.type !== 'oauth-client') return;
+	const updated = mergeScopedOAuthImport(JSON.stringify(previous), environment, origin, prepared.client);
 	const decoded = JSON.parse(updated);
 	assert.deepEqual(decoded.metadata, previous.metadata);
 	assert.deepEqual(decoded.environments.development, previous.environments.development);
@@ -67,8 +67,27 @@ test('Google writes the canonical runtime bundle and preserves other scopes and 
 	assert.equal(parseOAuthClientConfig(updated, 'GOOGLE_CLIENT_ID', origin, environment)?.clientId, prepared.client.clientId);
 	assert.equal(parseOAuthClientConfig(updated, 'GOOGLE_CLIENT_ID', origin, 'development'), null);
 	for (const invalid of ['broken', '{}', '{"environments":{"production":null}}']) {
-		assert.throws(() => mergeGoogleCredentialImport(invalid, environment, origin, prepared.client), code('conflict'));
+		assert.throws(() => mergeScopedOAuthImport(invalid, environment, origin, prepared.client), code('conflict'));
 	}
+});
+
+test('a scoped Connections import binds the registered label and callback and accepts only one client', () => {
+	const facebook: CredentialImportTarget = { ...target, format: 'oauth-client', label: 'connections-facebook-oauth' };
+	assert.deepEqual(parseImportTarget(facebook, origin, environment), facebook);
+	for (const label of ['arbitrary-label', GOOGLE_OAUTH_CREDENTIAL_LABEL, 'connections-chatgpt-oauth']) {
+		assert.throws(() => parseImportTarget({ ...facebook, label }, origin, environment), code('invalid_target'));
+	}
+	assert.throws(() => parseImportTarget({ ...facebook, callbackUrl: callback + '/' }, origin, environment), code('redirect_mismatch'));
+	const client = { clientId: '123456789', clientSecret: 'synthetic-app-secret', redirectUri: callback };
+	const prepare = (value: unknown) => prepareCredentialImport(facebook, utf8(JSON.stringify(value)));
+	assert.deepEqual(prepare(client), { type: 'oauth-client', client });
+	assert.throws(() => prepare({ ...client, redirectUri: callback + '/' }), code('redirect_mismatch'));
+	for (const invalid of [{ ...client, environments: {} }, { ...client, clientSecret: '' }, { ...client, clientId: 'invalid id' }]) {
+		assert.throws(() => prepare(invalid), code('invalid_credential'));
+	}
+	const bundle = mergeScopedOAuthImport(null, environment, origin, client);
+	assert.equal(parseOAuthClientConfig(bundle, 'FACEBOOK_APP_ID', origin, environment)?.clientId, client.clientId);
+	assert.equal(parseOAuthClientConfig(bundle, 'FACEBOOK_APP_ID', 'https://other.test', environment), null);
 });
 
 test('literal imports preserve bytes and reject malformed UTF-8 or JSON', () => {

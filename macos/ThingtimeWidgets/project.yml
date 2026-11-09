@@ -20,6 +20,11 @@ targets:
       - path: WidgetApp.swift
       - path: Connection
       - path: ../../iOS/Thingtime/Lopu
+        # Chat Live Activities use iOS-only ActivityKit/UIKit; share voice support.
+        excludes:
+          - LopuChatActivityClient.swift
+          - LopuChatActivityController.swift
+          - LopuChatActivitySnapshot.swift
       - path: ../../apple/Shared
       - path: ../../apple/Widgets
     info:

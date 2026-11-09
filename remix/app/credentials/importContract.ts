@@ -1,13 +1,14 @@
 /** The import capability carries write-only values to the platform provider vault. */
 export const CREDENTIAL_IMPORT_FEATURE = 'api.credentials-import';
-export const CREDENTIAL_IMPORT_VERSION = '1.0.0';
-export const CREDENTIAL_IMPORT_REQUIREMENTS = { [CREDENTIAL_IMPORT_FEATURE]: CREDENTIAL_IMPORT_VERSION } as const;
+export const CREDENTIAL_IMPORT_VERSION = '1.1.0';
+export const CREDENTIAL_IMPORT_BASE_VERSION = '1.0.0';
+export const CREDENTIAL_IMPORT_REQUIREMENTS = { [CREDENTIAL_IMPORT_FEATURE]: CREDENTIAL_IMPORT_BASE_VERSION } as const;
 export const CREDENTIAL_IMPORT_API_PATH = '/api/v1/credentials/import';
 export const CREDENTIAL_IMPORT_OPERATIONS = ['start', 'status', 'upload', 'inspect', 'approve', 'revoke', 'direct'] as const;
 export type CredentialImportOperation = (typeof CREDENTIAL_IMPORT_OPERATIONS)[number];
 export const CREDENTIAL_IMPORT_PAGE_PATH = '/credentials/import';
 export const CREDENTIAL_IMPORT_DESTINATIONS = {
-	'admin-provider-vault': ['google-oauth', 'text', 'json']
+	'admin-provider-vault': ['google-oauth', 'oauth-client', 'text', 'json']
 } as const;
 export const GOOGLE_OAUTH_CREDENTIAL_LABEL = 'connections-google-oauth';
 export const GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH = '/api/v1/connections/oauth/callback';
@@ -20,6 +21,10 @@ export const CREDENTIAL_IMPORT_HEADERS = {
 
 export type CredentialImportDestination = keyof typeof CREDENTIAL_IMPORT_DESTINATIONS;
 export type CredentialImportFormat = (typeof CREDENTIAL_IMPORT_DESTINATIONS)[CredentialImportDestination][number];
+export const isCredentialImportFormat = (format: unknown): format is CredentialImportFormat =>
+	CREDENTIAL_IMPORT_DESTINATIONS['admin-provider-vault'].some(value => value === format);
+export const credentialImportMinimum = (format: CredentialImportFormat) =>
+	format === 'oauth-client' ? CREDENTIAL_IMPORT_VERSION : CREDENTIAL_IMPORT_BASE_VERSION;
 export type CredentialImportOverwrite = { mode: 'create' } | { mode: 'replace'; expectedId: string; expectedUpdatedAt: string };
 export type CredentialImportTarget = {
 	destination: CredentialImportDestination;

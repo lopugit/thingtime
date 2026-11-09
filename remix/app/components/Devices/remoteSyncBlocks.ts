@@ -8,18 +8,19 @@ const button = (id: string, text: string, operation: string, disabled: string, i
 	({ ...element(id, 'button', text, { type: 'button', disabled, ...action(operation, inputs) }), css: control });
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'condition', condition: { arg, equals: true }, children });
 const row = (id: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'element', tag: 'div', css: { display: 'flex', 'flex-wrap': 'wrap', gap: '8px', 'align-items': 'center' }, children });
+const legacyRemoteHelp = 'Manage this device from any browser. Transfers continue on the device while Thingtime is running there. Folder selection, download approval and file recovery may ask for confirmation on that device.';
 
 /** Every repeated field and control is an ordinary editable block. Bindings
  * supply display state only; actions recheck owned records in the adapter. */
 export const remoteSyncBlocks: WebpageBlock[] = [{ id: 'remote-sync', type: 'element', tag: 'section',
 	props: { 'aria-label': 'Manage device sync' }, css: { display: 'grid', gap: '12px', 'min-width': '0', 'overflow-wrap': 'anywhere', 'font-size': '14px' }, children: [
 		element('remote-sync-title', 'h3', 'Sync connections'),
-		element('remote-sync-help', 'p', 'Manage this device from any browser. Transfers continue on the device while Thingtime is running there. Folder selection, download approval and file recovery may ask for confirmation on that device.'),
+		element('remote-sync-help', 'p', '{remote.help}'),
 		element('remote-sync-status', 'p', '{remote.status}', { role: 'status', 'aria-live': 'polite' }),
 		element('remote-sync-notice', 'p', '{remote.notice}', { role: 'status' }),
 		element('remote-sync-error', 'p', '{remote.error}', { role: 'alert' }),
-		row('remote-sync-toolbar', [button('remote-sync-refresh-settings', 'Refresh settings', 'refreshSettings', '{remote.busy}'),
-			button('remote-sync-refresh-device', 'Refresh device', 'refreshDevice', '{remote.checking}'),
+		row('remote-sync-toolbar', [button('remote-sync-refresh-settings', 'Refresh settings', 'refresh-settings', '{remote.busy}'),
+			button('remote-sync-refresh-device', 'Refresh device', 'refresh-device', '{remote.checking}'),
 			button('remote-sync-add', 'Add connection', 'add', '{remote.addDisabled}'),
 			button('remote-sync-choose', 'Choose device folder', 'choose', '{remote.deviceDisabled}')]),
 		{ id: 'remote-sync-roots', type: 'collection', props: { itemsPath: 'remote.roots', label: 'Device folders', hideSearch: true, hideSize: true, hideCount: true, size: 'all', empty: '{remote.rootsEmpty}' }, children: [
@@ -36,7 +37,7 @@ export const remoteSyncBlocks: WebpageBlock[] = [{ id: 'remote-sync', type: 'ele
                 ...syncConnectionGlanceBlocks('item.glance', 'remote-sync-glance'),
 				when('remote-sync-selected-controls', 'item.expanded', [element('remote-sync-connection-status', 'p', '{item.status}', { role: 'status' }), element('remote-sync-connection-speed', 'p', '{item.speed}'),
 				row('remote-sync-connection-actions', [button('remote-sync-edit', 'Edit', 'edit', '{remote.editDisabled}', { id: '{item.id}' }),
-					button('remote-sync-start', 'Sync now', 'start', '{item.startDisabled}', { id: '{item.id}' }),
+					button('remote-sync-start', '{item.startLabel}', 'start', '{item.startDisabled}', { id: '{item.id}' }),
 					button('remote-sync-pause', 'Pause sync', 'pause', '{item.pauseDisabled}', { id: '{item.id}' }),
 					button('remote-sync-details', 'Progress, coverage & priorities', 'details', '{remote.deviceDisabled}', { id: '{item.id}' }),
 					{ ...element('remote-sync-files', 'a', 'Browse synced files', { href: '{item.href}' }), css: control }]),
@@ -68,6 +69,8 @@ export const remoteSyncEditorBlocks: WebpageBlock[] = [{ id: 'remote-editor-acti
  * at render time as well as in the command adapter. */
 export function remoteSyncDisclosureBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
  const operations = new Set(['edit', 'start', 'pause', 'details', 'interval', 'automatic']);
+ const liveOperations = new Set(['refresh-device', 'add', 'choose', 'remove', 'quick', 'start', 'pause', 'details', 'interval', 'automatic']);
+ const liveBlocks = new Set(['remote-sync-roots', 'remote-sync-automatic-status', 'remote-sync-automatic-options', 'remote-sync-quick-error']);
  const visit = (block: WebpageBlock, inConnection = false): WebpageBlock => {
   const connection = inConnection || block.id === 'remote-sync-connection';
   const next = { ...block, ...(block.children ? { children: block.children.map(child => visit(child, connection)) } : {}) };
@@ -76,10 +79,21 @@ export function remoteSyncDisclosureBlocks(blocks: WebpageBlock[]): WebpageBlock
   }
   if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-glance')) next.children = [...(next.children ?? []), ...syncConnectionGlanceBlocks('item.glance', 'remote-sync-glance')];
   if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-editor-slot')) next.children = [...(next.children ?? []), { id: 'remote-sync-editor-slot', type: 'element', tag: 'div', props: { id: '{item.editorSlotId}', hidden: '{item.editorHidden}' } }];
-  const inputs = block.props?.['data-tt-action-inputs'];
-  if (connection && inputs && typeof inputs === 'object' && operations.has(String((inputs as { operation?: unknown }).operation)))
-   return when(`${block.id}-selection`, 'item.expanded', [next]);
-  return next;
+  if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-quick')) next.children = [...(next.children ?? []),
+  visit(element('remote-sync-quick-error', 'p', '{item.quickError}', { role: 'alert' }), true),
+  visit(button('remote-sync-quick', '{item.quickLabel}', 'quick', '{item.quickDisabled}', { id: '{item.id}' }), true)];
+ if (block.id === 'remote-sync-help' && block.text === legacyRemoteHelp) next.text = '{remote.help}';
+ if (block.id === 'remote-sync-start' || block.id === 'remote-sync-pause') next.props = { ...next.props, hidden: true };
+ const inputs = block.props?.['data-tt-action-inputs'];
+ const binding = inputs && typeof inputs === 'object' ? inputs as { operation?: unknown } : undefined;
+ let operation = String(binding?.operation ?? '');
+ // Earlier saved defaults used names that the transient adapter rejects.
+ if (operation === 'refreshSettings' || operation === 'refreshDevice') {
+  operation = operation === 'refreshSettings' ? 'refresh-settings' : 'refresh-device';
+  next.props = { ...next.props, 'data-tt-action-inputs': { ...binding, operation } };
+ }
+ const selected = connection && operations.has(operation) ? when(`${block.id}-selection`, 'item.expanded', [next]) : next;
+ return liveBlocks.has(block.id) || liveOperations.has(operation) ? when(`${block.id}-live`, 'remote.hasLiveControls', [selected]) : selected;
  };
  return blocks.map(block => visit(block));
 }

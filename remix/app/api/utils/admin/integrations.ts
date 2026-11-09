@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { BSON, ObjectId, type ClientSession } from 'mongodb';
 
 import type { CredentialImportReceipt, CredentialImportTarget, CredentialImportVaultMetadata } from '../../../credentials/importContract';
-import { CREDENTIAL_IMPORT_BSON_LIMIT, CredentialImportError, mergeGoogleCredentialImport, parseImportLabel, type PreparedImport } from '../credentials/importCore';
+import { CREDENTIAL_IMPORT_BSON_LIMIT, CredentialImportError, mergeScopedOAuthImport, parseImportLabel, type PreparedImport } from '../credentials/importCore';
 
 import {
 	ADMIN_INTEGRATION_MAX_REQUEST_BYTES,
@@ -322,7 +322,7 @@ export const writeAdminCredentialImport = async (
 	}
 	const id = previous?.id ?? opaqueId('secret');
 	const value = prepared.type === 'literal' ? prepared.value
-		: mergeGoogleCredentialImport(previous ? decryptSecret(previous) : null, target.environment, origin, prepared.client);
+		: mergeScopedOAuthImport(previous ? decryptSecret(previous) : null, target.environment, origin, prepared.client);
 	const updatedAt = new Date(Math.max(Date.now(), previous ? new Date(previous.updatedAt).getTime() + 1 : 0));
 	const record = {
 		...(previous ?? {}),

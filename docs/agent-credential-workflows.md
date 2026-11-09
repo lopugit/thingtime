@@ -48,8 +48,20 @@ file is a different credential and is refused. The write preserves the
 existing bundle's other environments and origins. Google Mail's
 `google-mail-oauth` bundle is separate and is not configured by this adapter.
 
+**Meta/Facebook Connections:** use the intended Meta app's App ID and App Secret.
+Register the exact Thingtime Connections callback in the app's Facebook Login
+settings. Use the scoped `oauth-client` handoff below with
+`connections-facebook-oauth`; this requires `api.credentials-import` 1.1.0 or
+compatible. The credential contains exactly one client with `clientId`,
+`clientSecret` and `redirectUri`. It updates only the selected environment and
+origin and keeps other entries in that label. Google web exports keep their
+dedicated format. The scoped format covers registered confidential Connections
+clients that use this shape. It does not configure ChatGPT-plan sign-in, other
+provider products, or Meta permissions.
+
 **Other providers:** text and JSON imports save to an explicit admin-vault
-label. Use the consuming integration's documented label and structure. JSON
+label and replace the whole value when authorized. Use the consuming
+integration's documented label and structure. JSON
 import validates JSON; it does not infer every provider's schema or call an
 arbitrary endpoint to test it. A provider-specific adapter must validate its
 format and preserve existing configuration before it can claim that support.
@@ -69,6 +81,22 @@ and this checkout's canonical dependencies (`npm run worktree-setup`). A
 cloud agent can use the same protocol when it has the selected file and the
 user's authorized browser can reach the **same** receiving origin.
 
+Run a read-only compatibility check before opening the provider's credential
+source. This verifies only the public manifest, needs no account or input
+file, and prints a safe JSON result.
+
+```sh
+npm --silent --prefix remix run credentials:import -- \
+  --preflight --origin https://thingtime.example --format oauth-client
+```
+
+The transfer repeats this check. Use `--format google-oauth` for the Google
+Web application download. The installed Thingtime MCP's Things and Actions
+permissions cannot import vault credentials or approve a handoff. Use this
+local helper and the verified root-admin browser, with a protected file or
+pipe from the authorized credential source. If that source can only show a
+secret in an observation or tool result, it cannot feed this agent workflow.
+
 ```sh
 npm --prefix remix run credentials:import -- \
   --origin https://thingtime.example \
@@ -86,6 +114,16 @@ both `--replace-id <credential-id>` and
 inline secret, shell substitution, a here-document containing a real secret,
 or a command that prints the input. The helper intentionally has no `--value`
 argument. It does not create a persistent session or grant file.
+
+For Meta, use `--format oauth-client --label connections-facebook-oauth`
+with a protected file or pipe containing the single-client JSON described above.
+Use a supported source or protected producer to prepare it directly, keeping
+the App Secret out of command arguments and model-visible tool results. Read
+the exact credential ID and current revision in the root administrator's
+**Encrypted secrets** list and supply both replacement flags if the label
+exists. If an existing bundle is malformed, resolve it through the approved
+vault workflow before retrying. Keep the approval review and saved receipt
+separate from the Connections account check.
 
 The helper prints one `approval_required` record with a non-secret verification
 URL. Open that exact URL in the assigned, independently authenticated Thingtime

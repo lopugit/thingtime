@@ -6,6 +6,7 @@ import { ComponentDataScope } from './ComponentSelect';
 import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
+import { useContentExecutionHeld } from './ContentExecutionHold';
 import { createPortal } from 'react-dom';
 import { BuilderOverlayHost } from './BuilderOverlayHost';
 import { blockChromePath, canAddBlockChildren, ownsBlockTarget, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
@@ -40,6 +41,7 @@ const InlineRichTextEditor = React.lazy(() => import('./InlineRichTextEditor').t
 // what you edit is exactly what viewers see.
 
 export type ComponentThingLike = {
+	executionHeld?: boolean;
 	id: string;
 	crystal: Record<string, any>;
 };
@@ -693,8 +695,8 @@ for (const [key, style] of Object.entries(TEXT_STYLES)) {
 // (liveComponent.tsx useThingSource) keyed by the block id. Kept as a thin
 // alias so the block view and every dedicated thing page fetch, cache, and
 // gate on exactly the same code.
-const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean): { scope: Record<string, unknown> } =>
-	useThingSource({ source: block.source, cacheId: block.id, argValues, interactive });
+const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean, executionHeld = false): { scope: Record<string, unknown> } =>
+	useThingSource({ source: block.source, cacheId: block.id, argValues, interactive, executionHeld });
 
 const ComponentBlockView = ({
 	block,
@@ -711,6 +713,8 @@ const ComponentBlockView = ({
 	confirm?: TtActionConfirmHandler;
 	onUnowned?: TtActionUnownedHandler;
 }) => {
+	const held = useContentExecutionHeld(component?.executionHeld);
+	interactive = interactive && !held;
 	const crystal = component?.crystal;
 	const inheritedScope = React.useContext(ComponentDataScope);
 	const markerInstance = React.useContext(ComponentInstanceIdentity);
@@ -728,7 +732,7 @@ const ComponentBlockView = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
 	);
-	const source = useBlockSource({ ...block, source: block.source ?? crystal?.source }, argValues, interactive);
+	const source = useBlockSource({ ...block, source: block.source ?? crystal?.source }, argValues, interactive, held);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
 		const authored = componentTextOverrides(crystal.render, block.args, chrome?.seamlessMode === 'edit');
@@ -795,6 +799,7 @@ const ComponentBlockView = ({
 
 	return (
 		<LiveTemplate
+			executionHeld={held}
 			render={resolved}
 			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope }}
 			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
@@ -894,6 +899,7 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
 /** Authored DOM elements are the selection boundary themselves. No wrapper div
  * breaks a summary, a grid, or a row. Repeated rows share one editable template. */
 const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const held = useContentExecutionHeld();
  const { block, chrome } = props;
  const register = React.useContext(BlockChromeElements);
  const authoredRef = React.useRef<HTMLElement>(null);
@@ -968,8 +974,8 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
  if (block.tag === 'tt-upload') return <ComponentUploadEnabled.Provider value={!!props.interactive && !editing && runtime.source === 'user' && !runtime.sharedRun}>{element}</ComponentUploadEnabled.Provider>;
- return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select'
-  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select' || block.tag === 'tt-menu' || block.tag === 'tt-rich-text'
+  ? <NativeControlsEnabled.Provider value={!held && (block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing)}>{element}</NativeControlsEnabled.Provider>
   : element;
 };
 
@@ -1383,12 +1389,13 @@ const BlockChromeOverlay = ({ blocks, chrome, elements }: { blocks: WebpageBlock
 };
 
 export const WebpageBlocksRenderer = (props: WebpageBlocksRendererProps) => {
+ const held = useContentExecutionHeld();
  const elements = React.useMemo(() => new Map<string, HTMLElement>(), []);
  const register = React.useCallback((id: string, element: HTMLElement | null) => {
   if (element) elements.set(id, element);
   return () => { if (elements.get(id) === element) elements.delete(id); };
  }, [elements]);
- const content = <BlockList {...props} containerId={null} />;
+ const content = <BlockList {...props} interactive={!!props.interactive && !held} renderNative={held ? undefined : props.renderNative} containerId={null} />;
  return <BlockChromeElements.Provider value={register}>
   {props.bare ? content : <Flex flexDirection="column" width="100%" rowGap={4}>{content}</Flex>}
   {props.chrome && <BlockChromeOverlay blocks={props.blocks} chrome={props.chrome} elements={elements} />}

@@ -88,6 +88,24 @@ User guidance (verbatim):
   changes and saved-Thing changes separately, and explicitly identify any
   remaining composition limitation.
 
+## One Thingtime MCP with general-purpose capabilities
+
+Original request (verbatim, 5 November 2026):
+
+> Please update global AI_ALL and thingtime local AI_ALL that there should only be 1 thingtime MCP and all features should be added to that, no seperate mcp's should be built please ❤️
+>
+> And any feature should be added to the mcp in a general and as highly abstracted as possible, not in a feature specific way like the thingtime_reporting was done please ❤️
+>
+> Please add my instructions word for word and add anything you think of too ❤️
+
+- Maintain exactly one canonical Thingtime MCP integration and user-facing server identity, `thingtime`. Add all MCP-accessible Thingtime features to its shared implementation, registry and tool catalogue. Do not build, register, recommend or configure separate feature-specific Thingtime MCPs such as `thingtime_reporting`, including aliases that merely conceal a duplicate server.
+- Design additions at the highest useful reusable abstraction supported by the real requirements. Prefer general Things, schemas, relationships, discovery, reads, queries, projections, validated mutations, Actions and capability composition. Express reporting, task management and other domain workflows as data, schemas and composed Actions over those primitives rather than dedicated domain-specific servers or a growing tool for each feature, page or workflow.
+- Inspect and extend the existing primitives and canonical contracts first. Add a new general-purpose primitive only when existing composition cannot represent the needed behavior clearly, safely or efficiently; document that gap and how the new contract can serve other workflows. Keep tools typed, discoverable, understandable and composable. Do not hide feature-specific switches or business logic behind a nominally generic tool name, and do not replace the catalogue with an unrestricted execute-anything tool.
+- One MCP does not mean one undifferentiated permission. Preserve least-privilege scopes, account and origin selection, ACLs, independent authorization boundaries, confirmation policy, validation, secret redaction, idempotency, pagination and capability negotiation. Generalization must never introduce arbitrary database queries, code execution, filesystem access, URL fetching or unregistered API dispatch as a shortcut around those boundaries.
+- Keep local/device execution behind supported, narrowly scoped adapters that reuse canonical contracts and serve the same Thingtime integration. Do not introduce a separate MCP or feature-specific side channel merely to evade this rule. If a capability is unavailable in a selected host or origin, expose that limitation accurately and extend the supported common path instead of silently creating another integration or broadening access.
+- Treat existing specialized tools and duplicate registrations as migration work: consolidate their reusable behavior into the canonical integration, preserve required capabilities and saved user configuration, update callers and documentation, and provide deliberate compatibility/deprecation where needed. Do not abruptly delete working interfaces, reset credentials or expand a documentation-only task into an unrequested implementation migration.
+- Verify the resulting public tool catalogue and configured server inventory, not just names in source. Cover representative different workflows using the shared primitives, capability/version compatibility and authorization refusals. Connection or authentication failures must be repaired in the canonical integration rather than worked around by adding a second Thingtime MCP.
+
 ## Individually editable Thingtime blocks
 
 - Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.

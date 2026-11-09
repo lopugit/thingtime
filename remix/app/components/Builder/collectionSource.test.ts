@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendCollectionPage, collectionSource } from './collectionSource';
+import { appendCollectionPage, collectionOffsetPage, collectionSource } from './collectionSource';
 
 const source = collectionSource({ action: 'read-page' })!;
 test('empty pages retain their cursor and older rows append with stable-key deduplication', () => {
@@ -21,17 +21,23 @@ test('repeated or cyclical cursors and malformed pages fail without destroying p
 	assert.equal(second.cursor, 'two');
 	assert.throws(() => appendCollectionPage(collectionSource({ action: 'read', inputs: { cursor: 'initial' } })!, { items: [], nextCursor: 'initial' }));
 });
-test('bounded pages, bytes and distinct rows; nested mappings remain data-only', () => {
-	const custom = collectionSource({ action: 'read', itemsPath: 'data.rows', cursorPath: 'data.next', itemKey: 'record.key', cursorInput: 'after' })!;
-	assert.equal(appendCollectionPage(custom, { data: { rows: [{ record: { key: 0 } }] } }).items.length, 1);
-	assert.throws(() => appendCollectionPage(source, { items: [{ id: 'a', text: 'x'.repeat(4 * 1024 * 1024) }] }), /4 MB/);
-	assert.throws(() => appendCollectionPage(source, { items: Array.from({ length: 10001 }, (_, id) => ({ id })) }), /10,000/);
-	let pages = appendCollectionPage(source, { items: [], nextCursor: '1' });
-	for (let i = 2; i <= 200; i++) pages = appendCollectionPage(source, { items: [], nextCursor: String(i) }, pages);
-	assert.throws(() => appendCollectionPage(source, { items: [] }, pages), /200 pages/);
+test('nested mappings and exact totals remain data-only without arbitrary collection caps', () => {
+ const custom = collectionSource({ action: 'read', itemsPath: 'data.rows', cursorPath: 'data.next', itemKey: 'record.key', cursorInput: 'after', totalPath: 'data.total' })!;
+ const first = appendCollectionPage(custom, { data: { rows: [{ record: { key: 0 } }], next: 'next', total: 10001 } });
+ assert.equal(first.total, 10001);
+ assert.equal(appendCollectionPage(custom, { data: { rows: [], total: 10001 } }, first).total, 10001);
+ assert.throws(() => appendCollectionPage(custom, { data: { rows: [], total: -1 } }), /total/);
+ assert.equal(appendCollectionPage(source, { items: Array.from({ length: 10001 }, (_, id) => ({ id })) }).items.length, 10001);
 });
 test('source config rejects unsafe paths, non-scalar inputs and unresolved Actions', () => {
 	assert.equal(collectionSource(undefined), null);
 	for (const value of [{ action: '{item.action}' }, { action: 'x', inputs: { nested: {} } }, { action: 'x', cursorInput: 'a.b' }, { action: 'x', itemsPath: '__proto__.x' }, { action: 'x', inputs: { n: Infinity } }])
 		assert.throws(() => collectionSource(value));
+});
+
+test('offset pages must confirm their requested offset and size', () => {
+ const spec = collectionSource({ action: 'read', offsetInput: 'offset', limitInput: 'limit' })!;
+ assert.equal(collectionOffsetPage(spec, { offset: 20, items: [{ id: 20 }] }, 20, 10).items.length, 1);
+ assert.throws(() => collectionOffsetPage(spec, { offset: 0, items: [] }, 20, 10), /confirm/);
+ assert.throws(() => collectionOffsetPage(spec, { offset: 20, items: [{ id: 1 }, { id: 2 }] }, 20, 1), /page size/);
 });

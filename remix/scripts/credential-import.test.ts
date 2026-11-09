@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { transferCredential, parseImportArgs, importOrigin, ImportFailure, readCredentialInput } from './credential-import';
+import { transferCredential, checkCredentialImport, parseImportArgs, importOrigin, ImportFailure, readCredentialInput } from './credential-import';
 import type { CredentialImportTarget } from '../app/credentials/importContract';
 
 const target: CredentialImportTarget = { destination: 'admin-provider-vault', format: 'text', label: 'synthetic-provider', environment: 'development', overwrite: { mode: 'create' } };
@@ -16,9 +16,28 @@ test('CLI rejects unsafe origins and secret arguments before input', () => {
   assert.equal(importOrigin('http://127.0.0.1:17883'), 'http://127.0.0.1:17883');
   const args = ['--origin','https://thingtime.com','--account','admin-id','--environment','production','--format','google-oauth','--file','/selected/client.json'];
   assert.equal(parseImportArgs(args).target.label, 'connections-google-oauth');
+  const scoped = args.map(value => value === 'google-oauth' ? 'oauth-client' : value);
+  assert.throws(() => parseImportArgs(scoped), ImportFailure);
+  assert.equal(parseImportArgs([...scoped, '--label', 'connections-facebook-oauth']).target.callbackUrl,
+    'https://thingtime.com/api/v1/connections/oauth/callback');
   assert.throws(() => parseImportArgs([...args, '--value', 'never-print-this']), ImportFailure);
   assert.throws(() => parseImportArgs([...args, '--stdin']), ImportFailure);
   assert.throws(() => parseImportArgs([...args, '--replace-id', 'secret_1234']), ImportFailure);
+});
+
+test('read-only preflight checks the selected origin and format minimum without starting a handoff', async () => {
+  const origin = 'https://thingtime.com';
+  const manifestFetch = (version: string): typeof fetch => async (url, init) => {
+    assert.equal(String(url), origin + '/.well-known/thingtime-capabilities.json');
+    assert.equal(init?.method, undefined);
+    assert.equal(init?.credentials, 'omit');
+    assert.equal(init?.redirect, 'manual');
+    return json({ schemaVersion: 1, origin, features: { 'api.credentials-import': { version } }, unexpected: 'SERVER-ONLY' });
+  };
+  assert.equal((await checkCredentialImport(origin, 'google-oauth', manifestFetch('1.0.0'))).status, 'compatible');
+  await assert.rejects(checkCredentialImport(origin, 'oauth-client', manifestFetch('1.0.0')), /INCOMPATIBLE_CAPABILITY/);
+  const result = await checkCredentialImport(origin, 'oauth-client', manifestFetch('1.1.2'));
+  assert.deepEqual(result, { status: 'compatible', origin, feature: 'api.credentials-import', version: '1.1.2', minimum: '1.1.0', format: 'oauth-client' });
 });
 
 test('manifest, redirect and verification URL failures never read the selected credential', async () => {

@@ -39,7 +39,8 @@ test('confirmed idle resets completed throughput without converting missing CPU 
  assert.equal(idle.idle, true);
  assert.equal(idle.transfer, 0);
  assert.equal(idle.scan, 0);
- assert.equal(idle.cpu, null);
+ assert.equal(idle.cpu, 3);
+ assert.equal(idle.lastNative, true, 'idle retains the explicitly historical CPU reading');
  assert.equal(liveDeviceResourceDisplay({ ...input, resources: undefined, online: false }).transfer, null);
 });
 test('historical measured zero and absent intervals have distinct coverage and chart marks', () => {
@@ -52,4 +53,14 @@ test('historical measured zero and absent intervals have distinct coverage and c
  assert.equal(display.series.uploadMbps.coverage, '2 of 4 intervals · 2 readings');
  assert.equal(display.series.scanMbps.peak, 'Unavailable');
  assert.equal(display.series.memoryBytes.peak, '1 MiB');
+});
+
+
+test('iOS without an explicit resource-limit capability is OS-managed, never an assumed Mac budget', async () => {
+ const { iosManagedSyncResources } = await import('./deviceSyncResourceDisplay');
+ assert.equal(iosManagedSyncResources({ platform: 'ios', fileAccessVersion: '1.16.0' }), true);
+ assert.equal(iosManagedSyncResources({ platform: 'ios', fileResourceLimitsVersion: '1.0.0' }), false);
+ assert.equal(iosManagedSyncResources({ platform: 'ios', fileResourceLimitsVersion: '2.0.0' }), true);
+ assert.equal(iosManagedSyncResources({ platform: 'macos' }), false);
+ assert.equal(iosManagedSyncResources(undefined), false);
 });

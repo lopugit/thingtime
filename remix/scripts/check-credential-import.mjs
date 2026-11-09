@@ -122,6 +122,7 @@ try {
 	assert.equal(await framed.getByRole('heading', { name: 'Import provider credentials' }).count(), 0);
 	await page.locator('#framed-credential-fixture').evaluate(frame => frame.remove());
 	await page.getByText('Awaiting approval.').waitFor();
+	await page.getByText(`Callback: ${origin}/api/v1/connections/oauth/callback`, { exact: true }).waitFor();
 	assert.equal(await page.getByRole('progressbar').count(), 0);
 	await page.getByLabel('Choose credential file').setInputFiles({
 		name: 'synthetic-wrong.json', mimeType: 'application/json', buffer: Buffer.from('{"installed":{"client_id":"fixture"}}')

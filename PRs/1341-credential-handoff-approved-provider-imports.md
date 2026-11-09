@@ -10,6 +10,8 @@ A Node helper reads the selected file or protected pipe only after a root admini
 
 Session selection revisions and transactional authorization fences prevent Character overrides or approval revival after switching away and back. Exact ID/revision CAS, immutable input replay, cancellation/status reconciliation and frame-deny headers protect the handoff. Anonymous control metadata has admission controls; the fixed proof envelope is distinct from user credential data. Existing vault encryption and indexes are reused.
 
+The CLI can now preflight the selected format against the public manifest without opening the credential source. Version 1.1 adds a scoped OAuth client format for registered confidential Connections labels such as Facebook. A replacement keeps sibling origins and environments. The existing approval screen displays the client format and exact callback before delivery.
+
 ## Verified locally on 2026-11-04
 
 - Final client, Nitro node server and Vercel builds; OAuth runtime packaging and output verification passed.

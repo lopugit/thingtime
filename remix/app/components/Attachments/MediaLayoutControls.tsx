@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, IconButton, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { Minus, MoveDiagonal, Plus, Trash2 } from 'lucide-react';
 
-import { MAX_MEDIA_LAYOUT_ENTRIES, MAX_MEDIA_LAYOUT_TRACK, MEDIA_LAYOUT_SPAN_VALUES, type MediaLayoutSpan } from '~/schemas/registry';
+import { MEDIA_LAYOUT_SPAN_VALUES, type MediaLayoutSpan } from '~/schemas/registry';
 import { attachmentMediaSrc } from './attachmentUiCore';
 import { mediaLayoutRows, rowAspectRatio, spanAspect, spanColumns, spanRows } from './PostAttachments';
 import type { PublicAttachment } from './attachmentTypes';
@@ -123,8 +123,7 @@ export const MediaLayoutPicker = ({
 									icon={<Plus size={12} />}
 									size="xs"
 									variant="ghost"
-									isDisabled={count >= MAX_MEDIA_LAYOUT_TRACK}
-									onClick={() => onPattern(pattern.map((value, row) => (row === index ? Math.min(MAX_MEDIA_LAYOUT_TRACK, value + 1) : value)))}
+									onClick={() => onPattern(pattern.map((value, row) => (row === index ? value + 1 : value)))}
 								/>
 								{pattern.length > 1 ? (
 									<IconButton
@@ -144,7 +143,6 @@ export const MediaLayoutPicker = ({
 							variant="outline"
 							borderRadius="999px"
 							leftIcon={<Plus size={12} />}
-							isDisabled={pattern.length >= MAX_MEDIA_LAYOUT_ENTRIES}
 							onClick={() => onPattern([...pattern, pattern.at(-1) || 1])}
 						>
 							Add row
@@ -174,8 +172,7 @@ export const MediaLayoutPicker = ({
 							size="xs"
 							variant="outline"
 							borderRadius="999px"
-							isDisabled={columns >= MAX_MEDIA_LAYOUT_TRACK}
-							onClick={() => onColumns(Math.min(MAX_MEDIA_LAYOUT_TRACK, columns + 1))}
+							onClick={() => onColumns(columns + 1)}
 						/>
 					</Flex>
 					<Text fontSize="11px" color={MUTED}>
@@ -252,7 +249,7 @@ export const MediaLayoutCanvas = ({
 	onSpanChange: (id: string, span: MediaLayoutSpan) => void;
 	disabled?: boolean;
 }) => {
-	const gridColumns = Math.max(1, Math.min(columns, attachments.length, MAX_MEDIA_LAYOUT_TRACK));
+	const gridColumns = Math.max(1, Math.min(columns, attachments.length));
 	// live drag preview: the candidate span tracks the pointer between snaps
 	const [dragPreview, setDragPreview] = React.useState<{ id: string; span: MediaLayoutSpan } | null>(null);
 	const dragRef = React.useRef<{
@@ -337,7 +334,7 @@ export const MediaLayoutCanvas = ({
 					FINAL VIEW PREVIEW
 				</Text>
 				<Flex alignItems="center" columnGap={2} flex="1" minWidth="140px" maxWidth="240px">
-					<Slider aria-label="Grid columns" min={1} max={MAX_MEDIA_LAYOUT_TRACK} step={1} value={columns} onChange={onColumns} isDisabled={disabled}>
+					<Slider aria-label="Grid columns" min={1} max={Math.max(6, columns)} step={1} value={columns} onChange={onColumns} isDisabled={disabled}>
 						<SliderTrack>
 							<SliderFilledTrack />
 						</SliderTrack>

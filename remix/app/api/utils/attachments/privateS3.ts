@@ -50,6 +50,7 @@ export type AttachmentS3 = {
 		partNumber: number;
 		checksumSha256: string;
 		contentLength: number;
+		expiresInSeconds?: number;
 	}): Promise<{ url: string; expiresAt: string; headers: Record<string, string> }>;
 	listParts(input: { objectKey: string; uploadId: string }): Promise<AttachmentUploadedPart[]>;
 	completeMultipartUpload(input: { objectKey: string; uploadId: string; parts: AttachmentUploadedPart[] }): Promise<{ versionId: string }>;
@@ -148,7 +149,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			return { uploadId: result.UploadId };
 		},
 
-		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength }) {
+		async signUploadPart({ objectKey, uploadId, partNumber, checksumSha256, contentLength, expiresInSeconds = PART_URL_TTL_SECONDS }) {
 			const command = new UploadPartCommand({
 				...common,
 				Key: objectKey,
@@ -158,7 +159,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 				ContentLength: contentLength
 			});
 			const url = await presign(client, command, {
-				expiresIn: PART_URL_TTL_SECONDS,
+				expiresIn: Math.min(expiresInSeconds, PART_URL_TTL_SECONDS),
 				// A checksum in the query could be stripped or rewritten by browser
 				// URL handling. Keep it as a required signed request header.
 				unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
@@ -166,7 +167,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			});
 			return {
 				url,
-				expiresAt: expiresAt(PART_URL_TTL_SECONDS),
+				expiresAt: expiresAt(Math.min(expiresInSeconds, PART_URL_TTL_SECONDS)),
 				headers: { 'x-amz-checksum-sha256': checksumSha256 }
 			};
 		},

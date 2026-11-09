@@ -123,7 +123,6 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 									size="sm"
 									borderRadius={RADIUS_SM}
 									placeholder={attachment.name}
-									maxLength={255}
 									value={filenamePreviewDraft}
 									onChange={(event) => setFilenamePreviewDraft(event.target.value)}
 								/>
@@ -136,7 +135,6 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 									size="sm"
 									borderRadius={RADIUS_SM}
 									placeholder="Give this media a title ✨"
-									maxLength={200}
 									value={titleDraft}
 									onChange={(event) => setTitleDraft(event.target.value)}
 								/>
@@ -151,7 +149,6 @@ export const AttachmentAnnotatePopover = (props: AttachmentAnnotatePopoverProps)
 									resize="vertical"
 									borderRadius={RADIUS_SM}
 									placeholder="Describe it… (optional)"
-									maxLength={2000}
 									value={descriptionDraft}
 									onChange={(event) => setDescriptionDraft(event.target.value)}
 								/>

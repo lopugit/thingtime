@@ -6,12 +6,13 @@ import { constants } from 'node:fs';
 import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { parseArgs } from 'node:util';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../app/api/utils/capabilities/capabilityContract';
 import {
-  CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_VERSION,
+  CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_FEATURE, credentialImportMinimum, isCredentialImportFormat,
   CREDENTIAL_IMPORT_PAGE_PATH, CREDENTIAL_IMPORT_HEADERS, GOOGLE_OAUTH_CREDENTIAL_LABEL,
   GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH,
-  type CredentialImportTarget, type CredentialImportReceipt
+  type CredentialImportFormat, type CredentialImportTarget, type CredentialImportReceipt
 } from '../app/credentials/importContract';
 
 type Event = { status: string; requestId?: string; verificationUrl?: string; expiresAt?: string; receipt?: CredentialImportReceipt };
@@ -38,6 +39,33 @@ export function importOrigin(input: string) {
       !(url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))) return fail('INVALID_ORIGIN');
     return url.origin;
   } catch { return fail('INVALID_ORIGIN'); }
+}
+
+async function requestImportJson(origin: string, path: string, fetcher: typeof fetch, cancel?: AbortSignal, init: RequestInit = {}) {
+  const timeout = AbortSignal.timeout(30_000);
+  const signal = cancel ? AbortSignal.any([cancel, timeout]) : timeout;
+  let response: Response;
+  try {
+    response = await fetcher(origin + path, {
+      ...init, credentials: 'omit', redirect: 'manual', cache: 'no-store', signal,
+      headers: { Accept: 'application/json', Origin: origin, ...init.headers }
+    });
+  } catch { return fail(cancel?.aborted ? 'CANCELLED' : 'NETWORK_ERROR'); }
+  if (response.redirected || (response.status >= 300 && response.status < 400) ||
+    (response.url && new URL(response.url).origin !== origin)) return fail('REDIRECT_REFUSED');
+  if (!response.ok) return fail(`HTTP_${response.status}`);
+  if (!response.headers.get('content-type')?.includes('application/json')) return fail('INVALID_RESPONSE');
+  try { return await response.json(); } catch { return fail('INVALID_RESPONSE'); }
+}
+
+export async function checkCredentialImport(input: string, format: CredentialImportFormat, fetcher = fetch, signal?: AbortSignal) {
+  const origin = importOrigin(input);
+  const manifest = await requestImportJson(origin, THINGTIME_CAPABILITY_MANIFEST_PATH, fetcher, signal);
+  const version = manifest?.features?.[CREDENTIAL_IMPORT_FEATURE]?.version;
+  const minimum = credentialImportMinimum(format);
+  if (manifest?.schemaVersion !== 1 || manifest.origin !== origin ||
+    typeof version !== 'string' || !capabilitySatisfies(version, minimum)) return fail('INCOMPATIBLE_CAPABILITY');
+  return { status: 'compatible', origin, feature: CREDENTIAL_IMPORT_FEATURE, version, minimum, format };
 }
 
 function receipt(value: unknown, target: CredentialImportTarget): CredentialImportReceipt {
@@ -85,21 +113,7 @@ export async function transferCredential(options: Options): Promise<CredentialIm
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   const proof = { requestId, verifier };
   let bytes: Buffer | undefined;
-  const request = async (path: string, init: RequestInit = {}) => {
-    const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000);
-    let response: Response;
-    try {
-      response = await fetcher(origin + path, {
-        ...init, credentials: 'omit', redirect: 'manual', cache: 'no-store', signal,
-        headers: { Accept: 'application/json', Origin: origin, ...init.headers }
-      });
-    } catch { return fail(options.signal?.aborted ? 'CANCELLED' : 'NETWORK_ERROR'); }
-    if (response.redirected || (response.status >= 300 && response.status < 400) ||
-      (response.url && new URL(response.url).origin !== origin)) return fail('REDIRECT_REFUSED');
-    if (!response.ok) return fail(`HTTP_${response.status}`);
-    if (!response.headers.get('content-type')?.includes('application/json')) return fail('INVALID_RESPONSE');
-    try { return await response.json(); } catch { return fail('INVALID_RESPONSE'); }
-  };
+  const request = (path: string, init?: RequestInit) => requestImportJson(origin, path, fetcher, options.signal, init);
   const post = (operation: string, body: unknown) => request(`${CREDENTIAL_IMPORT_API_PATH}/${operation}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
   });
@@ -112,10 +126,7 @@ export async function transferCredential(options: Options): Promise<CredentialIm
     }
   };
   try {
-    const manifest = await request(THINGTIME_CAPABILITY_MANIFEST_PATH);
-    if (manifest?.schemaVersion !== 1 || manifest.origin !== origin ||
-      typeof manifest.features?.[CREDENTIAL_IMPORT_FEATURE]?.version !== 'string' ||
-      !capabilitySatisfies(manifest.features[CREDENTIAL_IMPORT_FEATURE].version, CREDENTIAL_IMPORT_VERSION)) return fail('INCOMPATIBLE_CAPABILITY');
+    await checkCredentialImport(origin, options.target.format, fetcher, options.signal);
     const started = await retryOnce(() => post('start', { requestId, target: options.target, expectedAccountId: options.expectedAccountId, challenge }));
     const expectedUrl = new URL(CREDENTIAL_IMPORT_PAGE_PATH, origin);
     expectedUrl.searchParams.set('requestId', requestId);
@@ -188,13 +199,17 @@ Usage: npm --prefix remix run credentials:import -- --origin https://thingtime.c
   --account <expected-admin-id> --environment production --format google-oauth
   --file <downloaded-client.json>
 
-Formats: google-oauth, text, json. Generic formats require --label <vault-label>.
+Formats: google-oauth, oauth-client, text, json. Except for google-oauth, specify --label <vault-label>.
+oauth-client takes {clientId, clientSecret, redirectUri} for a registered Connections label
+such as connections-facebook-oauth, and updates only the selected origin and environment.
 Use --stdin instead of --file for a protected pipe. Never pass a secret as an argument.
-Google defaults to the selected origin's Connections callback; --callback may name it explicitly.
+OAuth formats default to the selected origin's Connections callback; --callback may name it explicitly.
 Replacing a saved label requires BOTH --replace-id <secret-id> and --replace-updated-at <ISO-date>.
 The command prints an approval URL for the assigned, authenticated browser. No browser is opened
 automatically. Input is read after approval and never printed. Ctrl-C ends the local handoff.
-Requires Node 22+ and a selected origin advertising api.credentials-import 1.0.0 or compatible.
+Read-only compatibility check: npm --prefix remix run credentials:import -- --preflight
+  --origin https://thingtime.com --format oauth-client
+Requires Node 22+ and api.credentials-import 1.0.0 (oauth-client requires 1.1.0), or compatible.
 This saves provider configuration, not personal passwords, session cookies or passkey keys.`;
 
 export function parseImportArgs(args: string[]) {
@@ -209,15 +224,17 @@ export function parseImportArgs(args: string[]) {
   }
   const origin = importOrigin(values['--origin']);
   const format = values['--format'];
-  if (!['google-oauth', 'text', 'json'].includes(format) || !values['--account'] || !values['--environment'] ||
+  if (!isCredentialImportFormat(format) || !values['--account'] || !values['--environment'] ||
     (stdin === Boolean(values['--file'])) || Boolean(values['--replace-id']) !== Boolean(values['--replace-updated-at'])) return fail('INVALID_ARGUMENTS');
-  if (format !== 'google-oauth' && (!values['--label'] || values['--callback'])) return fail('INVALID_ARGUMENTS');
+  const oauth = format === 'google-oauth' || format === 'oauth-client';
+  if (format !== 'google-oauth' && !values['--label']) return fail('INVALID_ARGUMENTS');
+  if (!oauth && values['--callback']) return fail('INVALID_ARGUMENTS');
   if (format === 'google-oauth' && values['--label'] && values['--label'] !== GOOGLE_OAUTH_CREDENTIAL_LABEL) return fail('INVALID_ARGUMENTS');
   const target: CredentialImportTarget = {
-    destination: 'admin-provider-vault', format: format as CredentialImportTarget['format'],
+    destination: 'admin-provider-vault', format,
     label: format === 'google-oauth' ? GOOGLE_OAUTH_CREDENTIAL_LABEL : values['--label'],
     environment: values['--environment'],
-    ...(format === 'google-oauth' ? { callbackUrl: values['--callback'] || origin + GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH } : {}),
+    ...(oauth ? { callbackUrl: values['--callback'] || origin + GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH } : {}),
     overwrite: values['--replace-id'] ? { mode: 'replace', expectedId: values['--replace-id'], expectedUpdatedAt: values['--replace-updated-at'] } : { mode: 'create' }
   };
   return { origin, expectedAccountId: values['--account'], target, file: values['--file'], stdin };
@@ -231,7 +248,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.once('SIGINT', cancel); process.once('SIGTERM', cancel);
     void (async () => {
       try {
-        const args = parseImportArgs(process.argv.slice(2));
+        const cliArgs = process.argv.slice(2);
+        if (cliArgs[0] === '--preflight') {
+          let values;
+          try {
+            ({ values } = parseArgs({ args: cliArgs.slice(1), options: { origin: { type: 'string' }, format: { type: 'string' } } }));
+          } catch { return fail('INVALID_ARGUMENTS'); }
+          if (!values.origin || !isCredentialImportFormat(values.format)) return fail('INVALID_ARGUMENTS');
+          console.log(JSON.stringify(await checkCredentialImport(values.origin, values.format, fetch, controller.signal)));
+          return;
+        }
+        const args = parseImportArgs(cliArgs);
         if (args.stdin && process.stdin.isTTY) return fail('STDIN_REQUIRES_PIPE');
         await transferCredential({ ...args, signal: controller.signal, emit: event => console.log(JSON.stringify(event)),
           readInput: () => readCredentialInput(args.file, process.stdin, controller.signal) });

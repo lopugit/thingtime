@@ -6,6 +6,7 @@ import { fallbackSocialMeta, injectSocialMeta, renderSocialMetaHtml, resolveSoci
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { gatewayAuthority, getMongoConnectionMode } from '../../app/api/utils/deployment/environmentGateway';
+import { socialPreviewDesignFromUrl, socialPreviewDesignParams } from '../../app/utils/socialPreviewDesign';
 
 // The SPA shell for every non-API, non-static path. Nitro compiles this route
 // as MIDDLEWARE ahead of its built-in SPA renderer (rootDir/index.html), and
@@ -36,7 +37,10 @@ export default defineHandler(async (event) => {
 		// (uncapped parent walk on a comment or attachment). HEAD therefore bought
 		// that projection with no PNG to make the miss worth caching.
 		if (method === 'HEAD') return new Response(null, { headers: cardHeaders });
-		const path = normaliseSocialPreviewPath(requestUrl.searchParams.get('path'));
+		const target = requestUrl.searchParams.get('path') || '/';
+		const choice = { ...socialPreviewDesignFromUrl(target), ...socialPreviewDesignFromUrl(requestUrl) };
+		const designParams = socialPreviewDesignParams(choice);
+		const path = `${normaliseSocialPreviewPath(target)}${designParams.size ? `?${designParams}` : ''}`;
 		// lazy, for the same reason socialPreview.ts lazy-imports things/users/
 		// webpages/attachments: socialCard.ts pulls in the @resvg native binding and
 		// ~1.1 MB of embedded font source, measuring ~40ms and ~7 MiB of heap at

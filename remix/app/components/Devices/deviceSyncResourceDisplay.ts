@@ -1,3 +1,5 @@
+import { capabilitySatisfies } from '~/api/utils/capabilities/capabilityContract';
+import type { FolderCapabilities } from '~/fileSync/mobileFolders.client';
 import type { DeviceSyncHistory } from '~/fileSync/deviceSyncHistory';
 import type { SyncResourceStatus } from '~/fileSync/resourceGovernor';
 
@@ -40,11 +42,11 @@ export function liveDeviceResourceDisplay(input: {
  const scan = idle ? 0 : show ? mbps(resources?.scanBytesPerSecond) : null;
  const nativeCurrent = sampleCurrent && (!idle || sourceSampleAge! <= 1_000);
  return {
-  idle, stale, heartbeatCurrent, sampleCurrent, heartbeatExpiry, sampleExpiry,
-  measurementAt: idle ? observedAt : measuredAt,
+  idle, stale, lastNative: !!measuredAt && !nativeCurrent, heartbeatCurrent, sampleCurrent, heartbeatExpiry, sampleExpiry,
+  measurementAt: idle && nativeCurrent ? observedAt : measuredAt ?? (idle ? observedAt : undefined),
   upload, download, scan, transfer: upload == null || download == null ? null : upload + download,
-  cpu: (show || nativeCurrent) && resources?.cpuStatus === 'measured' ? resources.cpuPercent : null,
-  memory: show || nativeCurrent ? mib(resources?.memoryBytes) : null
+  cpu: !!measuredAt && resources?.cpuStatus === 'measured' ? resources.cpuPercent : null,
+  memory: measuredAt ? mib(resources?.memoryBytes) : null
  };
 }
 
@@ -83,3 +85,8 @@ export function deviceResourceHistoryDisplay(history?: DeviceSyncHistory) {
   }))
  };
 }
+
+/** Missing native support never implies the renderer's saved Mac defaults. */
+export const iosManagedSyncResources = (capabilities?: FolderCapabilities): boolean =>
+ capabilities?.platform === 'ios' && !capabilitySatisfies(capabilities.fileResourceLimitsVersion, '1.0.0');
+export const IOS_SYNC_RESOURCE_STATUS = 'iOS manages scheduling. Native CPU, scan and resource limits are unavailable in this version; transfer progress remains available on each connection.';

@@ -1,11 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import {
-	CREDENTIAL_IMPORT_DESTINATIONS,
 	GOOGLE_OAUTH_CREDENTIAL_LABEL,
+	isCredentialImportFormat,
 	type CredentialImportTarget
 } from '../../../credentials/importContract';
-import { exactOAuthOrigin, oauthRedirectUri } from '../connections/oauthConfig';
+import { exactOAuthOrigin, isScopedOAuthImportLabel, oauthRedirectUri } from '../connections/oauthConfig';
 
 // The actual MongoDB limit for a single BSON document, including its envelope.
 export const CREDENTIAL_IMPORT_BSON_LIMIT = 16 * 1024 * 1024;
@@ -14,7 +14,7 @@ const errors = {
 	invalid_request: [400, 'The credential import request is invalid.'],
 	invalid_target: [400, 'Choose a valid credential format, destination, and overwrite option.'],
 	invalid_credential: [400, 'The credential is empty, malformed, or incompatible with the selected format.'],
-	redirect_mismatch: [400, 'The Google web client must register the exact callback for this Thingtime origin.'],
+	redirect_mismatch: [400, 'The OAuth client must use the exact callback for this Thingtime origin.'],
 	unauthorized: [401, 'Sign in to the intended administrator account.'],
 	origin_mismatch: [403, 'Open the import on the same configured Thingtime origin.'],
 	admin_required: [403, 'A current administrator browser session is required.'],
@@ -74,13 +74,14 @@ export const parseImportTarget = (input: unknown, origin: string, environment: s
 	if (!isImportObject(input) || !only(input, ['destination', 'format', 'label', 'environment', 'callbackUrl', 'overwrite'])) throw invalid();
 	const { destination, format, callbackUrl, overwrite } = input;
 	const label = parseImportLabel(input.label);
-	if (destination !== 'admin-provider-vault' || !CREDENTIAL_IMPORT_DESTINATIONS[destination].some(item => item === format)
+	if (destination !== 'admin-provider-vault' || !isCredentialImportFormat(format)
 		|| !label
 		|| typeof input.environment !== 'string' || !environmentId.test(input.environment) || input.environment !== environment
 		|| !isImportObject(overwrite)) throw invalid();
-	if (format !== 'google-oauth' && format !== 'text' && format !== 'json') throw invalid();
-	if (format === 'google-oauth') {
-		if (label !== GOOGLE_OAUTH_CREDENTIAL_LABEL || !oauthRedirectUri(origin) || callbackUrl !== oauthRedirectUri(origin)) {
+	if (format === 'google-oauth' || format === 'oauth-client') {
+		if (format === 'google-oauth' ? label !== GOOGLE_OAUTH_CREDENTIAL_LABEL : !isScopedOAuthImportLabel(label)) throw invalid();
+		const requiredCallback = oauthRedirectUri(origin);
+		if (!requiredCallback || callbackUrl !== requiredCallback) {
 			throw new CredentialImportError('redirect_mismatch');
 		}
 	} else if (label === GOOGLE_OAUTH_CREDENTIAL_LABEL || callbackUrl !== undefined) {
@@ -97,8 +98,10 @@ export const parseImportTarget = (input: unknown, origin: string, environment: s
 	return { ...base, overwrite: { mode: 'replace', expectedId: overwrite.expectedId, expectedUpdatedAt: overwrite.expectedUpdatedAt } };
 };
 
-type GoogleClient = { clientId: string; clientSecret: string; redirectUri: string };
-export type PreparedImport = { type: 'literal'; value: string } | { type: 'google'; client: GoogleClient };
+type ScopedOAuthClient = { clientId: string; clientSecret: string; redirectUri: string };
+export type PreparedImport = { type: 'literal'; value: string } | { type: 'oauth-client'; client: ScopedOAuthClient };
+const isOAuthCredential = (value: unknown): value is string =>
+	typeof value === 'string' && value.length > 0 && !/[\s\p{Cc}\p{Cf}]/u.test(value);
 
 export const prepareCredentialImport = (target: CredentialImportTarget, bytes: Uint8Array): PreparedImport => {
 	const invalid = () => new CredentialImportError('invalid_credential');
@@ -115,17 +118,25 @@ export const prepareCredentialImport = (target: CredentialImportTarget, bytes: U
 	catch { throw invalid(); }
 	if (target.format === 'json') return { type: 'literal', value: raw };
 
+	if (target.format === 'oauth-client') {
+		if (!isImportObject(parsed) || !only(parsed, ['clientId', 'clientSecret', 'redirectUri'])) throw invalid();
+		const { clientId, clientSecret, redirectUri } = parsed;
+		if (!isOAuthCredential(clientId) || !isOAuthCredential(clientSecret) || !target.callbackUrl) throw invalid();
+		if (redirectUri !== target.callbackUrl) throw new CredentialImportError('redirect_mismatch');
+		return { type: 'oauth-client', client: { clientId, clientSecret, redirectUri } };
+	}
+
 	if (!isImportObject(parsed) || own(parsed, 'installed') !== undefined || !isImportObject(parsed.web)) throw invalid();
 	const { client_id: clientId, client_secret: clientSecret, redirect_uris: redirects } = parsed.web;
 	if (typeof clientId !== 'string' || !/^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId)
-		|| typeof clientSecret !== 'string' || !clientSecret || /[\s\p{Cc}\p{Cf}]/u.test(clientSecret) || !target.callbackUrl
+		|| !isOAuthCredential(clientSecret) || !target.callbackUrl
 		|| !Array.isArray(redirects) || !redirects.every(value => typeof value === 'string')) throw invalid();
 	if (!redirects.includes(target.callbackUrl)) throw new CredentialImportError('redirect_mismatch');
-	return { type: 'google', client: { clientId, clientSecret, redirectUri: target.callbackUrl } };
+	return { type: 'oauth-client', client: { clientId, clientSecret, redirectUri: target.callbackUrl } };
 };
 
 /** Preserve all untouched entries and refuse to replace a malformed existing bundle. */
-export const mergeGoogleCredentialImport = (previous: string | null, environment: string, origin: string, client: GoogleClient): string => {
+export const mergeScopedOAuthImport = (previous: string | null, environment: string, origin: string, client: ScopedOAuthClient): string => {
 	const fail = () => new CredentialImportError('conflict');
 	let bundle: unknown;
 	try { bundle = previous === null ? { environments: {} } : JSON.parse(previous); } catch { throw fail(); }

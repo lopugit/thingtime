@@ -10,7 +10,8 @@ type MarkerAppearance = {
 	avatarSrc?: string;
 };
 export type LngLat = [number, number];
-export type MapboxPoint = { id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance; item?: Record<string, unknown> };
+export type MapboxMarkerGroup = { key: string | number; count: number; selected: boolean; members: Array<{ point: MapboxPoint; item: Record<string, unknown> }> };
+export type MapboxPoint = { overlayKey?: string; markerGroup?: MapboxMarkerGroup; id: string; coordinates: LngLat; label: string; markerLabel?: string; color?: string; selected?: boolean; group?: 'favourite' | 'route'; appearance?: MarkerAppearance; item?: Record<string, unknown> };
 
 export function publicMapboxToken(value: unknown): string | null {
 	const token = value && typeof value === 'object' ? (value as Record<string, unknown>).publicToken : null;
@@ -47,7 +48,7 @@ function markerAppearance(value: unknown): MarkerAppearance | undefined {
 
 export function markerSelection(
 	point: Pick<MapboxPoint, 'group' | 'id'>,
-	config: { onSelectState?: unknown; onRouteSelectState?: unknown; onSelectQuery?: unknown; onRouteSelectQuery?: unknown; queryScope?: unknown },
+	config: { onSelectState?: unknown; onRouteSelectState?: unknown; onSelectQuery?: unknown; onRouteSelectQuery?: unknown; onSelectQueryParams?: unknown; onRouteSelectQueryParams?: unknown; queryScope?: unknown },
 	query: Record<string, unknown>
 ): Record<string, unknown> | undefined {
 	const route = point.group === 'route';
@@ -61,7 +62,14 @@ export function markerSelection(
 	}
 	const queryKey = route ? config.onRouteSelectQuery : config.onSelectQuery;
 	if (typeof queryKey === 'string' && queryKey) {
-		const params = { ...query, [queryKey]: point.id };
+		const extra = route ? config.onRouteSelectQueryParams : config.onSelectQueryParams;
+		const params: Record<string, unknown> = { ...query };
+		if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+			for (const [key, value] of Object.entries(extra)) {
+				if (/^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$/.test(key) && !['__proto__', 'constructor', 'prototype'].includes(key) && (typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || value === null)) params[key] = value;
+			}
+		}
+		params[queryKey] = point.id;
 		if (config.queryScope !== 'page') return { op: 'query', params };
 		const otherKey = route ? config.onSelectQuery : config.onRouteSelectQuery;
 		if (typeof otherKey === 'string' && otherKey !== queryKey) delete params[otherKey];
@@ -131,13 +139,35 @@ export function mapboxOrderedRoutePoints(value: unknown, navigation: Record<stri
 		const own = markerAppearance(item.crystal);
 		if (inherited || own) appearances.set(item.id, { ...inherited, ...own });
 	}
+	// Ordinals belong to the complete itinerary, before invalid/unresolved
+	// coordinates are omitted. Rank is an ordering key, never the displayed
+	// number: nonconsecutive and fractional ranks still produce 1, 2, 3.
+	const ordinalIds = [...items.keys()];
+	const ordinalSeen = new Set(ordinalIds);
+	if (!ordinalIds.length && Array.isArray(result.points)) result.points.forEach((point: any, index: number) => {
+		const id = typeof point?.id === 'string' ? point.id : String(index);
+		if (!ordinalSeen.has(id)) { ordinalSeen.add(id); ordinalIds.push(id); }
+	});
+	ordinalIds.sort((left, right) => (ranks.get(left) ?? Infinity) - (ranks.get(right) ?? Infinity));
+	// Transient optimization reorders the resolved members within their full
+	// itinerary slots. Unresolved stops keep a slot instead of disappearing
+	// from numbering, and source-provided labels below remain authoritative.
+	const optimized = Array.isArray(navigation?.orderedStopIds) ? navigation.orderedStopIds.filter((id: unknown): id is string => typeof id === 'string' && ordinalSeen.has(id)) : [];
+	const uniqueOptimized = [...new Set<string>(optimized)];
+	const optimizedIds = new Set(uniqueOptimized);
+	let optimizedIndex = 0;
+	for (let index = 0; index < ordinalIds.length; index++) if (optimizedIds.has(ordinalIds[index])) ordinalIds[index] = uniqueOptimized[optimizedIndex++];
+	const ordinals = new Map(ordinalIds.map((id, index) => [id, String(index + 1)]));
 	const order = new Map<unknown, number>(Array.isArray(navigation?.orderedStopIds) ? navigation.orderedStopIds.map((id: unknown, index: number) => [id, index]) : []);
 	return points.sort((a, b) => {
 		const left = order.size ? order.get(a.id) : ranks.get(a.id), right = order.size ? order.get(b.id) : ranks.get(b.id);
 		return (left ?? Infinity) - (right ?? Infinity);
 	}).map((point) => {
 		const appearance = appearances.get(point.id);
-		return { ...point, item: items.get(point.id) ?? point.item, ...(appearance ? { appearance: { ...appearance, ...point.appearance } } : {}) };
+		const item = items.get(point.id) ?? point.item;
+		const sourceLabel = item?.markerLabel;
+		const markerLabel = point.markerLabel ?? (typeof sourceLabel === 'string' || (typeof sourceLabel === 'number' && Number.isFinite(sourceLabel)) ? String(sourceLabel) : ordinals.get(point.id));
+		return { ...point, ...(markerLabel === undefined ? {} : { markerLabel }), item, ...(appearance ? { appearance: { ...appearance, ...point.appearance } } : {}) };
 	});
 }
 

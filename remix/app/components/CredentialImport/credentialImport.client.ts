@@ -2,14 +2,19 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 import { rootIdentity } from '~/utils/rootIdentity';
 
 import {
-	CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_HEADERS, CREDENTIAL_IMPORT_VERSION,
+	CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_BASE_VERSION, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_HEADERS,
 	type CredentialImportFormat, type CredentialImportTarget
 } from '~/credentials/importContract';
 
 type ImportScope = { origin: string; actor: string; generation: number };
 
-export const importFormatLabel = (format: CredentialImportFormat) =>
-	format === 'google-oauth' ? 'Google OAuth client' : format === 'json' ? 'Provider JSON' : 'Provider text';
+const importFormatLabels: Record<CredentialImportFormat, string> = {
+	'google-oauth': 'Google OAuth client',
+	'oauth-client': 'Connections OAuth client',
+	json: 'Provider JSON',
+	text: 'Provider text'
+};
+export const importFormatLabel = (format: CredentialImportFormat) => importFormatLabels[format];
 
 export class CredentialImportError extends Error {
 	constructor(message: string, readonly status: number) { super(message); }
@@ -30,7 +35,7 @@ export async function credentialImportRequest<T>(
 	};
 	assertCurrent();
 	try {
-		await requireThingtimeCapability(CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_VERSION, scope.origin, {
+		await requireThingtimeCapability(CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_BASE_VERSION, scope.origin, {
 			fetch: globalThis.fetch, currentOrigin: () => window.location.origin, signal
 		});
 	} catch {

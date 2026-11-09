@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { MongoClient } from 'mongodb';
-import { transferCredential } from './credential-import';
+import { checkCredentialImport, transferCredential } from './credential-import';
 import {
   CREDENTIAL_IMPORT_API_PATH as importPath, CREDENTIAL_IMPORT_FEATURE, CREDENTIAL_IMPORT_OPERATIONS,
   CREDENTIAL_IMPORT_VERSION, CREDENTIAL_IMPORT_PAGE_PATH, CREDENTIAL_IMPORT_HEADERS as headers, GOOGLE_OAUTH_CREDENTIAL_LABEL,
@@ -140,6 +140,7 @@ try {
   assert.equal(manifest.origin, origin);
   const feature = manifest.features?.[CREDENTIAL_IMPORT_FEATURE];
   assert.equal(feature?.version, CREDENTIAL_IMPORT_VERSION);
+  assert.equal((await checkCredentialImport(origin, 'oauth-client')).version, CREDENTIAL_IMPORT_VERSION);
   for (const operation of CREDENTIAL_IMPORT_OPERATIONS) {
     const path = importPath + '/' + operation;
     assert(manifest.operations?.some((entry: { path: string; methods: string[]; feature: string }) =>
@@ -180,14 +181,27 @@ try {
   const target: CredentialImportTarget = {
     destination: 'admin-provider-vault', format: 'text', label: 'fixture-cli-provider', environment, overwrite: { mode: 'create' }
   };
+  const otherOrigin = 'https://fixture-secondary.example.invalid';
+  const facebookOtherEntry = { clientId: '123456', clientSecret: marker + '-META-OTHER',
+    redirectUri: otherOrigin + GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH };
+  const facebookLabel = 'connections-facebook-oauth';
+  const facebookExisting = (await request('/api/v1/admin/integrations', { cookie: owner.cookie, body: {
+    action: 'create-secret', label: facebookLabel,
+    value: JSON.stringify({ environments: { [environment]: { origins: { [otherOrigin]: facebookOtherEntry } } } })
+  } })).data.secret;
+  const facebookCallback = origin + GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH;
+  const handoffTarget: CredentialImportTarget = {
+    ...target, format: 'oauth-client', label: facebookLabel, callbackUrl: facebookCallback,
+    overwrite: { mode: 'replace', expectedId: facebookExisting.id, expectedUpdatedAt: facebookExisting.updatedAt }
+  };
   let approval: Promise<void> | undefined;
   const abortTransfer = new AbortController();
   const transfer = transferCredential({
-    origin, expectedAccountId: owner.id, target, signal: abortTransfer.signal,
+    origin, expectedAccountId: owner.id, target: handoffTarget, signal: abortTransfer.signal,
     readInput: async () => {
       assert(approval, 'CLI read input before starting browser approval');
       await approval;
-      return Buffer.from(marker + '-CLI');
+      return Buffer.from(JSON.stringify({ clientId: '987654', clientSecret: marker + '-META', redirectUri: facebookCallback }));
     },
     emit: event => {
       if (event.status !== 'approval_required' || !event.verificationUrl) return;
@@ -212,7 +226,7 @@ try {
         });
         assert.equal(await actions.count(), 0, 'A framed handoff exposed an action');
         await approveCredentialHandoff({
-          page, origin, verificationUrl, target, accountId: owner.id, artifactDir: evidence
+          page, origin, verificationUrl, target: handoffTarget, accountId: owner.id, artifactDir: evidence
         });
       })();
       void approval.catch(() => abortTransfer.abort());
@@ -221,7 +235,16 @@ try {
   try {
     const saved = await transfer;
     await verifyCompleted(page, saved);
-    assert.equal(saved.label, target.label);
+    assert.equal(saved.label, handoffTarget.label);
+    assert.equal(saved.credentialId, facebookExisting.id);
+    assert.notEqual(saved.updatedAt, facebookExisting.updatedAt);
+    const read = await request('/api/v1/vault/reveal', { cookie: owner.cookie, reveal: true, body: {
+      vault: 'admin', id: saved.credentialId, action: 'reveal', password: owner.password
+    } });
+    const facebookOrigins = JSON.parse(read.data.value).environments[environment].origins;
+    assert(JSON.stringify(facebookOrigins[otherOrigin]) === JSON.stringify(facebookOtherEntry), 'Scoped Meta import changed the other origin');
+    assert(facebookOrigins[origin]?.clientSecret === marker + '-META', 'Scoped Meta import did not reach its exact origin');
+    assert(facebookOrigins[origin]?.redirectUri === facebookCallback, 'Meta callback changed');
   } catch (error) {
     await approval;
     throw error;
@@ -290,7 +313,6 @@ try {
   assert.equal((await op('status', { body: characterRevoked })).data.status, 'revoked');
 
   stage = 'Google JSON browser import and conditional update';
-  const otherOrigin = 'https://fixture-secondary.example.invalid';
   const otherEntry = { clientId: 'fixture-other.apps.googleusercontent.com', clientSecret: marker + '-OTHER',
     redirectUri: otherOrigin + GOOGLE_OAUTH_CREDENTIAL_CALLBACK_PATH };
   // Seed the legacy multi-origin document through the existing authorized write API.
@@ -325,7 +347,7 @@ try {
   assert(origins[origin]?.clientSecret === marker + '-GOOGLE', 'Exact intended credential did not reach the vault');
   assert(origins[origin]?.redirectUri === googleTarget.callbackUrl, 'Google callback changed');
 
-  console.log('PASS built manifest and all seven routes, isolated browser and CLI approval, metadata-only readback, frame protection, wrong account, Character switch invalidation, revocation, replay, Google import, origin preservation and stale CAS');
+  console.log('PASS built manifest and all seven routes, scoped Meta CLI approval, metadata-only readback, frame protection, wrong account, Character switch invalidation, revocation, replay, Google import, origin preservation and stale CAS');
 } catch (error) {
   // Assertion messages may include synthetic data from Playwright; emit the stage and source line only.
   const location = error instanceof Error ? error.stack?.match(/credential-import-acceptance\.mts:(\d+):\d+/)?.[1] : undefined;

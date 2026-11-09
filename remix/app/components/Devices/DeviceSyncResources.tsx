@@ -1,3 +1,4 @@
+import type { FolderCapabilities } from '~/fileSync/mobileFolders.client';
 import React from 'react';
 import { activityManager } from '~/activity/activityManager';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
@@ -14,9 +15,10 @@ import { deviceResourceKey, readDeviceSyncResourcePolicy, saveDeviceSyncResource
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { deviceSyncResourceBlocks, migrateDeviceSyncResourceBlocks } from './deviceSyncResourceBlocks';
-import { deviceResourceHistoryDisplay, deviceResourceWindows, liveDeviceResourceDisplay, resourceDateTime, resourceReading, type DeviceResourceWindow } from './deviceSyncResourceDisplay';
+import { deviceSyncResourceBlocks, migrateDeviceSyncResourceBlocks, withDeviceResourceAvailability } from './deviceSyncResourceBlocks';
+import { IOS_SYNC_RESOURCE_STATUS, iosManagedSyncResources, deviceResourceHistoryDisplay, deviceResourceWindows, liveDeviceResourceDisplay, resourceDateTime, resourceReading, type DeviceResourceWindow } from './deviceSyncResourceDisplay';
 
+const migrateResourcePresentation = (blocks: Parameters<typeof migrateDeviceSyncResourceBlocks>[0]) => withDeviceResourceAvailability(migrateDeviceSyncResourceBlocks(blocks));
 const resourceActivity = { id: 'sync.resources.local', title: 'Local Sync resource usage', kind: 'polling', detail: 'Samples the selected Mac during an active Sync transfer while the dashboard is visible.' } as const;
 const localSamplers = new WeakMap<FolderHost, { listeners: Set<(resources: SyncResourceStatus) => void>; stop(): void }>();
 
@@ -54,7 +56,7 @@ function subscribeLocalResources(host: FolderHost, ownerId: string, listener: (r
  };
 }
 export type RemoteDeviceResources = {
- origin: string; policy?: DeviceSyncResourcePolicy; resources?: SyncResourceStatus; taskResources?: SyncResourceStatus; observedAt?: number; receivedAt?: number; active: boolean;
+ origin: string; capabilities?: FolderCapabilities; policy?: DeviceSyncResourcePolicy; resources?: SyncResourceStatus; taskResources?: SyncResourceStatus; observedAt?: number; receivedAt?: number; active: boolean;
  online?: boolean; checking?: boolean; refresh?(): Promise<void>; status: string;
  save?(policy: DeviceSyncResourcePolicy): Promise<DeviceSyncResourcePolicy>;
 };
@@ -76,14 +78,16 @@ export function DeviceSyncResources(props: Props) {
 }
 
 function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRemote, rendererOrigin, generation }: Props & { rendererOrigin: string; generation: number }) {
+ const [localCapabilities, setLocalCapabilities] = React.useState<FolderCapabilities>();
  const [native, setNative] = React.useState<{ origin: string; observedAt: number; resources?: SyncResourceStatus; online: boolean }>();
  const [discovery, setDiscovery] = React.useState<'checking' | 'local' | 'remote'>('checking');
  const [checking, setChecking] = React.useState(false);
  const hostRef = React.useRef<Host | undefined>(undefined);
  const refreshRef = React.useRef<(() => void) | undefined>(undefined);
- const discoveredRemote = useDeviceSyncRemoteResources({ ownerId, deviceId, enabled: allowed && discovery === 'remote' && !suppliedRemote });
+ const discoveredRemote = useDeviceSyncRemoteResources({ ownerId, deviceId, enabled: allowed && discovery === 'remote' && !suppliedRemote && !iosManagedSyncResources(localCapabilities) });
  const remote = suppliedRemote ?? discoveredRemote;
  const local = discovery === 'local';
+ const iosManaged = !local && iosManagedSyncResources(localCapabilities ?? remote.capabilities);
  const origin = local ? native!.origin : remote.origin || rendererOrigin;
  const key = deviceResourceKey(origin, ownerId, deviceId), prefix = React.useId();
  const policy = React.useSyncExternalStore(subscribeDeviceSyncResourcePolicy, () => readDeviceSyncResourcePolicy(key), () => readDeviceSyncResourcePolicy(key));
@@ -103,6 +107,16 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  React.useEffect(() => {
   if (!allowed) return;
   const adapter = getNativeSyncAdapter();
+  if (!suppliedRemote && adapter?.platform === 'ios') {
+   // Bind the installed bridge's capability to this exact paired device before
+   // showing OS-managed limits. Selecting a different remote device stays remote.
+   const abort = new AbortController();
+   const check = () => { abort.signal.throwIfAborted(); assertRef.current(); };
+   void createNativeSyncHost({ adapter, ownerId, deviceId, signal: abort.signal, assertCurrent: check }).then(host => {
+    check(); setLocalCapabilities(host.capabilities); setDiscovery('remote');
+   }).catch(() => { if (!abort.signal.aborted) setDiscovery('remote'); });
+   return () => abort.abort();
+  }
   if (suppliedRemote || !adapter || adapter.platform !== 'macos') { setDiscovery('remote'); return; }
   const abort = new AbortController();
   let reading = false, timer: ReturnType<typeof setTimeout>;
@@ -164,7 +178,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
   };
  }, [ownerId, deviceId, allowed, suppliedRemote]);
 
- const selectedPolicy = local ? policy : allowed ? remote.policy : undefined;
+ const selectedPolicy = iosManaged ? undefined : local ? policy : allowed ? remote.policy : undefined;
  const { transferBytesPerSecond, scanBytesPerSecond, cpuPercent } = selectedPolicy ?? {};
  React.useEffect(() => {
   if (draftIdentity.current !== key) { draftIdentity.current = key; dirty.current = false; }
@@ -186,7 +200,15 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  const observed = allowed ? (local ? native?.resources : remote.resources) : undefined;
  const activeSample = current ? run.progress.resources : allowed && !local ? remote.taskResources : undefined;
  const currentSample = (activeSample?.measuredAt ?? 0) > (observed?.measuredAt ?? 0) ? activeSample : observed;
- const resources = (sampled?.measuredAt ?? 0) > (currentSample?.measuredAt ?? 0) ? sampled : currentSample;
+ const latestResources = (sampled?.measuredAt ?? 0) > (currentSample?.measuredAt ?? 0) ? sampled : currentSample;
+ // A policy/status reply may omit a resource sample while the same scoped
+ // connection refreshes. Retain only the last measured sample, never authority.
+ const lastMeasurement = React.useRef<{ key: string; resources: SyncResourceStatus } | undefined>(undefined);
+ if (!allowed || iosManaged || lastMeasurement.current?.key !== key) lastMeasurement.current = undefined;
+ if (allowed && !iosManaged && latestResources?.measuredAt != null && latestResources.measuredAt >= (lastMeasurement.current?.resources.measuredAt ?? -1))
+  lastMeasurement.current = { key, resources: latestResources };
+ const resources = allowed && !iosManaged ? lastMeasurement.current?.resources ?? latestResources : undefined;
+ const retainingMeasurement = !!resources && resources !== latestResources;
  const observedAt = allowed ? local ? native?.observedAt : remote.observedAt : undefined;
  const receivedAt = allowed && !local ? remote.receivedAt : undefined;
  const sourceClock = React.useRef({ observedAt, receivedAt });
@@ -204,7 +226,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
   const timers = expiries.map(expiry => setTimeout(() => tick(value => value + 1), expiry + 1 - now));
   return () => timers.forEach(clearTimeout);
  }, [heartbeatExpiry, sampleExpiry]);
- const { upload, download, transfer, scan, cpu, memory } = display;
+ const { upload, download, transfer, scan, cpu, memory } = iosManaged ? { upload: null, download: null, transfer: null, scan: null, cpu: null, memory: null } : display;
 
  const [windowId, setWindowId] = React.useState<DeviceResourceWindow>('live');
  const [custom, setCustom] = React.useState(() => ({ from: formDateTime(Date.now() - 3_600_000), to: formDateTime(Date.now()) }));
@@ -228,7 +250,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
   setHistoryError('');
   setQuery({ from, to, bucketCount: 24 });
  };
- const historyAvailable = allowed && discovery !== 'checking';
+ const historyAvailable = allowed && !iosManaged && discovery !== 'checking';
  const historyKey = JSON.stringify([key, local]);
  React.useEffect(() => {
   if (!historyAvailable || !query || windowId === 'live') return;
@@ -293,26 +315,29 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
  const liveLoading = checking || !!remote.checking;
  const liveCold = allowed && (discovery === 'checking' || (liveLoading && observedAt == null));
  const data = {
-  status: !allowed ? 'Sign in to view this device’s private Sync resources.'
+  status: iosManaged ? IOS_SYNC_RESOURCE_STATUS : !allowed ? 'Sign in to view this device’s private Sync resources.'
    : liveCold ? ''
-   : display.idle ? 'Idle · no active Sync or Backup work on this device.'
+   : display.idle ? display.lastNative || retainingMeasurement ? 'Idle · no active Sync or Backup work. CPU and memory show the last measurements, not current usage.' : 'Idle · no active Sync or Backup work on this device.'
+   : retainingMeasurement ? 'Last measurements · waiting for a new reading. These values are not current.'
    : display.stale ? 'Last measurement · stale. These readings are not current.'
    : display.sampleCurrent ? 'Measuring Sync and Backup on this device.'
    : local ? (online ? 'Sync is active. Waiting for the first resource measurement…' : 'Local resource status is temporarily unavailable.')
    : remote.status,
-  measurement: display.measurementAt == null ? liveCold ? '' : 'No resource reading yet.' : `${display.idle ? 'Idle confirmed' : 'Last measured'}: ${resourceDateTime(display.measurementAt)}`,
-  ...meter('transfer', transfer, (selectedPolicy?.transferBytesPerSecond ?? 625000) / 125000, 'Mbps', budget(selectedPolicy && selectedPolicy.transferBytesPerSecond / 125000, 'Mbps shared')),
-  ...meter('scan', scan, (selectedPolicy?.scanBytesPerSecond ?? 625000) / 125000, 'Mbps', budget(selectedPolicy && selectedPolicy.scanBytesPerSecond / 125000, 'Mbps')),
-  ...meter('cpu', cpu, 100, '%', budget(selectedPolicy?.cpuPercent, '% target'), cpu != null ? ` (${resources?.cpuScopes?.length ?? '?'} of 3 scopes)` : ''),
-  ...meter('memory', memory, 512, 'MiB', '512 MiB indexer budget'),
-  directions: `Upload: ${resourceReading(upload, 'Mbps')} · Download: ${resourceReading(download, 'Mbps')}. Memory covers the native indexer only.`,
+  measurement: iosManaged ? 'Native resource telemetry unavailable on this iOS version.' : display.measurementAt == null ? liveCold ? '' : 'No resource reading yet.' : `${display.idle && !display.lastNative && !retainingMeasurement ? 'Idle confirmed' : 'Last measured'}: ${resourceDateTime(retainingMeasurement ? resources!.measuredAt! : display.measurementAt)}`,
+  ...meter('transfer', transfer, (selectedPolicy?.transferBytesPerSecond ?? 625000) / 125000, 'Mbps', iosManaged ? 'iOS-managed' : budget(selectedPolicy && selectedPolicy.transferBytesPerSecond / 125000, 'Mbps shared')),
+  ...meter('scan', scan, (selectedPolicy?.scanBytesPerSecond ?? 625000) / 125000, 'Mbps', iosManaged ? 'iOS-managed' : budget(selectedPolicy && selectedPolicy.scanBytesPerSecond / 125000, 'Mbps')),
+  ...meter('cpu', cpu, 100, '%', iosManaged ? 'iOS-managed' : budget(selectedPolicy?.cpuPercent, '% target'), cpu != null ? ` (${resources?.cpuScopes?.length ?? '?'} of 3 scopes)${display.lastNative || retainingMeasurement ? ' · last measured' : ''}` : ''),
+  ...meter('memory', memory, 512, 'MiB', iosManaged ? 'iOS-managed' : selectedPolicy ? '512 MiB indexer budget' : 'Unverified budget', memory != null && (display.lastNative || retainingMeasurement) ? ' · last measured' : ''),
+  targetsUnavailable: iosManaged,
+  policyDescription: iosManaged ? 'iOS manages this device; native CPU, scan and rate budgets are not enforced here.' : 'Device-wide budgets apply only after the selected device confirms its active policy. CPU is an adaptive target for Sync work. Directory discovery uses CPU and worker backpressure; Mbps measures file-content reads.',
+  directions: iosManaged ? 'Upload/download progress is shown per connection. Native resource telemetry is unavailable.' : `Upload: ${resourceReading(upload, 'Mbps')} · Download: ${resourceReading(download, 'Mbps')}. Memory covers the native indexer only.`,
   ...Object.fromEntries((['transfer', 'scan', 'cpu'] as const).flatMap(name => [[`${name}Id`, `${prefix}-${name}`], [`${name}Target`, draft[name]]])),
-  disabled: !allowed || (local ? !native?.online : !remote.save), error,
+  disabled: !allowed || iosManaged || (local ? !native?.online : !remote.save), error,
   history: { ...historyDisplay,
-   id: prefix, custom, showCustom: windowId === 'custom', showLive: windowId === 'live', showHistory: windowId !== 'live',
-   disabled: !historyAvailable, pressed: Object.fromEntries(deviceResourceWindows.map(([id]) => [id, id === windowId])),
+   id: prefix, custom, showCustom: !iosManaged && windowId === 'custom', showLive: iosManaged || windowId === 'live', showHistory: !iosManaged && windowId !== 'live',
+   disabled: !historyAvailable, pressed: Object.fromEntries(deviceResourceWindows.map(([id]) => [id, id === (iosManaged ? 'live' : windowId)])),
    backgrounds: Object.fromEntries(deviceResourceWindows.map(([id]) => [id, id === windowId ? 'color-mix(in srgb, var(--tt-accent, #7864d9) 16%, transparent)' : 'transparent'])),
-   refreshDisabled,
+   refreshDisabled: iosManaged || refreshDisabled,
    refreshLabel: windowId === 'live' ? 'Refresh live' : 'Refresh history',
    hasData: historyDisplay.sampleCount > 0,
    recordingIssue: historyValue?.recordingIssue === 'storage-unavailable',
@@ -339,7 +364,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
   'save-targets': async () => {
    try {
     assertCurrent();
-    if (local ? !native?.online : !remote.save) throw Error('The selected device is unavailable for resource changes.');
+    if (iosManaged || (local ? !native?.online : !remote.save)) throw Error('The selected device is unavailable for resource changes.');
     const next = { transferBytesPerSecond: Number(draft.transfer) * 125000, scanBytesPerSecond: Number(draft.scan) * 125000, cpuPercent: Number(draft.cpu) };
     if (!local && remote.save) { await remote.save(next); assertCurrent(); dirty.current = false; setError('Selected device targets saved.'); return; }
     if (!hostRef.current) throw Error('The paired device connection changed.');
@@ -352,7 +377,7 @@ function DeviceResourceSession({ ownerId, deviceId, allowed, remote: suppliedRem
    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Targets could not be saved.'); }
   }
  };
- return <SettingsDocumentHost documentKey="device-sync-total-resources" defaultDocument={deviceSyncResourceBlocks} migrateBlocks={migrateDeviceSyncResourceBlocks} scopeKey={key} title="Total Sync resource usage">
+ return <SettingsDocumentHost documentKey="device-sync-total-resources" defaultDocument={deviceSyncResourceBlocks} migrateBlocks={migrateResourcePresentation} scopeKey={key} title="Total Sync resource usage">
   {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={key} enabled={!editing} scope={{ deviceResources: data }} actions={actions}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
  </SettingsDocumentHost>;
 }

@@ -135,7 +135,7 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
     try {
       const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
       if (!payload.sub || !payload.jti) return null;
-      return { sub: String(payload.sub), jti: String(payload.jti), ...(typeof payload.exp === 'number' ? { exp: payload.exp } : {}) };
+      return { sub: String(payload.sub), jti: String(payload.jti), ...(payload.exp === undefined ? {} : { exp: payload.exp }) };
     } catch {
       // Try the legacy HS256 verifier below for sessions minted before ES256.
     }
@@ -147,7 +147,7 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
   try {
     const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
     if (!payload.sub || !payload.jti) return null;
-    return { sub: String(payload.sub), jti: String(payload.jti), ...(typeof payload.exp === 'number' ? { exp: payload.exp } : {}) };
+    return { sub: String(payload.sub), jti: String(payload.jti), ...(payload.exp === undefined ? {} : { exp: payload.exp }) };
   } catch {
     return null;
   }

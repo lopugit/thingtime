@@ -44,7 +44,12 @@ export function ComponentCollection({
 	renderItem,
 	transparent,
 	maxItems,
-	templateEach
+	templateEach,
+	total,
+	totalPath,
+	selectedKey,
+	itemKey,
+	revealSelected
 }: Record<string, unknown>) {
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
@@ -56,7 +61,20 @@ export function ComponentCollection({
 	const local = React.useContext(ComponentLocalControl);
 	const localRef = React.useRef(local);
 	localRef.current = local;
-	const count = Array.isArray(data) ? data.length : 0;
+	const configuredTotal = typeof totalPath === 'string' ? componentScopeValue(scope, totalPath) : total;
+	const sourceTotal = paged.total ?? configuredTotal;
+	const exactTotal = typeof sourceTotal === 'number' && Number.isSafeInteger(sourceTotal) && sourceTotal >= 0 && typeof filterPath !== 'string' ? sourceTotal : undefined;
+	const count = exactTotal ?? (Array.isArray(data) ? data.length : 0);
+	const selection = (typeof selectedKey === 'string' && selectedKey !== '') || (typeof selectedKey === 'number' && Number.isFinite(selectedKey)) ? selectedKey : undefined;
+	const keyPath = typeof itemKey === 'string' ? itemKey : 'id';
+	const rowKey = React.useCallback((item: Record<string, unknown>) => componentScopeValue(item, keyPath), [keyPath]);
+	const revealed = React.useRef<unknown>(undefined);
+	const reveal = React.useCallback((element: HTMLDivElement | null) => {
+		if (!element || revealSelected !== true || selection == null || revealed.current === selection) return;
+		const target = element.firstElementChild as HTMLElement | null;
+		if (target) { revealed.current = selection; target.scrollIntoView({ block: 'nearest' }); }
+	}, [selection, revealSelected]);
+	React.useEffect(() => { if (selection == null) revealed.current = undefined; }, [selection]);
 	React.useEffect(() => {
 		if (enabled && typeof countStateKey === 'string') localRef.current?.({ op: 'set', key: countStateKey, value: count });
 	}, [enabled, countStateKey, count]);
@@ -82,6 +100,13 @@ export function ComponentCollection({
             <style>{collectionStyles}</style>
 			{paged.error && <p role="alert">{paged.error}</p>}
 			<CollectionList<Record<string, any>>
+				loadPage={paged.loadPage}
+				pageData={paged.pageData}
+				pageLoading={paged.pageLoading}
+				pageError={paged.pageError}
+				total={exactTotal}
+				selectedKey={selection}
+				itemKey={rowKey}
 				hasMore={paged.hasMore}
 				loadMore={paged.loadMore}
 				loading={paged.loading}
@@ -120,29 +145,31 @@ export function ComponentCollection({
 							: {})
 					}))}
 			>
-				{(visible) => {
+				{(visible, pageStart) => {
 					const resolveRow = createTemplateResolver();
 					const nextBudget = { depth: budget.depth + 1, rows: Math.floor((budget.rows - visible.length) / Math.max(1, visible.length)) };
 					return (
 						<div className={typeof className === 'string' ? className : undefined}>
 							{visible.map((item, index) => {
-								const position = positions.get(item) ?? index;
+								const position = positions.get(item) ?? pageStart + index;
 								const rowScope = {
 									...scope,
 									item,
 									index,
 									collection: {
 										index: position,
-										previous: items[position - 1],
-										next: items[position + 1],
-										afterNext: items[position + 2],
-										count: items.length
+										previous: positions.has(item) ? items[position - 1] : visible[index - 1],
+										next: positions.has(item) ? items[position + 1] : visible[index + 1],
+										afterNext: positions.has(item) ? items[position + 2] : visible[index + 2],
+										count: exactTotal ?? items.length
 									}
 								};
 								return (
 									<Nesting.Provider key={String(item?.id ?? index)} value={nextBudget}>
 										<ComponentDataScope.Provider value={rowScope}>
+											<div style={{ display: 'contents' }} ref={rowKey(item) === selection ? reveal : undefined} data-tt-collection-selected={rowKey(item) === selection || undefined}>
 											{typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={resolveRow(itemTemplate, rowScope) as any} />}
+											</div>
 										</ComponentDataScope.Provider>
 									</Nesting.Provider>
 								);

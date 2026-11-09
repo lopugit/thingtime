@@ -480,6 +480,7 @@ const cacheSummary = (summary: DeviceSummary | null): DeviceSummary | null => {
 	if (!summary) return null;
 	return {
 		id: text(summary.id, 160),
+		rootFolderId: text(summary.rootFolderId, 160) || null,
 		name: text(summary.name, 160) || 'Device',
 		platform: text(summary.platform, 80),
 		serviceStatus: summary.serviceStatus,

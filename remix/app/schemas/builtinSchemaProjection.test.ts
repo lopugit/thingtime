@@ -21,6 +21,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   file: ['name', 'trashed', 'content', 'symbolicLink'],
   'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
   'password-verification-device': [], // Private device proofs never enter the public crystal projection.
+  'backup-job': [], // Coordinator authority is never public schema data.
+  'backup-job-event': [],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -58,7 +60,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
-  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "ignoreRules"],
+  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "photoAutomation", "ignoreRules"],
   "folder": ["name", "icon", "description", "builderApp", "iconUrl", "metadata"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],
@@ -182,7 +184,7 @@ test('managed attachment, moderation, user, and emoji fields are closed server-o
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
-test('attachment metadata is normalized but its Thingtime kind remains protected from generic CRUD', () => {
+test('attachment filenames remain exact while types normalize and generic CRUD stays protected', () => {
 	const validated = validateThingtimeCrystal(['attachment'], {
 		name: '  clip.MP4 ',
 		size: 123,
@@ -192,7 +194,7 @@ test('attachment metadata is normalized but its Thingtime kind remains protected
 	assert.equal(validated.ok, true);
 	if (validated.ok !== true) return;
 	assert.deepEqual(validated.crystal, {
-		name: 'clip.MP4',
+		name: '  clip.MP4 ',
 		size: 123,
 		contentType: 'video/mp4',
 		mediaKind: 'video'

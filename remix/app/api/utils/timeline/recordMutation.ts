@@ -1,3 +1,4 @@
+import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { recordPageComponentBindings } from './componentBindings';
 import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
@@ -5,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { appendTimelineEvent } from './repository.ts';
-import { isProtectedThingtime } from '../../../schemas/registry.ts';
+import { MAX_STORABLE_NESTING, isProtectedThingtime } from '../../../schemas/registry.ts';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore.ts';
 import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../storage/userStorage';
 import { timelineMutationContext } from './mutationContext';
@@ -14,15 +15,18 @@ import { folderPlacementSnapshot } from '../../../timeline/folderPlacement.ts';
 /** Explicit content projection. Never copy a Mongo document wholesale: secure,
  * tokens, hidden-link keys, grants and platform ledger state are not revisions.
  * Dedicated protected families must supply their own approved snapshot adapter. */
+export function thingContentSnapshotValue(doc: any) {
+	return {
+		thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
+		tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
+		geo: doc.geo ?? null
+	};
+}
 export function thingContentSnapshot(doc: any): TimelineSnapshot | null {
 	if (!doc) return null;
 	return {
 		adapter: 'thing-content', version: 1,
-		value: copyBoundedJson({
-			thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
-			tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
-			geo: doc.geo ?? null
-		}, { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: 90, maxNodes: 90_000, sortKeys: true }, 'Thing revision')
+		value: copyBoundedJson(thingContentSnapshotValue(doc), { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: MAX_STORABLE_NESTING + 1, maxNodes: Infinity, sortKeys: true }, 'Thing revision')
 	};
 }
 
@@ -87,6 +91,7 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 /** Call within the content transaction after its successful CAS. A thrown
  * append/accounting error rolls back the content and head as one operation. */
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
+	await recordCreationContentEpoch(things, before, after, session);
 	const prepared = prepareThingMutation(before, after, capture);
 	if (!prepared) return null;
 	const { parts } = prepared;
@@ -117,6 +122,7 @@ export async function recordFolderPlacement(things: any, before: any, after: any
 		before.thingtime?.length !== 1 || !['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(before.thingtime[0]) ||
 		JSON.stringify(before.thingtime) !== JSON.stringify(after.thingtime)) throw new StorageMutationError(409, 'storage_conflict', 'This folder contains a managed item that must be moved through its own editor before deleting the folder');
 	if ((before.folderId ?? null) === (after.folderId ?? null)) return null;
+	await recordCreationContentEpoch(things, before, after, session);
 	const event = parseTimelineEvent({ formatVersion: 1, id: capture.id, ownerId: before.ownerId, thingId: before.shareId,
 		branchId: 'main', parentIds: before.timelineHeadId ? [before.timelineHeadId] : [], operationId: capture.operationId,
 		actorId: capture.actorId, source: capture.source, clientId: null, occurredAt: capture.now.toISOString(),

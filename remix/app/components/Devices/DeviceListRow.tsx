@@ -6,7 +6,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { ChevronRight, Laptop, Lock, Watch as WatchIcon } from 'lucide-react';
 
 import type { DeviceSnapshot, DeviceSummary } from './deviceTypes';
-import { DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
+import { DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen, resolvedDevicePresence } from './DeviceCard';
 import { deviceThingsPageHref } from './deviceNavigation';
 
 export type DeviceListRowProps = {
@@ -75,9 +75,9 @@ export const DeviceListRow = memo(
 				</Flex>
 				<Flex alignItems="center" gap={2} marginTop={1} minWidth={0} wrap="wrap">
 					<DeviceHealthBadges now={now} summary={device} />
-					<Text color="var(--tt-muted, #71717a)" fontSize="10px" title={device.lastSeenAt || undefined}>
+					{resolvedDevicePresence(device, now) === 'online' && device.serviceStatus !== 'degraded' ? <Text color="var(--tt-muted, #71717a)" fontSize="10px" title={device.lastSeenAt || undefined}>
 						{formatDeviceLastSeen(device.lastSeenAt, now)}
-					</Text>
+					</Text> : null}
 					{pendingCommandCount > 0 ? (
 						<Text color="var(--tt-accent, #db2777)" fontSize="10px" fontWeight={700}>
 							{pendingCommandCount} queued

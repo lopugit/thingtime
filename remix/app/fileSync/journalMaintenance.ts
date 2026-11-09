@@ -68,7 +68,7 @@ export function journalMaintenance(db: IDBDatabase, access: JournalAccess, keyRa
 						if (row.id === active || row.id === retained || row.id === baseline?.runId || row.id === early || earlyProgressRuns.has(row.id)) { next(false); return; }
 						if (row.retiring) { next(true); return; }
 						if (run.phase !== 'complete') { next(false); return; }
-						if (run.spec.streaming?.source === 'both') { next(true); return; }
+						if (run.spec.streaming && (run.confirmed || run.spec.streaming.source === 'both')) { next(true); return; }
 						if (run.retained) { next(true); return; }
 						get<PagedCheckpointHeader | undefined>(PAGED_CHECKPOINT_DRAFTS, [key, row.id], c => {
 							if (!c) { next(false); return; }

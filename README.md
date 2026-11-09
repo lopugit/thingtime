@@ -2,6 +2,35 @@
 
 https://thingtime.com
 
+### Private device location history and locate actions
+
+Paired devices can opt into private location observations, retained with
+`Never` as the default delete-after policy. iOS uses authorized Core Location
+significant-change updates; macOS uses its own location provider. A platform
+without a provider remains unavailable. Collection permission and notification
+permission are explicit local device choices, independent of pairing.
+
+Fork setup: author a private Webpage with `siteRoute: /devices/location` and a
+private settings Webpage with `pageKey: settings-device-location-settings`.
+`DeviceLocationWorkspace` supplies `location` data and typed transient actions;
+use ordinary editable blocks, collections and `tt-mapbox` marker children.
+Configure Mapbox through your account's existing encrypted integration vault
+and reference its ID from the map block; never embed a secret token in source.
+The framework intentionally does not seed an account-specific layout.
+
+Optional history expiry uses the authenticated observations cleanup cron and
+the deployment's existing `CRON_SECRET` bootstrap, with accounted resumable
+deletion rather than a database TTL. Targeted iOS notifications use the existing
+APNs provider configuration and a verified device registration. Uploaded audio
+uses canonical approved Files; iPhone notification tones require a separate
+CAF derivative under 30 seconds, preserving the original file. Device model
+artwork and attribution are in `remix/public/assets/devices/`; unknown models
+use a generic fallback, and no serial number is sent to an image provider.
+
+See the native [iOS](iOS/README.md) and [Mac](macos/ThingtimeNode/README.md)
+runbooks and the location acceptance checklist in `TESTING.md`. Provider
+acceptance is distinct from physical location, notification or speaker proof.
+
 ### Agent browsers and tasks
 
 ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
@@ -1272,7 +1301,12 @@ npm run worktree-setup
 The Remix `dev`, `build`, and lint entry points run the same dependency check
 automatically. It validates every direct dependency link and uses pnpm's shared
 store to repair missing or stale links, so `node_modules` never needs to be
-copied from another checkout.
+copied from another checkout. Install locks record their owning process.
+An interrupted owner fails promptly instead of waiting ten minutes; it does not
+steal a lock from a surviving pnpm child. Check this checkout for active installers
+before removing the named owner marker and empty lock directory, then rerun
+`npm run worktree-bootstrap`. Never remove another checkout’s lock or dependency
+files, and never infer that a live installer is stale from elapsed time alone.
 
 From the repository root, `npm run web-pms` starts or restarts the PM2-managed
 dev app `tt-nitro-react-router-9999`. The older `npm run remix-pms` command is
@@ -2569,6 +2603,8 @@ for those also set the dev server's origin and restart:
 
 ```sh
 THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+# Native signed range downloads require a trusted HTTPS origin instead.
+# Range targets last at most 60 seconds and require the exact signed Range header.
 ```
 
 Exact object versions are immutable, so the stand-in answers with an `ETag`
@@ -5466,6 +5502,8 @@ handler/database integration check; it does not claim HTTP/browser acceptance.
 
 ```sh
 npm --prefix remix run test:backups:account-profile
+# Pinned owner-content/reference/notification capture through real APIs:
+npm --prefix remix run test:backups:references
 ```
 
 The fixture proves concurrent updates keep the old database snapshot, independent
@@ -5902,16 +5940,76 @@ for the isolated browser harness and remaining native acceptance gates.
 
 ### Disposable Mac paged-sync acceptance
 
+The early fixture composes the production `DesktopFolderSync` and
+`createDesktopFolderHost` factories around a synthetic renderer/IPC surface,
+a real disposable API session and the production Swift adapter. It negotiates
+capabilities, uses fresh composite authorization and native operation guards,
+and keeps the real transfer worker's global fetch path. Both renderer and native
+device policies must confirm the requested budget. Its first-PUT measurement is
+server receipt of the worker's request; it is not renderer fetch invocation.
+The observer normalizes the native HTTP PUT target and separates runs with an
+append-position barrier. Its focused regression uses the real native network
+uploader and verifies that signed query values and body bytes are never logged.
+The 6 November canonical full two-way fixture run passed with first server-received
+native PUT at 19.030s; [PR 1363 evidence](PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md)
+records source fingerprints and its synthetic-only scope. Observer unit coverage
+alone is not end-to-end timing evidence.
+The canonical two-way proof requires a storage provider that supplies signed
+HTTPS download ranges. It checks that real capability before starting its timing
+run. The disposable fixture serves the canonical local attachment provider on
+HTTPS port 28313 while API and native identity stay on HTTP loopback port 28311.
+A fresh private one-day CA trusts only setup byte requests and the exact canonical
+transfer-worker child through a fixture-only preload. Other children and shipping
+launch code remain unchanged; certificate verification stays enabled. The fixture
+removes its keys, certificates and processes after completion. Focused tests must
+reject wrong and missing CA trust; no OS/keychain trust is installed.
+For upload-start attribution without exercising unsupported download storage, use
+`pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget --upload-start-diagnostic`.
+This keeps the canonical two-way connection but starts with an empty synthetic
+cloud folder. Its result is explicitly `upload-start-diagnostic`, reports
+`twoWayAcceptance: false`, and cannot satisfy the original two-direction proof.
+It must still verify the exact uploaded hash/receipt before seal, strict resume,
+and no replay. It does not establish native download acceptance.
+The debug-only Swift fixture observes identity admission/HTTP clock boundaries;
+digest-worker timing includes worker admission, IPC and scheduling.
+The follow-up fixture schedules fresh post-receipt native-page observations
+without awaiting them in the transfer consumer, then drains and asserts them
+before resume/success. It records immutable-operation READY/claim/receipt phases,
+per-session native request intervals and original identity-check provenance.
+Run `macos/ThingtimeNode/.build/debug/MacFolderSyncFixture --self-test-timing`
+after building the fixture to check native clock/request association.
+
+The instrumented 6 November full proof passed: `local.bin` READY 7.703s, claim
+13.670s, server PUT 19.024s. Six completed native calls after claim spent 4.522s
+in identity admission, 0.301s in identity HTTP and 0.075s in other native service.
+This uses the real shared 3-request/second identity scheduler after synthetic
+warm-up, not a cold installed-app baseline. No rate/authentication or production
+concurrency change is included. See the [qualified phase evidence](PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md#instrumented-follow-up).
+
+
+The fixture pipe multiplexes request IDs against one production native manager.
+`scan-changes` has an independent polling lane; active requests remain serialized,
+and cancellation keeps a lane occupied until the native manager acknowledges it.
+Early proof receipt checks share the next fresh production feed page, preserving
+its normal long-poll policy and avoiding competing proof-only polling requests.
+Run `pnpm --dir remix run test:files:mac-fixture-transport` for transport regressions.
+The early timing proof records queue and service aggregates plus summed native
+identity verification separately; these measurements do not establish installed
+app performance. Raw native stderr and throwable messages are never forwarded.
+
 Build the current server and non-shipping Swift fixture, then run:
 
 ```sh
 swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
-(cd remix && NITRO_PRESET=node-server pnpm exec nitro build)
+NITRO_PRESET=node_middleware pnpm --dir remix run build:server
 pnpm --dir remix run test:files:mac-paged
 ```
 
 The runner needs local `mongod`, `mongosh` and an installed Apple Development
 signing identity (`THINGTIME_TEST_SIGNING_IDENTITY` can select it explicitly).
+It builds and checks the source-tree Rust `commander-indexer` before provisioning
+any test account or cloud folders; `THINGTIME_MAC_SYNC_INDEXER_BIN` may select an
+exact already-built fixture binary. A missing indexer fails at preflight.
 It signs a temporary test executable with the app-scope bookmark entitlement;
 it never installs or replaces Thingtime. Ports 28311/28312 are reserved only for
 this disposable HTTP server and Mongo replica. A macOS OS network sandbox
@@ -5934,6 +6032,21 @@ directories and verifies two byte transfers and complete 10,003-path checkpoints
 through reply loss and restart. Allow up to 20 minutes. Mac access 1.5.1 or iOS
 access 1.3.1 is required for the paged native path: earlier builds retain the
 10,000-path bound because their publication alias check used a whole listing.
+
+For a nested mixed-file workload, use `-- --wide --wide-mixed` with the same
+runner. It retains the 10,001 API-created sibling folders and adds six nested
+folders with 24 native files spanning empty, small, medium and multi-range
+sizes. The proof checks all 10,033 paths, exact local/cloud byte hashes, lost
+reply and native restart recovery, complete checkpoints, and zero transfer
+operations on an unchanged rerun. The result reports wall time by phase and
+native/HTTP operation counts. These are fixture measurements on an isolated
+local server and disk; they do not predict personal drive or remote-provider
+throughput. The standard wide runner has a 20-minute deadline and cleans up its test state.
+The full 10,033-path mixed run has a 35-minute deadline because API import of
+10,001 ordinary folders and the subsequent native/HTTP recovery are measured
+separately. Diagnostic `--wide-count` runs retain the 20-minute deadline.
+For a quicker diagnosis of the same path, add `--wide-count=1000`; the default
+remains 10,001 siblings and only the default proves the over-10,000 path case.
 
 
 ### Mac file-sync lifecycle checks
@@ -6715,7 +6828,7 @@ subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
 ### Saved Mapbox map applications
 
 A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
-`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+`api.maps` 1.2.0 operations (including batched complete-address lookups). Save your own Mapbox token in the private Thingtime
 Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
 The browser map requires a public `pk` token; never put secret tokens in page
 definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
@@ -6726,6 +6839,16 @@ saving selected geocodes additionally requires Mapbox Permanent Geocoding
 entitlement and its storage conditions. No new Vercel provider-key variable is
 needed. Standard Mapbox navigation output cannot be cached. See
 [editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+Saved markers may use generic base/actual-zoom visual scaling and explicit
+association keys while retaining every original member/action and route geometry.
+Reusable `tt-rich-text` fields submit native Editor.js JSON plus optional paired
+plain text after an awaited latest save; `tt-menu` composes editable pointer,
+keyboard and touch menus. Keep these application definitions in private saved
+Things. See the [canonical Builder guide](/docs/builder) and
+[map contracts](docs/maps.md); no new provider credential or Vercel variable is
+needed. Client authoring requires Things1.50/update1.19/resolve1.12, and expanded
+Action input descriptors require actions-run1.41 on the selected origin.
 
 ### Storage recovery and production checks
 
@@ -6863,12 +6986,13 @@ home-plane transactional account path. No provider request API is added here.
 ### Agent provider-credential import and authentication
 
 Admin → External integrations supports selected credential files and masked
-paste; `npm --prefix remix run credentials:import -- --help` documents the
-write-only Node handoff. Both require the exact receiving origin to advertise
-`api.credentials-import` 1.0.0 (compatible 1.x). Read
-[the end-to-end agent runbook](docs/agent-credential-workflows.md) for Google
-Web application JSON, generic provider text/JSON, safe approvals, password
-AutoFill, OAuth grants, passkeys and platform-specific constraints.
+paste. `npm --prefix remix run credentials:import -- --help` documents the
+write-only Node handoff and its read-only preflight. The exact receiving origin
+must advertise compatible `api.credentials-import` 1.x. Google Web application
+JSON and literal text/JSON use 1.0.0. The scoped Connections OAuth client format
+for Meta and other registered confidential clients requires 1.1.0. See
+[the end-to-end agent runbook](docs/agent-credential-workflows.md) for the
+provider-specific steps, browser approval and separate OAuth acceptance.
 
 Fork setup uses the existing home Mongo replica set, administrator account,
 `THINGTIME_ADMIN_VAULT_KEY` bootstrap (32 random bytes encoded base64url), and
@@ -6879,3 +7003,43 @@ the fork's exact Connections callback with Google, download its web-client
 JSON through the provider, then import the selected file; never commit it.
 The importer does not infer arbitrary provider schemas, configure Google Mail's
 separate bundle, or bootstrap a signed-out native password bridge.
+
+### Account-file restore worker proof
+
+Independent portable backup destination registration, administrator-vault setup,
+read-only readiness discovery and remaining execution gates are documented in
+[backup destinations](docs/backup-destinations.md). A configured destination is
+not yet a working snapshot/restore workflow or provider durability proof.
+
+Run `corepack pnpm --dir remix run test:backups:file-restore` with local `mongod`
+and `mongosh` on macOS. It owns replica port **28167**, isolated synthetic
+accounts and private temporary vault/object directories. It uses canonical APIs,
+including the fixture-only documented administrator policy for upload approval
+and the existing legacy-index migration/cache drain; it never imports app env or
+personal credentials. The proof reads a copied sealed vault after source-object
+and first-vault loss, preserves nested folder metadata and file history, and
+checks current/historical bytes, interruption and authority races. This is an
+internal selected-file worker, not a new public restore UI or complete account
+restore. See [the contract](docs/portable-backups.md#reviewed-account-file-publication--6-november-2026).
+
+
+### Durable backup dispatch setup
+
+The supported Vercel scheduler calls `/api/v1/backups/run` every five minutes.
+It reuses the deployment's existing `CRON_SECRET` bootstrap credential; do not
+copy it into the application vault, a job Thing, command arguments or client.
+No new provider credential or permanently running supervisor is required.
+The route negotiates `api.backup-dispatch` 1.0.0 and accepts no selectors or user
+payload. An authenticated same-origin full administrator can invoke the same
+bounded maintenance pass with POST `{}`. The normal activity/error/request
+reporting covers the registered route; its response exposes aggregate counts.
+
+Protected admission is the durable outbox. Request-attached background dispatch
+reduces latency, while the scheduler recovers a request/process disappearing
+before startup. Reserved attempt IDs and original-session/generation checks fence
+late old initialization, pause/cancel and uncertain startup. SDK acceptance,
+Workflow execution, independent storage verification and selected restore
+completion are separate outcomes. A configured cron or declared capability does
+not prove the selected deployment actually ran it; verify real scheduling before
+claiming the complete workflow ready. Independent storage setup remains in
+[backup destinations](docs/backup-destinations.md).

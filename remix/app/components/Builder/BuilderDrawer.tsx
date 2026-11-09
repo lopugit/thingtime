@@ -484,9 +484,11 @@ const BlockInspector = ({
      <FieldRow label="Format"><Input {...inputStyles} value={String(block.format.kind || '')} onChange={e => patch({ format: { ...block.format, kind: e.target.value } })} /></FieldRow>
     </> : null}
     {block.type === 'collection' ? <>
-     {['itemsPath', 'label', 'empty', 'filterPath', 'filterValue'].map(key => <FieldRow key={key} label={key}>
+     {['itemsPath', 'label', 'empty', 'filterPath', 'filterValue', 'totalPath', 'selectedKey', 'itemKey', 'countStateKey'].map(key => <FieldRow key={key} label={key}>
       <Input {...inputStyles} aria-label={`Collection ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
      </FieldRow>)}
+     <FieldRow label="Collection source"><StructuredValue key={`${block.id}-collection-source`} value={block.props?.source} onChange={value => patch({ props: { ...block.props, source: value } })} /></FieldRow>
+     <FieldRow label="Reveal selected"><Select {...inputStyles} aria-label="Reveal selected" value={block.props?.revealSelected === true ? 'yes' : 'no'} onChange={e => patch({ props: { ...block.props, revealSelected: e.target.value === 'yes' } })}><option value="no">No</option><option value="yes">Yes</option></Select></FieldRow>
      <FieldRow label="Default page size"><Select {...inputStyles} aria-label="Default page size" value={String(block.props?.size ?? 'all')} onChange={e => patch({ props: { ...block.props, size: ['all','infinite'].includes(e.target.value) ? e.target.value : Number(e.target.value) } })}>
       <option value="all">Show all</option><option value="5">5</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="infinite">Infinite scrolling</option>
      </Select></FieldRow>

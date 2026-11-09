@@ -31,7 +31,18 @@ fd=os.open(sys.argv[3],os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
 os.fchmod(fd,0o600)
 with os.fdopen(fd,'wb') as out: plistlib.dump(data,out)
 PY
-xcodebuild test-without-building -xctestrun "$runfile" -destination "$DEST" \
-  -only-testing:ThingtimeTests/MobileDevicePairingTests \
-  -only-testing:ThingtimeTests/MobileDeviceLiveTests \
+selectors=(
+  -only-testing:ThingtimeTests/MobileDevicePairingTests
+  -only-testing:ThingtimeTests/MobileDeviceLocationTests
+  -only-testing:ThingtimeTests/MobileDeviceCommandWorkerTests
+  -only-testing:ThingtimeTests/MobileDeviceLocationLiveTests
+  -only-testing:ThingtimeTests/MobileDeviceLiveTests
   -only-testing:ThingtimeTests/ThingtimeWebDestinationTests
+)
+if [ "${MOBILE_DEVICE_TEST_LIVE_ONLY:-0}" = "1" ]; then
+  selectors=(
+    -only-testing:ThingtimeTests/MobileDeviceLocationLiveTests
+    -only-testing:ThingtimeTests/MobileDeviceLiveTests
+  )
+fi
+xcodebuild test-without-building -xctestrun "$runfile" -destination "$DEST" "${selectors[@]}"
