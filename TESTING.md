@@ -2306,6 +2306,11 @@ email whose link points at the attacker.
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
       than an `outputDirectory` selected by the dashboard.
+- [ ] Confirm the emitted Nitro function loads bcrypt from its packaged native
+      binding. Linux builds must reject symbols newer than Vercel's glibc 2.34.
+      The emitted binding must verify existing bcrypt 5 hashes and fresh hashes
+      at the requested cost. Before promotion, confirm the staged deployment's
+      app shell and Nitro capability manifest respond successfully.
 - [ ] Confirm the Vercel output verifier rejects any server chunk that leaves
       `unicode-emoji-json/data-by-emoji.json` as a runtime package lookup
       without tracing the JSON asset. In an isolated copy of the generated
@@ -12284,6 +12289,10 @@ transfer, whole-account snapshots or production deployment.
   nonempty grant snapshot on successful status, arm, and continuation replies.
   Verify an enabled connection arms after a null initial status, live progress
   appears, and the explicit background action acknowledges the same run.
+- Run `testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey` to
+  exercise Foundation's resolved directory URLs. On the iPhone, reopen the app
+  after arming an enabled backup and confirm the saved native run resumes
+  without a second tap and publishes verified originals to its destination.
 - Let the native run authorization expire at the same saved revision. On the
   next five-minute check, verify the browser reauthorizes the exact current
   binding. A live binding returns its existing handle. An expired binding
