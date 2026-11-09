@@ -331,15 +331,15 @@ const authorizeHeadersIndex = routes.findIndex(
 	(route) =>
 		route.continue === true &&
 		typeof route.src === 'string' &&
-		route.src.includes('/authorize') &&
+		['/authorize', '/authorize/', '/credentials/import', '/credentials/import/'].every(path => new RegExp(route.src).test(path)) &&
 		route.headers?.['X-Frame-Options'] === 'DENY' &&
 		route.headers?.['Content-Security-Policy'] === authorizeCsp
 );
 if (authorizeHeadersIndex === -1) {
-	throw new Error('Vercel output config does not frame-deny the /authorize consent page.');
+	throw new Error('Vercel output config does not frame-deny the consent and credential review pages.');
 }
 if (authorizeHeadersIndex > spaIndex) {
-	throw new Error('Vercel output stamps /authorize frame-deny headers after the SPA fallback.');
+	throw new Error('Vercel output stamps consent and credential review frame-deny headers after the SPA fallback.');
 }
 
 const cspHeadersIndex = routes.findIndex(
@@ -352,7 +352,7 @@ if (cspHeadersIndex > spaIndex) {
 	throw new Error('Vercel output stamps the global CSP after the SPA fallback.');
 }
 if (cspHeadersIndex > authorizeHeadersIndex) {
-	throw new Error('Vercel output stamps the global CSP after the /authorize override, so /authorize would lose frame-ancestors.');
+	throw new Error('Vercel output stamps the global CSP after the frame-deny override, so sensitive pages would lose frame-ancestors.');
 }
 const designBundlesHeadersIndex = routes.findIndex(
 	(route) =>
@@ -419,7 +419,7 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 }
 
 console.log(
-	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
+	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and consent and credential review frame-deny.'
 );
 
 const draftHeaders = routes.find(route => route.src === '^/draft-preview(?:/.*)?$' && route.headers?.['Content-Security-Policy'] === draftPreviewCsp);
