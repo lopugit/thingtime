@@ -5,6 +5,7 @@
 // Prerequisite: NITRO_PRESET=node-server npm --prefix remix run build:server.
 // Required CONNECTOR_SETTINGS_EVIDENCE_DIR; optional PLAYWRIGHT_MODULE,
 // CHROMIUM_EXECUTABLE, and THINGTIME_TEST_MONGOD. No app .env files are loaded.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -143,6 +144,7 @@ try {
   await page.unroute('**'+settingsPath);
   await page.setViewportSize({width:1440,height:960});
   const host=page.locator('[data-settings-document="connector-confirmations"]');
+  await enableCurrentPageBuilder(page);
   await host.getByRole('button',{name:'Edit layout',exact:true}).click();
   await host.getByRole('button',{name:'Open Builder inspector',exact:true}).click();
   const selector=page.getByRole('combobox',{name:'Select block',exact:true});

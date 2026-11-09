@@ -2,6 +2,7 @@
 // Real API/browser acceptance against a task-owned disposable replica and two runtimes.
 // No user env files, credentials, profiles, PM2 entries or production data are loaded.
 // Mongo driver use is limited to replica initialization; all product data uses APIs.
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -177,6 +178,7 @@ async function browserAcceptance() {
    await measure('connections-' + width + '-cards'); checks.push(width + ': actual API cards, search, empty, freshness, keyboard details, refresh, full scroll');
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await enableCurrentPageBuilder(page);
   await host.getByRole('button', { name: 'Edit layout', exact: true }).click(); await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
   const drawer = page.getByTestId('builder-drawer');
   for (const [id, label, value] of [['mongo-intro', 'Block text', 'Connection sources reviewed independently'], ['mongo-source-counts', 'Block text', '{item.counts} · reviewed'], ['mongo-search', 'Element placeholder', 'Find a runtime']]) {

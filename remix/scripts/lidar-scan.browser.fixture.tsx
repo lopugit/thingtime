@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
@@ -59,7 +60,7 @@ function Fixture() {
 		<footer>End of Things</footer>
 	</LidarScanProvider>;
 }
-const router = createBrowserRouter([{ id: 'root', path: '*', element: <Fixture /> }], {
+const router = createBrowserRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }], {
 	hydrationData: { loaderData: { root: { user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' } } }
 });
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);

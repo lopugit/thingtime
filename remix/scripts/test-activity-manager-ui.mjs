@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -18,7 +19,7 @@ if (!process.env.TT_ACTIVITY_UI_WORKER) {
 		source = `import {ActivityManagerPage} from '../app/components/Activity/ActivityManagerPage';
 import {activityInterval,clearActivityInterval,activityEvents} from '../app/activity/activityManager';\n${source}`;
 		source = source
-			.replace('element: <Fixture />', 'element: <ActivityFixture />')
+			.replace('<Fixture />', '<ActivityFixture />')
 			.replace(
 				"if (desktop && (taskQA || homeQA) && url.pathname === '/api/v1/webpages/resolve') {",
 				"if (url.pathname === '/api/v1/webpages/resolve') {"
@@ -135,6 +136,7 @@ import {activityInterval,clearActivityInterval,activityEvents} from '../app/acti
 			assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
 			await page.screenshot({ path: join(evidence, `${label}-bottom.png`) });
 		}
+		await enableCurrentPageBuilder(page);
 		await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.getByRole('heading', { name: 'Activity manager', exact: true }).click();
 		await page.getByLabel('Block text', { exact: true }).fill('Activity manager · saved');

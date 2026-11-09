@@ -7,6 +7,7 @@ import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 import type { BuilderChrome } from '../Builder/WebpageBlocksRenderer';
 import type { UseWebpageDraft } from '../Builder/useWebpage';
+import { useCurrentPageBuilder } from '../Builder/CurrentPageBuilder';
 import { useBuilderChrome } from '../Builder/useBuilderChrome';
 import { BuilderDrawer } from '../Builder/BuilderDrawer';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
@@ -22,6 +23,8 @@ export type SettingsDocumentHostProps = {
   layoutEditingDisabled?: boolean;
   /** View-only consumers render the saved document without layout management UI. */
   showLayoutControls?: boolean;
+  /** The normal view also uses the editable document as its runtime draft. */
+  previewRuntimeLayoutDraft?: boolean;
   /** Opt in to the existing Builder media upload controls in this document. */
   allowMediaUploads?: boolean;
   /** Keep the duplicate floating Lopu bubble off narrow control workspaces.
@@ -75,7 +78,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', editLayoutLabel = 'Edit layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, allowMediaUploads = false, clearMobileLaunchers = false, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', editLayoutLabel = 'Edit layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, previewRuntimeLayoutDraft = false, allowMediaUploads = false, clearMobileLaunchers = false, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -86,6 +89,9 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', e
   const [document, setDocument] = React.useState<SettingsDocument>(() => { const seed = initial(); return migrateBlocks ? { ...seed, blocks: settingsDocumentBlocks(migrateBlocks(seed.blocks)) } : seed; });
   const [saved, setSaved] = React.useState(document);
   const [editing, setEditing] = React.useState(false);
+  const { active: pageBuilderActive } = useCurrentPageBuilder();
+  const showControls = showLayoutControls && pageBuilderActive;
+  if (!pageBuilderActive && editing) setEditing(false);
   const [ready, setReady] = React.useState(!writable);
   const [error, setError] = React.useState('');
   const [reload, setReload] = React.useState(0);
@@ -166,17 +172,21 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', e
     save, resetToDefault: async () => { update(defaults); return { ok: true }; },
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
+  // Keep unsaved edits available for reentry without applying them to the live view.
+  const viewBlocks = !pageBuilderActive && !previewRuntimeLayoutDraft && dirty
+    ? migrateBlocks ? settingsDocumentBlocks(migrateBlocks(saved.blocks)) : saved.blocks
+    : document.blocks;
   return <Box minW={0} data-settings-document={documentScope.documentKey} data-tt-mobile-control-workspace={clearMobileLaunchers ? true : undefined}>
-    {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
+    {showControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
       <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : editLayoutLabel}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
     </Flex>}
     {showLayoutControls && error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {showLayoutControls && editing ? <SettingsEditor key="edit" allowMediaUploads={allowMediaUploads} draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+    {showControls && editing ? <SettingsEditor key="edit" allowMediaUploads={allowMediaUploads} draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
       {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
-    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
+    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: viewBlocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 

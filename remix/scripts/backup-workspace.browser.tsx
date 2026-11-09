@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 /** Task-owned browser entry. Default mode is explicitly synthetic; the real
  * HTTP mode uses production hooks, authenticated handlers and account-saved
  * Builder documents against the disposable fixture origin only. */
@@ -52,5 +53,5 @@ const router = createMemoryRouter([{ id: 'root', path: '*', loader: realMode ? a
  const result = await response.json();
  if (!response.ok || !result.user?.id || result.user.accountKind !== 'user') throw Error('The isolated test account is not authenticated.');
  return { user: result.user, dataPlane: 'home' };
-} : () => ({ user: { id: 'synthetic-owner', accountKind: 'user' }, dataPlane: 'home' }), element: <ChakraProvider><Box maxW="880px" mx="auto" p={4}>{realMode ? <RealWorkspace /> : <BackupWorkspace scope={{ ownerId: 'synthetic-owner', apiOrigin: location.origin, dataPlane: 'home', identity: 'fixture' }} adapter={adapter} renderDestinationPicker={({ onLocationChange }) => <button type="button" onClick={() => onLocationChange('destination', 'Recovered')}>Recovered</button>} accountTransport={transport} />}</Box></ChakraProvider> }], { initialEntries: [location.pathname + location.search] });
+} : () => ({ user: { id: 'synthetic-owner', accountKind: 'user' }, dataPlane: 'home' }), element: <CurrentPageBuilderFixture><ChakraProvider><Box maxW="880px" mx="auto" p={4}>{realMode ? <RealWorkspace /> : <BackupWorkspace scope={{ ownerId: 'synthetic-owner', apiOrigin: location.origin, dataPlane: 'home', identity: 'fixture' }} adapter={adapter} renderDestinationPicker={({ onLocationChange }) => <button type="button" onClick={() => onLocationChange('destination', 'Recovered')}>Recovered</button>} accountTransport={transport} />}</Box></ChakraProvider></CurrentPageBuilderFixture> }], { initialEntries: [location.pathname + location.search] });
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);

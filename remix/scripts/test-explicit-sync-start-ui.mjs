@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -64,6 +65,7 @@ try {
      assert.equal(await page.getByRole('button', { name: 'Choose folder', exact: true }).isDisabled(), true);
      assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 0);
      const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
+     await enableCurrentPageBuilder(page);
      await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
      await layout.locator('[data-block-id="folder-card-background-help"]').click();
      const selected = page.getByRole('combobox', { name: 'Select block', exact: true });
@@ -250,6 +252,7 @@ try {
       const notifications = card.getByRole('textbox', { name: 'Progress notification interval (minutes)', exact: true });
       assert.equal(await notifications.inputValue(), '30');
       const layout = card.locator('[data-settings-document="photo-backup-automation-controls"]');
+      await enableCurrentPageBuilder(page);
       await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
       await layout.locator('[data-block-id="speed-label"]').click();
       const blocks = page.getByRole('combobox', { name: 'Select block', exact: true });

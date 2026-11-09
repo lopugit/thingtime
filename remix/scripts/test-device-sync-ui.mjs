@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, writeFile, rm, mkdir } from 'node:fs/promises';
@@ -16,7 +17,7 @@ if (!process.env.TT_DEVICE_SYNC_UI_WORKER) {
 		let source = await readFile(join(root, 'scripts/mobile-sync-editor.browser.tsx'), 'utf8');
 		source = `import { useLocation } from 'react-router';
 import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingParentPaths';\nimport {ThingFileLocation} from '../app/components/Things/ThingFileLocation';\nimport {UnfiledAttachmentsPage} from '../app/components/Things/UnfiledAttachmentsPage';\nimport {DeviceSyncPanel,DeviceSyncBrowser} from '../app/components/Devices/DeviceSyncBrowser';\nimport {DeviceCard} from '../app/components/Devices/DeviceCard';\nimport {DeviceDetailsDrawer} from '../app/components/Devices/DeviceDetailsDrawer';\n${source}`;
-		source = source.replace('element: <Fixture />', 'element: <DeviceBrowserFixture />');
+		source = source.replace('<Fixture />', '<DeviceBrowserFixture />');
 		source = source.replace("id: 'root', path: '/'", "id: 'root', path: '*'");
 		source = source
 			.replace(
@@ -215,6 +216,7 @@ import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingP
 		}
 		await page.setViewportSize({ width: 1440, height: 1000 });
 		await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
+		await enableCurrentPageBuilder(page);
 		await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).click();
 		await page.getByLabel('Block text', { exact: true }).fill('My device files');
@@ -222,6 +224,7 @@ import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingP
 		await page.reload();
 		await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
 		await page.getByRole('heading', { name: 'My device files', exact: true }).waitFor();
+		await enableCurrentPageBuilder(page);
 		await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.getByText('{item.name}', { exact: true }).click();
 		await page.getByLabel('Block text', { exact: true }).fill('{item.name} · saved');
@@ -233,6 +236,7 @@ import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingP
 		results.push({ builderHeadingSaveReload: true, builderRepeatedFieldSaveReload: true });
         await page.getByRole('button', { name: 'Open recorded location', exact: true }).click();
         await page.getByRole('link', { name: 'Cloud documents', exact: true }).waitFor();
+        await enableCurrentPageBuilder(page);
         await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await page.getByText('{item.name}', { exact: true }).click();
         await page.getByLabel('Block text', { exact: true }).fill('{item.name} · location');
@@ -245,6 +249,7 @@ import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingP
         await page.getByRole('button', { name: 'Open parent paths', exact: true }).click();
         await page.getByRole('button', { name: 'Scan / continue parent references', exact: true }).click();
         await page.getByRole('link', { name: 'Backups', exact: true }).waitFor();
+        await enableCurrentPageBuilder(page);
         await page.getByRole('button', { name: 'Edit layout', exact: true }).click();
         await page.getByText('{item.name}', { exact: true }).click();
         await page.getByLabel('Block text', { exact: true }).fill('{item.name} · linked');
