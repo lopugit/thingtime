@@ -7212,6 +7212,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       bundle must retain its signing identity and designated requirement before
       replacement; verify the installed copy and permission preflights after
       launch. A fresh install uses Apple Development and never ad-hoc signing.
+- [ ] With the installed app's managed Node and its bundled Electron child
+      running, quit the desktop window and install the next verified stable
+      bundle with `install:local`. The installer must let the stopped service's
+      processes exit before replacing the app, then start one managed Node from
+      the verified replacement. If an installed process stays open, preserve
+      the prior app and restart its managed service.
 - [ ] In the installed Electron app's footer, confirm the branch and full commit
       link match `Contents/Resources/web/metadata.json`, even when the selected
       Thingtime origin's root data reports a different deployment branch.

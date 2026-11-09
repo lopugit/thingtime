@@ -326,11 +326,22 @@ export function installLocalApp(options = {}) {
         serviceLifecycle.stop(serviceState);
         serviceStopped = true;
       }
-      const pids = runningPids(targetExecutable);
+      let pids = runningPids(targetExecutable);
+      let nodePids = nodeRunningPids(targetNodeExecutable);
+      if (serviceStopped && (pids.length || nodePids.length)) {
+        // launchctl bootout can return before Node and its bundled Electron
+        // child have exited. Keep both replacement guards active while they drain.
+        const deadline = performance.now() + 2000;
+        const delay = new Int32Array(new SharedArrayBuffer(4));
+        while ((pids.length || nodePids.length) && performance.now() < deadline) {
+          Atomics.wait(delay, 0, 0, 50);
+          pids = runningPids(targetExecutable);
+          nodePids = nodeRunningPids(targetNodeExecutable);
+        }
+      }
       if (pids.length) {
         throw new Error(`Quit the installed Thingtime app before replacing it (running PID${pids.length === 1 ? '' : 's'}: ${pids.join(', ')}).`);
       }
-      const nodePids = nodeRunningPids(targetNodeExecutable);
       if (nodePids.length) {
         const qualifier = serviceState.registered ? 'Thingtime Node did not stop cleanly' : 'Quit the unmanaged Thingtime Node process';
         throw new Error(`${qualifier} before replacing the app (running PID${nodePids.length === 1 ? '' : 's'}: ${nodePids.join(', ')}).`);
