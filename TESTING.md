@@ -12284,6 +12284,10 @@ transfer, whole-account snapshots or production deployment.
   nonempty grant snapshot on successful status, arm, and continuation replies.
   Verify an enabled connection arms after a null initial status, live progress
   appears, and the explicit background action acknowledges the same run.
+- Run `testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey` to
+  exercise Foundation's resolved directory URLs. On the iPhone, reopen the app
+  after arming an enabled backup and confirm the saved native run resumes
+  without a second tap and publishes verified originals to its destination.
 - Let the native run authorization expire at the same saved revision. On the
   next five-minute check, verify the browser reauthorizes the exact current
   binding. A live binding returns its existing handle. An expired binding
