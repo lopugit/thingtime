@@ -35,13 +35,17 @@ recovery cases are included in that workspace count. [Static checks](final-stati
 raw TypeScript and its zero-error ratchet pass; full lint has zero errors and
 359 warnings. Production source hashes stayed unchanged through build/checks.
 Test-only fixture corrections after the build are recorded separately and do
-not change the compiled assets. The full unit aggregate passed an earlier
-iteration; final-head CI is still a separate gate after publication.
+not change the compiled assets. The published recovery checkpoint `4492bc7e` passed API, build/typecheck/unit,
+native compilation and CodeQL checks. Later evidence-only heads retain their
+own CI state; [checkpoint checks](../final-preview/published-checkpoint-checks.json).
 
-Remaining delivery: the final identity fixture batch, matching hosted image and
-fresh provider checks, actual connected-host artifact delivery and separately
-authorized release. The earlier provider candidate must not be activated for
-this new renderer. The native evidence is development-app acceptance, not a
+The [final identity fixture batch](../final-isolation/README.md) and the
+[matching hosted provider preflight](../final-provider/README.md) have now passed.
+The new [deployed preview](../final-preview/README.md) also passed clean native
+render/download with the same renderer hash. Remaining delivery is final-head
+CI, actual connected-host artifact delivery and separately authorized release.
+The superseded provider candidate was retired; only the accepted matching
+snapshot is retained. Native evidence is development-app acceptance, not a
 stable production installation.
 
 ## Earlier reviewed build

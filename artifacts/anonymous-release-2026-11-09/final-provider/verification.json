@@ -1,0 +1,72 @@
+{
+  "providerPreflight": "passed",
+  "renderedFiles": 5,
+  "artifactFiles": [
+    {
+      "name": "thingtime-draft.json",
+      "bytes": 2081,
+      "sha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4"
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "bytes": 116094,
+      "sha256": "37130b20fdd314190ee1e1d57123fcaa6c771d69283686d3a1f39c456851c26c",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "card.png",
+      "bytes": 96582,
+      "sha256": "5a94c5b9f6a6d9fce3bfc01f6911dea28d36a9ffc2067548852c45f62de0946c",
+      "width": 400,
+      "height": 560
+    },
+    {
+      "name": "viewport-390x844.png",
+      "bytes": 79632,
+      "sha256": "a69f0becd48ecfed25d10ddec052cf8020bf24046062512ac14da978453335bf",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "name": "viewport-320x844.png",
+      "bytes": 57347,
+      "sha256": "251fc49417d9aa728e4e46db593659e2a035c393dd92eaf94ad95573c381e353",
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "verifiedChecks": [
+    "native render",
+    "canonical JSON",
+    "3 viewport PNGs",
+    "card PNG",
+    "exact artifact hashes/dimensions and text",
+    "bad crop refusal",
+    "stop and delete both render sandboxes"
+  ],
+  "runnerSha256": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4",
+  "sourceArtifactHashes": {
+    "remix/.vercel/output/static/index.html": "cf273daaf8e3b06264646a02f1fa4f1a5e7c5f10bc92859d1753e7e96977e402",
+    "remix/.vercel/output/static/draft-preview/runner.js": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4",
+    "remix/.vercel/output/static/platform/runtime.js": "7a59a77625c7e7d5bf4ee46bae48bd715d5306c764ad050825b495d85831d198",
+    "remix/.vercel/output/functions/__server.func/index.mjs": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+    "remix/dist/draft-preview/runner.js": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4"
+  },
+  "publishedSourceCommit": "4492bc7eaf8fdf577c88af513c03a98ccca984ae",
+  "isolated": true,
+  "browserSandbox": true,
+  "allThreeVMsIndependently404": true,
+  "acceptedImageRetained": true,
+  "verifiedSnapshotRetained": true,
+  "retentionDays": 30,
+  "snapshotExpiresAt": "2026-12-09T17:01:41.480Z",
+  "supersededSnapshotDeletionReadback": "deleted",
+  "supersededImageDeletionReadback": 404,
+  "lifecycle": {
+    "totalBootstrapAndDiagnosticVMs": 7,
+    "recoveryCandidateBootstrapVMs": 1,
+    "recoveryCandidateRenderVMs": 2
+  },
+  "activatedOnProduction": false
+}

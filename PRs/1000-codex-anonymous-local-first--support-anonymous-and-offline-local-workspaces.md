@@ -2,6 +2,32 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Matching provider, preview and identity acceptance — 2026-11-10
+
+Published recovery checkpoint `4492bc7e` uses renderer `021173e8`. The matching
+private provider snapshot passed native rendering of canonical JSON and four
+PNGs, invalid-crop refusal and independent cleanup; superseded task resources
+were retired. Its new branch preview independently passed the real no-login UI,
+JSON download, three responsive widths, card crop and no-account-request checks.
+[Provider artifacts](../artifacts/anonymous-release-2026-11-09/final-provider/README.md) ·
+[Deployed preview](../artifacts/anonymous-release-2026-11-09/final-preview/README.md).
+
+The final identity batch passed Character/anonymous privacy, A/B callback
+retirement across tabs, logout/reconnect/revocation and wrong-plane refusal.
+Three fixture sources were corrected for isolated browser online state and the
+current sync versions; provider identity was explicitly rerun with Chromium
+sandbox enabled. Exact copied/source provenance and environment prerequisites
+are retained in [the isolation evidence](../artifacts/anonymous-release-2026-11-09/final-isolation/README.md).
+The final fixture sources passed TypeScript and the zero-error ratchet. The
+published runtime checkpoint passed API, build/typecheck/unit, native compile
+and CodeQL checks; later evidence-only heads retain their own CI state.
+These are scoped tests, not actual origin migration or provider OAuth acceptance.
+Production activation and actual current-host artifact delivery remain on hold;
+there is still one canonical Thingtime MCP and no task-restart automation.
+This evidence checkpoint uses a refreshed portable structural Graphify snapshot.
+The earlier bounded semantic attempts timed out; no fresh semantic coverage of
+the changed documentation is claimed, and the shared proxy was left unchanged.
+
 ## Bound-file recovery — 2026-11-10
 
 History now restores ordinary deleted posts, linked comments and complete retained
@@ -16,8 +42,8 @@ private read denial. Legacy missing retention and existing deletion conflicts
 remain explicit refusals. Workspace checks passed 947 plus five shell checks,
 with 113 explicit opt-in skips; raw TypeScript, ratchet and full lint passed.
 [Build, browser, native and check receipts](../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
-The earlier hosted snapshot has a different renderer hash and must be replaced
-and verified before activation. No production configuration or stable app changed.
+The earlier hosted snapshot was replaced by the matching verified candidate
+recorded above. No production configuration or stable app changed.
 
 ## Vault and Character acceptance — 2026-11-10
 

@@ -16,6 +16,21 @@ test(
 		const reader = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
 			author = await browser.newContext(),
 			page = await reader.newPage();
+		// Docker's loopback-only network can report navigator.onLine=false while
+		// the fixture API is reachable. Keep that signal aligned with each switch.
+		const network = await reader.newCDPSession(page);
+		await network.send('Network.enable');
+		const connectivity = async (value: boolean) => {
+			await reader.setOffline(value);
+			await network.send('Network.overrideNetworkState', {
+				offline: value,
+				latency: 1,
+				downloadThroughput: 100_000_000,
+				uploadThroughput: 100_000_000,
+				connectionType: value ? 'none' : 'ethernet'
+			});
+		};
+		await connectivity(false);
 		page.setDefaultTimeout(15_000);
 		const headers = { Origin: new URL(base!).origin },
 			url = (path: string) => new URL(path, base).href,
@@ -65,7 +80,7 @@ test(
 						return true;
 				return false;
 			});
-			await reader.setOffline(true);
+			await connectivity(true);
 			offline = true;
 			assert.equal(
 				await page.evaluate(async () => {
@@ -110,7 +125,7 @@ test(
 				[]
 			);
 			offline = false;
-			await reader.setOffline(false);
+			await connectivity(false);
 			await page.reload();
 			await page.getByRole('region', { name: 'Account interaction sync', exact: true }).waitFor({ state: 'hidden', timeout: 90_000 });
 			let remote: any;
@@ -130,13 +145,13 @@ test(
 			assert.equal((await reader.request.post(url('/api/v1/auth/logout'), { headers })).status(), 200);
 			await page.reload();
 			await page.getByRole('button', { name: 'Back to the feed 📰', exact: true }).waitFor();
-			await reader.setOffline(true);
+			await connectivity(true);
 			offline = true;
 			await page.reload();
 			await page.getByRole('button', { name: 'Back to the feed 📰', exact: true }).waitFor();
 			assert.equal(await page.getByText(text, { exact: true }).count(), 0);
 			offline = false;
-			await reader.setOffline(false);
+			await connectivity(false);
 			const login = await reader.request.post(url('/api/v1/login'), { headers, data: { username: viewer.username, password: viewer.password } });
 			assert.equal(login.status(), 200, await login.text());
 			await page.goto(url(`/post/${id}`));
@@ -148,7 +163,7 @@ test(
 			await page.goto(url(`/post/${id}`));
 			await page.getByText(text, { exact: true }).waitFor({ state: 'hidden' });
 			await page.getByRole('button', { name: 'Back to the feed 📰', exact: true }).waitFor();
-			await reader.setOffline(true);
+			await connectivity(true);
 			offline = true;
 			await page.reload();
 			await page.getByText(text, { exact: true }).waitFor({ state: 'hidden' });
@@ -184,7 +199,7 @@ test(
 			}
 			throw error;
 		} finally {
-			await reader.setOffline(false);
+			await connectivity(false);
 			for (const context of [reader, author]) for (const tab of context.pages()) await tab.close();
 			if (id) await author.request.delete(url(`/api/v1/things?id=${id}`), { headers });
 			for (const context of [reader, author]) await context.request.post(url('/api/v1/auth/logout'), { headers });

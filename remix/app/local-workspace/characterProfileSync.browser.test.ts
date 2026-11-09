@@ -32,7 +32,7 @@ test('native session delegates private theme and algorithm sync without principa
   const manifest = await (await fetch(base + '/.well-known/thingtime-capabilities.json')).json();
   const routes = await (await fetch(base + '/api/v1/capabilities')).json();
   assert.equal(manifest.origin, base);
-  for (const [kind, version] of [['themes', '1.6.0'], ['algorithms', '1.4.0']]) {
+  for (const [kind, version] of [['themes', '1.8.0'], ['algorithms', '1.6.0']]) {
    assert.equal(manifest.features[`api.${kind}-sync`].version, version);
    assert.equal(routes.features[`api.${kind}-sync`], version);
    assert.ok(manifest.operations.some(row => row.path === `/api/v1/${kind}/sync` && row.methods.includes('POST')));

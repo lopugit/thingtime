@@ -9,7 +9,11 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
 
 Freshly fetched `origin/main` at `cc248ed5336b21948bccfd9b6ebe486239421189`
 is already an ancestor of the feature branch. The latest merge was a no-op.
-The published checkpoint remains `af8c5254`; subsequent recovery work is local.
+The reviewed recovery checkpoint is published as `4492bc7e` on the existing PR
+and passed API, build/typecheck/unit, native compilation and CodeQL checks.
+Later test-fixture corrections and acceptance receipts do not change the runtime source.
+The corrected fixture sources passed TypeScript and the zero-error ratchet;
+subsequent evidence-only heads retain their own CI state.
 
 The clean deployed preview passed native rendering, exact affirmation text,
 canonical dependency-complete JSON download and desktop/mobile/card captures.
@@ -28,12 +32,13 @@ unresolved deletion conflicts still produce explicit refusals. The full workspac
 suite passed 947 tests plus five offline-shell checks; 113 opt-ins were skipped.
 Raw TypeScript, the zero-error ratchet and full lint passed (359 lint warnings).
 
-Next, rebuild the hosted runtime for the exact final renderer hash,
-verify its positive/negative jobs and cleanup, then complete exact-origin
-configuration and actual connected-host artifact delivery. The earlier provider
-snapshot must not be activated with the changed renderer. Final source CI,
-matching preview and separately authorized release/native installation are
-independent gates. See [recovery evidence](../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
+The matching hosted runtime now passes positive/negative jobs and independent
+cleanup, and the new deployed preview passes native render/export with the same
+renderer hash. The final identity batch also passes its scoped four journeys,
+including an explicit-sandbox provider rerun. Exact-origin configuration,
+actual connected-host artifact delivery, final-head CI and separately authorized
+release/stable installation remain independent gates. No production activation
+or PR merge is implied by provider or preview acceptance. See [recovery evidence](../artifacts/anonymous-release-2026-11-09/recovery-follow-up/README.md).
 
 ## Main integration — 2026-11-09
 

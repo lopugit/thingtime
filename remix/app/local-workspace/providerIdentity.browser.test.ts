@@ -16,9 +16,16 @@ test('native account switches retire provider proof responses and pending select
  const origin = new URL(base!).origin;
  assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname));
  const { chromium } = await import(playwrightPath!);
- const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true });
+ const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
  const control = await context.newPage(), page = await context.newPage();
+ // The loopback-only fixture is reachable even when Chromium reports offline.
+ for (const tab of [control, page]) {
+  const network = await context.newCDPSession(tab);
+  await network.send('Network.enable');
+  await network.send('Network.overrideNetworkState', { offline: false, latency: 1, downloadThroughput: 100_000_000,
+   uploadThroughput: 100_000_000, connectionType: 'ethernet' });
+ }
  await control.setViewportSize({ width: 1440, height: 1000 });
  const errors: string[] = [], evidence: string[] = [];
  const users: { id: string; username: string; password: string }[] = [];

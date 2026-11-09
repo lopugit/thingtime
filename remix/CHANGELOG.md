@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10 — Verify the final recovery renderer through a matching isolated
+  provider snapshot and its deployed preview, retaining actual JSON/PNG files.
+  Correct browser-fixture online state and capability expectations; explicitly
+  sandbox the provider identity fixture. Production activation remains separate.
+  [Acceptance evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-10 — Restore deleted account posts, ordinary linked children and
   retained attachments atomically through History. Preserve image validation,
   verify retained byte integrity and mint fresh receipts after attempted file
