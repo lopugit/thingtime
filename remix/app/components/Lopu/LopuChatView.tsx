@@ -379,7 +379,7 @@ const MessageBubble = React.memo(function MessageBubble({
 	if (message.deleted) return null;
 	if (role === 'user') return <Box minW={0}><LopuUserRow text={message.text} compact={compact} /><PostAttachments attachments={message.attachments} compact={compact} /></Box>;
 	const metaLine =
-		meta && meta.provider
+		meta?.deviceTranscript ? 'Unverified device transcript' : meta && meta.provider
 			? describeLopuTurnMeta(
 					{
 						provider: meta.provider,

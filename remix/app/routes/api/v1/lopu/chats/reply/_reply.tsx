@@ -230,6 +230,7 @@ export const action = async ({ request }: { request: Request }) => {
 // public action always authenticates above; no caller-supplied user is accepted.
 export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean; resolveActionActor?: ResolveActionActor } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
+  if (request.headers.get('X-Thingtime-Device-Inference') === '1') return json({ ok: false, error: 'Open this conversation on the device that owns its connection.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
   const unsupported = requireJsonContentType(request);
