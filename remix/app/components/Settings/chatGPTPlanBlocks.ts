@@ -24,7 +24,9 @@ export const chatGPTPlanBlocks: WebpageBlock[] = [
   text('plan-description', 'Use your ChatGPT plan for eligible Lopu requests. Credentials stay in protected runtime storage, linked to your Thingtime account.'),
   text('plan-guidance', 'Choose a model below, then select the account in Lopu → Your providers. Plan limits apply; this connection never switches to API credits automatically.'),
   when('plan-signed-out', 'plan.signedIn', [text('plan-sign-in-note', 'Sign in to your personal Thingtime account to connect a ChatGPT plan.')], true),
-  when('plan-unavailable', 'plan.unavailable', [text('plan-runtime-note', 'Enable the local API and database in Electron’s Desktop settings, or choose a configured self-hosted API. Complete initial ChatGPT sign-in on the runtime computer.')]),
+  when('plan-unavailable', 'plan.unavailable', [text('plan-runtime-note', 'Open this page in Thingtime desktop while signed in, or use a configured self-hosted API. Complete initial ChatGPT sign-in on the device running the connection.')]),
+  when('plan-device', 'plan.thisDevice', [text('plan-device-note', 'Keep this app open on this device to use the connection in a new Lopu text chat. Your Thingtime account stays selected. Messages save to your account; attachments and actions are unavailable for this connection.')]),
+  when('plan-device-replies-unavailable', 'plan.deviceReplyUnavailable', [text('plan-device-replies-note', 'You can connect your ChatGPT plan now. Lopu replies will be available once your Thingtime account server supports saving device chats.')]),
   when('plan-move-only', 'plan.moveOnly', [text('plan-move-note', 'This runtime accepts moved connections. Sign in through your local Electron runtime, then use “Move between runtimes” below.')]),
   when('plan-loading', 'plan.loading', [el('plan-loading-note', 'p', 'Checking ChatGPT connections…', { role: 'status' })]),
   when('plan-error', 'plan.error', [row('plan-error-row', [el('plan-error-note', 'p', '{plan.error}', { role: 'alert' }), button('plan-retry', 'Retry', 'plan.retry')])]),
@@ -48,7 +50,7 @@ export const chatGPTPlanBlocks: WebpageBlock[] = [
     ]),
     when('plan-account-reconnect', 'item.connected', [button('plan-reconnect', 'Continue with ChatGPT', 'plan.begin', '{plan.cannotBegin}', { id: '{item.id}' })], true)
    ], { ...cardCss, ...stackCss })]),
-   when('transfer-available', 'plan.available', [el('transfer-disclosure', 'details', '', {}, [
+   when('transfer-available', 'plan.canTransfer', [el('transfer-disclosure', 'details', '', {}, [
     el('transfer-summary', 'summary', '', {}, [text('transfer-summary-label', 'Move between runtimes', 'span')], { cursor: 'pointer', 'font-weight': '600' }),
     stack('transfer-content', [
      text('transfer-description', 'Connect locally, then move a connection to another runtime you control. Your API runs requests; its configured database stores the encrypted connection. A move stops this source from using or refreshing it.'),

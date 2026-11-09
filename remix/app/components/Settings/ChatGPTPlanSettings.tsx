@@ -16,7 +16,7 @@ const CAPABILITY = 'api.ai-chatgpt-plan';
 const ATTEMPT_LIFETIME = 10 * 60 * 1000;
 type Account = { id: string; label: string; email?: string; connected: boolean; model: string; models: { slug: string; displayName: string }[] };
 type Attempt = { id: string; status: 'pending' | 'connecting' | 'connected' | 'cancelled' | 'failed'; error?: string };
-type Snapshot = { available: boolean; accounts: Account[]; attempts: Attempt[]; canAuthorize: boolean; storageMode?: string };
+type Snapshot = { available: boolean; accounts: Account[]; attempts: Attempt[]; canAuthorize: boolean; storageMode?: string; deviceChatAvailable?: boolean };
 type Pending = { id: string; url: string; expiresAt: number; status: 'pending' | 'connecting' };
 // Only public account metadata is cached; authorization URLs and tokens never persist.
 const snapshots = new Map<string, Snapshot>();
@@ -137,7 +137,7 @@ const ChatGPTPlanScope = ({
 		if (typeof result.available !== 'boolean' || !Array.isArray(result.accounts) || !Array.isArray(result.attempts))
 			throw new Error('ChatGPT connection status is unavailable. Please retry.');
 		const next: Snapshot = { available: result.available, accounts: result.accounts, attempts: result.attempts,
-			canAuthorize: result.canAuthorize === true, storageMode: result.storageMode };
+			canAuthorize: result.canAuthorize === true, storageMode: result.storageMode, deviceChatAvailable: result.deviceChatAvailable === true };
 		if (current() && sequence === readSequence.current) {
 			snapshots.set(scope, next);
 			setSnapshot(next);
@@ -293,7 +293,7 @@ const ChatGPTPlanScope = ({
 		}
 		setWelcome(false);
 	};
-	const transfer = useChatGPTPlanTransfer({ accounts: snapshot?.accounts || [], disabled: busy || !!pending || !snapshot?.available, request, refresh });
+	const transfer = useChatGPTPlanTransfer({ accounts: snapshot?.accounts || [], disabled: busy || !!pending || !snapshot?.available || snapshot.storageMode === 'device', request, refresh });
 	const account = (id: unknown) => typeof id === 'string' ? snapshot?.accounts.find(value => value.id === id) : undefined;
 	const actions: TransientBlockActions = {
 		...transfer.actions,
@@ -322,6 +322,9 @@ const ChatGPTPlanScope = ({
 	};
 	const plan = {
 		signedIn: true, available: !!snapshot?.available, unavailable: snapshot?.available === false,
+		thisDevice: snapshot?.storageMode === 'device',
+		canTransfer: !!snapshot?.available && snapshot.storageMode !== 'device',
+		deviceReplyUnavailable: snapshot?.storageMode === 'device' && snapshot.deviceChatAvailable !== true,
 		moveOnly: !!snapshot?.available && !snapshot.canAuthorize, loading: !snapshot && !error, error, busy, welcome,
 		cannotBegin: busy || !snapshot?.available || !snapshot.canAuthorize || !!pending,
 		cannotManage: busy || !snapshot?.available || !!pending,

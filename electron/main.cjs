@@ -101,6 +101,11 @@ let localRuntime = null;
 let sessionAuthority = null;
 let desktopServicesClosing = false;
 let desktopServicesClosed = false;
+let desktopProviderAuthority = new AbortController();
+function invalidateDesktopProviderAuthority() {
+ desktopProviderAuthority.abort();
+ desktopProviderAuthority = new AbortController();
+}
 async function closeDesktopServices() {
  const tasks = [];
  if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
@@ -353,6 +358,32 @@ async function startNitroServer() {
 
   process.env.NODE_ENV = process.env.NODE_ENV || 'production';
   process.env.THINGTIME_DESKTOP = '1';
+  // The Nitro server runs in this main process. Keep the protector and active
+  // session check out of renderer/preload APIs. New device enrollments are an
+  // explicit personal, local use; installing the app alone never enables them.
+  const planOwner = require('./lib/personal-chatgpt-plan.cjs').personalChatGPTPlanOwner(process.env, activeApiEndpoint);
+  if (!localRuntime.runningEnabled && planOwner) globalThis[Symbol.for('thingtime.desktop.protected-runtime')] = {
+    ownerId: planOwner,
+    directory: path.join(app.getPath('userData'), 'device-ai', 'chatgpt-plan'),
+    available: () => !desktopServicesClosing && localRuntime.encryptionReady(),
+    encrypt: (text) => {
+      if (!localRuntime.encryptionReady()) throw new Error('Protected desktop storage is unavailable.');
+      return safeStorage.encryptString(text);
+    },
+    decrypt: (bytes) => {
+      if (!localRuntime.encryptionReady()) throw new Error('Protected desktop storage is unavailable.');
+      return safeStorage.decryptString(bytes);
+    },
+    sessionSignal: () => desktopProviderAuthority.signal,
+    isActiveSession: async (origin, value, requireHome) => {
+      const contents = mainWindow?.webContents;
+      if (desktopServicesClosing || appOrigin !== origin || !contents || contents.isDestroyed() || new URL(contents.getURL()).origin !== origin) return false;
+      const cookies = await contents.session.cookies.get({ url: origin, name: 'tt_auth' });
+      if (requireHome && (await contents.session.cookies.get({ url: origin, name: 'tt_mongo' })).some(cookie => cookie.value)) return false;
+      return !desktopServicesClosing && mainWindow?.webContents === contents && appOrigin === origin &&
+        cookies.length === 1 && cookies[0].httpOnly && cookies[0].value === value;
+    }
+  };
   const renderer = await startRendererServer({
     profilePath: app.getPath('userData'),
     selectedPort: port,
@@ -390,6 +421,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
+	invalidateDesktopProviderAuthority();
 	desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
 	if (!localRuntime?.runningEnabled) process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
@@ -1856,16 +1888,17 @@ function createWindow() {
 
   attachWindowZoom(mainWindow);
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
+    if (isMainFrame && !isInPlace) { invalidateDesktopProviderAuthority(); syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); });
+  mainWindow.webContents.on('render-process-gone', () => { invalidateDesktopProviderAuthority(); syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); });
   const folderCookies = mainWindow.webContents.session.cookies;
   const folderAccountChanged = (_event, cookie) => {
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts' || cookie.name === 'tt_mongo') invalidateDesktopProviderAuthority();
     if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
   };
   folderCookies.on('changed', folderAccountChanged);
   mainWindow.on('closed', () => {
-    syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+    invalidateDesktopProviderAuthority(); syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
     mainWindow = null;
   });
   const syncWindow = mainWindow;
