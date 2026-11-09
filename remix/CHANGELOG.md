@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Authorize ChatGPT plan usage from Thingtime desktop while keeping
+  the selected account API. Protect the grant on the device and save completed
+  Lopu text turns through the account's transcript API. **Codex (AI)**
+
 - 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
   status, start, and background replies. Enabled backups can proceed after their
   first status check, and the card can show native progress. **Codex (AI)**

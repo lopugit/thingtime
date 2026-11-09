@@ -11,6 +11,7 @@ import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mo
 import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 import { enforceExpectedActor } from '../../app/api/utils/auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
+import { desktopAccountAuthority } from './desktopAccountAuthority';
 
 const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN', 'THINGTIME_DESKTOP', 'THINGTIME_DESKTOP_API_MODE', 'NODE_ENV', 'MONGO_PASS', 'THINGTIME_AGENT_TEST_MODE', 'THINGTIME_AGENT_TEST_SESSION'] as const;
 
@@ -35,6 +36,50 @@ const withFallbackEnv = async (fallbackOrigin: string | undefined, run: () => Pr
 		}
 	}
 };
+
+test('device authority uses the active Electron session and the same HTTPS account API for every remote check', async t => {
+  await withFallbackEnv('https://selected.test', async () => {
+    process.env.THINGTIME_DESKTOP = '1';
+    process.env.THINGTIME_DESKTOP_API_MODE = 'remote';
+    const key = Symbol.for('thingtime.desktop.protected-runtime');
+    const loopback = 'http://127.0.0.1:17340';
+    let active = true;
+    const controller = new AbortController();
+    Reflect.set(globalThis, key, { ownerId: 'owner', available: () => true, sessionSignal: () => controller.signal, isActiveSession: async (origin: string, value: string) =>
+      active && origin === loopback && value === 'fixture-session' });
+    try {
+      const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+        assert.equal(url.href, 'https://selected.test/api/v1/ai/chatgpt-plan');
+        assert.equal(new Headers(init.headers).get('Cookie'), 'tt_auth=fixture-session');
+        assert.equal(new Headers(init.headers).get('X-Thingtime-Expected-Actor'), 'owner');
+        assert.equal(init.redirect, 'error');
+        return Response.json({ ok: true, available: false });
+      });
+      const request = (headers: Record<string, string> = {}) => new Request(`${loopback}/api/v1/ai/chatgpt-plan`, {
+        method: 'POST', headers: { Cookie: 'tt_auth=fixture-session; unrelated=fixture', Origin: loopback,
+          'X-Thingtime-Expected-User': 'owner', 'X-Thingtime-Expected-Actor': 'owner', ...headers }
+      });
+      for (const headers of [{ Authorization: 'Bearer fixture' }, { 'X-Thingtime-Character': 'other' }, { Origin: 'https://other.test' },
+        { 'X-Thingtime-Expected-Actor': 'other' }, { 'X-Thingtime-Expected-Actor': 'other', 'X-Thingtime-Expected-User': 'other' },
+        { Cookie: 'tt_auth=one; tt_auth=two' }]) assert.equal(desktopAccountAuthority(request(headers), 'https://selected.test'), null);
+      assert.equal(desktopAccountAuthority(request({ Cookie: 'tt_auth=fixture-session; tt_mongo=custom-fixture' }), 'https://selected.test', true), null);
+      assert.equal(desktopAccountAuthority(request({ 'X-TT-Mongo-Url': 'custom-fixture' }), 'https://selected.test', true), null);
+      const authority = desktopAccountAuthority(request(), 'https://selected.test')!;
+      assert.deepEqual(await (await authority.planStatus())?.json(), { ok: true, available: false });
+      assert.equal(authority.scope.ownerId, 'owner');
+      assert.equal(authority.scope.origin, 'https://selected.test');
+      active = false;
+      assert.equal(await authority.planStatus(), null);
+      active = true;
+      process.env.THINGTIME_API_FALLBACK_ORIGIN = 'https://changed.test';
+      assert.equal(await authority.planStatus(), null);
+      process.env.THINGTIME_API_FALLBACK_ORIGIN = 'https://selected.test';
+      controller.abort();
+      assert.equal(await authority.planStatus(), null);
+      assert.equal(upstream.mock.callCount(), 1);
+    } finally { Reflect.deleteProperty(globalThis, key); }
+  });
+});
 
 test('fallback has no default and rejects malformed, credential-bearing and insecure targets', async () => {
   for (const target of [undefined, '', 'not a URL', 'thingtime.com', 'http://127.0.0.1:18280', 'http://example.com', 'https://user:secret@example.com']) {

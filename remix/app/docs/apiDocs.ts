@@ -3238,9 +3238,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Provider sync statuses; never credentials or provider error bodies.', body: { ok: true, report: [] } }]
   }),
   endpoint({
-    id: 'ai-chatgpt-plan', contractVersion: '1.1.1', featureVersion: '1.1.1',
+    id: 'ai-chatgpt-plan', contractVersion: '1.2.0', featureVersion: '1.2.0',
     group: 'lopu', title: 'ChatGPT plan connections', endpoint: '/api/v1/ai/chatgpt-plan',
-    summary: 'Connects the current account to ChatGPT plan usage on an explicitly configured local or self-hosted runtime.',
+    summary: 'Connects the current account to ChatGPT plan usage on Thingtime desktop or a configured local or self-hosted runtime.',
     detail: 'Version 1.1.1 refuses X-Thingtime-Character overrides so pending credential operations revalidate the current session identity. Version 1.1.0 adds explicit encrypted moves between configured runtimes. GET returns redacted accounts, models, session-bound attempts, canAuthorize and storageMode. POST begin starts PKCE loopback authorization when enabled; cancel stops it; select-model chooses a discovered model; refresh-models retries model discovery after import or a provider outage; disconnect revokes and clears credentials. prepare-import issues an expiring owner/origin/session-bound recipient code. move-account seals one connection to that recipient and durably stops source use before returning ciphertext; retrying the same move recovers its receipt. import-account consumes the package once using the destination host identity. Tokens never appear in plaintext responses. MongoDB storage is encrypted and bound to the account backend; generic data-plane selection never relocates credentials. Remote GUI users connect locally then move to their self-hosted runtime. Personal account/session checks, same-origin JSON and selected-origin capability negotiation apply; failures never switch to API billing.',
     auth: { mode: 'session', description: 'Personal, non-temporary Thingtime account; same-origin JSON mutations.' },
     methods: ['GET', 'POST'],
@@ -5043,6 +5043,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'External response.', body: { ok: true, url: 'https://example.com/', status: 200, contentType: 'text/html', body: '<html>...</html>' } }, { status: 401, description: 'Sign in required.', body: { ok: false, error: 'Sign in with a full account.' } }]
   }),
   endpoint({
+    id: 'lopu-chats-device-turns', group: 'lopu', title: 'Save Lopu device turns', endpoint: '/api/v1/lopu/chats/device-turns',
+    contractVersion: '1.0.0', featureVersion: '1.0.0',
+    summary: 'Reads text history for a private device conversation or saves one completed turn under the signed-in owner.',
+    detail: 'Use action history with requestId, text, an optional chatId and its opaque device providerId. A completed exact request returns its saved transcript rather than new inference. Use action save with the same requestId, providerId, user text and answer. A new chat uses a stable account-bound creation key. A repeat must carry the exact text and answer. This endpoint persists unverified device transcript text only; it does not execute a model, record provider/model/billing receipts, run Actions, accept tool receipts or confer hosted provider authority. A device pin requires the original device for inference.',
+    auth: { mode: 'session', description: 'Same-origin first-party personal session with X-Thingtime-Expected-Actor.' },
+    methods: ['POST'], steps: ['Negotiate api.lopu-chats-device-turns 1.0.0 at the exact account API.', 'Read the existing private history before local inference; save the same request ID and immutable turn once complete.'],
+    requestExamples: [], responseExamples: [{ status: 200, description: 'Text history or an exact transcript receipt without tool grants or credentials.', body: { ok: true, history: [] } }]
+  }),
+  endpoint({
     id: 'lopu-chats-reply',
     group: 'lopu',
     title: 'Lopu reply stream',
@@ -5059,8 +5068,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.21.1',
-    featureVersion: '1.21.1',
+    contractVersion: '1.22.0',
+    featureVersion: '1.22.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'Version 1.21.1 keeps personal-plan turns on their persistent runtime with client management, including older clients requesting server management, and allows follow-up turns to retain the same verified provider. Completed Responses output items are reconciled before tool execution, including terminal frames with empty output; conflicting or unfinished items fail closed. Version 1.21.0 admits text turns on a live owner/origin-bound ChatGPT plan without admin verification, using a full account session and no Character override header. Scoped credentials, ordinary BYO, catalog and voice retain existing policy; unavailable plans never fall back to API billing. Version 1.20.0 accepts local ChatGPT plan provider IDs with fail-closed account resolution, streaming Responses and existing tool permissions. Plan failure never switches billing. Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
@@ -7309,13 +7318,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Version 1.5 adds lopu.deviceTranscript:true for an unverified device-reported assistant transcript, without hosted provider, model, billing or tool metadata. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
       'Version 1.1 adds optional lopu.toolCalls[].links ({label, href}, at most 100 per call) to assistant message history. Links allow local paths and credential-free HTTP(S) URLs only; raw tool data and approval grants are excluded. ' +
