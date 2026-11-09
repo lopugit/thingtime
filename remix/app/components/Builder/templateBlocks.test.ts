@@ -143,3 +143,18 @@ test('converted ttEach preserves primitive rows, object entries, aliases and emp
  assert.equal(converted[0].props?.empty, 'None for {query.name}');
  assert.throws(() => templateToBlocks({ ttEach: { arg: 'result.items', empty: { tag: 'p', children: ['No rows'] }, node: { tag: 'span' } } }, id), /empty branch/);
 });
+
+test('editable collection paging and map selection properties survive conversion and save', () => {
+ const props = { source: { action: 'read-page', offsetInput: 'offset', limitInput: 'limit', totalPath: 'total' }, selectedKey: '{query.id}', itemKey: 'id', revealSelected: true, totalPath: 'result.total', itemTemplate: { ttTemplate: { tag: 'p', children: ['{item.name}'] } } };
+ const blocks = templateToBlocks({ tag: 'tt-collection', props }, id);
+ const saved = sanitizeWebpageBlocks(blocks);
+ assert.equal(saved.ok, true);
+ if (!saved.ok) return;
+ const savedProps = saved.blocks[0].props as Record<string, unknown>;
+ assert.deepEqual(savedProps.source, props.source);
+ assert.equal(savedProps.selectedKey, props.selectedKey);
+ assert.equal(savedProps.revealSelected, true);
+ const map = sanitizeWebpageBlocks([{ id: 'map', type: 'element', tag: 'tt-mapbox', props: { onSelectQueryParams: { view: 'places' } } }]);
+ assert.equal(map.ok, true);
+ if (map.ok) assert.deepEqual(map.blocks[0].props, { onSelectQueryParams: { view: 'places' } });
+});

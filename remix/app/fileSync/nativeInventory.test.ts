@@ -699,3 +699,45 @@ test('PhotoKit capture uses short cancellable requests after both legacy bridge 
   }
  }
 });
+
+
+test('negotiated Photos backup imports available originals and a separate cloud-only ledger', async () => {
+	const id = crypto.randomUUID();
+	const capture: NativeBackupCapture = { id, generation: id, totalEntries: 1, totalSkipped: 1, coverage: 'partial', consistency: 'per-entry' };
+	const actions: string[] = [];
+	const result = [];
+	for await (const frame of readNativeInventory({ ...expected, deviceId: 'device', rootId, signal: new AbortController().signal,
+		strictAsync: true, captureId: id, photoGapPolicy: { mode: 'backup', propagateDeletes: false },
+		request: async (_owner, r) => {
+			actions.push(r.action);
+			if (r.action === 'scan-capture') {
+				assert.equal(r.allowCloudGaps, true);
+				return { roots: [], capture, strictCapture: { id, generation: id, state: 'complete', indexedEntries: 1, cloudOriginals: 1 } };
+			}
+			if (r.action === 'scan-skips') return { roots: [], skippedPage: { capture, offset: 0, totalSkipped: 1, nextOffset: null,
+				skipped: [{ ordinal: 0, path: 'live-photo-video.mov', reason: 'cloud-original', scope: 'entry' }] } };
+			if (r.action === 'scan-page') return { roots: [], inventoryPage: { capture, entries: [entry], offset: 0, nextOffset: null } };
+			return { roots: [] };
+		}
+	})) result.push(frame);
+	assert.deepEqual(actions, ['scan-capture', 'scan-skips', 'scan-page', 'scan-discard']);
+	assert.equal(result[0].skippedPage?.skipped[0].reason, 'cloud-original');
+	assert.deepEqual(result[1].entries, [entry]);
+	assert.equal(result[1].backupCapture?.coverage, 'partial');
+});
+
+test('native PhotoKit download progress is bounded and belongs to the exact running capture', () => {
+	const id = crypto.randomUUID();
+	const request = { action: 'scan-status', rootId, inventoryDeviceId: 'device', captureId: id,
+		capturePolicy: 'strict-async', allowCloudGaps: true } as const;
+	const payload = { ...expected, rootId, captureId: id, capturePolicy: 'strict-async', complete: false, roots: [],
+		strictCaptureState: 'running', captureGeneration: id, indexedEntries: 2, cloudOriginals: 1, photoDownloadFraction: 0.5 };
+	const result = parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, request);
+	assert.equal(result?.strictCapture?.photoDownloadFraction, 0.5);
+	for (const patch of [{ captureId: crypto.randomUUID() }, { photoDownloadFraction: -1 }, { photoDownloadFraction: 1.1 },
+		{ photoDownloadFraction: '50%' }, { photoDownloadFraction: true }, { photoDownloadFraction: Infinity },
+		{ strictCaptureState: 'interrupted' }]) {
+		assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...payload, ...patch } }, expected, request));
+	}
+	assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, { ...request, allowCloudGaps: undefined }));
+});

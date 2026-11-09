@@ -6,6 +6,7 @@ import { createAttachmentDetectionBackfillAction } from './backfill-detected-typ
 import { createAttachmentCleanupLoader } from './cleanup/_cleanup';
 import { createAttachmentContentLoader } from './content/_content';
 import { createAttachmentLinkAction } from './link/_link';
+import { contentPartPlan, EMPTY_CONTENT_SHA256 } from '~/fileSync/contentFingerprint';
 
 const endpoint = 'https://thingtime.example/api/v1/attachments/uploads';
 const allowed = async () => ({
@@ -459,6 +460,50 @@ test('cache receipts authorize every request without exposing signed URLs, and r
 	allowedNow = false;
 	assert.equal((await route({ request })).status, 404);
 	assert.equal((await route({ request: new Request(request.url.replace('width=64', 'width=99999')) })).status, 400);
+});
+
+test('authorized zero-byte cache read accepts a successful empty storage body and rejects missing storage', async () => {
+	let size = 0, storageStatus = 200, storageLength = '0', storageReads = 0, fingerprintValid = true, fingerprintVersion = 'b'.repeat(64);
+	let storageBody: Uint8Array<ArrayBuffer> | null = null;
+	const route = createAttachmentContentLoader({
+		getUser: async () => user,
+		enrichViewer: async viewer => viewer,
+		enforceLimit: allowed as any,
+		download: async () => ({ ok: true, url: 'https://private.example/empty', expiresAt: 'later',
+			cacheKey: 'a'.repeat(64), version: 'b'.repeat(64), size,
+			contentType: 'application/octet-stream', disposition: 'attachment', image: false }),
+		fingerprint: async () => ({ ok: true, id: 'empty-file', version: fingerprintVersion, size: 0,
+			fingerprint: { algorithm: 'sha256-parts-v1', ...contentPartPlan(0), sha256: fingerprintValid ? EMPTY_CONTENT_SHA256 : '0'.repeat(64) } }),
+		rangeFetch: async (_url, init) => {
+			storageReads++;
+			assert.equal(init?.redirect, 'error');
+			return new Response(storageBody, { status: storageStatus, headers: { 'Content-Length': storageLength } });
+		}
+	});
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=empty-file&cache=bytes');
+	const empty = await route({ request });
+	assert.equal(empty.status, 200);
+	assert.equal(empty.headers.get('Content-Length'), '0');
+	assert.equal((await empty.arrayBuffer()).byteLength, 0);
+	assert.match(empty.headers.get('Cache-Control') || '', /private/);
+	assert.equal(storageReads, 1, 'An empty cache read still verifies the stored object');
+	storageBody = new Uint8Array(0);
+	assert.equal((await route({ request })).status, 200, 'An empty stream also represents real zero-byte content');
+	storageBody = new Uint8Array([9]);
+	assert.equal((await route({ request })).status, 502, 'A zero-byte receipt cannot serve nonempty storage bytes');
+	storageBody = null;
+	storageStatus = 404;
+	assert.equal((await route({ request })).status, 502);
+	storageStatus = 200; storageLength = '1';
+	assert.equal((await route({ request })).status, 502);
+	storageLength = '0'; fingerprintValid = false;
+	assert.equal((await route({ request })).status, 502, 'Wrong empty checksum must fail closed');
+	fingerprintValid = true;
+	fingerprintVersion = 'c'.repeat(64);
+	assert.equal((await route({ request })).status, 502, 'A different stored version cannot satisfy the empty receipt');
+	fingerprintVersion = 'b'.repeat(64);
+	storageLength = '0'; size = 1;
+	assert.equal((await route({ request })).status, 502, 'Nonempty content still requires a storage body');
 });
 
 test('conditional byte reuse authorizes before returning a cacheable 304', async () => {

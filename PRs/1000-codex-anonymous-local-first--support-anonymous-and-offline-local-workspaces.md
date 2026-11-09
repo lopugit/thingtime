@@ -2,6 +2,28 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Main reconciliation — 2026-11-09
+
+Reconciled feature `d214a6b5` with fetched main `c0d1ae9c`, preserving independent
+post/draft/file completion and adopting main's restore execution restrictions,
+Builder/map behavior and uncapped ordinary Timeline/transfer contracts. Cached
+account Actions and old catalog projections now preserve the restore gate;
+cloud incoming shares wait for real account receipts. Colliding receipt API
+versions are bumped and negotiated deliberately. Restrictive host umasks no
+longer prevent the non-root isolated renderer from reading its copied snapshot.
+
+Final local checks pass: clean raw TypeScript, complete production build,
+914 workspace tests plus four offline-shell tests, 184 capability tests and
+compiled smoke of both manifests with 16 route/docs contracts. There are 110
+explicit opt-in workspace skips; none is claimed as acceptance. See the
+[exact scope, corrections and outstanding work](../artifacts/anonymous-release-2026-11-09/README.md).
+
+The corrected full global/site Builder fixture, normal importer round-trip,
+remaining account/device/provider matrix and final release acceptance remain
+open. The current hosted canonical MCP still lacks render/export; local SDK
+proof cannot satisfy that host connection. PR #1000 remains open pending those
+gates. No production release is claimed by this merge from main.
+
 ## Main integration — 2026-11-05
 
 Merged fetched main `f07a96dea1821d10180dab82737460e2c9a79995` into the

@@ -96,3 +96,10 @@ test('recording reminders carry their bounded title and safe recording deep link
   const long = buildApnsPayload({ ...input, title: '🦄'.repeat(5000), preview: '🦄'.repeat(5000) });
   assert.ok(Buffer.byteLength(JSON.stringify(long), 'utf8') < 4096);
 });
+
+test('canonical targeting binds the exact device and container cache while ordinary re-registration clears old binding',()=>{
+ const result=normalizePushDeviceInput({token:'ab'.repeat(32),platform:'ios',environment:'sandbox'});assert.equal(result.ok,true);if(!result.ok)return;
+ const targeted=pushDeviceUpsert('owner','device-session',result,new Date(),{deviceId:'canonical-device',cacheGeneration:'installation-cache'});
+ assert.equal(targeted.$set.crystal.canonicalDeviceId,'canonical-device');assert.equal(targeted.$set.crystal.cacheGeneration,'installation-cache');
+ const ordinary=pushDeviceUpsert('next-owner','web-session',result,new Date());assert.equal('canonicalDeviceId' in ordinary.$set.crystal,false);assert.equal('cacheGeneration' in ordinary.$set.crystal,false);
+});

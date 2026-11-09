@@ -12,6 +12,43 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-09: Continue PR #1000 against current main, retaining protected execution holds through account caches and local Actions, reconciling receipt capability versions and preserving both branches’ tests/build entrypoints. The isolated render snapshot now works with restrictive host permissions without exposing its private parent directory. Fresh native renderer and final release acceptance remain separately tracked. [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+- 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
+  keeping live 25-second change reads during uploads instead of repeated
+  two-second polling. Retain fresh admission, cancellation and native revision
+  finish checks; installed startup timing remains a separate gate. **Codex (AI)**
+
+- 2026-11-06: Defer already queued two-replica folder hints before expensive
+  initial point reads. Preserve sequential journal processing, fresh effect
+  policy and strict reconciliation; measure first-file startup and queued-peer
+  effectiveness in the canonical mixed recovery fixture. **Codex (AI)**
+
+- 2026-11-06: Avoid repeated point reads for exact opposite-feed folder echoes
+  already proven to need no early copy. Keep fresh policy/effect checks, bounded
+  observation memory and independent strict reconciliation. **Codex (AI)**
+
+- 2026-11-06: Add an explicit canonical desktop-worker lane to mixed-file sync
+  acceptance, preserving legacy fallback coverage, exact real-byte/restart
+  checks and uncached native admission/HTTP timing. **Codex (AI)**
+
+- 2026-11-06: Negotiate compatible minimum API versions in the disposable native
+  paged-sync acceptance runner, retaining exact-origin and missing/breaking
+  capability refusals before registration; record first body-byte timing, exact
+  payload lengths and checkpoint/hash evidence without consuming request data. **Codex (AI)**
+
+- 2026-11-06: Retain ordinary backup content with the versioned streaming v2
+  codec while preserving v1 bytes/readers; verify deep/wide content, scalars beyond
+  the legacy 128 MiB processing budget, immutable retries and independent source
+  loss through worker tests and disposable production handlers. Whole-account
+  coverage and destination acceptance remain gated. **Codex (AI)**
+
+- 2026-11-06: Keep Add connection available while other sync drafts exist;
+  preserve separate new/saved drafts and incomplete resource inputs through
+  switching and reload, with compatible single-draft migration. **Codex (AI)**
+
+- 2026-11-06: Builder app cards open their declared saved Thing entry point through independent read checks; explicit Browse/Edit remains, and kind/search/view changes retain the current app scope.
+
 - 2026-11-04: Add Linux/Windows scoped desktop password delivery with a private agent CLI, OS-encrypted retry state, exact-origin catalog metadata (`api.passwords` 1.7.0), and the existing editable per-entry approval policy. Preserve the macOS Apple provider; system-wide autofill, passkey export and first-sign-in handoff are not advertised. See [implementation and acceptance](../PRs/1328-codex-native-autofill-linux-windows-add-scoped-native-password-delivery.md). **Codex (AI)**
 
 - 2026-11-03: Resolve social OAuth apps from exact-origin/environment encrypted platform-vault entries; isolate encrypted multi-account grants per owner and fence callback replay, client changes and refresh/disconnect races. Preserve existing connection UI and legacy link IDs on reconnect. Real provider/deployed acceptance remains separate.
@@ -110,6 +147,230 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
+  its glibc requirements and password hash compatibility before release.
+  **Codex (AI)**
+
+- 2026-11-09: Authorize ChatGPT plan usage from Thingtime desktop while keeping
+  the selected account API. Protect the grant on the device and save completed
+  Lopu text turns through the account's transcript API. **Codex (AI)**
+
+- 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
+  status, start, and background replies. Enabled backups can proceed after their
+  first status check, and the card can show native progress. **Codex (AI)**
+
+- 2026-11-08: Add per-Thing cloud and device storage choices, private device policies, verified managed copies, and safe iOS local release/open controls. Existing storage behavior is inherited until a choice changes. Bound LiDAR archive preparation memory with per-chunk autorelease pools, verified against an 11.36 GB archive. See [Thing storage](../docs/thing-storage.md) and [PR 1427 validation](../PRs/1427-codex-thing-storage-placement-add-per-thing-cloud-and-device-storage-choices.md). — Codex (AI)
+
+- 2026-11-09: Add atomic create-or-reuse to saved server Actions, private page
+  activation, independent map point sources, and optional per-point map fitting. [Builder Action contract](../docs/builder-browser-actions.md) · [PR 1430 validation](../PRs/1430-codex-routes-daily-activation-add-private-page-activation-and-map-sources.md). **Codex (AI)**
+
+- 2026-11-08: Show referenced Thing metadata with canonical JSON hashing, human-readable JSON and verified attachment sizes, editable layouts and access-aware refresh. Preserve original LiDAR archives during recovery and refuse empty captures. [Contract](../docs/thing-metadata.md) · [PR 1425 validation](../PRs/1425-codex-thing-metadata-sizes-show-thing-metadata-sizes-and-preserve-original-lidar-scans.md). **Codex (AI)**
+
+- 2026-11-08: Resume enabled iPhone Photos backup on launch and after temporary
+  native interruptions. Keep saved policy and upload receipts while adding a
+  five-minute retry, managed upload pacing and budgets, progress notifications
+  and one native Photos engine for active and iOS-scheduled work. [Verification](../PRs/1424-codex-ios-photos-auto-sync-resume-and-continue-iphone-photos-backups-automatically.md). **Codex (AI)**
+
+- 2026-11-08: Add the iOS LiDAR scanner drawer entry, origin-bound web action and
+  [Verification](../PRs/1422-codex-ios-lidar-capture-add-native-ios-lidar-capture-and-private-thing-saving.md).
+  durable private scan archive upload. Preserve available ARKit depth, imagery,
+  calibration and geometry, with local recovery and retry identity. Physical
+  LiDAR acceptance is tracked separately. See [scan workflow](../docs/native-lidar-scans.md). **Codex (AI)**
+
+- 2026-11-08: Back up iOS Photos in capture-date order through one queue for
+  local and iCloud originals, with companion resources kept together
+  ([PR 1417 notes](../PRs/1417-ios-photo-newest-first-newest-first-photos-backup.md)). **Codex (AI)**
+
+- 2026-11-07: Keep Wi-Fi-only Photos backups in a clear wait state, identify
+  iCloud-only originals separately, and queue already prepared originals for
+  iOS background processing. The original foreground sync publishes verified
+  cloud-folder and Timeline receipts ([PR 1413 notes](../PRs/1413-ios-background-photo-sync-prepared-photos-uploads.md)). **Codex (AI)**
+
+- 2026-11-07: Restore legacy iOS backup starts on hosts without native resource
+  limits, while preserving explicitly saved device and connection policies. Add
+  ordinary Photos consent and original-byte acceptance with storage-readiness
+  checks ([PR 1408 notes](../PRs/1408-ios-photos-upload-recovery.md)). **Codex (AI)**
+
+- **2026-11-07 — Codex (AI):** Add ordinary device root folder references and
+  idempotent default backup destinations under Device / Files / Source, readable
+  cloud paths and offline Show Folder navigation. Keep existing destinations,
+  drafts and pause settings; expose collapsed-card transfer actions/errors and
+  restore compact native Device setup navigation. Explicit Start confirms a
+  pause-only CAS update for the selected connection before runner admission;
+  uncertain saves and retained drafts never start transfers.
+
+- 2026-11-07: Compose an editable account backup workspace with protected durable
+  snapshot/review/restore jobs, independent immutable storage, exact-T inventory,
+  retained file history/annotations and canonical ordinary graph creation.
+  Verify real isolated HTTP/Chrome desktop/mobile, shared destination picker,
+  Builder persistence and interruption recovery. Deployed Workflow/S3 and
+  whole-account acceptance remain open. See
+  [the scoped implementation note](../PRs/1405-codex-backup-resumable-verification-editable-snapshot-review-and-restore.md).
+  **Codex (AI)**
+
+- 2026-11-06: Exclude iOS-only Chat Activity sources from the macOS Widgets
+  target while retaining shared Lopu voice and recording support. Add a
+  source-selection regression that preserves iOS app and test coverage.
+  **Codex (AI)**
+
+- 2026-11-07: Two-way startup preparation negotiates one typed Mac policy and
+  candidate/parent observation, retaining fresh authorization and strict legacy
+  fallback. The canonical synthetic fixture uses the same observation adapter.
+  [Validation and scope](../PRs/1406-codex-sync-compound-observation-guarded-native-startup-observations.md).
+
+
+- 2026-11-07: Preserve the Node location entitlement through canonical signing
+  and require its Boolean grant in final bundle verification. Keep OS consent
+  and explicit collection opt-in separate from signing eligibility. **Codex (AI)**
+
+- 2026-11-06: Add opt-in private device location history with Never retention,
+  accounted expiry, native iOS/Mac collection and scoped locate messages/audio.
+  Mapbox, marker artwork, filters and settings compose from private editable
+  Things. Keep background scheduling, provider receipts and physical-device
+  acceptance distinct. See [PR #1397 evidence](../PRs/1397-codex-device-location-history-private-device-location-and-alerts.md). **Codex (AI)**
+
+- 2026-11-06: Reconnect bookmarked external volumes through stable volume/root
+  proof, fresh Rust inventory generations and receipt-preserving reconciliation.
+  Preserve staged downloads and private publication journals across remounts;
+  verify cross-volume publication and portable links with disposable APFS images.
+  Native Mac file access 1.20.0 / publication 1.3.0. **Codex (AI)**
+
+- 2026-11-06: Register independent portable backup destinations through the
+  existing encrypted administrator vault, exact environment/origin selection
+  and AWS OIDC. Publish private read-only configuration discovery with explicit
+  unverified-provider and unavailable-execution status; refuse primary attachment
+  bucket reuse. Durable capture/restore and installed acceptance remain open.
+  See [destination setup](../docs/backup-destinations.md). **Codex (AI)**
+
+- 2026-11-06: Defer guarded streaming hints with missing journal ancestry before
+  policy RPCs, retaining current connection checks before all protected reads.
+  Add an explicit healthy canonical timing lane alongside fault/restart coverage.
+  **Codex (AI)**
+
+- 2026-11-06: Replace inactive device health warnings with muted last-seen labels
+  across cards, lists and device controls. Negotiate native iOS background presence
+  through pairing contract 1.1.0, retaining foreground support on older shells and
+  withdrawing background approval on identity or Activity manager changes.
+  Background App Refresh runs only when iOS schedules it; physical background
+  delivery remains a separate native acceptance check. **Codex (AI)**
+- 2026-11-06: Add reviewed account-file publication over ordinary restored folders, verified indexed offline bytes, canonical upload/Timeline audit records, mapped rename/move/branch history and atomic session/root/checkpoint/epoch recovery. Preserve source-loss and owner-edit boundaries; public restore/jobs/UI, provider and installed acceptance remain separate. **Codex (AI)**
+
+- 2026-11-06: Revalidate detail-page Schema execution holds after normal refresh, preserve same-scope drafts during verification, clear revoked templates, and distinguish temporary capability-discovery failures from invalid authority. Add full real-backend route and quiet-control regressions. [PR 1390 evidence](../PRs/PR-1390-codex-schema-hold-refresh-refresh-schema-execution-holds-without-discarding-detail-page-drafts.md). **Codex (AI)**
+
+- 2026-11-06: Keep saved mobile device connections alive across app routes and
+  retry on foreground/network recovery, independently of file-sync jobs. Preserve
+  account boundaries, explicit revoked-device repair and connection preferences.
+  Physical iPhone acceptance remains separate from lifecycle regression checks.
+  **Codex (AI)**
+
+- 2026-11-06: Add reviewed atomic/resumable ordinary-graph creation primitives with canonical transaction receipts, private execution holds, containment/closure checks and edit-safe completion fencing. Held previews suppress source, pseudo/native and delayed callbacks across desktop/mobile surfaces. This is not whole-account restore delivery; see [PR 1387 scope and verification](../PRs/PR-1387-codex-account-restore-execution-resumable-ordinary-graph-creation.md). **Codex (AI)**
+
+- 2026-11-06: Preserve owned backup content with paged source-reference evidence, explicit unresolved/unsupported/excluded-authority coverage, and streamed notification history. Verify pinned API capture, independent recovery, runtime alias differences and private dependency boundaries; whole-account readiness remains false. [PR1386 verification](../PRs/1386-codex-backup-reference-closure-preserve-backup-content-with-explicit-source-reference-coverage.md). **Codex (AI)**
+
+- 2026-11-06: Add local-worker account restore admission and immutable paged review plans with explicit incomplete coverage, source-format limitations, per-page integrity/identity fences and disposable available-disk indexes. No account writer or full-backup completion is exposed. See [scope and verification](../PRs/1383-codex-account-restore-admission-add-durable-account-restore-review-planning.md). **Codex (AI)**
+
+- 2026-11-06: Preserve confirmed backup stream counters through strict reconciliation and reload; retain repeated live revisions as cumulative activity while checkpointing only the final confirmed effect. Completion evidence migrates in bounded resumable pages and excludes unpublished intents.
+
+- 2026-11-06: Exercise iOS inventory regressions through its supported backup mode and explicitly verify strict-watcher refusal; retain macOS strict coverage and all paging, policy, integrity and cancellation assertions. Full iOS runtime: 262 tests, zero failures, 10 existing opt-in skips. **Codex (AI)**
+
+- 2026-11-06: Add an independently negotiated bounded Mac compound byte upload beneath the existing guarded single-file commit, preserving fresh identity checks, callback-time authority and shared resources. Larger/custom-policy sources retain their existing transport. [PR 1375 verification](../PRs/1375-native-compound-upload-reduce-mac-upload-latency.md).
+- 2026-11-06: Keep private Swift fixtures out of the canonical Release bundle build; compile/check/copy the same explicit shipped-product set and refuse failed or missing binaries before staging. [PR 1375](../PRs/1375-native-compound-upload-reduce-mac-upload-latency.md).
+- 2026-11-06: Resolve the iOS release Cargo executable through rustup and provision device plus both simulator targets before native tests. Cover Homebrew/custom toolchain paths and missing-executable refusal with an executable workflow regression. **Codex (AI)**
+
+- 2026-11-06: Preserve complete authenticated shared content and Timeline copy/export/compare/checkout without arbitrary content ceilings. Retain authorization, rate admission, canonical depth, storage accounting and request/event/part controls. Negotiate combined Action 1.42 and Timeline 1.19.2; verify a full Unicode Data lifecycle with HTTP bodies over 7 MB and visible share controls above the keyboard. [Evidence and release boundaries](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
+
+- 2026-11-06: Add editable rich fields, context menus and map scale/group controls; keep Editor.js in Builder viewport documents, flush the latest form snapshot, and defer hidden rich editors until first visibility. [Implementation and acceptance](../PRs/1364-codex-builder-rich-text-context-menu-add-authored-rich-text-fields-context-menus-and-map-marker-controls.md). **Codex (AI)**
+
+- 2026-11-06: Local attachment storage now signs exact-version native download ranges for 60 seconds, requiring the exact Range header and trusted HTTPS origin; whole-object replay and altered range authority are refused. — Codex (AI)
+
+
+- 2026-11-06: Keep authored context menus open through same-record source refreshes; reconcile conditional controls and preserve focus, while command dismissal retains native form capture and closes on true slot/ownership changes. **Codex (AI)**
+
+
+- 2026-11-06: Supply the real Node argument-vector shape in the parallel
+  workspace bootstrap test VM after early password-agent CLI discovery was
+  added. This repairs the release test fixture without changing app startup,
+  credentials or development/stable profile separation.
+  **Codex (AI)**
+
+- 2026-11-06: Wait for macOS to reap killed development process groups when a
+  zombie temporarily produces EPERM. Cleanup still requires ESRCH within the
+  existing deadline and preserves permission refusals and failed-test evidence.
+  **Codex (AI)**
+
+
+- 2026-11-06: Correct the native upload-batch test peer to verify only requested
+  upload receipts. Exercise admission expiry and completion of all 256 files
+  across fresh bounded requests with retained operation IDs, receipt reuse and
+  no duplicate PUTs. Production expiry, authorization and resource policy are
+  unchanged; this is a test-only release follow-up.
+  **Codex (AI)**
+
+- 2026-11-06: Add disposable HTTPS attachment bytes with an ephemeral CA scoped to the exact canonical transfer-worker child; reject missing/wrong trust and preserve normal TLS, native authorization and two-way proof semantics. No OS trust or shipping launcher changes. Original full two-way before-seal proof passes at 5 MB/s and 15% CPU; first native server-received PUT 19.030s, synthetic scope only. [PR 1363 evidence](../PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md). **Codex (AI)**
+
+- 2026-11-06: Compose the canonical desktop host/transfer worker in early sync acceptance, negotiate real capabilities and composite authorization, verify renderer/native resource parity, and record safe per-call/server-observed timings. Make the disposable Mac sync fixture multiplex native request IDs so polling can overlap inspect/read through the existing production lanes. Add cancellation/EOF transport regressions and safe queue/service/identity timing aggregates; retain all identity and exact-byte acceptance checks. **Codex (AI)**
+- 2026-11-06: Observe before-seal receipts asynchronously without blocking the transfer consumer; retain per-operation readiness/claim and per-session native admission/HTTP provenance. The one instrumented synthetic two-way proof passes at 5 MB/s/15% CPU; rates, fresh authorization and shipping concurrency remain unchanged. [Qualified phase evidence](../PRs/1363-codex-native-sync-fixture-lanes-canonical-native-two-way-proof.md#instrumented-follow-up). **Codex (AI)**
+
+
+- 2026-11-06: Keep Mac folder settings mounted independently of background
+  sync runs, preserve focused unsaved connection drafts while automatic checks
+  run, and retain scoped resource measurements with explicit historical labels
+  until a fresh sample arrives. Background refresh uses one inline indicator;
+  saving still waits for the active run to finish.
+  **Codex (AI)**
+
+- 2026-11-06: Move the Thingtime Node `@main` entry out of Swift's special
+  `main.swift` file so the release workflow's clean `swift test` build compiles
+  the executable as a test dependency. Supply the isolated Rust indexer to
+  photo-original tests and preflight it in the release workflow. The signed app
+  behavior is unchanged.
+  **Codex (AI)**
+
+- 2026-11-06: Return validated native inventory status with each bounded Rust
+  page so large Mac scans avoid a second helper launch per page. The matched
+  10,001-entry/79-page fixture read fell from 21.6 s to 11.4 s; full sync
+  throughput and first-transfer timing remain separate acceptance. Show an
+  allowlisted saved automatic-sync failure reason when available instead of
+  claiming every attention state means settings changed. See
+  [PR 1357](../PRs/1357-codex-optimize-native-scan-page-reduce-native-sync-paging-cost-and-clarify-automatic-attention.md).
+  **Codex (AI)**
+- 2026-11-06: Add reusable saved Editor.js fields/read views with awaited form
+  capture and paired plain text, editable contextual menus with keyboard/touch
+  access, and generic map visual scale/zoom adaptation and explicit association.
+  Preserve original route ordinals, SDK transforms, member actions and private
+  data boundaries; remove the fixed Action descriptor-count cap. **Codex (AI)**
+
+- 2026-11-05: Replace the iOS share completion dead end with a prefilled post composer, normal message destination and Things folder saving. Add an editable contextual bottom toolbar, bounded native file reads and durable share recovery. Remove arbitrary shared-data input ceilings and read comment previews/counts in bounded batches; see [implementation and acceptance](../PRs/1355-codex-share-composer-20261105-open-ios-shares-in-post-message-and-save-composers.md). **Codex (AI)**
+
+
+- 2026-11-05: Fix large/deep editable Webpage saves that passed validation but
+  rolled back when Timeline discovery hit hidden block/nesting caps. Share
+  cycle-safe iterative traversal across capture and comparison; preserve
+  Component authorization, CAS and transactional revisions. Add disposable
+  real-API and reused-node/cycle regressions. **Codex (AI)**
+
+- 2026-11-05: Replace shared preview artwork with Editorial/Colour Blocks and
+  three invitation themes; add an editable preview customiser with URL-carried
+  theme/layout choices and anonymous content autofill. Details and acceptance:
+  [PR 1287](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md).
+
+- 2026-11-05: Add ACL-aware exact counts, authorized offset paging and ordered
+  batch Thing reads; retain collection pages and prefetch adjacent pages, reveal
+  selected list rows, and publish map pages progressively. Add complete-address
+  batch geocoding with allowlisted match quality. Private app composition stays
+  in saved Things. Diagnose interrupted dependency installers without stealing
+  live locks. Prune impossible managed-kind query alternatives for explicit
+  kinds while preserving mixed protected-kind and legacy compatibility checks.
+  Deployment and real-account acceptance remain separate checks.
+  See [PR 1351](../PRs/1351-codex-routes-home-performance-add-precise-collection-paging-and-progressive-maps.md).
+  **Codex (AI)**
+
+### Provider credential handoff
+
+- 2026-11-09: Check credential handoff compatibility without reading provider input. Add scoped Connections OAuth client imports for Meta and other registered confidential clients while preserving other environment and origin entries. [Agent runbook](../docs/agent-credential-workflows.md). **Codex (AI)**
+
+- 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
+
 - 2026-11-05: Reconcile latest main into the anonymous/local-first feature while preserving device partitions, independent queues, Builder provenance and Action authorization. Correct selected-origin renderer asset preflight and local CLI renderer configuration/deadlines; retain explicit acceptance gaps. [Integration record](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
 
@@ -187,6 +448,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   forwarding and independent disposable databases.
   [Integration evidence](../artifacts/anonymous-local-first-2026-10-26-develop-integration/README.md). — Codex (AI)
 ### 2026-11-05
+- Accept canonical zero-byte file entries in the native sync cloud change feed
+  without relaxing multipart fingerprint checks for nonempty files. The signed
+  installed two-way download exposed the validator mismatch after PR #1352.
+  — Codex (AI)
+- Serve verified zero-byte attachment objects through the authenticated byte-cache route even when storage returns no stream (`api.attachment-content` 1.17.2). Extend the disposable Mac paged fixture with nested mixed-size files, explicit synthetic resource limits, and per-phase/native/HTTP timing while keeping installed sync state separate. [PR #1352 details](../PRs/1352-codex-sync-large-folder-performance-fix-empty-attachment-reads-and-validate-mixed-large-folder-sync.md). — Codex (AI)
 - Add account-scoped connector confirmation controls in Settings → Connections,
   staged large mutation plans, paged signed review and single-use receipts.
 - Let saved map elements compose their markers from ordinary editable child
@@ -351,6 +617,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   **Codex (AI)**
 
 - 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
+
+- 2026-10-29: Add invitation previews and optional recipient profile suggestions. Discover app-route preview defaults automatically from the real router, support optional route-local overrides, and infer supported anonymous saved-page copy/photos without per-page metadata registration. Share those projections through `api.social-previews` 1.1.0 and branded PNGs through `api.social-card` 1.3.0, preserving canonical ACLs, managed-photo version checks and exact Thingtime brand assets. Deployment/live acceptance remains separate; [PR 1287 details](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md). **Codex (AI)**
 
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
 

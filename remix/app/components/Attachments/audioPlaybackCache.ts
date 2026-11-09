@@ -6,6 +6,7 @@ import { workspaceScopeKey, type WorkspaceScope, type WorkspaceLease, type Works
 import { EXPECTED_DATA_PLANE_HEADER, isDataPlane } from '../../utils/dataPlane';
 import { requireThingtimeCapability } from '../../api/utils/capabilities/requireCapability.client';
 import { withExportDeadline } from '../../utils/thingTransfer/exportDeadline';
+import { REMOTE_TRANSFER_CONTENT_VERSION } from '../../utils/thingTransfer/remoteCapabilities';
 import { ORIGINAL_STREAM_POLICY } from '../../utils/thingTransfer/originalStreamPolicy';
 
 const CACHE_VERSION = 'v2';
@@ -145,7 +146,7 @@ export const saveOfflineAudio = async (attachment: PublicAttachment, context: Of
  }, signal);
  try {
   await withExportDeadline(async signal => {
-   await (options.requireCapability || requireThingtimeCapability)('api.attachment-content', '1.18.0');
+   await (options.requireCapability || requireThingtimeCapability)('api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION);
    if (context.scope.kind === 'account' && context.scope.delegatedBy) await (options.requireCapability || requireThingtimeCapability)('api.auth-characters', '1.0.0');
    lease.assertCurrent(); signal.throwIfAborted();
   }, signal);

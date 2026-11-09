@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { importedThingCrystal } from './importContent';
 import { parseTransfer, serializeTransfer, validateTransfer, TRANSFER_FORMAT, TRANSFER_LIMITS, type ThingTransfer } from './format';
 
 const fixture = (): ThingTransfer => ({
@@ -70,7 +71,7 @@ test('files use numbered paths and bounded checksummed manifests, never display 
   const value = fixture();
   value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', name: 'photo.png', mime: 'image/png', bytes: 12, sha256: 'a'.repeat(64), title: 'Photo 🥰', description: 'First\nSecond', filenamePreview: 'Friendly filename' });
   assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
-  for (const patch of [{ title: 'bad\nline' }, { description: 'bad\u0000control' }, { filenamePreview: 'x'.repeat(256) }, { nsfw: false }, { detectedContentType: 'image/png' }]) {
+  for (const patch of [{ title: 'bad\nline' }, { description: 'bad\u0000control' }, { nsfw: false }, { detectedContentType: 'image/png' }]) {
     assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], ...patch }] }));
   }
   for (const path of ['../photo', '/etc/file', 'files/../file', 'files\\photo', 'https://example.com/photo', 'files/000001']) {
@@ -103,4 +104,31 @@ test('file metadata preserves large exact sizes but rejects unsafe sizes and agg
   }
   assert.throws(() => parseTransfer(serializeTransfer(value), { maxFileBytes: 12 }), /too large/);
   assert.throws(() => serializeTransfer(value, { maxFileBytes: 12 }), /too large/);
+});
+
+test('portable metadata roundtrips long shared names, annotations, URLs and tags within archive framing', () => {
+ const value = fixture();
+ value.things[1].tags = Array.from({ length: 30 }, (_, index) => `tag-${index}-${'long'.repeat(200)}`);
+ const metadata = { name: `  ${'original'.repeat(150)}.custom  `, title: 'title'.repeat(300), description: 'description\n'.repeat(300), filenamePreview: 'shown'.repeat(300) };
+ metadata.description = metadata.description.trim();
+ value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', mime: 'application/octet-stream', bytes: 0, sha256: 'a'.repeat(64), ...metadata });
+ value.links = [{ id: 'long-link', targetId: 'data', url: `https://example.test/${'path'.repeat(1000)}.png`, mediaKind: 'image', title: metadata.title }];
+ value.attachmentOrder = ['file', 'long-link'];
+ assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+});
+
+test('an editable private webpage copy does not inherit its source route or automatic activation', () => {
+  const value = fixture();
+  const webpage = {
+    id: 'page', thingtime: ['webpage'],
+    crystal: { name: 'Editable page', pageKey: 'source', siteRoute: '/original', activationAction: { action: 'run-on-open' }, blocks: [{ type: 'text', text: 'Preserve this editable block' }] }
+  };
+  value.things.push(webpage);
+  const saved = parseTransfer(serializeTransfer(value)).things.at(-1)!;
+  assert.deepEqual(saved.crystal, webpage.crystal, 'the portable export retains exact source data');
+  const copy = importedThingCrystal(saved, saved.crystal, new Map([['page', 'new-page']]), 'new');
+  assert.equal(copy.siteRoute, undefined);
+  assert.equal(copy.activationAction, undefined);
+  assert.equal(copy.pageKey, 'source-new');
+  assert.deepEqual(copy.blocks, webpage.crystal.blocks);
 });

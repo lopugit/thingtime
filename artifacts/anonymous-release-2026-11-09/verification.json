@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-09",
+  "featureParent": "d214a6b5a1965831febd2e5d1f2488ee3f13d1fc",
+  "mainParent": "c0d1ae9c4a5c047d9c7ada870dea7a5f6fa8f4a0",
+  "checks": {
+    "typecheck": {
+      "exit": 0,
+      "diagnostics": 0
+    },
+    "fullBuild": {
+      "exit": 0
+    },
+    "workspace": {
+      "pass": 914,
+      "skip": 110,
+      "fail": 0
+    },
+    "offlineShell": {
+      "pass": 4,
+      "fail": 0
+    },
+    "apiCapabilities": {
+      "pass": 184,
+      "fail": 0
+    },
+    "compiledManifest": {
+      "contracts": 16,
+      "exit": 0
+    },
+    "lint": {
+      "errors": 0,
+      "warnings": 24
+    }
+  },
+  "hostedRenderAvailable": false,
+  "productionAccepted": false,
+  "notes": "Targeted suite counts overlap; skipped cases are not passes."
+}

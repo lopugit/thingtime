@@ -1,10 +1,50 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { updateMapboxOverlay } from './mapboxOverlay';
+import { mapboxMarkerVisual, scaleMapboxMarker, updateMapboxOverlay } from './mapboxOverlay';
+import { mapboxPoints } from './mapboxData';
+
+test('moving excluded points stay visible without changing fitted destination bounds', () => {
+	const document = markerDocument();
+	const fitted: unknown[][] = [];
+	let added = 0;
+	const map = { getSource: () => null, fitBounds: (bounds: { coordinates: unknown[] }) => fitted.push(bounds.coordinates) };
+	const gl = {
+		LngLatBounds: class { coordinates: unknown[] = []; extend(value: unknown) { this.coordinates.push(value); } isEmpty() { return !this.coordinates.length; } },
+		Marker: class { setLngLat() { return this; } addTo() { added++; return this; } remove() {} }
+	};
+	for (const latitude of [-37, -38]) {
+		const points = mapboxPoints([{ id: 'destination', coordinates: [145, -37], label: 'Destination' }, { id: 'moving', coordinates: [146, latitude], label: 'Moving point', fitBounds: false }]);
+		updateMapboxOverlay(map, gl, [], { document, points, route: null, center: [145, -37], zoom: 10, fitBounds: true });
+	}
+	assert.equal(added, 4, 'every marker is still drawn');
+	assert.deepEqual(fitted, [[[145, -37]], [[145, -37]]]);
+	updateMapboxOverlay(map, gl, [], { document, points: mapboxPoints([{ coordinates: [146, -39], fitBounds: false }]), route: null, center: [145, -37], zoom: 10, fitBounds: true });
+	assert.equal(fitted.length, 2, 'an excluded-only overlay does not move the camera');
+});
+
+class MarkerNode {
+	children: MarkerNode[] = []; attributes: Record<string, string> = {}; textContent = ''; title = ''; src = ''; alt = ''; onError?: () => void; parent?: MarkerNode; onclick?: () => void;
+	style: Record<string, any> = { setProperty(key: string, value: string) { this[key] = value; } };
+	constructor(readonly tag: string, readonly ownerDocument: any) {}
+	set innerHTML(_: string) { assert.fail('marker text must never be parsed as HTML'); }
+	setAttribute(key: string, value: string) { this.attributes[key] = value; }
+	getAttribute(key: string) { return this.attributes[key]; }
+	removeAttribute(key: string) { delete this.attributes[key]; }
+	append(node: MarkerNode) { this.children.push(node); node.parent = this; }
+	contains(node: MarkerNode): boolean { return node === this || this.children.some(child => child.contains(node)); }
+	focus() { this.ownerDocument.activeElement = this; }
+	addEventListener(name: string, callback: () => void) { if (name === 'error') this.onError = callback; }
+	remove() { this.parent?.children.splice(this.parent.children.indexOf(this), 1); }
+}
+function markerDocument(nodes: MarkerNode[] = []) {
+	const document: any = { activeElement: null, createElement: (tag: string) => { const node = new MarkerNode(tag, document); nodes.push(node); return node; } };
+	return document;
+}
+const markerButton = (anchor: MarkerNode) => anchor.children[0].children[0];
 
 test('changing stops and route updates a loaded map without replacing it', () => {
 	const priorDocument = (globalThis as any).document;
-	(globalThis as any).document = { createElement: () => ({ style: {}, setAttribute() {}, textContent: '', title: '' }) };
+	(globalThis as any).document = markerDocument();
 	try {
 		const calls: string[] = [];
 		let source: { setData: (value: unknown) => void } | null = null;
@@ -39,7 +79,7 @@ test('changing stops and route updates a loaded map without replacing it', () =>
 
 test('reconciled marker selection restores keyboard focus to the same point', () => {
 	const priorDocument = (globalThis as any).document;
-	const doc: any = { activeElement: null, createElement: () => ({ style: {}, attributes: {} as Record<string, string>, setAttribute(key: string, value: string) { this.attributes[key] = value; }, getAttribute(key: string) { return this.attributes[key]; }, focus() { doc.activeElement = this; } }) };
+	const doc = markerDocument();
 	(globalThis as any).document = doc;
 	try {
 		const gl = {
@@ -47,19 +87,19 @@ test('reconciled marker selection restores keyboard focus to the same point', ()
 			Marker: class { node: any; constructor({ element }: any) { this.node = element; } getElement() { return this.node; } setLngLat() { return this; } addTo() { return this; } remove() {} }
 		};
 		const map = { getSource: () => null };
-		const data = { points: [{ id: 'fav', coordinates: [144, -37] as [number, number], label: 'Favourite' }], route: null, center: [144, -37] as [number, number], zoom: 10, fitBounds: false };
+		const data = { points: [{ id: 'fav', label: 'Favourite', coordinates: [144, -37] as [number, number] }], route: null, center: [144, -37] as [number, number], zoom: 10, fitBounds: false };
 		const first = updateMapboxOverlay(map, gl, [], data);
-		first[0].getElement().focus();
+		markerButton(first[0].getElement()).focus();
 		const second = updateMapboxOverlay(map, gl, first, { ...data, points: [{ ...data.points[0], selected: true }] });
-		assert.equal(doc.activeElement, second[0].getElement());
-		assert.match(second[0].getElement().style.cssText, /min-width:44px;min-height:44px/);
+		assert.equal(doc.activeElement, markerButton(second[0].getElement()));
+		assert.match(markerButton(second[0].getElement()).style.cssText, /min-width:44px;min-height:44px/);
 	} finally { (globalThis as any).document = priorDocument; }
 });
 
 test('route fitting keeps favourites visible, numbered buttons select without HTML injection', () => {
 	const priorDocument = (globalThis as any).document;
 	const nodes: any[] = [], coordinates: unknown[] = [], selected: string[] = [];
-	(globalThis as any).document = { createElement: () => { const node = { style: {}, attributes: {} as Record<string, string>, setAttribute(key: string, value: string) { this.attributes[key] = value; }, textContent: '' }; nodes.push(node); return node; } };
+	(globalThis as any).document = markerDocument(nodes);
 	try {
 		const map = { getSource: () => null, fitBounds: () => {} };
 		const gl = {
@@ -69,13 +109,16 @@ test('route fitting keeps favourites visible, numbered buttons select without HT
 		const favourite = { id: 'fav', coordinates: [110, -20] as [number, number], label: '<img onerror=evil>', markerLabel: '•', color: '#167d8d' };
 		const stop = { id: 'stop', coordinates: [144, -37] as [number, number], label: 'Stop name', markerLabel: '1', color: '#c4513c', selected: true };
 		updateMapboxOverlay(map, gl, [], { points: [favourite, stop], fitPoints: [stop], route: null, center: [144, -37], zoom: 10, fitBounds: true, onSelect: (point) => selected.push(point.id) });
-		assert.equal(nodes.length, 2);
-		assert.equal(nodes[0].textContent, '•');
-		assert.equal(nodes[0].title, '<img onerror=evil>');
-		assert.equal(nodes[1].textContent, '1');
-		assert.equal(nodes[1].attributes['aria-pressed'], 'true');
+		const buttons = nodes.filter(node => node.tag === 'button');
+		assert.equal(buttons.length, 2);
+		assert.equal(buttons[0].children[0].textContent, '•');
+		assert.match(buttons[0].style.cssText, /background:transparent/);
+		assert.match(buttons[0].children[0].style.cssText, /background:/);
+		assert.equal(buttons[0].title, '<img onerror=evil>');
+		assert.equal(buttons[1].children[0].textContent, '1');
+		assert.equal(buttons[1].attributes['aria-pressed'], 'true');
 		assert.deepEqual(coordinates, [[144, -37]]);
-		nodes[0].onclick(); nodes[1].onclick();
+		buttons[0].onclick!(); buttons[1].onclick!();
 		assert.deepEqual(selected, ['fav', 'stop']);
 	} finally { (globalThis as any).document = priorDocument; }
 });
@@ -83,27 +126,11 @@ test('route fitting keeps favourites visible, numbered buttons select without HT
 
 test('rich marker keeps its stop number and renders labels, icons and avatar through DOM properties', () => {
 	const priorDocument = (globalThis as any).document;
-	class NodeStub {
-		children: NodeStub[] = [];
-		style: Record<string, string> = {};
-		attributes: Record<string, string> = {};
-		textContent = '';
-		src = '';
-		alt = '';
-		onError?: () => void;
-		parent?: NodeStub;
-		constructor(readonly tag: string) {}
-		set innerHTML(_: string) { assert.fail('marker text must never be parsed as HTML'); }
-		setAttribute(key: string, value: string) { this.attributes[key] = value; }
-		append(node: NodeStub) { this.children.push(node); node.parent = this; }
-		addEventListener(name: string, callback: () => void) { if (name === 'error') this.onError = callback; }
-		remove() { this.parent?.children.splice(this.parent.children.indexOf(this), 1); }
-	}
-	(globalThis as any).document = { createElement: (tag: string) => new NodeStub(tag) };
+	(globalThis as any).document = markerDocument();
 	try {
 		const gl = {
 			LngLatBounds: class { extend() {} isEmpty() { return true; } },
-			Marker: class { constructor(readonly options: { element: NodeStub }) {} setLngLat() { return this; } addTo() { return this; } }
+			Marker: class { constructor(readonly options: { element: MarkerNode }) {} setLngLat() { return this; } addTo() { return this; } }
 		};
 		const label = '<img src=x onerror=evil>';
 		const avatarSrc = '/api/v1/attachments/content?id=account-photo';
@@ -114,8 +141,8 @@ test('rich marker keeps its stop number and renders labels, icons and avatar thr
 		const pins = updateMapboxOverlay({ getSource: () => null }, gl, [], {
 			points, route: null, center: [144, -37], zoom: 10, fitBounds: false
 		});
-		const button = pins[0].options.element as NodeStub;
-		const [row, icons] = button.children;
+		const button = markerButton(pins[0].options.element as MarkerNode);
+		const [row, icons] = button.children[0].children;
 		assert.equal(button.attributes['aria-label'], `Stop 2, Pickup, ${label}, 🚲, ♿`);
 		assert.deepEqual(row.children.map((node) => node.textContent), ['2', '', '★', `Pickup · ${label}`]);
 		assert.equal(row.children[1].tag, 'img');
@@ -127,7 +154,47 @@ test('rich marker keeps its stop number and renders labels, icons and avatar thr
 		const characterPins = updateMapboxOverlay({ getSource: () => null }, gl, [], {
 			points, route: null, center: [144, -37], zoom: 10, fitBounds: false, characterId: 'trusted-character'
 		});
-		const characterAvatar = characterPins[0].options.element.children[0].children[1] as NodeStub;
+		const characterAvatar = markerButton(characterPins[0].options.element).children[0].children[0].children[1] as MarkerNode;
 		assert.equal(characterAvatar.src, avatarSrc + '&character=trusted-character');
 	} finally { (globalThis as any).document = priorDocument; }
+});
+
+test('custom marker scaling retains SDK anchor, portal host and actual focused control', () => {
+	const document = markerDocument();
+	const anchor = document.createElement('div');
+	anchor.style.transform = 'translate(160px, 100px)';
+	const visual = mapboxMarkerVisual(anchor);
+	const button = document.createElement('button'); visual.append(button); button.focus();
+	let created = 0, removed = 0;
+	const gl = {
+		LngLatBounds: class { extend() {} isEmpty() { return true; } },
+		Marker: class {
+			element: MarkerNode;
+			constructor(options: { element: MarkerNode }) { this.element = options.element; created++; }
+			getElement() { return this.element; } setLngLat() { return this; } addTo() { return this; } remove() { removed++; }
+		}
+	};
+	const data = { document, markerElements: new Map([['["","fav"]', anchor]]), points: [{ id: 'fav', label: 'Favourite', coordinates: [144, -37] as [number, number] }], route: null, center: [144, -37] as [number, number], zoom: 10, fitBounds: false };
+	const pins = updateMapboxOverlay({ getSource: () => null }, gl, [], data);
+	scaleMapboxMarker(anchor, 0.5); scaleMapboxMarker(anchor, 1.5);
+	assert.equal(created, 1); assert.equal(removed, 0); assert.equal(pins[0].getElement(), anchor);
+	assert.equal(mapboxMarkerVisual(anchor), visual); assert.equal(document.activeElement, button);
+	assert.equal(anchor.style.transform, 'translate(160px, 100px)'); assert.equal(visual.style.transform, 'scale(1.5)');
+	const next = updateMapboxOverlay({ getSource: () => null }, gl, pins, { ...data, markerScale: 0.8 });
+	assert.equal(next[0], pins[0]); assert.equal(created, 1); assert.equal(document.activeElement, button);
+});
+
+test('default keyed marker retains anchor and focused button when associated members arrive', async () => {
+	const { groupMapboxMarkers } = await import('./mapboxGrouping');
+	const document = markerDocument(); let created = 0;
+	const gl = {
+		LngLatBounds: class { extend() {} isEmpty() { return true; } },
+		Marker: class { element: MarkerNode; constructor(options: { element: MarkerNode }) { this.element = options.element; created++; } getElement() { return this.element; } setLngLat() { return this; } addTo() { return this; } remove() { assert.fail('stable group must retain anchor'); } }
+	};
+	const original = { id: 'first', label: 'First', coordinates: [144, -37] as [number, number], item: { association: 'same' } };
+	const base = { document, route: null, center: [144, -37] as [number, number], zoom: 10, fitBounds: false };
+	const first = updateMapboxOverlay({ getSource: () => null }, gl, [], { ...base, points: groupMapboxMarkers([original], 'item.association') });
+	const button = markerButton(first[0].getElement()); button.focus();
+	const next = updateMapboxOverlay({ getSource: () => null }, gl, first, { ...base, points: groupMapboxMarkers([original, { ...original, id: 'second' }], 'item.association') });
+	assert.equal(created, 1); assert.equal(next[0], first[0]); assert.equal(markerButton(next[0].getElement()), button); assert.equal(document.activeElement, button);
 });

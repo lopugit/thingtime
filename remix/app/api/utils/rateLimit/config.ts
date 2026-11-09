@@ -11,6 +11,7 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'social-previews.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.write': { limit: 60, windowMs: 60_000, enabled: true },
   'mail.sync': { limit: 30, windowMs: 60_000, enabled: true },
@@ -26,6 +27,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'attachments.start': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
   'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
+  'files.sync-transfer-admit': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
   // owner title/description edits (POST /api/v1/attachments/annotate) — small
   // crystal-only writes, same shape as delete
@@ -164,6 +166,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // batched beacons; one flush covers a whole scroll session, so this window
   // is generous for humans and a wall for replay scripts (anon keys by IP)
   'things.views': { limit: 60, windowMs: 60_000, enabled: true },
+  // Managed replica workflows fence source/policy before and after local effects.
+  'things.storagePolicy.read': { limit: 240, windowMs: 60_000, enabled: true },
+  // The worker validates the sparse generation before transfer and publication.
+  'things.storagePolicy.automatic': { limit: 600, windowMs: 60_000, enabled: true },
   // Admin-only raw queries can still be expensive; keep accidental repeated
   // scans bounded independently from the ordinary app APIs.
   'mongodb.query': { limit: 30, windowMs: 60_000, enabled: true },
@@ -342,6 +348,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
 	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
 	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
+	'backups.workspace.read': { limit: 180, windowMs: 60_000, enabled: true },
+	'backups.workspace.write': { limit: 60, windowMs: 60_000, enabled: true },
+	'backups.dispatch': { limit: 15, windowMs: 60_000, enabled: true },
+	'backups.destinations': { limit: 120, windowMs: 60_000, enabled: true },
 	'devices.sync-control': { limit: 1200, windowMs: 60_000, enabled: true },
 	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
 	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },

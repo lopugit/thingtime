@@ -4,6 +4,26 @@ Anonymous `api.client.ts` resolves `local-*` algorithm previews from the leased
 `LocalAlgorithms` store before public discovery. Missing local IDs stay local
 404s and retired facades refuse; they never trigger public capability/HTTP reads.
 Regression: `local-workspace/api.client.test.ts` and `algorithms.test.ts`.
+
+## Prefilled incoming shares
+
+`PostComposer.initialDraft` and Messenger's `Composer.initialDraft` admit a stable
+share once, retaining typed text across destination switches. `/share` defaults
+to Post and composes the existing chat and Things surfaces behind the reusable
+`ContextActionToolbar`. `api.chats-messages` 1.3.0 and
+`api.chats-messages-edit` 1.1.0 remove product text/attachment-count ceilings;
+existing transport, authorization, purpose, storage and moderation gates remain.
+See [incoming sharing](../incoming-sharing.md) and the matching manual checklist.
+
+Uncapped comment creation uses `app/api/utils/things/relatedWindows.ts` for
+identity-only preview windows, aggregate interaction counts and batched keyset
+thread counts. `things.ts` hydrates only selected bodies through the existing
+moderation checks. Processing pages do not limit the stored thread. Run
+`node remix/scripts/feed-window-acceptance.mjs <private-fixture-path> <evidence-path>`
+against the task-owned disposable incoming-share host to verify more than 500
+comments through real APIs, exact counts, all cursor pages, ordering and privacy.
+
+
 Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
 The root declaration takes precedence over legacy nested `crystal.thing` in
 `PostInteractiveThing`; the linked embed still reads its Component through its

@@ -2,7 +2,7 @@ import { serializeTransfer, TRANSFER_LIMITS, validateTransfer } from './format';
 
 export const REMOTE_TRANSFER_EXPORT_VERSION = '1.18.0';
 export const REMOTE_TRANSFER_IMPORT_VERSION = '1.15.0';
-export const REMOTE_TRANSFER_CONTENT_VERSION = '1.18.0';
+export const REMOTE_TRANSFER_CONTENT_VERSION = '1.19.0';
 
 /** Requirements describe the selected origin, never the portable format version. */
 export function transferImportMinimumVersion(manifest: unknown): string {

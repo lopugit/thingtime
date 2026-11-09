@@ -5,6 +5,9 @@ import { rootIdentity } from '../../utils/rootIdentity';
 import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
 import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
 import { resolveLocalWebpage } from '../../local-workspace/api.client';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { requiresCollectionPagingContract } from './savedCollectionContract';
+import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -41,7 +44,7 @@ export type WebpageTarget =
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
+	page: { id: string; executionHeld?: boolean; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
 };
@@ -78,7 +81,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 			const data = await resolveAccountWebpage(account, target);
 			return { status: 'ready', data: { page: data.page, source: data.source, componentsByRef: buildComponentsByRef(data) } };
 		}
-		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
+		await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
@@ -168,6 +171,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 			...carried,
 			id,
 			crystal,
+			...(typeof thing.executionHeld === 'boolean' ? { executionHeld: thing.executionHeld } : {}),
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
 			...(timelineHeadId ? { timelineHeadId } : {}),
@@ -398,6 +402,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				...(pageKey ? { pageKey } : {}),
 				...(siteRoute ? { siteRoute } : {}),
 				...(crystalBase.previewBg ? { previewBg: crystalBase.previewBg } : {}),
+				...(resolved?.source === 'user' && crystalBase.activationAction ? { activationAction: crystalBase.activationAction } : {}),
 				version: (Number(crystalBase.version) || 0) + 1,
 				...(resolved?.source === 'user'
 					? crystalBase.forkOf
@@ -411,14 +416,20 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			try {
 				// Device saves validate locally; only remote transport negotiates.
 				if (!isAnonymousWorkspace() && !currentAccountWorkspace()) {
-					if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+					if (usesAuthoredControls(blocks)) {
+						await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+						await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+					} else if (requiresCollectionPagingContract(blocks)) {
+						await requireThingtimeCapability('api.things', '1.49.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
+					} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
 						await requireThingtimeCapability('api.things', '1.47.0');
 						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
 					} else if (requiresEditableIntrinsicContract(blocks)) {
 						await requireThingtimeCapability('api.things', '1.44.0');
 						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
-					}
-					else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
+					} else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
 					else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				}
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;

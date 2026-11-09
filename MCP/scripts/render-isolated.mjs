@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cp, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, mkdtemp, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,14 +36,22 @@ export function parseOptions(argv) {
 }
 
 // A selected source tree must not smuggle dotenv files or escaping symlinks.
-export async function verifyMount(root) {
+export async function verifyMount(root, { rendererSnapshot = false } = {}) {
   const actual = await realpath(root);
   async function walk(path) {
     const info = await lstat(path);
     if (info.isSymbolicLink()) {
       const target = relative(actual, await realpath(path));
       if (target === '..' || target.startsWith('../') || isAbsolute(target)) throw new Error('A mount contains an escaping symlink.');
-    } else if (info.isDirectory()) {
+      return;
+    }
+    if (rendererSnapshot && (info.isDirectory() || info.isFile())) {
+      // The snapshot's parent remains private on the host. The copy archived
+      // into Docker must be readable by UID 1001 regardless of the host umask.
+      const access = info.isDirectory() ? 0o055 : 0o044;
+      if ((info.mode & access) !== access) await chmod(path, (info.mode & 0o777) | access);
+    }
+    if (info.isDirectory()) {
       for (const entry of await readdir(path)) {
         if (entry === '.env' || entry.startsWith('.env.')) throw new Error('A mount contains a dotenv file.');
         await walk(join(path, entry));
@@ -200,7 +208,7 @@ export async function main(argv = process.argv.slice(2)) {
     await cp(options.renderer, join(snapshot, 'remix/dist/draft-preview'), copyTree);
     await cp(join(here, 'render-only-server.mjs'), join(snapshot, 'MCP/scripts/render-only-server.mjs'));
     await cp(join(mcp, 'package.json'), join(snapshot, 'MCP/package.json'));
-    await verifyMount(snapshot); assertActive();
+    await verifyMount(snapshot, { rendererSnapshot: true }); assertActive();
     const expiry = new Date(deadline).toISOString();
     const labels = ['--label', 'thingtime.render-isolated=true', '--label', `thingtime.render-session=${name}`, '--label', `thingtime.expires-at=${expiry}`];
     const created = docker(['volume', 'create', ...labels, volume]);

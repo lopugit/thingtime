@@ -9,6 +9,7 @@ import { getThingsCollection, withMongoTransaction } from '../mongodb/collection
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { StorageMutationError } from '../storage/storageCore.ts';
+import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { appendTimelineEvent, readTimelineEntries, timelineEventThingId, timelineFolderId } from './repository.ts';
 
 /** One protected relational Thing per (owner, event). The event stays immutable:
@@ -46,7 +47,11 @@ export async function readTimelineVersionNames(things: any, ownerId: string, eve
 
 const dependencies = {
 	collection: getThingsCollection, transaction: withMongoTransaction, debit: applyUserStorageDelta, now: () => new Date(),
-	append: appendTimelineEvent, entries: readTimelineEntries
+	append: appendTimelineEvent, entries: readTimelineEntries,
+ epoch: async (things: any, ownerId: string, thingId: string, session: any) => {
+  const doc = await things.findOne({ shareId: thingId, ownerId }, { session, projection: { shareId: 1, ownerId: 1, executionHold: 1 } });
+  await recordCreationContentEpoch(things, doc, doc, session);
+ }
 };
 export function createVersionNameService(overrides: Partial<typeof dependencies> = {}) {
 	const deps = { ...dependencies, ...overrides };
@@ -97,6 +102,7 @@ export function createVersionNameService(overrides: Partial<typeof dependencies>
 				if (error?.code === 11000) refuse(409, 'This version name changed on another device. Refresh and try again.');
 				throw error;
 			}
+			await deps.epoch(things, ownerId, command.thingId, session);
 			return { ok: true as const, name: next, entry };
 		}).catch(error => { if (error instanceof VersionNameMutationError) refuse(error.status, error.message); throw error; });
 	};

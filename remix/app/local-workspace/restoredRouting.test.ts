@@ -1,3 +1,4 @@
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -22,7 +23,7 @@ async function fixture() {
 			requests.push({ url: url.href, credentials: options?.credentials });
 			if (!allowPublic) throw new Error('Unexpected outbound request');
 			if (options?.credentials === 'same-origin')
-				return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: '1.31.0' } } });
+				return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'] } } });
 			assert.equal(options?.credentials, 'omit');
 			assert.equal(options?.redirect, 'error');
 			return Response.json({

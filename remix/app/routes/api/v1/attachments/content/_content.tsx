@@ -9,6 +9,7 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
+import { EMPTY_CONTENT_SHA256 } from '~/fileSync/contentFingerprint';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
 import { ORIGINAL_STREAM_POLICY } from '~/utils/thingTransfer/originalStreamPolicy';
@@ -109,10 +110,13 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 				return json(result);
 			}
+			const contentViewer = audience || sharedRoot
+				? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) }
+				: null;
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
-				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
+				contentViewer,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
 				retained ? range!.version : undefined,
@@ -265,9 +269,41 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			}
 			if (retainBytes || url.searchParams.get('cache') === 'bytes') {
 				if (!retainBytes && result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await dependencies.fetchObject(result.url, { redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]) });
-				if (!upstream.ok || !upstream.body) { void upstream.body?.cancel().catch(() => {}); return new Response(null, { status: 502 }); }
-				return new Response(upstream.body, {
+				const fetchBytes = retainBytes ? dependencies.fetchObject : dependencies.rangeFetch;
+				const upstream = await fetchBytes(result.url, { redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]) });
+				if (!upstream.ok || (!upstream.body && result.size !== 0) ||
+					(result.size === 0 && upstream.headers.has('Content-Length') && upstream.headers.get('Content-Length') !== '0')) {
+					void upstream.body?.cancel().catch(() => {});
+					return new Response(null, { status: 502 });
+				}
+				if (result.size === 0) {
+					const verified = await dependencies.fingerprint(contentViewer, url.searchParams.get('id'));
+					if (verified.ok === false) {
+						void upstream.body?.cancel().catch(() => {});
+						return json({ ok: false, error: verified.error }, { status: verified.status });
+					}
+					if (verified.version !== result.version || verified.size !== 0 || verified.fingerprint.algorithm !== 'sha256-parts-v1' ||
+						verified.fingerprint.partCount !== 0 || verified.fingerprint.sha256 !== EMPTY_CONTENT_SHA256) {
+						void upstream.body?.cancel().catch(() => {});
+						return new Response(null, { status: 502 });
+					}
+					if (upstream.body) {
+						const reader = upstream.body.getReader();
+						try {
+							// A zero-byte GET may have an empty stream, but must never
+							// smuggle bytes behind the verified zero-size receipt.
+							for (let emptyChunks = 0; emptyChunks < 16; emptyChunks++) {
+								const chunk = await reader.read();
+								if (chunk.done) break;
+								if (chunk.value.byteLength || emptyChunks === 15) return new Response(null, { status: 502 });
+							}
+						} catch { return new Response(null, { status: 502 }); }
+						finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+					}
+				}
+				// Fetch permits a successful zero-byte object to have a null body.
+				// Return actual empty bytes only after its authorized storage GET succeeds.
+				return new Response(result.size === 0 ? new Uint8Array(0) : upstream.body, {
 					headers: {
 						ETag: etag,
 						'Content-Type': result.contentType,

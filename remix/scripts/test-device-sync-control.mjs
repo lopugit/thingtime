@@ -9,8 +9,9 @@ import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { MongoClient } from 'mongodb';
-const [bundleArgument, mongodArgument] = process.argv.slice(2);
-assert.ok(bundleArgument && mongodArgument && process.argv.length === 4, 'Usage: test-device-sync-control.mjs <compiled server/index.mjs> <mongod executable>');
+const [bundleArgument, mongodArgument, mode] = process.argv.slice(2);
+assert.ok(mode === undefined || mode === '--device-folders');
+assert.ok(bundleArgument && mongodArgument && (process.argv.length === 4 || process.argv.length === 5), 'Usage: test-device-sync-control.mjs <compiled server/index.mjs> <mongod executable>');
 const bundle = await realpath(resolve(bundleArgument)), mongod = await realpath(resolve(mongodArgument));
 const directory = await mkdtemp(join(tmpdir(), 'thingtime-sync-control-'));
 await chmod(directory, 0o700); await mkdir(join(directory, 'db'));
@@ -35,7 +36,7 @@ try {
       assert.ok(Date.now() < deadline, 'Disposable replica election timed out'); await new Promise(resolve => setTimeout(resolve, 100));
     }
   } finally { await client.close(); }
-  worker = spawn(process.execPath, ['scripts/device-sync-control.integration.mjs'], { cwd: resolve(import.meta.dirname, '..'), stdio: 'inherit', env: {
+  worker = spawn(process.execPath, [mode === '--device-folders' ? 'scripts/device-folders.integration.mjs' : 'scripts/device-sync-control.integration.mjs'], { cwd: resolve(import.meta.dirname, '..'), stdio: 'inherit', env: {
     ...cleanEnv, MONGODB_CONNECTION_STRING: 'mongodb://127.0.0.1:28179/thingtime?replicaSet=sync-control-fixture',
     THINGTIME_SYNC_CONTROL_TEST_DIRECTORY: directory, THINGTIME_SYNC_CONTROL_BUNDLE: bundle,
     JWT_SECRET: randomUUID() + randomUUID(), APP_URL: 'http://127.0.0.1:28180', THINGTIME_EMAIL_PROVIDER: 'console'

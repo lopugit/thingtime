@@ -40,6 +40,14 @@ data stay on the home data plane.
 | Admin routes | `app/routes/api/v1/admin/*` (users/public-uploads, ci, integrations, error-logs, moderation, migrations) |
 | Client hooks | `app/hooks/useCurrentUser.tsx`, account switcher components in `app/components/Account/*` |
 
+Native mobile background authority is watched by `mobileDeviceIdentity.ts`,
+mounted outside the optional polling activity in `MobileDevicePresenceBootstrap`.
+Identity/unmount withdrawal cancels scoped in-flight native authorizations while
+retaining opt-in; one read-only status can resume the same verified identity.
+Ordinary visibility hiding does not withdraw an authorized location session.
+Run the Devices identity/presence/location bridge tests and the native location
+scope regressions; see `TESTING.md` for activity-disabled logout/relogin checks.
+
 ## Authorization helper
 
 - Every API route: `const user = await getCurrentUser(request)`; treat
@@ -451,6 +459,12 @@ OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpe
 
 ## Local ChatGPT plan connections
 
+Desktop remote mode verifies the active Electron account session against its
+exact HTTPS account API, then uses the same loopback OAuth runtime with Electron
+Safe Storage. `desktopAccountAuthority.ts` fences owner and origin; device plan
+IDs cannot resolve to a hosted credential. The normal production account and
+managed local API modes remain separate. See README for the device text path.
+
 `ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
 ## Characters
 
@@ -539,6 +553,17 @@ new policy reader; a UI-only preview forwarding to the old gateway cannot prove
 the new backend. See README “Preview cleanup policy” for defaults and rollout.
 Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
 coverage: TESTING.md “Preview retention and PR liveliness”.
+
+## Gift invites
+
+`Invites/InvitePanel.tsx` uses the shared `InviteProfileFields` with optional
+creator suggestions. `inviteCore.ts::inviteProfile` validates supplied suggestions;
+`invites.ts::createInvite` accepts omitted or blank names/usernames. The recipient
+chooses their final profile in `InviteSignup.tsx`; `prepareInviteSignup` still
+requires a valid final name and username, supports legacy suggested defaults, and
+never lets suggestions override explicit recipient input. `api.auth-invites` 2.2.0
+advertises optional creator fields and the client negotiates that minimum.
+`test:invites` covers empty suggestions, recipient choice and escrow/replay safety.
 
 Browser workspace window ownership and captured website targeting live in
 `browser-extension/workspace.js`; `popup.html`/`popup.js`/`popup.css` provide the
@@ -644,3 +669,33 @@ metadata. Connections renders a local link mark while pending or unavailable.
 The provider catalog uses a separate Settings Builder document with one editable
 repeated card template. Its logo has normal upload and optional URL controls;
 its Connect block calls the same scoped, synchronous OAuth gesture handler.
+
+## Agent provider credential import
+
+`api.credentials-import` 1.1.0 supplies a write-only admin-vault file import and
+account/origin/destination-bound CLI handoff. `credentials/importContract.ts` is
+the shared contract; `api/utils/credentials/{importCore,importService}.ts` own
+validation and transactional one-use approval/receipt state. Browser operations
+require a live root administrator cookie and exact expected actor; CLI operations
+use a short-lived S256 proof. `components/CredentialImport` composes editable
+settings blocks with a transient secret adapter. The existing admin integrations
+view embeds direct import; `/credentials/import` is the approval page.
+Version 1.1 adds a single-origin/environment OAuth client update for registered
+confidential Connections labels, including Facebook. The CLI preflight checks
+the selected format against the exact origin before acquiring the input file.
+
+Run `test:credentials-import`, `test:credentials-import:browser` and the built
+replica-set `test:credentials-import:acceptance`, plus capability/gateway tests.
+Read [the agent credential runbook](../agent-credential-workflows.md) and the
+provider-import checklist in `TESTING.md` for live account acceptance.
+
+## Transaction-bound full-account mutation fence
+
+`auth/fenceAccountSession.ts` is an internal home-plane composition helper. It
+reuses canonical JWT/current-user resolution, requires the actual principal's
+own supported full session and performs a fresh random session write inside
+the content transaction. Revocation or selection changes therefore conflict;
+no-op updates and caller-supplied actor IDs are not authority. The selected
+ordinary-restore primitive currently refuses Character delegation and scoped
+credentials; this is an explicit initial capability scope, not impersonation.
+The real replica check covers wrong-account and revoked accepted-receipt retries.

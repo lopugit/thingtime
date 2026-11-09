@@ -5,6 +5,35 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
+## Main integration — 2026-11-09
+
+The existing feature checkpoint `d214a6b5` is reconciled with fetched main
+`c0d1ae9c`. The combined source preserves server-projected restoration holds
+through account caches and local Actions, prevents older catalog projections
+from bypassing the new hold metadata, and requires cloud receipts for native
+incoming shares with a cloud destination. Main's uncapped ordinary imports and
+Timeline transport coexist with the isolated renderer's explicit work budgets.
+
+Receipt and stream clients now negotiate `api.things` 1.57.0, attachment content
+1.19.0, links and upload cancellation 1.3.0, and conditional annotation 1.4.0.
+This avoids treating main's earlier same-numbered contracts as equivalent to
+the feature's receipt additions. Shared Action execution retains main's policy.
+
+The original no-login renderer and independent posting/draft-saving foundations
+are already ancestors of main. Broader browser-local editing, file storage,
+History and separate account synchronization remain implemented on this feature
+branch. Their historical checks are retained below; current integration results
+are recorded in [9 November evidence](../artifacts/anonymous-release-2026-11-09/README.md).
+
+Remaining priorities: **P0** current combined checks, normal importer and
+individually editable global/site Builder acceptance; **P1** the remaining
+identity/origin/plane/Character, media/provider, vault and native-device matrix;
+**P2** exact final-head CI, web preview/release and installed native acceptance.
+The one hosted `thingtime` MCP currently exposes 37 tools and no render/export.
+A fresh local stdio render is useful evidence, but does not satisfy that hosted
+connection or downloadable artifact requirement. Do not weaken authentication
+or allocate a second feature-specific MCP to close that gap.
+
 ## Main integration — 2026-11-05
 
 This maintenance merge brings fetched `origin/main` at
@@ -79,7 +108,7 @@ the complete root/dependency/file closure is read without account credentials,
 reauthorized, then imported atomically with fresh legitimate IDs. A failure or
 source change leaves no partial copy. This never creates or publishes an
 account Thing. Signed-in behavior retains the existing account route. Larger originals use negotiated
-`api.attachment-content` 1.18.0 streams with exact receipt/length checks and
+`api.attachment-content` 1.19.0 streams with exact receipt/length checks and
 fresh access checks before completion. Older origins refuse unsupported large
 copies before downloading. Existing format, quota and receiving limits remain.
 
@@ -5143,7 +5172,7 @@ coverage in `TESTING.md` remains required.
 
 ## Owned originals stream into Blob storage — 2026-10-18
 
-`api.attachment-content` 1.16.0 adds `cache=retain-bytes&download=1` on the
+The current combined contract, `api.attachment-content` 1.19.0, includes `cache=retain-bytes&download=1` on the
 existing content route. It reuses the owned-file descriptor authorization,
 including full-user/same-origin, exact owner, durable target, moderation, expiry
 and storage-version checks. The server pipes the stored original with
@@ -5927,7 +5956,7 @@ quota; canonical import still binds and remaps them transactionally.
 `api.things-export` 1.18.0 plans those larger stored files without downloading
 them into the metadata handler.
 
-First-party remote download clients negotiate export 1.18.0 and content 1.18.0,
+First-party remote download clients negotiate export 1.18.0 and content 1.19.0,
 then use pinned original streams with exact receipts, `If-Match`, content length,
 identity encoding, no redirects and post-read/pre-use checks. A 1 MiB collector
 coalesces small network frames into immutable Blob segments. Unpinned remote
@@ -6030,7 +6059,7 @@ are ignored and left untouched; the existing **Save full file offline** control
 performs an authorized re-download. Device-local and explicitly shared/keyed
 playback keep their normal resolvers rather than borrowing an ordinary cache.
 
-Downloads negotiate `api.attachment-content` 1.18.0 (and Characters 1.0.0 when
+Downloads negotiate `api.attachment-content` 1.19.0 (and Characters 1.0.0 when
 delegated), validate identity before and after fetching, use the expected actor
 and data-plane headers, and compare the canonical ETag, exact length and MIME.
 Bounded streaming, cancellation, deadlines and transactional scope leases fence

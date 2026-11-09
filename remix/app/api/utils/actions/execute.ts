@@ -5,11 +5,13 @@ import {
 	schemaScopeAllows,
 	schemaIdentityOf,
 	type ActionBudget,
- type ActionOperationPolicy,
+	type ActionOperationPolicy,
 	type ActionProgram,
 	type ActionRuntimeHost,
 	type ActionRunTraceEntry
 } from '../../../actions/runtime';
+import { isPrivateActivationPage, stableActivationEnsureKey } from '~/schemas/webpageActivation';
+import { contentExecutionHeld, type ContentExecutionHold } from '../things/contentExecutionGate';
 import { validateRunInputs } from './actionInputs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { capabilitySatisfies } from '../capabilities/capabilityContract';
@@ -45,6 +47,7 @@ import {
 	createThing,
 	canViewInherited,
 	deleteThing,
+	ensureOwnedDataThing,
 	fail,
 	getThing,
 	isFail,
@@ -130,28 +133,36 @@ export type RunActionResult =
 const resolveActionProgram = async (
 	viewer: Viewer,
 	reference: string,
-	options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
+	options?: { ownedOnly?: boolean; privateRevision?: string; shared?: SharedComposition; parentId?: string }
 ): Promise<Fail | ActionProgram> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown>; executionHold?: ContentExecutionHold; executionHeld?: boolean } | null = null;
 	if (options?.shared) {
 		const included = options.parentId ? options.shared.children.get(`${options.parentId}:${trimmed}`) : options.shared.actions.get(trimmed);
 		if (!included) return fail(404, 'This action is not included in the shared app');
-		doc = { id: included.shareId, crystal: included.crystal || {} };
+		doc = { id: included.shareId, ownerId: included.ownerId, crystal: included.crystal || {}, executionHold: (included as any).executionHold };
+	} else if (options?.privateRevision) {
+		const result = await getThing(viewer, trimmed);
+		if (result.ok && result.thing.id === trimmed && result.thing.author?.id === viewer.id &&
+			result.thing.thingtime.includes('action') && isPrivateActivationPage(result.thing.acl) &&
+			result.thing.updatedAt === options.privateRevision) {
+			const action = result.thing;
+			doc = { id: action.id, ownerId: viewer.id, crystal: action.crystal, executionHeld: action.executionHeld };
+		}
 	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown>, executionHeld: byId.thing.executionHeld };
 		}
 	}
-	if (!doc) {
+	if (!doc && !options?.privateRevision) {
 		const things = await getThingsCollection();
 		// Deterministic under duplicate keys: nothing index-enforces per-owner
 		// actionKey uniqueness yet, so resolve to the LATEST revision (highest
@@ -167,7 +178,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown>, executionHold: own.executionHold };
 	}
 	if (!doc) {
 		return fail(
@@ -177,6 +188,11 @@ const resolveActionProgram = async (
 				: `No runnable action matches "${trimmed.slice(0, 80)}"`
 		);
 	}
+
+	// Every ID/key/shared/child path and browser preparation reaches this
+	// resolver. Current ACL resolution above remains mandatory; a held graph
+	// never lends its invoker authority before durable completion.
+	if (doc.executionHeld === true || await contentExecutionHeld(doc)) return fail(409, 'This content is still restoring; actions are unavailable until verification completes');
 
 	// Re-sanitize so run-time enforces the exact save-time contract (steps
 	// grammar, capability coverage, ref validity) even for legacy documents.
@@ -325,6 +341,7 @@ const serverActionHost = (viewer: Viewer): ActionRuntimeHost => ({
 	resolveActionProgram: (reference, options) => resolveActionProgram(viewer, reference, options),
 	resolveSchemaRef: (reference) => resolveSchemaRef(viewer, reference),
 	getThing: (id) => getThing(viewer, id),
+	ensureThing: (identity, schema, values, folderId) => ensureOwnedDataThing(viewer!, identity, schema, values, folderId),
 	createThing: (input) => createThing(viewer!.id, input, viewer),
 	updateThing: (id, input) => updateThing(viewer, id, input),
 	deleteThing: (id) => deleteThing(viewer, id),
@@ -457,7 +474,7 @@ const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
+	context?: { firstPartyActorId?: string; activation?: { actionRevision: string; dayInput?: string }; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -467,9 +484,21 @@ const executeActionRun = async (
 	// flag only ever NARROWS resolution, so honouring a client-supplied value
 	// is safe: the viewer's own client always sends it, and a caller who omits
 	// it is acting as themselves on their own behalf.
-	const ownedOnly = request.source === 'component';
-	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, shared });
+	const activation = request.source === 'activation';
+	if (activation && (shared || viewer.pat || context?.firstPartyActorId !== viewer.id || !context.activation?.actionRevision))
+		return fail(403, 'Page activation requires the current owning account and saved opt-in');
+	const ownedOnly = request.source === 'component' || activation;
+	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, privateRevision: activation ? context?.activation?.actionRevision : undefined, shared });
 	if (isFail(program)) return program;
+
+	// Automatic and retried runs may read and ensure a stable identity, never
+	// invoke an arbitrary child program or repeat a non-idempotent effect.
+	if (activation && program.steps.some(step => !['compute', 'fail', 'return', 'things.get', 'things.search', 'things.ensure'].includes(step.op) &&
+		!(step.op === 'http.request' && step.method === 'GET')))
+		return fail(403, 'Page activation can only read or ensure saved data');
+	if (activation && program.steps.some(step => step.op === 'things.ensure' &&
+		!stableActivationEnsureKey(step.key, context?.activation?.dayInput)))
+		return fail(403, 'Page activation ensure needs a literal key or the saved civil-date input');
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
 	// Walk the CEILINGS, never the merged object: an unrecognised declared key

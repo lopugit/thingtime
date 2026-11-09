@@ -1,3 +1,4 @@
+import { WorkspaceError } from '../../local-workspace/storage';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ThingtimeApiError } from '../../hooks/apiFailure';
@@ -16,9 +17,9 @@ test('shared and bearer-key reads retain their exact composition context',async(
  }
 });
 test('a directly refused foreign schema can still resolve through an authorized root',async()=>{
- for(const status of [403,404]){
+ for(const failure of [new ThingtimeApiError('Refused',{status:403}),new ThingtimeApiError('Missing',{status:404}),new WorkspaceError('SYNC_REFUSED','Refused',403)]){
   const calls:any[]=[];
-  const result=await readThingSchema(async(args)=>{calls.push(args);if(!args.sharedRoot)throw new ThingtimeApiError('Refused',{status});return 'inherited';},owned,new AbortController().signal);
+  const result=await readThingSchema(async(args)=>{calls.push(args);if(!args.sharedRoot)throw failure;return 'inherited';},owned,new AbortController().signal);
   assert.equal(result,'inherited');assert.deepEqual(calls,[{id:'schema'},{id:'schema',sharedRoot:'data'}]);
  }
 });

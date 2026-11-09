@@ -1,6 +1,6 @@
 import { combineSyncDirections } from './directionalProgress';
 import { streamForegroundSync } from './streamingForegroundSync';
-import { assertBackupCapturePolicy, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
+import { assertBackupCapturePolicy, nativePhotoAssetKey, parseNativeBackupCapture, type NativeBackupCapture } from './nativeInventory';
 import { foregroundSyncContext } from './foregroundSyncContext';
 import { runForegroundCloudSync, type ForegroundSyncInput, type ForegroundSyncProgress } from './foregroundSync';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
@@ -12,9 +12,15 @@ import { executePreparedPagedSyncRun } from './pagedExecute';
 import { INVENTORY_PAGE_BYTES, INVENTORY_PAGE_ENTRIES, type InventoryIdentity, type InventoryCursor } from './inventoryJournal';
 import type { PagedPlanSpec } from './pagedPlanJournal';
 import type { PagedRunSpec, PagedRunProgress } from './pagedRunJournal';
-import { MAX_SYNC_SCAN_ENTRIES, planFileSync, type SyncScope, type SyncEntry } from './reconcile';
-import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
+import { MAX_SYNC_SCAN_ENTRIES, planFileSync, sameSyncContent, sameSyncStamp, type SyncScope, type SyncEntry } from './reconcile';
+import { inventorySyncEntry, type CloudInventoryNode, type CloudInventoryRoot } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
+import { readCloudPathObservation } from './cloudPath.client';
+import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
+import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
+import { cloudRequests } from './cloudTransport';
+import type { PagedCheckpointHead } from './checkpoint';
+import { automaticStoragePathAllowed } from './automaticStoragePlacement';
 
 /** Import one already complete bounded scan. Native/cloud producers still use
  * their existing limits; pages here do not turn a partial scan into a full one. */
@@ -153,7 +159,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		} } : undefined;
 		// A captured import already owns all its immutable source rows. Resume
 		// seal at its committed validation cursor, without another native read.
-		for await (const page of terminal ? [] : input.scanLocalPages(options)) {
+		for await (const page of terminal ? [] : input.scanLocalPages({ ...options, observationPurpose: reportIndex ? 'plan' : 'checkpoint' })) {
 			check();
 			if (terminal || !page || typeof page.generation !== 'string' ||
 				!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(page.generation) || (generation !== undefined && page.generation !== generation))
@@ -191,8 +197,7 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		// mounted earlier could mistake an unfilled capture for strict coverage.
 		if (reportIndex && coverage) input.inventorySession?.({ scope: structuredClone(scope), inventory: structuredClone(id) });
 	};
-	const importObservations = async (local: InventoryIdentity, remote: InventoryIdentity, checkpoint = false, resumable = false) => {
-		await importLocal(local, !checkpoint, resumable);
+	const importCloud = async (remote: InventoryIdentity, checkpoint = false) => {
 		if (!checkpoint) preparing('read-remote');
 		if (input.inventoryPages) {
 			// A checkpoint stores stamps, but must first validate the complete physical tree.
@@ -239,18 +244,106 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		preparing('validate-remote');
 		await inventory.seal(remote, value => preparing('validate-remote', value.validatedEntries, value.entries)); check();
 	};
-	const capture = async (baseline: PagedPlanSpec['baseline'], purpose: 'initial' | 'review' = 'initial') => {
+	/** Exact points are authoritative for selected flat originals only. Any
+	 * directory collision goes through the original complete-tree review. */
+	const importPhotoCloud = async (source: InventoryIdentity, remote: InventoryIdentity,
+		baseline?: { from: PagedPlanSpec['baseline']; into: PagedPlanSpec['baseline'] }): Promise<boolean> => {
+		let root: CloudInventoryRoot | undefined, cursor: InventoryCursor | null = null;
+		let remoteOrdinal = 0, remoteTotal = 0, baselineOrdinal = 0, baselineTotal = 0;
+		const observe = async (path: string) => {
+			const value = await readCloudPathObservation(runtime, scope, configuration.remoteFolderId, path, signal);
+			check();
+			if (root && root.rootRevision !== value.rootRevision) throw Error('The cloud folder changed while checking this Photos batch.');
+			root ??= { rootId: value.rootId, rootRevision: value.rootRevision };
+			return value.entry;
+		};
+		const writeRemote = async (rows: (SyncEntry | CloudInventoryNode)[], final = false) => {
+			if (!rows.length && !final) return;
+			remoteTotal += rows.length;
+			if (baseline) await inventory.appendCloud(remote, { ordinal: remoteOrdinal++, nodes: rows as CloudInventoryNode[], ...(final ? { totalEntries: remoteTotal } : {}) });
+			else await inventory.append(remote, { ordinal: remoteOrdinal++, entries: rows as SyncEntry[], ...(final ? { totalEntries: remoteTotal } : {}) });
+			check();
+		};
+		if (baseline) await Promise.all([inventory.begin(baseline.into.local), inventory.begin(baseline.into.remote)]);
+		else await inventory.begin(remote);
+		do {
+			const page = await inventory.read(source, cursor ?? undefined); check();
+			const paths = page.entries.map(entry => {
+				if (entry.kind !== 'file' || entry.path.includes('/') || !nativePhotoAssetKey(entry.path)) throw Error('Photos batch contains an invalid original path.');
+				return entry.path;
+			});
+			if (baseline && paths.length) {
+				const [left, right] = await Promise.all([inventory.entriesForPaths(baseline.from.local, paths), inventory.entriesForPaths(baseline.from.remote, paths)]);
+				const localRows: SyncEntry[] = [], remoteRows: SyncEntry[] = [];
+				paths.forEach((_path, index) => {
+					const local = left[index], destination = right[index];
+					if (!sameSyncContent(local, destination)) throw Error('The Photos baseline no longer contains matching replica content.');
+					if (local && destination) { localRows.push(local); remoteRows.push(destination); }
+				});
+				if (localRows.length) {
+					await Promise.all([inventory.append(baseline.into.local, { ordinal: baselineOrdinal, entries: localRows }),
+						inventory.append(baseline.into.remote, { ordinal: baselineOrdinal, entries: remoteRows })]);
+					baselineOrdinal++; baselineTotal += localRows.length;
+				}
+			}
+			for (const path of paths) {
+				const observed = await observe(path);
+				if (baseline && remoteOrdinal === 0) await inventory.beginCloud(remote, root!);
+				if (!observed) continue;
+				if (!baseline) { await writeRemote([observed]); continue; }
+				if (observed.kind !== 'file') return false;
+				const { negotiate, json } = cloudRequests(runtime, scope, signal);
+				await negotiate({ 'api.files': '1.0.0' });
+				const result = await json('/api/v1/files?' + new URLSearchParams({ id: observed.id })), file = parseCloudFile(result.file);
+				check();
+				if (file.folderId !== configuration.remoteFolderId || !sameSyncStamp(observed, cloudFileSyncEntry(file, path)))
+					throw Error('The cloud original changed while checking its exact path.');
+				await writeRemote([{ kind: 'file', path, file }]);
+			}
+			cursor = page.next;
+		} while (cursor);
+		if (!root) {
+			const { negotiate, json } = cloudRequests(runtime, scope, signal);
+			await negotiate(CLOUD_FOLDER_REQUIREMENTS);
+			const result = await json('/api/v1/files?' + new URLSearchParams({ folderId: configuration.remoteFolderId }));
+			const folder = parseCloudFolder(result.folder);
+			check(); if (folder.id !== configuration.remoteFolderId) throw Error('The cloud folder changed.');
+			root = { rootId: folder.id, rootRevision: folder.revision };
+		}
+		if (baseline && !remoteOrdinal) await inventory.beginCloud(remote, root!);
+		await writeRemote([], true);
+		await inventory.seal(remote); check();
+		if (baseline) {
+			await Promise.all([inventory.append(baseline.into.local, { ordinal: baselineOrdinal, entries: [], totalEntries: baselineTotal }),
+				inventory.append(baseline.into.remote, { ordinal: baselineOrdinal, entries: [], totalEntries: baselineTotal })]);
+			await Promise.all([inventory.seal(baseline.into.local), inventory.seal(baseline.into.remote)]); check();
+		}
+		return true;
+	};
+	const capture = async (baseline: PagedPlanSpec['baseline'], purpose: 'initial' | 'review' = 'initial', head?: PagedCheckpointHead | null) => {
 		indexProgress = {}; lastPreparation = undefined;
 		publish({ stage: 'scanning', confirmed: 0, total: 0 });
 		await authorize();
-		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local'), remote = identity('remote');
-		await importObservations(local, remote, false, !!input.beginLocalImport);
-		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline,
+		const local = input.beginLocalImport ? await input.beginLocalImport(purpose) : identity('local');
+		await importLocal(local, true, !!input.beginLocalImport);
+		let remote = identity('remote'), photoBaselineInstance: string | undefined;
+		if (head && !early && (await inventory.coverage(local))?.photoQueue) {
+			const slices = { local: identity('local'), remote: identity('remote') };
+			if (await importPhotoCloud(local, remote, { from: head.baseline, into: slices })) {
+				baseline = slices; photoBaselineInstance = head.instance;
+			} else {
+				await Promise.all([inventory.discard(remote), inventory.discard(slices.local), inventory.discard(slices.remote)]);
+				remote = identity('remote'); baseline = head.baseline; await importCloud(remote);
+			}
+		} else await importCloud(remote);
+		const spec: PagedPlanSpec = { id: crypto.randomUUID(), local, remote, baseline, ...(photoBaselineInstance ? { photoBaselineInstance } : {}),
 			policy: { mode: configuration.mode, propagateDeletes: configuration.propagateDeletes }, ...(early ? { earlyRunId: early.id } : {}), excludedPaths: configuration.excludedPaths, ...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) };
+		const placement = await runtime.automaticStoragePlacement?.rules(); check();
 		preparing('index-plan');
 		const result = await plans.build(spec, value => preparing(value.phase === 'indexing' ? 'index-plan' : 'plan',
 			value.phase === 'indexing' ? value.indexed : value.planned, value.phase === 'indexing' ? undefined : value.indexed),
-			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined);
+			early ? paths => runs.earlyReceiptsForPaths(early!, paths) : undefined,
+			placement ? row => automaticStoragePathAllowed(row, spec.policy, scope, placement) : undefined);
 		// Every whole-tree compatibility boundary must stay bounded. The native
 		// paged path can keep its plan, review and baseline on disk throughout.
 		if (result.indexed > MAX_SYNC_SCAN_ENTRIES &&
@@ -314,7 +407,8 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 		let baseline = draft?.spec.plan.baseline ?? head?.baseline;
 		if (draft && draft.spec.plan.earlyRunId !== early?.id)
 			throw Error('Early sync reconciliation evidence changed while this review was saved.');
-		if (draft && head && JSON.stringify(draft.spec.plan.baseline) !== JSON.stringify(head.baseline))
+		if (draft && (draft.spec.plan.photoBaselineInstance ? head?.instance !== draft.spec.plan.photoBaselineInstance :
+			head && JSON.stringify(draft.spec.plan.baseline) !== JSON.stringify(head.baseline)))
 			throw Error('The baseline changed while this conflict review was saved. Its choices were preserved.');
 		if (!baseline) {
 			baseline = { local: identity('local'), remote: identity('remote') };
@@ -322,14 +416,14 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 				? legacyCheckpoint.baseline.entries : [];
 			await importEntries(baseline.local, old.map(p => p.local)); await importEntries(baseline.remote, old.map(p => p.remote));
 		}
-		const saved = draft?.spec ?? { id: crypto.randomUUID(), plan: await capture(baseline), configuration };
+		const saved = draft?.spec ?? { id: crypto.randomUUID(), plan: await capture(baseline, 'initial', head), configuration };
 		const state = await reviewDraft(saved); let plan = saved.plan;
 		// The active review head now pins the initial plan and its inputs. Never
 		// release a different, partially imported fresh-review generation.
 		await input.releaseLocalImport?.(saved.plan.local); check();
 		let review: PagedRunSpec['review'];
 		if (state.count) {
-			plan = await capture(baseline, 'review');
+			plan = await capture(baseline, 'review', head);
 			try { await verifyFreshReview(plans, plan, drafts, saved, scope); }
 			catch (error) {
 				if (error instanceof SyncReviewChangedError) { await releaseDraft(saved); await plans.discard(plan); await input.releaseLocalImport?.(plan.local); }
@@ -347,7 +441,10 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 				}
 			}
 		}
-		spec = { id: saved.id, plan, configuration, ...(review ? { review } : {}) };
+		const photoBatch = (await inventory.coverage(plan.local))?.photoQueue; check();
+		spec = { id: saved.id, plan, configuration, ...(photoBatch ? { photoAssetOrder: photoBatch.assetKeys } : {}),
+			...(photoBatch && !review && input.deferredUploads?.publishPhotos ? { backgroundPhotoPublication: true as const } : {}),
+			...(review ? { review } : {}) };
 		await authorize(); await runs.begin(spec);
 		if (review) await importReviewDraft(runs, spec, drafts, saved);
 		await releaseDraft(saved, !review);
@@ -359,27 +456,61 @@ async function runPagedForegroundTransfer(reviewed: SavedFileSyncConfiguration, 
 	await runs.prepareCloud(spec, configuration, value => preparing('cloud', value.prepared, value.total)); check();
 	input.progressSession?.({ scope: structuredClone(scope), run: structuredClone(spec) });
 	const planningCoverage = await inventory.coverage(spec.plan.local);
+	const photoQueue = planningCoverage?.photoQueue;
+	const coverageProgress = {
+		...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}),
+		...(photoQueue ? { photoQueue: { pending: photoQueue.pending, unavailable: photoQueue.unavailable } } : {})
+	};
 	let state = await runs.begin(spec);
  if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
  const retain = spec.review?.kind === 'retain';
 	const report = (value: PagedRunProgress, stage: ForegroundSyncProgress['stage'] = retain ? 'retaining' : 'transferring') => {
-		state = value; publish({ stage, confirmed: value.confirmed, total: value.operations, directions: value.directions, totalFinal: true, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) });
+		state = value; publish({ stage, confirmed: value.confirmed, total: value.operations, directions: value.directions, totalFinal: true, ...coverageProgress });
 	};
 	const port = await createPagedCloudSyncPort(spec, configuration, runs, {
 		currentScope: input.currentScope, signal, localTarget,
 		transfer: input.transfer,
 		readLocal,
 		openSource,
-		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...(planningCoverage ? { coverage: planningCoverage.coverage, skipped: planningCoverage.totalSkipped, consistency: planningCoverage.consistency } : {}) }); }
+		progress: (path, bytes, size, direction) => { check(); publish({ stage: retain ? 'retaining' : 'transferring', confirmed: state.confirmed, total: state.operations, directions: state.directions, totalFinal: true, direction, path, bytes, size, ...coverageProgress }); }
 	}, runtime);
-	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, changed: p => report(p) }); check();
+	const queued = new Set<string>();
+	const prepare = input.deferredUploads && !input.deferredUploads.skipLookahead && configuration.sourceKind === 'photos' && !spec.review ? async (operation: import('./execute').SyncOperation) => {
+		const ahead = await runs.peekDeferredUploads(spec); check();
+		const candidates = [operation, ...ahead.filter(candidate => candidate.id !== operation.id)].slice(0, 4);
+		for (const candidate of candidates) {
+			if (queued.has(candidate.id)) continue;
+			if (queued.size >= 4) break;
+			try {
+				const state = await port.deferUpload(candidate);
+				if (state?.queued) {
+					queued.add(candidate.id); input.deferredUploads!.queued(queued.size, state.scheduled);
+				}
+			} catch {
+				check(); // Optional lookahead must never suppress cancellation.
+				// Ordinary dispatch reauthorizes the current operation. A failed
+				// lookahead cannot grant native authority or commit any receipt.
+				break;
+			}
+		}
+	} : undefined;
+	const done = await executePreparedPagedSyncRun(spec, scope, runs, port, { signal, prepare, changed: p => report(p),
+		...(prepare ? { confirmed: (operation: import('./execute').SyncOperation) => {
+			queued.delete(operation.id); input.deferredUploads!.queued(queued.size);
+		} } : {}) }); check();
 	if (retain) { await runs.finishRetention(spec); report(done, 'retained'); return { spec, progress: done }; }
 	report(done, 'verifying'); await authorize();
-	const checkpoint = { run: spec, localRootId: configuration.localRootId, remoteFolderId: configuration.remoteFolderId };
+	const photoBaseline = spec.plan.photoBaselineInstance ? await checkpoints.current() : null; check();
+	if (spec.plan.photoBaselineInstance && photoBaseline?.instance !== spec.plan.photoBaselineInstance)
+		throw Error('The Photos baseline changed before this batch could be verified.');
+	const checkpoint = { run: spec, localRootId: configuration.localRootId, remoteFolderId: configuration.remoteFolderId,
+		...(photoBaseline ? { photoBaseline } : {}) };
 	let checkpointDraft = await checkpoints.begin(checkpoint); check();
 	if (checkpointDraft.phase === 'collecting') {
 		checkpointDraft = await checkpoints.restartCollection(checkpoint);
-		await importObservations(checkpointDraft.after.local, checkpointDraft.after.remote, true);
+		await importLocal(checkpointDraft.after.local, false);
+		if (photoBaseline) await importPhotoCloud(spec.plan.local, checkpointDraft.after.remote);
+		else await importCloud(checkpointDraft.after.remote, true);
 	}
-	await checkpoints.build(checkpoint); check(); report(done, 'complete'); return { spec, progress: done };
+	await checkpoints.build(checkpoint); check(); report(done, photoQueue?.assetKeys.length ? 'verifying' : 'complete'); return { spec, progress: done, ...(photoQueue ? { photoQueue } : {}) };
 }

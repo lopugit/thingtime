@@ -32,12 +32,7 @@ export function planConfiguredFileSync(input: {
  conditions: SyncConditions;
 }): ConfiguredSyncPlan {
  const { saved, approval, local, remote, baseline, conditions } = input;
- const c = parseFileSyncConfiguration(saved.configuration), approved = parseFileSyncConfiguration(approval.configuration);
- const scope = local.scope;
- validateSyncScope(scope); validateSyncScope(approval.scope);
- if (scope.rootId !== saved.id || scope.deviceId !== c.deviceId || c.localRootId !== input.localRootId || c.remoteFolderId !== input.remoteFolderId ||
-  approval.id !== saved.id || approval.updatedAt !== saved.updatedAt || JSON.stringify(approved) !== JSON.stringify(c) ||
-  !sameSyncScope(approval.scope, scope)) throw Error('Sync configuration or device approval changed. Review it on this device before continuing.');
+ const c = assertConfiguredSyncApproval(saved, approval, local.scope, input.localRootId, input.remoteFolderId);
  if (c.paused) return { status: 'waiting', reason: 'paused' };
  if (conditions.network === 'offline') return { status: 'waiting', reason: 'offline' };
  if (!['wifi', 'cellular', 'ethernet'].includes(conditions.network) || (c.network === 'wifi' && conditions.network !== 'wifi')) return { status: 'waiting', reason: 'network' };
@@ -61,4 +56,15 @@ export function planConfiguredFileSync(input: {
   remote: remoteByPath.get(decision.path) ?? null
  } : decision);
  return { status: 'ready', plan };
+}
+
+/** Validate settings before any compound protected observation, without inventing conditions. */
+export function assertConfiguredSyncApproval(saved: SavedFileSyncConfiguration, approval: FileSyncApproval, scope: SyncScope, localRootId: string, remoteFolderId: string) {
+ const c = parseFileSyncConfiguration(saved.configuration), approved = parseFileSyncConfiguration(approval.configuration);
+
+ validateSyncScope(scope); validateSyncScope(approval.scope);
+ if (scope.rootId !== saved.id || scope.deviceId !== c.deviceId || c.localRootId !== localRootId || c.remoteFolderId !== remoteFolderId ||
+  approval.id !== saved.id || approval.updatedAt !== saved.updatedAt || JSON.stringify(approved) !== JSON.stringify(c) ||
+  !sameSyncScope(approval.scope, scope)) throw Error('Sync configuration or device approval changed. Review it on this device before continuing.');
+ return c;
 }

@@ -25,12 +25,12 @@ test('transport pins account and database on reads and writes and retires mismat
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
  let result = Response.json({ ok: true, thing: { id: 'thing' } }), thingVersion = '1.34.0', contentVersion = '1.11.0';
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: thingVersion }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.18.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: contentVersion }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.3.0' }, 'api.attachment-annotate': { version: '1.4.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: thingVersion }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.18.0' }, 'api.things-fork': { version: '1.8.1' }, 'api.components-browse': { version: '1.1.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: contentVersion }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
   const transport = accountThingTransport(scope, lease);
-  await transport.get('thing', new AbortController().signal);
+  await assert.rejects(transport.get('thing', new AbortController().signal), /incompatible/);
   await transport.write({ id: 'thing', operationId: 'write', version: 1, method: 'update', body: { id: 'thing' } }, new AbortController().signal);
   const beforeBinding=calls.length;
   await assert.rejects(transport.write({id:'thing',operationId:'binding',version:1,method:'update',body:{id:'thing',attachmentIds:['file']}},new AbortController().signal),/incompatible/);
@@ -38,6 +38,8 @@ test('transport pins account and database on reads and writes and retires mismat
   const beforeBlocks = calls.length;
   await assert.rejects(transport.write({ id: 'page', operationId: 'editable-blocks', version: 1, method: 'update', body: { id: 'page', crystal: { blocks: [{ id: 'button', type: 'element', tag: 'button', children: [] }] } } }, new AbortController().signal), /incompatible/);
   assert.equal(calls.length, beforeBlocks, 'keep a device edit queued instead of sending new block types to an older origin');
+  thingVersion = '1.52.0';
+  await transport.get('thing', new AbortController().signal);
   await transport.write({ id: 'queued-comment', operationId: 'comment-write', version: 1, method: 'create', body: { shareId:'queued-comment', targetId:'parent', thingtime:['post','comment'], crystal:{type:'text',text:'Saved offline'},attachmentIds:['receipt-file'],tags:[],acl:['tt:inherit'] } }, new AbortController().signal);
   const submission=calls.at(-2);assert.equal(submission.url,'/api/v1/things/comment');
   assert.deepEqual(JSON.parse(submission.init.body),{id:'parent',shareId:'queued-comment',type:'text',text:'Saved offline',tags:[],attachmentIds:['receipt-file']});
@@ -56,7 +58,7 @@ test('transport pins account and database on reads and writes and retires mismat
   result = Response.json({ ok: true });
   const deletion = { id: 'thing', operationId: 'delete', version: 1, method: 'delete' as const, body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } };
   await assert.rejects(transport.remove!(deletion, new AbortController().signal), /incompatible/);
-  thingVersion = '1.42.0';
+  thingVersion = '1.57.0';
   await transport.remove!(deletion, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
   assert.equal(JSON.parse(calls.at(-1).init.body).retainAttachmentReceipts,true);
@@ -66,7 +68,7 @@ test('transport pins account and database on reads and writes and retires mismat
   assert.equal(calls.length,beforeBoundDelete);
   await assert.rejects(transport.files.retention('file',new AbortController().signal,true),/incompatible/);
   assert.equal(calls.length,beforeBoundDelete);
-  contentVersion = '1.18.0';
+  contentVersion = '1.19.0';
   await transport.export({ ids: ['thing'] }, new AbortController().signal);
   assert.equal(calls.at(-1).url, '/api/v1/things/export'); assert.equal(calls.at(-1).init.method, 'POST');
   await transport.fork({ id: 'thing' });
@@ -104,7 +106,7 @@ test('file transport negotiates uploads, preserves retry codes, and sends signed
  const calls: any[] = [];
  let response = Response.json({ ok: true, upload: { id: 'remote-file' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, fetch: async (url: string | URL, init: RequestInit) => {
-  if (String(url).includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (String(url).includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.3.0' }, 'api.attachment-annotate': { version: '1.4.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url: String(url), init }); return response.clone();
  } });
  try {
@@ -163,7 +165,7 @@ test('owned file transport binds metadata and exact bytes to one account, plane 
  const calls:any[]=[],bytes=new Uint8Array([1,2,3]),key='a'.repeat(64)+':original';
  let etag='"'+key+':v1"', body=bytes, declaredSize='3';
  Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
-  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.attachment-content':{version:'1.16.0'},'api.attachment-delete':{version:'1.5.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.attachment-content':{version:'1.19.0'},'api.attachment-delete':{version:'1.5.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
   calls.push({url,init});
   return url.includes('cache=retain-bytes')?new Response(body,{headers:{ETag:etag,'Content-Length':declaredSize}}):Response.json({ok:true});
  }});
@@ -191,7 +193,7 @@ test('owned file transport rejects a changed version without waiting for refused
  let cancelled = 0, pulled = 0;
  const body = new ReadableStream({pull() {pulled++;}, cancel() {cancelled++; return new Promise<void>(() => {});}}, {highWaterMark: 0});
  Object.assign(globalThis, {window: {location: {origin}, dispatchEvent() {}}, fetch: async (url: string) => {
-  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.16.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.19.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
   return new Response(body, {headers: {ETag: '"different"', 'Content-Length': '1'}});
  }});
  try {
@@ -242,7 +244,7 @@ for (const mode of ['caller', 'local-scope', 'remote-scope'] as const) test(`own
  const ready = new Promise<void>(resolve => {entered = resolve;});
  const body = new ReadableStream({pull() {entered();}, cancel() {cancelled++;}}, {highWaterMark: 0});
  Object.assign(globalThis, {window: {location: {origin}, dispatchEvent() {}}, fetch: async (url: string) => {
-  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.16.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin, features: {'api.attachment-content': {version: '1.19.0'}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
   return new Response(body, {headers: {ETag: `"${key}:v1"`, 'Content-Length': '1'}});
  }});
  try {
@@ -270,11 +272,11 @@ test('parent deletion refuses an origin without durable cascade receipts and per
   // The checker first rejects any cached manifest from another origin.
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
-  for (const older of ['1.40.0', '1.41.0', '2.0.0']) {
+  for (const older of ['1.42.0', '1.56.0', '2.0.0']) {
    version=older; await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
    assert.deepEqual(mutations,[]);
   }
-  version='1.42.0';await transport.remove!(op,new AbortController().signal);
+  version='1.57.0';await transport.remove!(op,new AbortController().signal);
   assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
  }finally{Object.assign(globalThis,saved);}
 });
@@ -297,21 +299,21 @@ test('owned-original transport negotiates before fetching and accepts streamed f
   rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
   const transport = accountThingTransport(scope, {assertCurrent() {}, onInvalidate: () => () => {}}).files, signal = new AbortController().signal;
   await assert.rejects(transport.bytes('file', key, size, signal), /incompatible/); // Evicts the preceding test's other origin.
-  for (const unsupported of ['1.15.9', '2.0.0']) {version = unsupported; await assert.rejects(transport.bytes('file', key, size, signal), /incompatible/);}
+  for (const unsupported of ['1.15.9', '1.18.0', '2.0.0']) {version = unsupported; await assert.rejects(transport.bytes('file', key, size, signal), /incompatible/);}
   assert.equal(requests, 0);
-  version = '1.16.1'; const blob = await transport.bytes('file', key, size, signal);
+  version = '1.19.0'; const blob = await transport.bytes('file', key, size, signal);
   assert.ok(blob instanceof Blob); assert.equal(blob.size, size); assert.equal(consumed, size); assert.equal(requests, 1);
   assert.deepEqual(new Uint8Array(await blob.slice(-5).arrayBuffer()), new Uint8Array(5).fill(137));
  } finally {Object.assign(globalThis, saved);}
 });
 
 
-test('atomic attachment edits refuse media-only update contracts before transport', async () => {
+test('atomic attachment edits require generic PATCH support before transport', async () => {
  const saved={window:globalThis.window,fetch:globalThis.fetch};
  const origin='https://atomic-binding.test',scope={kind:'account' as const,origin,ownerId:'owner',dataPlane:'home'};
- let version='1.12.0';const mutations:any[]=[];
+ let version='1.56.0';const mutations:any[]=[];
  Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
-  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.things':{version:'1.42.0'},'api.things-update':{version},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.things':{version},'api.things-update':{version:'1.22.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
   mutations.push(init);return Response.json({ok:true,thing:{id:'post'}});
  }});
  try{
@@ -320,10 +322,10 @@ test('atomic attachment edits refuse media-only update contracts before transpor
   const op={id:'post',operationId:'binding',version:1,method:'update' as const,body:{id:'post',attachmentIds:['file'],expectedUpdatedAt:'2026-10-17T00:00:00.000Z'}};
   // First refusal also discards a cached manifest belonging to another origin.
   await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);
-  for(const older of ['1.11.0','1.12.0','2.0.0']){
+  for(const older of ['1.42.0','1.56.0','2.0.0']){
    version=older;await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
   }
-  version='1.13.0';await transport.write(op,new AbortController().signal);
+  version='1.57.0';await transport.write(op,new AbortController().signal);
   const writes=mutations.filter(init=>init.method==='PATCH');
   assert.equal(writes.length,1);assert.equal(mutations.length,2);
   assert.deepEqual(JSON.parse(writes[0].body),op.body);

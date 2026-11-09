@@ -5,6 +5,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { createThingtimeCapabilityChecker } from './requireCapability.client';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
 import { timelineVersionExportRequirement } from '../../../timeline/exportVersion';
+import { canKeepThingAfterReadFailure } from '../../../components/Things/thingDetailSectionsCore';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 beforeEach(() => {
@@ -258,4 +259,46 @@ test("an immediate remount never inherits the previous caller's aborted discover
   await old;
   await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
   assert.equal(calls, 2, 'Late old failure must preserve the successful remount cache');
+});
+
+test('discovery read failures retain readable projections only for transient transport/HTTP failures', async (t) => {
+  for (const status of [408, 429, 500, 503, 401, 403, 404]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status }));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), status === 408 || status === 429 || status >= 500);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
+  const offline = t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Network unavailable'); });
+  await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+    assert.equal(canKeepThingAfterReadFailure(error), true);
+    return true;
+  });
+  offline.mock.restore();
+  for (const body of [null, manifest('0.1.0'), { ...manifest(), origin: 'https://wrong-origin.test' }, { ...manifest(), features: {} }]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => Response.json(body));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), false);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
+  const malformed = t.mock.method(globalThis, 'fetch', async () => new Response('{'));
+  await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+    assert.equal(canKeepThingAfterReadFailure(error), false);
+    return true;
+  });
+  malformed.mock.restore();
+});
+
+test('manifest body transport remains transient while malformed complete bodies do not', async (t) => {
+  for (const failure of [new TypeError('Connection terminated'), new DOMException('Connection check timed out', 'TimeoutError')]) {
+    const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('{')); controller.error(failure); } })));
+    await assert.rejects(createThingtimeCapabilityChecker()('api.lopu-reminders', '1.1.0'), error => {
+      assert.equal(canKeepThingAfterReadFailure(error), true);
+      return true;
+    });
+    fetchMock.mock.restore();
+  }
 });

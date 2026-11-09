@@ -25,6 +25,7 @@ export type BrowseComponentAuthor = {
 export type ComponentDesignRef = { id: string; library: string };
 
 export type BrowseComponentEntry = {
+  executionHeld?: boolean;
   id: string;
   thingtime: string[];
   author: BrowseComponentAuthor;

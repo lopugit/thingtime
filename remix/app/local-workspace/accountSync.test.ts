@@ -118,7 +118,7 @@ test('sync acknowledgements preserve the editor token and remote clocks do not h
 test('local tag normalization matches canonical server writes, including lost-response readback', async () => {
  const f = setup();
  const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Tags' }, tags: [' CAFÉ ', 'cafe\u0301', '💛'.repeat(45), '\ud800', ''] });
- assert.deepEqual(row.tags, ['café', '💛'.repeat(40)]);
+ assert.deepEqual(row.tags, ['café', '💛'.repeat(45)], 'valid tags are kept in full while invalid Unicode and duplicates are removed');
  await f.sync.sync({ ...f.transport, write: async op => { await f.transport.write(op, new AbortController().signal); throw new Error('Lost response'); } });
  assert.equal((await f.sync.status())[0].state, 'synced'); await f.db.close();
 });

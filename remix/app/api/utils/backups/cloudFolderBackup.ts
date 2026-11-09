@@ -9,7 +9,7 @@ import { equalContentFingerprints } from '../../../fileSync/contentFingerprint';
 import { MAX_ATTACHMENT_RANGE_BYTES, readExactRange } from '../attachments/attachmentRanges';
 import { EXPECTED_ACTOR_HEADER } from '../auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../../utils/dataPlane';
-import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, parseBackupHeader } from '../../../backups/manifest';
+import { BACKUP_FORMAT, BACKUP_METADATA_BYTES, parseBackupHeader, parseBackupItem, backupJson, type BackupItem } from '../../../backups/manifest';
 import { prepareBackup, captureBackup, sealBackup, pendingBackupItems, type BackupObjectStore } from './portableBackup';
 
 export { CLOUD_BACKUP_FOLDER_ADAPTER } from './cloudBackupTree';
@@ -162,16 +162,11 @@ export async function prepareCloudFolderBackup(store: BackupObjectStore, snapsho
 	}
 }
 
-/** Resume the original plan, not a new live inventory. Attachment range requests
- * reauthorize the owner and pin immutable object versions; edits/Trash do not
- * substitute current content. Every retained byte is verified before sealing. */
-async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime, attachments: boolean) {
-	const c = cloud(runtime);
-	await c.authenticate();
-	const contentFor = (item: Parameters<Parameters<typeof captureBackup>[2]['read']>[0]) => {
+
+function backupCloudContent(item: BackupItem, scope: TimelineScope, attachments: boolean) {
 		if (attachments && item.snapshot.adapter === BACKUP_ATTACHMENT_ADAPTER) {
 			const record = parseBackupAttachment(item.snapshot.value);
-			if (record.ownerId !== c.scope.ownerId) throw Error('Backup attachment owner changed');
+			if (record.ownerId !== scope.ownerId) throw Error('Backup attachment owner changed');
 			const content = backupAttachmentItemContent(item);
 			if (!content) throw Error('Linked attachment has no stored bytes');
 			return content;
@@ -186,7 +181,49 @@ async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, r
 		)
 			throw Error('Cloud backup item changed');
 		return file.content;
-	};
+}
+async function readBackupCloudBytes(c: ReturnType<typeof cloud>, item: BackupItem, offset: number, length: number,
+	attachments: boolean, signal?: AbortSignal, extraGuard: () => void = () => {}) {
+	const content = backupCloudContent(item, c.scope, attachments);
+	if (!Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 || offset + length > content.size) throw Error('Invalid backup source range');
+	const bytes = new Uint8Array(length);
+	for (let at = 0; at < length; at += MAX_ATTACHMENT_RANGE_BYTES) {
+		c.guard(); extraGuard();
+		const range = { version: content.version, offset: offset + at, length: Math.min(MAX_ATTACHMENT_RANGE_BYTES, length - at) };
+		const response = await c.request('/api/v1/attachments/content?' + new URLSearchParams({ id: content.attachmentId,
+			retained: '1', range: '1', version: range.version, offset: String(range.offset), length: String(range.length) }), signal);
+		if (response.headers.get('ETag') !== `"${range.version}"`) { await response.body?.cancel(); throw Error('Cloud backup version changed'); }
+		bytes.set(await readExactRange(response, range, content.size, () => { c.guard(); extraGuard(); signal?.throwIfAborted(); }), at);
+	}
+	c.guard(); extraGuard();
+	return bytes;
+}
+
+/** A single admitted attachment source for bounded capture units. All retention
+ * and exact-version byte reads use the existing authenticated API, never a
+ * persisted download URL, provider key or filesystem path. */
+export async function openAccountBackupRangeSource(input: BackupItem, runtime: CloudBackupRuntime) {
+	const item = parseBackupItem(input), identity = backupJson(item), c = cloud(runtime);
+	await c.authenticate();
+	const content = backupCloudContent(item, c.scope, true), versions = [{ id: content.attachmentId, version: content.version }], started = performance.now();
+	const retained = await c.json('/api/v1/attachments/content', BACKUP_METADATA_BYTES, { versions });
+	const duration = Date.parse(retained.retainedUntil) - Date.parse(retained.serverTime);
+	if (!Number.isFinite(duration) || duration < 60_000 || duration > 24 * 60 * 60_000 || JSON.stringify(retained.versions) !== JSON.stringify(versions)) throw Error('Invalid source retention receipt');
+	const check = () => { c.guard(); if (performance.now() >= started + duration) throw Error('Backup source retention expired'); };
+	return { read: async (current: BackupItem, offset: number, length: number, signal?: AbortSignal) => {
+		check(); if (backupJson(current) !== identity) throw Error('Backup source item changed');
+		const bytes = await readBackupCloudBytes(c, item, offset, length, true, signal, check);
+		check(); return bytes;
+	} };
+}
+
+/** Resume the original plan, not a new live inventory. Attachment range requests
+ * reauthorize the owner and pin immutable object versions; edits/Trash do not
+ * substitute current content. Every retained byte is verified before sealing. */
+async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, runtime: CloudBackupRuntime, attachments: boolean) {
+	const c = cloud(runtime);
+	await c.authenticate();
+	const contentFor = (item: BackupItem) => backupCloudContent(item, c.scope, attachments);
 	let deadline = Infinity,
 		renewAt = 0;
 	const renew = async () => {
@@ -236,38 +273,7 @@ async function resumeCloudBackup(store: BackupObjectStore, snapshotId: string, r
 		store,
 		snapshotId,
 		{
-			read: async (item, offset, length, signal) => {
-				const content = contentFor(item);
-				const bytes = new Uint8Array(length);
-				for (let at = 0; at < length; at += MAX_ATTACHMENT_RANGE_BYTES) {
-					const range = { version: content.version, offset: offset + at, length: Math.min(MAX_ATTACHMENT_RANGE_BYTES, length - at) };
-					const response = await c.request(
-						'/api/v1/attachments/content?' +
-							new URLSearchParams({
-								id: content.attachmentId,
-								retained: '1',
-								range: '1',
-								version: range.version,
-								offset: String(range.offset),
-								length: String(range.length)
-							}),
-						signal
-					);
-					if (response.headers.get('ETag') !== `"${range.version}"`) {
-						await response.body?.cancel();
-						throw Error('Cloud backup version changed');
-					}
-					bytes.set(
-						await readExactRange(response, range, content.size, () => {
-							c.guard();
-							signal?.throwIfAborted();
-						}),
-						at
-					);
-				}
-				c.guard();
-				return bytes;
-			}
+			read: (item, offset, length, signal) => readBackupCloudBytes(c, item, offset, length, attachments, signal)
 		},
 		access
 	);

@@ -46,7 +46,7 @@ export const backupAttachmentProjection = {
 	attachmentMpuEmptyVerifiedAt: 1,
 	uploadId: 1,
 	attachmentSortIndex: 1,
-	moderation: 1,
+	'moderation.status': 1,
 	appId: 1,
 	sandbox: 1,
 	sandboxSpace: 1
@@ -193,7 +193,7 @@ export function backupAttachmentItem(record: BackupAttachment, ordinal: number):
 		thingId: value.id,
 		revision: 'snapshot-' + createHash('sha256').update(backupJson(value)).digest('hex'),
 		snapshot: { adapter: BACKUP_ATTACHMENT_ADAPTER, version: 1, value },
-		content: value.content ? { size: value.content.size, fingerprint: value.content.fingerprint } : null
+		content: value.content ? { size: value.content.size, fingerprint: value.content.size === 0 ? null : value.content.fingerprint } : null
 	});
 }
 export function backupAttachmentItemContent(item: BackupItem): CloudFileContent | null {

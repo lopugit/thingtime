@@ -22,6 +22,12 @@ export class InvalidAttachmentStorageEnvelopeError extends Error {
   }
 }
 
+export const thingStorageJsonPayload = (doc: { crystal?: unknown; extended?: unknown; tags?: unknown }) => ({
+  crystal: doc.crystal ?? null,
+  extended: doc.extended ?? null,
+  tags: doc.tags ?? []
+});
+
 // One versioned logical byte definition for every billable Thing. Ordinary
 // Things measure the exact UTF-8 JSON stored in the customer-controlled payload
 // fields. Protected attachment Things additionally add their verified root
@@ -42,11 +48,7 @@ export const thingStorageSizeBytes = (doc: {
   secure?: unknown;
 }): number => {
   const payloadBytes = Buffer.byteLength(
-    JSON.stringify({
-      crystal: doc.crystal ?? null,
-      extended: doc.extended ?? null,
-      tags: doc.tags ?? []
-    }),
+    JSON.stringify(thingStorageJsonPayload(doc)),
     'utf8'
   );
   const objectBytes = attachmentObjectSizeBytesForAccounting(doc);
@@ -121,6 +123,7 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'post-discovery',
 	'lopu-recording-settings',

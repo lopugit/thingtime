@@ -111,6 +111,7 @@ export class LocalActions {
 				.filter((row) => row.crystal.actionKey === reference)
 				.sort((a, b) => Number(b.crystal.version || 1) - Number(a.crystal.version || 1) || newest(a, b))[0];
 		if (!row) return fail(`No action you own matches "${reference.slice(0, 80)}" in this local workspace`, 404);
+		if (row.executionHeld === true) return fail('This content is still restoring; actions are unavailable until verification completes', 409);
 		const checked = sanitizeActionCrystal(row.crystal);
 		if (checked.ok === false) return fail(`This action no longer passes the program grammar: ${checked.error}`, 422);
 		const crystal = checked.crystal;
@@ -239,18 +240,19 @@ export class LocalActions {
 			inputs: this.inputs(program, raw)
 		};
 	}
-	async run(request: { action: string; inputs?: unknown; source?: string }) {
+	async run(request: { action: string; inputs?: unknown; source?: string }, signal?: AbortSignal) {
 		this.assert();
 		const count = activeRuns.get(this.db) || 0;
 		if (count >= 4) return fail('Four local Actions are already running. Wait for one to finish.', 429);
 		activeRuns.set(this.db, count + 1);
 		try {
-			return await this.execute(request);
+			return await this.execute(request, signal);
 		} finally {
 			activeRuns.set(this.db, (activeRuns.get(this.db) || 1) - 1);
 		}
 	}
-	private async execute(request: { action: string; inputs?: unknown; source?: string }) {
+	private async execute(request: { action: string; inputs?: unknown; source?: string }, signal?: AbortSignal) {
+		signal?.throwIfAborted();
 		this.assert();
 		const program = await this.resolve(request.action),
 			inputs = this.inputs(program, request.inputs);
@@ -266,6 +268,7 @@ export class LocalActions {
 			...this.lease,
 			assertCurrent: () => {
 				this.assert();
+				signal?.throwIfAborted();
 				if (Date.now() >= deadline) fail('Action execution timed out', 408);
 			}
 		};

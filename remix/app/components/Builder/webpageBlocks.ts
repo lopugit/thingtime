@@ -1,3 +1,5 @@
+import type { WebpageActivation } from '~/schemas/webpageActivation';
+
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
 
@@ -66,6 +68,7 @@ export interface WebpageCrystal {
 	version?: number;
 	forkOf?: string;
 	previewBg?: string;
+	activationAction?: WebpageActivation;
 	// the behaviour suite (installable app bundle) this page belongs to
 	suiteKey?: string;
 	blocks: WebpageBlock[];
@@ -370,7 +373,7 @@ export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
 /** New intrinsic element boundaries accepted by the saved Webpage writer. */
 export function requiresEditableIntrinsicContract(
  blocks: WebpageBlock[],
- tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload']
+ tags: readonly string[] = ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox', 'tt-upload', 'tt-menu', 'tt-rich-text']
 ): boolean {
  const pending = [...blocks];
  while (pending.length) {

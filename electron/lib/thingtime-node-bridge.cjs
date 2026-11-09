@@ -152,7 +152,7 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 function nodeRequestTimeoutMs(method) {
 	if (method === 'folder-sync.request') return 305_000;
 	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
-	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
+	if (method === 'pairing.unpair' || method === 'permissions.request' || method === 'location.set-enabled' || method === 'location.request-permission' || method === 'location.request-notification-permission' || method === 'location.open-settings') return PRESENCE_BRIDGE_TIMEOUT_MS;
 	return BRIDGE_TIMEOUT_MS;
 }
 
@@ -542,11 +542,14 @@ function parseCodeSignatureDetails(output) {
 	return { authorities, hardenedRuntime: Boolean(runtimeVersion), identifier, runtimeVersion, teamIdentifier, timestamp };
 }
 
-function parseEntitlementKeys(output) {
-	const keys = new Set();
-	for (const match of output.matchAll(/<key>([^<]+)<\/key>/gu)) keys.add(match[1].trim());
-	for (const match of output.matchAll(/^\s*\[Key\]\s+(.+)$/gmu)) keys.add(match[1].trim());
-	return [...keys].sort();
+const NODE_LOCATION_ENTITLEMENT = 'com.apple.security.personal-information.location';
+
+function assertNodeEntitlements(details, required = false) {
+    const hasLocation = Object.hasOwn(details.entitlements, NODE_LOCATION_ENTITLEMENT);
+    if ((required || hasLocation) && details.entitlements[NODE_LOCATION_ENTITLEMENT] !== true) {
+        throw new ThingtimeNodeBridgeError('invalid_entitlements', 'Thingtime Node is missing its enabled location entitlement.');
+    }
+    assertExpectedEntitlements(details, hasLocation ? [NODE_LOCATION_ENTITLEMENT] : [], 'Thingtime Node');
 }
 
 async function signatureDetails(targetPath, runner = runProcess, verifyResources = true) {
@@ -564,16 +567,29 @@ async function signatureDetails(targetPath, runner = runProcess, verifyResources
 	if (display.status !== 0) {
 		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node signing details are unavailable.');
 	}
-	const entitlements = await runner('/usr/bin/codesign', ['--display', '--entitlements', ':-', targetPath], {
+	const entitlements = await runner('/usr/bin/codesign', ['--display', '--entitlements', '-', '--xml', targetPath], {
 		maximumOutputBytes: MAX_ERROR_BYTES
 	});
 	if (entitlements.status !== 0) {
 		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node entitlements are unavailable.');
 	}
-	return {
-		...parseCodeSignatureDetails(`${display.stdout}\n${display.stderr}`),
-		entitlementKeys: parseEntitlementKeys(`${entitlements.stdout}\n${entitlements.stderr}`)
-	};
+    // codesign emits no plist when a binary has no entitlement blob. That is
+    // valid for the IPC bridge; strict Node build checks below still reject it.
+    let values = {};
+    if (entitlements.stdout.trim()) {
+        const parsed = await runner('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], {
+            input: entitlements.stdout, maximumOutputBytes: MAX_ERROR_BYTES
+        });
+        try { values = JSON.parse(parsed.stdout); } catch { values = null; }
+        if (parsed.status !== 0 || !values || typeof values !== 'object' || Array.isArray(values)) {
+            throw new ThingtimeNodeBridgeError('invalid_entitlements', 'Thingtime Node entitlements could not be parsed as an XML dictionary.');
+        }
+    }
+    return {
+        ...parseCodeSignatureDetails(`${display.stdout}\n${display.stderr}`),
+        entitlements: values,
+        entitlementKeys: Object.keys(values).sort()
+    };
 }
 
 async function leafCertificateFingerprint(targetPath, runner = runProcess) {
@@ -694,7 +710,7 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 			);
 		}
 	}
-	assertExpectedEntitlements(helper, [], 'Thingtime Node');
+	assertNodeEntitlements(helper, options.requireNodeLocationEntitlement ?? mode !== 'runtime');
 	assertExpectedEntitlements(bridge, [], 'Thingtime Node bridge');
 	if (paths.outerApp) {
 		const desktop = signed.at(-1).details;
@@ -712,7 +728,7 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
  * This validates only structure and identifiers; callers must never present it
  * as an Apple-verified update.
  */
-async function verifyUnsignedArtifacts(paths, runner = runProcess) {
+async function verifyUnsignedArtifacts(paths, runner = runProcess, options = {}) {
 	const requiredPaths = [paths.helperApp, paths.helperExecutable, paths.bridgeExecutable, paths.runtimePath];
 	if (paths.outerApp) requiredPaths.push(paths.outerApp);
 	for (const requiredPath of requiredPaths) {
@@ -745,7 +761,7 @@ async function verifyUnsignedArtifacts(paths, runner = runProcess) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is Apple-signed and must not be published as unsigned.`);
 		}
 	}
-	assertExpectedEntitlements(unsigned[0].details, [], 'Thingtime Node');
+	assertNodeEntitlements(unsigned[0].details, options.requireNodeLocationEntitlement === true);
 	assertExpectedEntitlements(unsigned[1].details, [], 'Thingtime Node bridge');
 	if (paths.outerApp) {
 		const desktop = unsigned.at(-1).details;
@@ -1001,7 +1017,7 @@ class ThingtimeNodeIntegration {
 		const paths = this.paths();
 		await this.verifyForRequest(paths);
 		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
-		const batching = method === 'folder-sync.request' && parameters.action === 'upload-batch';
+		const batching = method === 'folder-sync.request' && ['upload-batch', 'upload-single'].includes(parameters.action);
         const policy = parameters.resourceLimits;
         const governedPayload = method === 'folder-sync.request' && policy &&
             ((batching && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||

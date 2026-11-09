@@ -49,3 +49,30 @@ test('trusted policy blocks child frames, creates, and search-result disclosure'
  const parent: ActionProgram = { ...program, capabilities: [{ capability: 'actions.invoke', actions: ['child'] }], steps: [{ op: 'actions.invoke', action: 'child' }] };
  await assert.rejects(executeProgram({ id: 'owner' }, parent, {}, budget(policy), '', host), /Binding revoked/);
 });
+
+test('ensure uses only the authorized server adapter and does not run in a restricted or device Action', async () => {
+ const action: ActionProgram = {
+  ...program,
+  steps: [{ op: 'things.ensure', schema: 'schema', key: '$input.key', values: { text: '$input.text' } }, { op: 'return', value: '$step.1' }]
+ };
+ const calls: string[] = [];
+ const unexpected = async (): Promise<never> => { throw Error('unexpected host call'); };
+ const host: ActionRuntimeHost = {
+  resolveActionProgram: unexpected, getThing: unexpected, createThing: unexpected, updateThing: unexpected, deleteThing: unexpected,
+  search: unexpected, lookup: unexpected, packs: () => ({}),
+  resolveSchemaRef: async () => { calls.push('schema'); return { id: 'schema', name: 'schema' }; }
+ };
+ const server: ActionRuntimeHost = { ...host, ensureThing: async ({ actionId, key }, schema, values) => {
+  calls.push('ensure');
+  assert.deepEqual({ actionId, key, schema, values }, { actionId: 'program', key: 'day', schema: { id: 'schema', name: 'schema' }, values: { text: 'saved' } });
+  return { ok: true, doc: { shareId: 'confirmed', crystal: values } };
+ } };
+ const policy: NonNullable<ActionBudget['operationPolicy']> = { step: async op => { calls.push(op); }, create: unexpected, access: unexpected, update: unexpected, search: unexpected };
+ const inputs = { key: ' day ', text: 'saved' };
+ await assert.rejects(executeProgram({ id: 'owner' }, action, inputs, budget(policy), '', server), /restricted Action run/);
+ assert.deepEqual(calls.splice(0), ['things.ensure'], 'the trusted restriction runs before schema lookup or mutation');
+ await assert.rejects(executeProgram({ id: 'owner' }, action, inputs, budget(undefined), '', host), /cannot ensure Things in this workspace/);
+ assert.deepEqual(calls, []);
+ assert.deepEqual(await executeProgram({ id: 'owner' }, action, inputs, budget(undefined), '', server), { id: 'confirmed', crystal: { text: 'saved' }, schema: 'schema', schemaId: 'schema' });
+ assert.deepEqual(calls, ['schema', 'ensure']);
+});

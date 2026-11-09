@@ -13,6 +13,7 @@ function fixture() {
  let docs = new Map<string, any>(), events = new Map<string, any>(), charged = 0, failAppend = false, fingerprints = 0, receiptReads = 0;
  const now = new Date('2026-10-17T00:00:00Z');
  const matches = (doc: any, filter: any) => Object.entries(filter).every(([k, v]: any) => {
+  if (v && typeof v === 'object' && '$gt' in v) return +doc[k] > +v.$gt;
   if (v && typeof v === 'object' && '$in' in v) return v.$in.some((x: any) => x == null ? doc[k] == null : doc[k] === x);
   return Array.isArray(doc[k]) && typeof v === 'string' ? doc[k].includes(v) : doc[k] instanceof Date && v instanceof Date ? +doc[k] === +v : doc[k] === v;
  });
@@ -196,4 +197,26 @@ test('link metadata must match verified ready attachment bytes and survives read
  const event=f.events().get(restored.file.revision);assert.deepEqual(timelineFileVersion(event,'after')?.symbolicLink,symbolicLink);
  const retained:any=await f.service.commit('owner',{...restore,kind:'retained-version',operationId:randomUUID(),expectedRevision:restored.file.revision});assert.equal(retained.ok,true);assert.deepEqual(timelineFileVersion(f.events().get(retained.file.revision),'after')?.symbolicLink,symbolicLink);
  assert.equal((await f.service.commit('owner',{...restore,operationId:randomUUID(),expectedRevision:restored.file.revision,symbolicLink:{...symbolicLink,targetBase64:'Li4v'}})).ok,false,'Target-byte length mismatch must not publish');
+});
+
+test('trusted file composition requires an active outer transaction and propagates failure', async () => {
+ const f = fixture(), value = input(f.upload('att1'));
+ await assert.rejects(f.service.commit('owner', value, { session: {} }), /active transaction/);
+ assert.equal(f.docs().has(value.id), false);
+ f.failAppend(true);
+ await assert.rejects(f.service.commit('owner', value, { session: { inTransaction: () => true } }), /append failed/);
+});
+
+test('only trusted composition consumes a live owned import draft with its canonical binding', async () => {
+ const f = fixture(), version = f.upload('att1', { attachmentImportDraft: true, attachmentExpiresAt: new Date('2026-10-18T00:00:00Z') }), value = input(version);
+ assert.equal((await f.service.commit('owner', value)).ok, false);
+ assert.equal(f.docs().get('att1').targetId, undefined);
+ const result = await f.service.commit('owner', value, { session: { inTransaction: () => true }, consumeImportDraft: true });
+ assert.equal(result.ok, true); assert.equal(f.docs().get('att1').targetId, value.id); assert.equal(f.docs().get('att1').parentId, value.id);
+ assert.equal(f.docs().get('att1').attachmentImportDraft, false); assert.equal(f.docs().get('att1').attachmentExpiresAt, null);
+ assert.equal(f.docs().get('att1').sizeBytes, thingStorageSizeBytes(f.docs().get('att1')));
+ assert.equal(f.charged(), thingStorageSizeBytes(f.docs().get(value.id)), 'binding envelope changes do not charge the already reserved attachment bytes twice');
+ const expired = fixture(), expiredValue = input(expired.upload('att1', { attachmentImportDraft: true, attachmentExpiresAt: new Date('2026-10-16T00:00:00Z') }));
+ await assert.rejects(expired.service.commit('owner', expiredValue, { session: { inTransaction: () => true }, consumeImportDraft: true }), /ready file upload/);
+ assert.equal(expired.docs().get('att1').targetId, undefined);
 });

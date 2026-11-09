@@ -26,6 +26,30 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
 
 const recording = { ownerId: 'alice', thingtime: ['attachment'], attachmentPurpose: 'recording', attachmentState: 'ready' };
 
+test('required-kind pruning preserves library membership, including mixed protected kinds and managed exceptions', () => {
+  const excluded = [...PROTECTED_THINGTIME, 'chat', 'chat-message', 'custom-emoji'];
+  const kinds = ['data', 'builder-thing', 'user', 'theme', 'file', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment'];
+  const stamps = [...kinds.map(kind => [kind]), ...kinds.flatMap(kind => kinds.filter(other => other !== kind).map(other => [kind, other]))];
+  const fixtures = stamps.flatMap(thingtime => ['alice', 'bob'].flatMap(ownerId => [
+    { ownerId, thingtime, shareId: 'archive', archiveRootId: 'archive', archiveVersion: 1, crystal: { trashed: false },
+      attachmentPurpose: 'file', attachmentState: 'ready', targetId: null },
+    { ownerId, thingtime, crystal: { trashed: true }, attachmentPurpose: 'post', attachmentState: 'pending', targetId: 'parent' },
+    { ownerId, thingtime, attachmentPurpose: 'recording', attachmentState: 'ready' }
+  ]));
+  for (const includeArchives of [false, true]) for (const required of [[], ['data'], ['data', 'builder-thing'], ['data', 'theme'], ...kinds.map(kind => [kind])]) {
+    const original = ownerLibraryMatch('alice', excluded, includeArchives);
+    const pruned = ownerLibraryMatch('alice', excluded, includeArchives, required);
+    const filter = required.length ? { thingtime: { $in: required } } : {};
+    assert.deepEqual(fixtures.filter(doc => matches(doc, { $and: [pruned, filter] })),
+      fixtures.filter(doc => matches(doc, { $and: [original, filter] })), JSON.stringify({ required, includeArchives }));
+  }
+  const data = ownerLibraryMatch('alice', excluded, false, ['data']);
+  assert.equal('$or' in data, false, 'data does not explore incompatible managed-kind alternatives');
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'user'] }, data), false);
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'theme'] }, data), false);
+  assert.equal(matches({ ownerId: 'alice', thingtime: ['data', 'builder-thing'] }, data), true);
+});
+
 test('archive listing is opt-in, root-only and namespace/version/deletion fenced before pagination', () => {
   const archive = { shareId: 'root', ownerId: 'alice', thingtime: ['chat-archive'], archiveVersion: 1, archiveRootId: 'root' };
   assert.equal(matches(archive, ownerLibraryMatch('alice', PROTECTED_THINGTIME)), false);

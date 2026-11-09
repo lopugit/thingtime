@@ -1,6 +1,5 @@
-import { TIMELINE_SNAPSHOT_PARTS_ADAPTER, parseTimelineSnapshotReference } from './snapshotParts.ts';
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from './snapshotParts.ts';
 import {
-	TIMELINE_EVENT_MAX_BYTES,
 	isClientDraftVersion,
 	parseTimelineEvent,
 	parseTimelineEntry,
@@ -10,7 +9,7 @@ import {
 	type TimelineSnapshot
 } from './contract.ts';
 import { parseTimelineNote, TIMELINE_NOTES_PER_EVENT, type TimelineNote } from './notes.ts';
-import { copyBoundedJson } from '../utils/boundedJson.ts';
+import { copyTimelineContent } from './contentJson.ts';
 import { versionContent } from './versions.ts';
 import { THEME_CONTENT_ADAPTER, themeContentValue } from './themeContent.ts';
 import { ALGORITHM_CONTENT_ADAPTER, algorithmContentValue } from './algorithmContent.ts';
@@ -46,8 +45,7 @@ type Dependencies<Entry extends TimelineExportSource> = {
 };
 export function createVersionExportReader<Entry extends TimelineExportSource = TimelineEntry>(deps: Dependencies<Entry>) {
 	const { refuse } = deps;
-	const { restorableContent, loadVersionGraph, versionContentSources, createVersionContentReader } = createVersionGraphTools(refuse);
-	const tooLarge = `This version is too large to export in one file. It remains retained in ${deps.retainedLocation}.`;
+	const { restorableContent, loadVersionGraph, createVersionContentReader } = createVersionGraphTools(refuse);
 	return async (ownerId: string, eventId: string): Promise<TimelineVersionExport<Entry['receipt']> | null> => {
 		if (typeof eventId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(eventId)) refuse(400, 'Invalid Timeline export request');
 		const read = deps.entries;
@@ -60,9 +58,6 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 			refuse(422, 'An unacknowledged version must remain a device-authored draft.');
 		const side = source.event.after ? 'after' : 'before';
 		const retained = source.event[side];
-		// A parts snapshot may hold up to 128 MiB; refuse from its reference before any part document is read.
-		if (retained?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER && parseTimelineSnapshotReference(retained.value).bytes > TIMELINE_EVENT_MAX_BYTES)
-			refuse(413, tooLarge);
 		let content: TimelineSnapshot;
 		if (retained?.adapter === THEME_CONTENT_ADAPTER || retained?.adapter === ALGORITHM_CONTENT_ADAPTER) {
 			const kind = retained.adapter === THEME_CONTENT_ADAPTER ? 'theme' : 'algorithm';
@@ -82,15 +77,6 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 				const graph = compact
 					? await loadVersionGraph([eventId], source.event.thingId, (ids) => deps.nodes(ids))
 					: new Map<string, TimelineGraphNode>();
-				if (compact) {
-					// A compact version resolves through its saved ancestor; that ancestor's parts reference is checked before any part is read.
-					const ancestors = versionContentSources(graph, source).selected.filter((id) => id !== eventId);
-					for (const ancestor of ancestors.length ? await read(ancestors) : []) {
-						const after = ancestor.event.after;
-						if (after?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER && parseTimelineSnapshotReference(after.value).bytes > TIMELINE_EVENT_MAX_BYTES)
-							refuse(413, tooLarge);
-					}
-				}
 				value = await createVersionContentReader(graph, read, (entry) => deps.snapshot(entry, 'after'))(source);
 			} else value = restorableContent(await deps.snapshot(source, 'before'));
 			content = { adapter: 'thing-content', version: 1, value };
@@ -106,7 +92,6 @@ export function createVersionExportReader<Entry extends TimelineExportSource = T
 			name: names[0] ?? null,
 			...(deps.context ? { context: deps.context } : {})
 		};
-		if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) refuse(413, tooLarge);
 		return result;
 	};
 }
@@ -129,7 +114,7 @@ export function parseTimelineVersionExport(
 	const envelope = input as any;
 	const raw = envelope?.export ?? input;
 	if (envelope?.export && envelope.ok !== true) throw new Error('Invalid Timeline export');
-	const data = copyBoundedJson(raw, { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 100, maxNodes: 220_000 }, 'Timeline export') as any;
+	const data = copyTimelineContent(raw, 'Timeline export', 4) as any;
 	if (!data || data.formatVersion !== 1 || !data.event || !data.content) throw new Error('The export is not a version file.');
 	const event = parseTimelineEvent(data.event);
 	if (event.id !== expected.id || event.ownerId !== expected.ownerId || (expected.thingId !== undefined && event.thingId !== expected.thingId))

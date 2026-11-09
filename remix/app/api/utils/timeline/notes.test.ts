@@ -18,7 +18,7 @@ const remove = (n: number, noteId: string): TimelineNoteCommand => ({ command: '
 const rejects = async (work: Promise<unknown>, status: number, pattern: RegExp) =>
 	assert.rejects(work, (error: any) => error instanceof StorageMutationError && error.status === status && pattern.test(error.message));
 
-function harness(options: { billable?: boolean } = {}) {
+function harness(options: { billable?: boolean; epoch?: (things:any,ownerId:string,thingId:string,session:any)=>Promise<void> } = {}) {
 	let rows: any[] = [{ _id: 'db-folder', shareId: timelineFolderId('user-1'), ownerId: 'user-1', thingtime: ['folder'], updatedAt: new Date(0) }]; let charge = 0; let clock = Date.parse('2026-10-13T09:00:00.000Z');
 	const touches: Date[] = []; let failDebit=false;
 	const session = { inTransaction: () => true }; const ai: string[] = []; let reply: string | null = 'The title changed from Hello to World through the editor.';
@@ -44,6 +44,7 @@ function harness(options: { billable?: boolean } = {}) {
 	const events = new Map<string, TimelineEntry>([['saved', entryFixture(eventFixture('saved'))], ['other-thing', entryFixture(eventFixture('other-thing', { thingId: 'other-page' }))]]);
 	const service = createNoteService({
 		collection: async () => things as any,
+  ...(options.epoch?{epoch:options.epoch}:{}),
 		transaction: async work => { const before = [...rows]; const oldCharge = charge; try { return await work(session); } catch (error) { rows = before; charge = oldCharge; throw error; } },
 		debit: async (owner, bytes, tx) => { assert.ok(['user-1','other'].includes(owner)); assert.equal(tx, session); if(failDebit){failDebit=false;throw new Error('Quota transaction refused');} charge += bytes; },
 		billable: () => options.billable ?? true, now: () => new Date(clock += 1000),
@@ -193,4 +194,14 @@ test('failed removal accounting preserves the original note and quota atomically
  assert.equal(h.charge(),charge);assert.deepEqual(noteFromDoc(h.rows()[0]),result.note);assert.equal(h.rows()[0].timelineNoteRemoved,undefined);
  h.rows()[0].sizeBytes=0;await rejects(h.service('user-1',remove(3,result.note.id)),409,/reconciliation/);
  assert.equal(h.rows()[0].timelineNoteRemoved,undefined);assert.deepEqual(noteFromDoc(h.rows()[0]),result.note);
+});
+
+ test('note mutation and removal roll back when an active restored-content epoch refuses; retries do not advance it twice',async()=>{
+ let refuse=true,touches=0;
+ const h=harness({epoch:async(_things,ownerId,thingId,session)=>{assert.equal(ownerId,'user-1');assert.equal(thingId,'page-1');assert.ok(session.inTransaction());touches++;if(refuse)throw Error('held content epoch changed');}});
+ await assert.rejects(h.service('user-1',add(81)),/epoch changed/);assert.equal(h.rows().length,0);assert.equal(h.charge(),0);
+ refuse=false;const added=await h.service('user-1',add(81));assert.ok('note'in added);assert.equal(touches,2);
+ await h.service('user-1',add(81));assert.equal(touches,2,'stored request replay is not a new mutation');
+ const charged=h.charge();refuse=true;await assert.rejects(h.service('user-1',remove(82,added.note.id)),/epoch changed/);assert.equal(h.rows().length,1);assert.equal(h.charge(),charged);
+ refuse=false;await h.service('user-1',remove(82,added.note.id));assert.equal(h.rows().length,1);assert.equal(h.rows()[0].timelineNoteRemoved,true);const count=touches;await h.service('user-1',remove(82,added.note.id));assert.equal(touches,count,'missing-note acknowledgement is not a mutation');
 });

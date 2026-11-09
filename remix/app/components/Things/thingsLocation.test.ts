@@ -90,3 +90,19 @@ test('home library links preserve destination through folders and qualify detail
     'localPlane=home&localPlane=home&workspaceOwner=owner','localPlane=home&workspaceOwner=owner&workspaceOwner=owner'])
     assert.equal(readLibraryDestination(new URLSearchParams(query), {id:'owner'}), 'invalid');
 });
+
+test('app search and kind/view chips preserve the current container through back and reload', () => {
+  let params = new URLSearchParams('folder=app-a&kind=all');
+  const history = [params];
+  for (const patch of [{ q: 'shared name' }, { kind: 'webpage' as const }, { view: 'list' as const }, { display: 'preview' as const }, { sort: 'name' as const }, { group: 'kind' as const }]) {
+    params = writeThingsLocation(params, { ...readThingsLocation(params), ...patch });
+    history.push(params);
+    assert.equal(params.get('folder'), 'app-a');
+    assert.equal(params.get('q'), 'shared name');
+  }
+  for (const entry of history.slice(1).reverse()) {
+    const reloaded = new URLSearchParams(entry.toString());
+    assert.equal(reloaded.get('folder'), 'app-a');
+    assert.equal(readThingsLocation(reloaded).q, 'shared name');
+  }
+});

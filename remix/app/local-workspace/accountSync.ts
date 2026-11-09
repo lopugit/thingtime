@@ -37,6 +37,8 @@ export type AccountSyncRecord = {
 	id: string; state: SyncState; base: AccountThing | null; audience: { acl: string[]; visibility: string };
 	/** Set only by atomic full-file retention or a confirmed local binding write. */
 	postAttachmentIds?: string[];
+	// Server-projected execution state can change without a content revision.
+	executionRead?: { at: number; held: boolean };
 	pending?: FrozenWrite | FrozenDelete; deleted?: Pick<LocalThing, 'id' | 'revision' | 'updatedAt'>; claim?: { token: string; expiresAt: number }; attempts: number; retryAt: number; error?: string;
 };
 type SyncRecord = AccountSyncRecord;
@@ -137,7 +139,7 @@ export class AccountThingSync {
 		if (!input || input.author?.id !== this.scope.ownerId || typeof input.id !== 'string' || !Number.isFinite(Date.parse(input.updatedAt)))
 			throw new WorkspaceError('SYNC_IDENTITY', 'The remote Thing does not belong to this workspace', 409);
 		const rawAttachments = (input as any).attachments;
-		if (rawAttachments !== undefined && (!Array.isArray(rawAttachments) || rawAttachments.length > 4096)) throw new WorkspaceError('INVALID_SYNC_THING', 'Invalid account attachment receipt.', 502);
+		if (rawAttachments !== undefined && !Array.isArray(rawAttachments)) throw new WorkspaceError('INVALID_SYNC_THING', 'Invalid account attachment receipt.', 502);
 		const attachments = (rawAttachments || []).map(normalizePublicAttachment);
 		if (attachments.some((file: unknown) => !file)) throw new WorkspaceError('INVALID_SYNC_THING', 'Invalid account attachment receipt.', 502);
 		const checked = validateThingtimeCrystal(input.thingtime, snapshotTransferValue(input.crystal), { postAttachments: { hasAny: attachments.length > 0, hasVisual: attachments.some((file: any) => ['image','video'].includes(file.mediaKind)) } });
@@ -146,7 +148,8 @@ export class AccountThingSync {
 		// credentials, grants or arbitrary server envelope fields.
 		return snapshotTransferValue({ id: input.id, thingtime: checked.thingtime, crystal: checked.crystal,
 			extended: input.extended ?? null, tags: input.tags || [], folderId: input.folderId || null, targetId: input.targetId || null,
-			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1, ...(input.thingtime.includes('post') ? { accountAttachmentIds: attachments.map((file: any) => file.id) } : {}),
+			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1,
+			...(typeof input.executionHeld === 'boolean' ? { executionHeld: input.executionHeld } : {}), ...(input.thingtime.includes('post') ? { accountAttachmentIds: attachments.map((file: any) => file.id) } : {}),
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
 	async remember(input: AccountThing, startedAt = this.now(), admitFiles?: (tx: WorkspaceTransaction) => Promise<void>) { return (await this.rememberMany([input], startedAt, admitFiles))[0]; }
@@ -164,11 +167,27 @@ export class AccountThingSync {
 	}
 	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing, startedAt: number, refusals: Awaited<ReturnType<typeof accountReadRefusals>>, admitFiles?: (tx: WorkspaceTransaction) => Promise<void>) {
 		if ([remote.id, remote.targetId].some(id => id && (refusals.get(id)?.at ?? -Infinity) >= startedAt)) return undefined;
-		const sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
+		let sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
 		if (sync?.deleted) return undefined;
+		let previous = await tx.get<LocalThing>('things', remote.id);
+		const known = sync?.executionRead;
+		const observed = typeof remote.executionHeld === 'boolean' &&
+			(!known || startedAt > known.at || (startedAt === known.at && remote.executionHeld))
+			? { at: startedAt, held: remote.executionHeld } : known;
+		// Preserve content edits and their revision. Only a current, explicit
+		// server projection may change a known hold; old/omitted values cannot
+		// arm a restored program.
+		if (observed && observed !== known && sync) {
+			sync = { ...sync, executionRead: observed };
+			await tx.put(COLLECTION, remote.id, sync);
+			if (previous && previous.executionHeld !== observed.held) {
+				previous = { ...previous, executionHeld: observed.held };
+				await tx.put('things', remote.id, previous);
+			}
+		}
+		if (observed) remote = { ...remote, executionHeld: observed.held };
 		// A background read cannot erase unsynced editing, nor regress the base.
-		if (sync && sync.state !== 'synced') return tx.get<LocalThing>('things', remote.id);
-		const previous = await tx.get<LocalThing>('things', remote.id);
+		if (sync && sync.state !== 'synced') return previous;
 		if (previous && sync?.base && (Date.parse(sync.base.updatedAt) > Date.parse(remote.updatedAt) || (!admitFiles && Date.parse(sync.base.updatedAt) === Date.parse(remote.updatedAt)))) return previous;
 		if (admitFiles) await admitFiles(tx);
 		if (previous && sync?.base && Date.parse(sync.base.updatedAt) === Date.parse(remote.updatedAt)) {
@@ -182,7 +201,7 @@ export class AccountThingSync {
 			updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
 		const device = this.files?.restore ? await this.files.restore(tx, cached) : cached;
 		await tx.put('things', remote.id, device);
-		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, ...(admitFiles ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}), audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
+		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, ...(observed ? { executionRead: observed } : {}), ...(admitFiles ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}), audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 		return device;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
@@ -385,9 +404,10 @@ export class AccountThingSync {
 			if (choice.keep === 'remote') {
 				if (state.deleted) await this.files?.restoreParent?.(tx, choice.id, remote.accountAttachmentIds || []);
 				await tx.delete(DELETED_CONTENT, choice.id);
-				await tx.put('things', choice.id, { ...remote, revision: local.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString() });
+				await tx.put('things', choice.id, { ...remote, ...(state.executionRead ? { executionHeld: state.executionRead.held } : {}), revision: local.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString() });
 			}
 			await tx.put(COLLECTION, choice.id, { id: choice.id, state: choice.keep === 'local' ? 'pending' : 'synced', base: remote,
+				...(state.executionRead ? { executionRead: state.executionRead } : {}),
 				...(choice.keep === 'local' && state.deleted ? { deleted: state.deleted } : {}),
 				...(choice.keep === 'local' && state.postAttachmentIds ? { postAttachmentIds: state.postAttachmentIds } : {}),
 				audience: choice.keep === 'local' ? state.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
@@ -531,8 +551,9 @@ export class AccountThingSync {
 					const row = await tx.get<LocalThing>('things', pending.id);
 					const newer = !!latest.deleted || (row && row.revision !== pending.version);
 					const device = this.files?.restore ? await this.files.restore(tx, remote) : remote;
-					if (!newer) await tx.put('things', pending.id, { ...device, ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
+					if (!newer) await tx.put('things', pending.id, { ...device, ...(latest.executionRead ? { executionHeld: latest.executionRead.held } : {}), ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
 					await tx.put(COLLECTION, pending.id, { id: pending.id, state: newer ? 'pending' : 'synced', base: remote,
+						...(latest.executionRead ? { executionRead: latest.executionRead } : {}),
 						...(this.files && Array.isArray(pending.body.attachmentIds) ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}),
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
 						audience: newer ? latest.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);

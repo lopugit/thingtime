@@ -28,6 +28,14 @@ full-app launch, not only host-side module checks.
 
 ## First ten minutes in a fresh checkout or worktree
 
+Development group cleanup in `electron/lib/local-runtime.cjs` requires ESRCH
+before deleting temporary state. After a successful SIGKILL, macOS can briefly
+return EPERM for a zombie-only group: [XNU's group-signal filter and return
+code](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c#L1612-L1621).
+Poll only within the existing kill deadline; persistent EPERM and permission
+failures before or during signal delivery remain errors. The owned-child zombie
+and permission regressions live in `electron/test/local-runtime.test.cjs`.
+
 ```sh
 npm run worktree-bootstrap          # deps relink, env copy, .claude/launch.json, hooksPath
 npm run web-ports                   # this checkout's derived ports + PM2 name
@@ -73,6 +81,9 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | Vercel output contract | `npm --prefix remix run verify:vercel-output` |
 | Graphify | `scripts/graphify update .` after code changes; `npm run test:graphify-cas` for the wrapper |
 | Electron restart storage | `corepack pnpm --dir electron run verify:renderer-restart` after `build:web` + `verify:web`; isolated multi-process Chromium acceptance of `electron/lib/renderer-server.cjs`, shared journal and drafts. Nitro uses `node_middleware`; the profile owns a stable, collision-checked origin. See `electron/README.md`. |
+| Sync settings continuity | `node remix/scripts/test-sync-continuity-ui.mjs` exercises actual retry/scheduled discovery against synthetic native/API replies; `node remix/scripts/test-device-sync-resources-ui.mjs` covers desktop/mobile retained measurements and draft boundaries. These isolated browser checks do not prove installed native transfers. |
+| Native upload admission/recovery | With `THINGTIME_TEST_COMMANDER_INDEXER` set to the built disposable Rust helper, run `swift test --package-path macos/ThingtimeNode --filter MacUploadBatchOperationTests`. The peer verifies only submitted receipt subsets; 256-file completion spans fresh bounded windows with no repeated PUTs. Run `node --import tsx --test app/fileSync/uploadBatchJournal.test.ts` from `remix` for canonical individual-recovery and original-ID journal coverage. |
+| Mac native sync fixtures | `macos/ThingtimeNode/scripts/test-commander-backup.sh` builds the isolated Rust helper, exports `THINGTIME_TEST_COMMANDER_INDEXER`, and runs folder, photo-original and remote-filesystem regressions. A clean full `swift test --package-path macos/ThingtimeNode` must also compile its executable dependency; the `@main` entry is `ThingtimeNodeApplication.swift`. |
 | Local Electron bundle | `corepack pnpm --dir electron run build` runs `npm ci` for the separately locked `MCP/` helper before the web/native build and preserves an available installed app signing identity; a fresh worktree needs no manual MCP dependency install |
 | Retained development app | `corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=<task> --prepare-only` snapshots the canonical runtime into a named development app with independent dependencies/profile/managed replica/ports. `dev-workspace.mjs` owns transactional preparation and process ownership; `--stop-workspace` stops its verified group while preserving state. Never install an unmerged candidate over stable. See `electron/README.md` and `electron/test/dev-workspace.test.cjs`. |
 
@@ -214,3 +225,27 @@ iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
 Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
 host suites before signing and installing. Release listeners include changes in
 this directory for every consuming app.
+
+The iOS TestFlight workflow resolves the stable Cargo executable through rustup,
+preserves custom toolchain homes and installs device plus arm64/x86_64 simulator
+targets before its pre-credential native tests. Its executable setup regression
+is `node --test iOS/scripts/tests/rust-release-toolchain.test.mjs`; the fixture
+runs the actual workflow step without downloading a toolchain or using secrets.
+
+The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
+`mac-fixture-worker-trust.cjs` preload for ephemeral HTTPS byte storage on 28313.
+API/native identity remain on 28311; only the exact canonical transfer-worker
+child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
+wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.
+
+Native Release packaging uses the explicit shipping-product set in
+`macos/ThingtimeNode/scripts/build-bundle.sh`, shared by build, executable checks
+and copying. Test-only Swift fixtures remain in the debug lane. Run
+`electron/test/native-bundle-build.test.cjs` for required-product failure/missing
+executable refusal before staging, then the canonical signed bundle verification.
+
+Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
+`mac-fixture-transport.mjs`; native clock provenance lives only in the
+`Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
+must drain before success/resume while leaving the consumer unblocked. Shipping
+Swift sources, authorization, rates and native active-slot policy are unchanged.

@@ -22,7 +22,7 @@ export function importedThingCrystal(thing: TransferThing, crystal: Record<strin
  const copy = rewriteComposition(thing.thingtime, crystal, (_kind, id) => ids.get(id) || id);
  for (const key of ['componentKey', 'actionKey', 'pageKey']) if (typeof copy[key] === 'string') copy[key] = `${copy[key].slice(0, 48)}-${suffix}`;
  if (thing.thingtime.includes('schema') && typeof copy.name === 'string') copy.name = `${copy.name.slice(0, 48)}-${suffix}`;
- if (thing.thingtime.includes('webpage')) delete copy.siteRoute;
+ if (thing.thingtime.includes('webpage')) { delete copy.siteRoute; delete copy.activationAction; }
  if (thing.thingtime.includes('post')) { delete copy.subspaceId; delete copy.flairId; }
  return copy;
 }

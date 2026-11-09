@@ -1,3 +1,4 @@
+import { attachmentSourceIdentity } from './attachmentFileSource';
 import { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS } from '~/api/utils/attachments/attachmentArchiveCore';
 import { isHeicImage } from './heicImage';
 import type {
@@ -24,8 +25,6 @@ const INLINE_VIDEO_TYPES = new Set([
 ]);
 const isAudioContentType = (value: string) => value.startsWith('audio/');
 export { MAX_POST_ATTACHMENTS } from '~/schemas/attachmentLimits';
-const MAX_POST_TAGS = 12;
-const MAX_POST_TAG_CHARS = 40;
 
 type ClipboardFileData = {
 	files?: ArrayLike<File> | null;
@@ -54,8 +53,7 @@ export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
 // Like the server, tags are NFC-normalized (composed and decomposed spellings
-// of one visible tag share a bucket), the cap counts code points (never
-// bisecting a surrogate pair) and lone surrogates are dropped so a tag can
+// of one visible tag share a bucket), and lone surrogates are dropped so a tag can
 // never make encodeURIComponent throw when rendered.
 export const canonicalPostTags = (values: readonly unknown[]): string[] => {
 	const tags: string[] = [];
@@ -66,10 +64,8 @@ export const canonicalPostTags = (values: readonly unknown[]): string[] => {
 				const codePoint = char.codePointAt(0) ?? 0;
 				return codePoint < 0xd800 || codePoint > 0xdfff;
 			})
-			.slice(0, MAX_POST_TAG_CHARS)
 			.join('');
 		if (tag && !tags.includes(tag)) tags.push(tag);
-		if (tags.length >= MAX_POST_TAGS) break;
 	}
 	return tags;
 };
@@ -94,14 +90,13 @@ const safeLinkedMediaKind = (requestedKind: unknown): AttachmentMediaKind =>
 
 // Mirrors the server's canonicalLinkedAttachmentUrl (attachmentCore) — plain
 // absolute http(s), no credentials, no control/format/space characters,
-// bounded length.
-export const MAX_LINKED_ATTACHMENT_URL_CHARS = 2048;
+// preserving the complete URL.
+export const MAX_LINKED_ATTACHMENT_URL_CHARS = Number.POSITIVE_INFINITY;
 export const canonicalLinkedMediaUrl = (value: unknown): string | null => {
 	if (typeof value !== 'string') return null;
 	const trimmed = value.trim();
 	if (
 		!trimmed ||
-		trimmed.length > MAX_LINKED_ATTACHMENT_URL_CHARS ||
 		/[\p{Cc}\p{Cf}\p{Cs}\s]/u.test(trimmed) ||
 		trimmed.includes('\\') ||
 		!/^https?:\/\//i.test(trimmed)
@@ -216,27 +211,23 @@ export const localFileMediaKind = (file: Pick<File, 'type'> & { name?: string })
 	return 'file';
 };
 
-const MAX_ATTACHMENT_TITLE_CHARS = 200;
-const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
-const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
-
-const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
+const normalizedOwnerText = (value: unknown): string | undefined => {
 	if (typeof value !== 'string') return undefined;
 	const trimmed = value.trim();
-	return trimmed ? trimmed.slice(0, maxChars) : undefined;
+	return trimmed || undefined;
 };
 
 export const normalizePublicAttachment = (value: unknown): PublicAttachment | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
 	const id = typeof record.id === 'string' ? record.id.trim() : '';
-	const name = typeof record.name === 'string' ? record.name.trim() : '';
+	const name = typeof record.name === 'string' ? record.name : '';
 	const contentType = typeof record.contentType === 'string' ? record.contentType.trim().toLowerCase() : 'application/octet-stream';
 	const size = Number(record.size);
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
-	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
-	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
-	const filenamePreview = normalizedOwnerText(record.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS);
+	const title = normalizedOwnerText(record.title);
+	const description = normalizedOwnerText(record.description);
+	const filenamePreview = normalizedOwnerText(record.filenamePreview);
 	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
@@ -505,10 +496,10 @@ export const attachmentCleanupAction = (upload: ComposerAttachmentUpload, commit
 export const dedupeSelectedFiles = (current: ComposerAttachmentUpload[], incoming: File[]): File[] => {
 	const seen = new Set(current.map((upload) => {
 		const file = upload.sourceFile || upload.file;
-		return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+		return `${file.name}\u0000${file.size}\u0000${file.lastModified}\u0000${file.webkitRelativePath || ''}\u0000${attachmentSourceIdentity(file)}`;
 	}));
 	return incoming.filter((file) => {
-		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}\u0000${file.webkitRelativePath || ''}\u0000${attachmentSourceIdentity(file)}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return true;

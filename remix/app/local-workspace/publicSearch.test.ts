@@ -1,3 +1,4 @@
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
@@ -32,5 +33,29 @@ test('anonymous structured discovery uses only the public read endpoint, omits c
   assert.equal(reads, 1);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.search(query), /Workspace changed/);
+ } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, old); }
+});
+
+test('an older public projection cannot replace a required restoration gate', async () => {
+ const old = { window: globalThis.window, indexedDB: globalThis.indexedDB, fetch: globalThis.fetch };
+ const origin = 'https://restoration-public.example';
+ const oldVersion = '1.31.0', currentVersion = CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'];
+ let version = oldVersion, offline = false, reads = 0;
+ Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, indexedDB: new IDBFactory(), fetch: async (_url: RequestInfo | URL, options?: RequestInit) => {
+  if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version } } });
+  if (offline) throw new TypeError('Offline');
+  reads++;
+  return Response.json({ ok: true, thing: { id: 'page', ...(version === currentVersion ? { executionHeld: true } : {}) } });
+ } });
+ bindLocalWorkspace(true, rootIdentity.read().generation);
+ try {
+  const read = (required: string) => publicWorkspaceRead('/api/v1/things?id=page', 'api.things', required);
+  assert.equal((await read(oldVersion)).thing.executionHeld, undefined);
+  await assert.rejects(read(currentVersion), /incompatible/);
+  assert.equal(reads, 1, 'an old manifest never sends a current-contract request');
+  version = currentVersion;
+  assert.equal((await read(currentVersion)).thing.executionHeld, true);
+  offline = true;
+  assert.equal((await read(currentVersion)).thing.executionHeld, true);
  } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, old); }
 });

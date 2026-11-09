@@ -1,6 +1,10 @@
 import { isBuilderThing, BUILDER_THING_REQUIREMENTS } from '../schemas/builderThing';
 import { REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
-import { requiresEditableBlockContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource } from '../schemas/authoredControls';
+import { requiresCollectionPagingContract } from '../components/Builder/savedCollectionContract';
+import { hasLiveSourceBinding } from '../schemas/liveSources';
+import { requiresEditableBlockContract, requiresEditableIntrinsicContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
 import type { AccountDraftTransport } from './accountDrafts';
 import type { DraftSummary } from '../drafts/draftCore';
 import type { AccountFileRetentionTransport, AccountFileTransport } from './accountFiles';
@@ -89,16 +93,34 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
 		if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
-		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'attachments/link': ['api.attachment-link', '1.1.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
-		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', REMOTE_TRANSFER_EXPORT_VERSION] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
+		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.3.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.4.0'], 'attachments/link': ['api.attachment-link', '1.1.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', CONTENT_EXECUTION_READ_REQUIREMENTS['api.components-browse']] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.8.1'] : endpoint === 'things/export' ? ['api.things-export', REMOTE_TRANSFER_EXPORT_VERSION] : endpoint === 'things' ? ['api.things', method === 'GET' ? CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'] : '1.33.0'] : ['api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']]);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION);
-		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && isBuilderThing(args)) await requireThingtimeCapability('api.things', BUILDER_THING_REQUIREMENTS['api.things']);
-		const blocks = (args.crystal as { blocks?: unknown } | undefined)?.blocks;
-		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && Array.isArray(blocks) && requiresEditableBlockContract(blocks as WebpageBlock[])) await requireThingtimeCapability('api.things', '1.35.0');
-		if (endpoint === 'things' && method === 'DELETE' && args.retainAttachmentReceipts === true) await requireThingtimeCapability('api.things', '1.42.0');
-		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', args.attachmentIds !== undefined ? '1.13.0' : '1.10.0');
+		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method)) {
+			if (isBuilderThing(args)) await requireThingtimeCapability('api.things', BUILDER_THING_REQUIREMENTS['api.things']);
+			const crystal = args.crystal as { blocks?: WebpageBlock[]; activationAction?: unknown; steps?: { op?: string }[] } | undefined;
+			const blocks = crystal?.blocks;
+			if (crystal?.activationAction !== undefined || (Array.isArray(crystal?.steps) && crystal.steps.some(step => step?.op === 'things.ensure')) || usesMapPointsSource(crystal))
+				await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
+			else if (usesAuthoredControls(crystal))
+				await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+			else if (requiresCollectionPagingContract(blocks))
+				await requireThingtimeCapability('api.things', '1.49.0');
+			else if (Array.isArray(blocks) && requiresEditableIntrinsicContract(blocks, ['tt-upload']))
+				await requireThingtimeCapability('api.things', '1.47.0');
+			else if (Array.isArray(blocks) && requiresEditableIntrinsicContract(blocks))
+				await requireThingtimeCapability('api.things', '1.44.0');
+			else if (hasLiveSourceBinding(blocks))
+				await requireThingtimeCapability('api.things', '1.37.0');
+			else if (Array.isArray(blocks) && requiresEditableBlockContract(blocks))
+				await requireThingtimeCapability('api.things', '1.36.0');
+		}
+		if (endpoint === 'things' && ((method === 'DELETE' && args.retainAttachmentReceipts === true) || (method === 'PATCH' && args.attachmentIds !== undefined)))
+			await requireThingtimeCapability('api.things', '1.57.0');
+		if (endpoint === 'attachments/link' && args.requestId !== undefined) await requireThingtimeCapability('api.attachment-link', '1.3.0');
+		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted(); signal?.throwIfAborted();
 		const query = method === 'GET' ? `?${new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : String(value)]))}` : '';
@@ -142,7 +164,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			write: (command, signal) => request('POST', { ...command, expectedActor: scope.ownerId }, signal, 'drafts')
 		},
 		files: {
-			retention: async (id, signal, bound) => { if (bound) await requireThingtimeCapability('api.attachment-content', '1.15.0'); return request('GET', { id, cache: 'retain', download: 1 }, signal, 'attachments/content'); },
+			retention: (id, signal) => request('GET', { id, cache: 'retain', download: 1 }, signal, 'attachments/content'),
 			bytes: async (id, cacheKey, size, signal) => {
 				if (!/^[a-f0-9]{64}:original$/.test(cacheKey) || !Number.isSafeInteger(size) || size < 1) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file descriptor.', 502);
 				return (await request('GET', { id, cache: 'retain-bytes', download: 1 }, signal, 'attachments/content', { cacheKey, size })).bytes;

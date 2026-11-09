@@ -14,12 +14,14 @@ export type PagedPlanSpec = {
 	local: InventoryIdentity;
 	remote: InventoryIdentity;
 	baseline: { local: InventoryIdentity; remote: InventoryIdentity };
+	photoBaselineInstance?: string;
 	policy: SyncPolicy;
 	excludedPaths: string[];
 	ignoreRules?: string;
 	earlyRunId?: string;
 };
 type ReadEarlyReceipts = (paths: readonly string[]) => Promise<(ConfirmedSyncOperation | null)[]>;
+type IncludePlacement = (row: SyncPathObservation) => boolean;
 export type PagedPlanProgress = { phase: 'indexing' | 'planning' | 'complete'; indexed: number; planned: number; decisions: number };
 export type PagedPlanCursor = { id: string; scope: SyncScope; after: string; read: number };
 type Position = { after: string | null; read: number };
@@ -45,6 +47,8 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	if (!value || !identifier(value.id) || !value.baseline || !value.policy ||
 		!['two-way', 'upload', 'download', 'backup'].includes(value.policy.mode) || typeof value.policy.propagateDeletes !== 'boolean' ||
 		(value.earlyRunId !== undefined && (!identifier(value.earlyRunId) || value.earlyRunId === value.id)) ||
+		(value.photoBaselineInstance !== undefined && (!identifier(value.photoBaselineInstance) || value.earlyRunId ||
+			value.policy.mode !== 'backup' || value.policy.propagateDeletes)) ||
 		!Array.isArray(value.excludedPaths) || value.excludedPaths.length > MAX_SYNC_EXCLUSIONS || value.excludedPaths.some(p => !validSyncPath(p)) ||
 		value.excludedPaths.reduce((n, p) => n + encoder.encode(p).length, 0) > 16_384) throw Error('Invalid paged sync plan.');
 	const ignoreRules = canonicalIgnoreRules(value.ignoreRules);
@@ -53,6 +57,7 @@ export function parsePagedPlanSpec(value: PagedPlanSpec): PagedPlanSpec {
 	const exclusions = value.excludedPaths.map(syncPathKey);
 	if (new Set(exclusions).size !== exclusions.length) throw Error('Duplicate sync exclusion.');
 	return { id: value.id, local: inputs[0], remote: inputs[1], baseline: { local: inputs[2], remote: inputs[3] },
+		...(value.photoBaselineInstance ? { photoBaselineInstance: value.photoBaselineInstance } : {}),
 		policy: { mode: value.policy.mode, propagateDeletes: value.policy.propagateDeletes }, excludedPaths: [...value.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(value.earlyRunId ? { earlyRunId: value.earlyRunId } : {}) };
 }
 
@@ -167,12 +172,12 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 			} catch (error) { fail(error); } };
 		});
 	};
-	const step = async (value: PagedPlanSpec, readEarly?: ReadEarlyReceipts): Promise<PagedPlanProgress> => {
+	const step = async (value: PagedPlanSpec, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> => {
 		const spec = parsePagedPlanSpec(value), header = await withHeader<Header>(spec, 'readonly', (h, _tx, done) => done(h));
 		if (header.phase === 'indexing' && header.inputInstances && initialUpload(spec, header.totals)) return begin(spec);
-		return advance(spec, header, readEarly);
+		return advance(spec, header, readEarly, includePlacement);
 	};
-	async function advance(spec: PagedPlanSpec, header: Header, readEarly?: ReadEarlyReceipts): Promise<PagedPlanProgress> {
+	async function advance(spec: PagedPlanSpec, header: Header, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> {
 		if (header.phase === 'complete') return progress(header);
 		if (!!spec.earlyRunId !== !!readEarly) throw Error('Early sync receipts are required to reconcile these inventories.');
 		const firstUpload = !!header.inputInstances && initialUpload(spec, header.totals);
@@ -190,7 +195,8 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 		const rows: SyncPathObservation[] = [], includedRows: boolean[] = [], flags: [string, number][] = [];
 		const exclusions = spec.excludedPaths.map(syncPathKey);
 		const ignore = ignorePolicy(spec);
-		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind);
+		const included = (row: SyncPathObservation) => !ignore.ignored(row.path, (row.local ?? row.remote ?? row.beforeLocal ?? row.beforeRemote)!.kind) &&
+			(includePlacement?.(row) ?? true);
 		const ancestorFlags = (row: SyncPathObservation, include: boolean, possible = false): [string, number][] => {
 			const flags: [string, number][] = [], parts = row.path.split('/');
 			const add = (side: number) => {
@@ -312,9 +318,9 @@ export function pagedPlanJournal(db: IDBDatabase, access: JournalAccess, keyRang
 				});
 			});
 		},
-		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void, readEarly?: ReadEarlyReceipts): Promise<PagedPlanProgress> {
+		async build(value: PagedPlanSpec, changed?: (value: PagedPlanProgress) => void, readEarly?: ReadEarlyReceipts, includePlacement?: IncludePlacement): Promise<PagedPlanProgress> {
 			const spec = parsePagedPlanSpec(value); let state = await begin(spec);
-			while (state.phase !== 'complete') { state = await step(spec, readEarly); changed?.(state); }
+			while (state.phase !== 'complete') { state = await step(spec, readEarly, includePlacement); changed?.(state); }
 			return state;
 		},
 		async read(value: PagedPlanSpec, continuation?: PagedPlanCursor): Promise<{ decisions: SyncDecision[]; next: PagedPlanCursor | null; totalDecisions: number }> {

@@ -1,3 +1,4 @@
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT } from '~/api/http';
 import { createAttachmentMutationAction, attachmentPostOnlyLoader } from '~/api/utils/attachments/attachmentResponses';
 import { linkAttachment } from '~/api/utils/attachments/attachments';
 
@@ -11,6 +12,7 @@ export const createAttachmentLinkAction = (
 	overrides: Parameters<typeof createAttachmentMutationAction>[1] = {},
 	service: typeof linkAttachment = linkAttachment
 ) => createAttachmentMutationAction({
+	bodyBudget: JSON_BODY_WITHOUT_APPLICATION_LIMIT,
 	rateKey: 'attachments.link',
 	requestIdRequiresFullUser: true,
 	service

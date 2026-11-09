@@ -1,5 +1,6 @@
 import { assertUserVaultMutationIntegrity } from '../lopu/userVaultIntegrity';
 import { thingContentSnapshot } from '../../../timeline/thingContent.ts';
+import { recordCreationContentEpoch } from '../things/contentExecutionGate';
 import { recordPageComponentBindings } from './componentBindings';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
 import { randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../sto
 import { timelineMutationContext } from './mutationContext';
 import { folderPlacementSnapshot } from '../../../timeline/folderPlacement.ts';
 
-export { thingContentSnapshot } from '../../../timeline/thingContent.ts';
+export { thingContentSnapshot, thingContentSnapshotValue } from '../../../timeline/thingContent.ts';
 
 export type ThingMutationCapture = {
 	id: string;
@@ -74,6 +75,7 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 /** Call within the content transaction after its successful CAS. A thrown
  * append/accounting error rolls back the content and head as one operation. */
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
+	await recordCreationContentEpoch(things, before, after, session);
 	const prepared = prepareThingMutation(before, after, capture);
 	if (!prepared) return null;
 	await assertUserVaultMutationIntegrity(things, before, after, session);
@@ -105,6 +107,7 @@ export async function recordFolderPlacement(things: any, before: any, after: any
 		before.thingtime?.length !== 1 || !['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(before.thingtime[0]) ||
 		JSON.stringify(before.thingtime) !== JSON.stringify(after.thingtime)) throw new StorageMutationError(409, 'storage_conflict', 'This folder contains a managed item that must be moved through its own editor before deleting the folder');
 	if ((before.folderId ?? null) === (after.folderId ?? null)) return null;
+	await recordCreationContentEpoch(things, before, after, session);
 	const event = parseTimelineEvent({ formatVersion: 1, id: capture.id, ownerId: before.ownerId, thingId: before.shareId,
 		branchId: 'main', parentIds: before.timelineHeadId ? [before.timelineHeadId] : [], operationId: capture.operationId,
 		actorId: capture.actorId, source: capture.source, clientId: null, occurredAt: capture.now.toISOString(),

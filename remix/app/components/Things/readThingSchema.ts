@@ -1,3 +1,4 @@
+import { WorkspaceError } from '../../local-workspace/storage';
 import { ThingtimeApiError } from '../../hooks/apiFailure';
 
 type SchemaRead = { id: string; sharedRoot?: string; key?: string };
@@ -16,7 +17,7 @@ export async function readThingSchema<T>(
   try { return await get({ id }, { signal }); }
   catch (error) {
    signal.throwIfAborted();
-   if (!(error instanceof ThingtimeApiError) || ![403, 404].includes(error.status ?? 0)) throw error;
+   if (!(error instanceof ThingtimeApiError || error instanceof WorkspaceError) || ![403, 404].includes(error.status ?? 0)) throw error;
   }
  }
  return get({ id, sharedRoot, ...(linkKey ? { key: linkKey } : {}) }, { signal });

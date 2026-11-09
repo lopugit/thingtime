@@ -1,4 +1,5 @@
-import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
+import type { JsonValue } from '../utils/boundedJson.ts';
+import { copyTimelineContent } from './contentJson.ts';
 import type { CapturedComponent } from './componentBindings.ts';
 import {
 	alignDefinitionsToPage,
@@ -11,7 +12,7 @@ import { rewriteComposition } from '../api/utils/actions/forkCompositionCore.ts'
 import { validateThingtimeCrystal } from '../schemas/registry';
 /** Canonical hash preimage shared by browser WebCrypto and the server. */
 export const componentComparisonText = (value: unknown) =>
-	JSON.stringify(copyBoundedJson(value, { maxBytes: 16 * 1024 * 1024, maxDepth: 96, maxNodes: 800_000, sortKeys: true }, 'Component comparison'));
+	JSON.stringify(copyTimelineContent(value, 'Component comparison', 4));
 const fieldFor = (values: ComponentDefinitionVersion, ref: string) =>
 	Object.prototype.hasOwnProperty.call(values, ref) ? values[ref] : { present: false as const };
 export const componentDefinitionFields = (refs: string[], values: Record<string, any>): ComponentDefinitionVersion =>

@@ -77,7 +77,7 @@ test('anonymous shared copy reauthorizes complete editable closure, stages bytes
 test('anonymous shared copies negotiate large original streams and pin receipts without persisting source authority', async () => {
 	const f = fixture();
 	try {
-		f.state.fileVersion = '1.18.0'; f.state.bytes = new Uint8Array(17 * 1024 * 1024 + 3).fill(61);
+		f.state.fileVersion = '1.19.0'; f.state.bytes = new Uint8Array(17 * 1024 * 1024 + 3).fill(61);
 		f.state.plan.files[0].bytes = f.state.bytes.length;
 		const result = await f.copy();
 		const attachment = result.things.find(row => row.thingtime.includes('attachment'))!;
@@ -103,8 +103,11 @@ test('large-copy negotiation, ETag changes and same-size receipt replacement lea
 	for (const failure of ['old-capability', 'etag', 'replacement'] as const) {
 		const f = fixture();
 		try {
-			if (failure === 'old-capability') f.state.plan.files[0].bytes = 17 * 1024 * 1024;
-			else f.state.fileVersion = '1.18.0';
+			if (failure === 'old-capability') {
+				f.state.fileVersion = '1.18.0';
+				f.state.plan.files[0].bytes = 17 * 1024 * 1024;
+			}
+			else f.state.fileVersion = '1.19.0';
 			if (failure === 'etag') f.state.etagChanged = true;
 			if (failure === 'replacement') f.state.afterBytes = () => { f.state.receiptChanged = true; };
 			await assert.rejects(f.copy()); assert.deepEqual(await f.things.snapshot(), []);

@@ -64,7 +64,7 @@ test('device archive context contains only canonical retained notes and naming e
  }finally{await f.close();}
 });
 
-test('invalid identity, missing ancestry, oversized content, abort and retired readers fail clearly',async()=>{
+test('invalid identity, missing ancestry, malformed controls, abort and retired readers fail clearly',async()=>{
  const f=setup();try{
   const thing=await f.sync.things.create({thingtime:['data'],crystal:{name:'Private'}}),[event]=await f.store.pending();
   await assert.rejects(exportAccountTimelineVersion('bad\nid',f),/Invalid/);
@@ -74,7 +74,8 @@ test('invalid identity, missing ancestry, oversized content, abort and retired r
   assert.throws(()=>parseTimelineVersionExport({...result.export,receipt:null,context:undefined},{ownerId:'owner',id:event.id}),/JSON values|receipt/);
   assert.throws(()=>parseTimelineVersionExport({...result.export,event:{...event,source:'api',mode:'revision',clientId:null}},{ownerId:'owner',id:event.id}),/receipt/);
   assert.throws(()=>parseTimelineVersionExport({...result.export,notes:[{ownerId:'other'}]},{ownerId:'owner',id:event.id}),/Timeline note/);
-  assert.throws(()=>parseTimelineVersionExport({...result.export,padding:'x'.repeat(TIMELINE_EVENT_MAX_BYTES)},{ownerId:'owner',id:event.id}),/budget/);
+  const oversizedEvent = { ...event, after: content('x'.repeat(TIMELINE_EVENT_MAX_BYTES)) };
+  assert.throws(() => parseTimelineVersionExport({ ...result.export, event: oversizedEvent }, { ownerId: scope.ownerId, id: event.id }), /budget|large/i);
   const compact=eventFixture('orphan',{...event,id:'orphan',thingId:thing.id,parentIds:['missing'],operation:'update',before:content('Before'),after:{adapter:'folder-placement',version:1,value:{folderId:null}}});
   await f.store.enqueue(compact);await assert.rejects(exportAccountTimelineVersion(compact.id,f),/Earlier versions/);
   f.retire();await assert.rejects(exportAccountTimelineVersion(event.id,f),/retired/);

@@ -5,10 +5,10 @@ import { IDBFactory } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
 import { LocalThings } from './things';
 import { LocalTimeline, LOCAL_TIMELINE_OWNER, localTimelineScope } from './timeline';
-import { parseTimelineEvent, type TimelineEvent } from '../timeline/contract';
+import { parseTimelineEvent, TIMELINE_EVENT_MAX_BYTES, type TimelineEvent } from '../timeline/contract';
 import { parseBranchMergePreview, createBranchMergeProposal, type BranchMergeRequest } from '../timeline/branchMerge';
 import { branchCheckoutRequest } from '../timeline/branchCheckout';
-import { captureComponentBindings, capturedComponentBindings } from '../timeline/componentBindings';
+import { captureComponentBindings, capturedComponentBindings, readComponentBinding } from '../timeline/componentBindings';
 import { mergeComponentVersions } from '../timeline/componentMerge';
 import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
 import { TimelineLocalStore } from '../timeline/localStore';
@@ -139,7 +139,7 @@ test('overlapping local edits require explicit choices; a changed head preserves
 	}
 });
 
-async function componentFixture(db: WorkspaceDatabase) {
+async function componentFixture(db: WorkspaceDatabase, extraText = '') {
 	const h = await fixture(db),
 		ref = 'card',
 		crystal = { name: 'Page', blocks: [{ id: 'card', type: 'component', component: ref }] };
@@ -156,7 +156,7 @@ async function componentFixture(db: WorkspaceDatabase) {
 			parentIds: [parent.id],
 			dependencies: []
 		});
-		const captures = captureComponentBindings(event, { card: { id: 'component-id', crystal: { render: { tag: 'p', children: label } } } }, [], () =>
+		const captures = captureComponentBindings(event, { card: { id: 'component-id', crystal: { render: { tag: 'p', children: label + extraText } } } }, [], () =>
 			randomUUID()
 		);
 		for (const captured of captures.events) await h.history.push(captured);
@@ -210,37 +210,29 @@ test('component conflicts retain exact recorded definitions and merge the explic
 	}
 });
 
-test('component batch size preflight refuses oversized metadata before decoding capture payloads', async () => {
-	class Guarded extends WorkspaceDatabase {
-		refusedCapture = '';
-		inspected = false;
-		override transaction<T>(...args: Parameters<WorkspaceDatabase['transaction']>): Promise<T> {
-			const [scope, mode, guard, run] = args;
-			return super.transaction(scope, mode, guard, (tx) =>
-				run({
-					...tx,
-					get: async <V>(collection: string, id: string) => {
-						if (this.refusedCapture && collection === 'timeline-events' && id === this.refusedCapture) {
-							this.inspected = true;
-							throw new Error('capture decoded before preflight');
-						}
-						return tx.get<V>(collection, id);
-					}
-				})
-			) as Promise<T>;
-		}
-	}
-	const db = new Guarded(new IDBFactory());
+test('component comparison preserves valid captured definitions beyond one event byte limit', async () => {
+	const db = new WorkspaceDatabase(new IDBFactory());
 	try {
-		const h = await componentFixture(db),
-			id = h.incoming.dependencies[0].eventId;
-		await db.transaction(partition, 'readwrite', lease, async (tx) => {
-			const header = await tx.get<any>('timeline-index', id);
-			await tx.put('timeline-index', id, { ...header, bytes: 4 * 1024 * 1024 });
+		const extraText = 'x'.repeat(1_450_000);
+		const h = await componentFixture(db, extraText);
+		const request = { ...h.request, componentChoices: { '["card"]': 'incoming' as const } };
+		const preview = parseBranchMergePreview((await h.history.branchMerge(request)).preview, LOCAL_TIMELINE_OWNER, request);
+		const entries = preview.components!.entries;
+		assert.equal(entries.length, 3);
+		const encoded = new TextEncoder();
+		assert.ok(entries.every(entry => encoded.encode(JSON.stringify(entry)).byteLength < TIMELINE_EVENT_MAX_BYTES));
+		assert.ok(encoded.encode(JSON.stringify(entries)).byteLength > TIMELINE_EVENT_MAX_BYTES);
+		const incoming = entries.find(entry => entry.event.id === h.incoming.dependencies[0].eventId)!;
+		assert.equal((readComponentBinding(incoming.event)?.component?.crystal.render as any).children, 'Recorded incoming' + extraText);
+		assert.deepEqual(createBranchMergeProposal(preview, 'local').event.dependencies, h.incoming.dependencies);
+
+		// The old aggregate cap is gone. An incorrect index is still damage,
+		// even if the declared size would otherwise fit an individual event.
+		await db.transaction(partition, 'readwrite', lease, async tx => {
+			const header = await tx.get<any>('timeline-index', incoming.event.id);
+			await tx.put('timeline-index', incoming.event.id, { ...header, bytes: header.bytes + 1 });
 		});
-		db.refusedCapture = id;
-		await assert.rejects(h.history.branchMerge(h.request), (error: any) => error.status === 413 && /too large/.test(error.message));
-		assert.equal(db.inspected, false);
+		await assert.rejects(h.history.branchMerge(request), /index does not match/);
 	} finally {
 		await db.close();
 	}

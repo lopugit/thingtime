@@ -60,7 +60,9 @@ export async function recordedComponentVersions(things: any, ownerId: string, so
 	const entries = await readRecordedComponentEntries(
 		things,
 		ownerId,
-		sources.flatMap(({ event }) => event.dependencies)
+		sources.flatMap(({ event }) => event.dependencies),
+		undefined,
+		Infinity
 	);
 	return sources.map(({ event, content }) => {
 		const refs = webpageComponentRefs(content.crystal?.blocks);

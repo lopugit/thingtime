@@ -75,16 +75,36 @@ test('bound-media exports round-trip through anonymous and account import with i
  }finally{await f.db.close();}
 });
 
-test('bound imports reject missing targets, corrupt bytes, excess attachments and unsupported mixed content atomically',async()=>{
- for(const failure of ['target','bytes','count','managed']){
+test('bound imports reject missing targets, corrupt bytes and unsupported mixed content atomically',async()=>{
+ for(const failure of ['target','bytes','managed']){
   const f=await fixture();try {
    if(failure==='target')f.manifest.files[0].targetId='missing';
    if(failure==='bytes')f.contentBytes.set('first',new Uint8Array(f.bytes.length));
-   if(failure==='count')for(let n=0;n<30;n++){const id='excess-'+n;f.manifest.files.push({...f.manifest.files[0],id,targetId:'reply',path:'files/'+String(n+3).padStart(6,'0')});f.manifest.attachmentOrder!.push(id);f.contentBytes.set(id,f.bytes);}
    if(failure==='managed')f.manifest.things.push({id:'managed',thingtime:['action-run'],crystal:{}});
    await assert.rejects(f.importing(), undefined, failure);
    assert.deepEqual(await f.sync.things.snapshot(),[]);assert.deepEqual(await f.sync.status(),[]);assert.deepEqual(await f.files.status(),[]);
    await f.db.transaction(f.scope,'readonly',f.lease,async tx=>assert.equal((await tx.usage()).bytes,0));
   }finally{await f.db.close();}
  }
+});
+
+test('a bound import keeps all reply files above the old selection limit', async () => {
+ const f = await fixture();
+ try {
+  const extraIds = Array.from({ length: 30 }, (_, index) => 'reply-extra-' + index);
+  for (const [index, id] of extraIds.entries()) {
+   f.manifest.files.push({ ...f.manifest.files[2], id, name: id + '.png', path: 'files/' + String(index + 3).padStart(6, '0') });
+   f.manifest.attachmentOrder!.push(id);
+   f.contentBytes.set(id, f.bytes);
+  }
+  const imported = await f.importing();
+  const replyFiles = imported.things.filter(row => row.targetId === imported.idMap.reply);
+  assert.equal(replyFiles.length, 31);
+  assert.equal((await f.files.status()).length, 33);
+  assert.deepEqual(f.writes, []);
+  assert.deepEqual(f.uploads, []);
+  const downloaded = await f.sync.things.export(imported.roots);
+  assert.deepEqual((downloaded.manifest.attachmentOrder || downloaded.manifest.files.map(file => file.id)).map(id => downloaded.manifest.files.find(file => file.id === id)!.name),
+   ['second.png', 'first.png', 'reply-image.png', ...extraIds.map(id => id + '.png')]);
+ } finally { await f.db.close(); }
 });

@@ -358,9 +358,9 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 	return (
 		<>
 			{renderRow(
-				'Floating Lopu 🦄',
-				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show the floating Lopu bubble" />,
-				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens Lopu either way)'
+				'Floating Lopu icon',
+				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show floating Lopu icon" />,
+				'Show a draggable shortcut on other pages. You can always open Lopu from navigation.'
 			)}
 			{renderRow(
 				'Window docking',
@@ -442,7 +442,7 @@ export const LopuHost = () => {
 	// hides the bubble only — the window still follows `open` (the navbar
 	// 🦄 toggles it)
 	const hiddenOnPath = isLopuHostHiddenOnPath(pathname);
-	const showLauncher = !hiddenOnPath && (settings.launcher || minimised);
+	const showLauncher = !hiddenOnPath && settings.launcher;
 	const showWindow = !hiddenOnPath && open && !minimised;
 	const showSheet = showWindow && isMobile;
 	const showFrame = showWindow && !isMobile;

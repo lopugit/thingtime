@@ -394,14 +394,11 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
     );
   }
 
-  const shown = images.slice(0, 4);
-  const hidden = images.length - shown.length;
 
   return (
     <Grid templateColumns="repeat(2, 1fr)" gap={1.5}>
-      {shown.map((src, index) => {
+      {images.map((src, index) => {
         const spansBoth = images.length >= 3 && index === 0;
-        const showOverlay = hidden > 0 && index === shown.length - 1;
 
         return (
           <Box key={`${src}-${index}`} position="relative" gridColumn={spansBoth ? '1 / -1' : undefined}>
@@ -416,19 +413,7 @@ const ImageGrid = ({ images, alt }: { images: string[]; alt: string }) => {
               borderRadius={RADIUS_MD}
               background="var(--tt-surface-alt, #f5f5f7)"
             />
-            {showOverlay && (
-              <Center
-                position="absolute"
-                inset={0}
-                borderRadius={RADIUS_MD}
-                background="rgba(0, 0, 0, 0.45)"
-                color="white"
-                fontWeight={700}
-                fontSize="lg"
-              >
-                +{hidden}
-              </Center>
-            )}
+
           </Box>
         );
       })}

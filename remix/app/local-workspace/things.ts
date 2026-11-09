@@ -27,7 +27,7 @@ import { normalizeSavedTheme } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountSuiteAliases, resolveAccountSuiteId } from './accountSuiteIdentity';
 
-export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
+export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string; executionHeld?: boolean };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment | LocalLinkedAttachment, previous?: LocalAttachment | LocalLinkedAttachment) => Promise<void>;
 export type LocalThingRecovery = (tx: WorkspaceTransaction, id: string) => Promise<Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> | undefined>;
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;

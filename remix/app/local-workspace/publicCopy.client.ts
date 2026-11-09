@@ -1,4 +1,4 @@
-import { REMOTE_TRANSFER_EXPORT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
+import { REMOTE_TRANSFER_CONTENT_VERSION, REMOTE_TRANSFER_EXPORT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../api/utils/capabilities/capabilityContract';
 import { canForkThing } from '../components/Sharing/forkThingCore';
 import { compositionReferences } from '../api/utils/actions/sharedCompositionCore';
@@ -88,7 +88,7 @@ export async function copyPublicThing(input: { id: string; key?: string }, deps:
 		const plan = await exportPlan(), snapshot = JSON.stringify(plan);
 		if (plan.files?.length && !capabilitySatisfies(manifest?.features?.['api.attachment-content']?.version ?? '', '1.11.0'))
 			refuse('This origin does not support compatible shared file downloads.');
-		const originalStream = capabilitySatisfies(manifest?.features?.['api.attachment-content']?.version ?? '', '1.18.0');
+		const originalStream = capabilitySatisfies(manifest?.features?.['api.attachment-content']?.version ?? '', REMOTE_TRANSFER_CONTENT_VERSION);
 		if (plan.files?.some(file => file.bytes > 16 * 1024 * 1024) && !originalStream)
 			refuse('This origin needs shared original streaming support to copy these files.');
 		const bundle = await bundleFromPlan(plan, { key: args.key, signal, originalStream,

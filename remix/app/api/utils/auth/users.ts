@@ -433,6 +433,58 @@ export const findUserById = async (id: string) => {
 	return legacy;
 };
 
+/**
+ * Serialize a credential import with changes to the authoritative admin record.
+ * A dedicated private stamp acquires the document write fence without changing
+ * profile data, edit timestamps, or a legacy twin's authorization.
+ */
+export const fenceCurrentAdminCredentialImport = async (userId: string, session: ClientSession): Promise<boolean> => {
+	const things = await getThingsCollection();
+	const thing = await things.findOne({ thingtime: 'user', shareId: userId }, {
+		session, projection: { secureAdmin: 1, 'crystal.username': 1, secureCredentialImportAt: 1 }
+	});
+	const stamp = (previous: unknown) => new Date(Math.max(Date.now(), previous instanceof Date ? previous.getTime() + 1 : 0));
+	if (thing) {
+		if (thing.secureAdmin !== true && !isEnvAdmin(thing.crystal?.username)) return false;
+		const updated = await things.updateOne({ _id: thing._id }, {
+			$set: { secureCredentialImportAt: stamp(thing.secureCredentialImportAt) }
+		}, { session });
+		return updated.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(userId)) return false;
+	const users = await getUsersCollection();
+	const legacy = await users.findOne({ _id: new ObjectId(userId) }, {
+		session, projection: { username: 1, 'meta.admin': 1, secureCredentialImportAt: 1 }
+	});
+	if (!legacy || !isAdminDoc(legacy)) return false;
+	const updated = await users.updateOne({ _id: legacy._id }, {
+		$set: { secureCredentialImportAt: stamp(legacy.secureCredentialImportAt) }
+	}, { session });
+	return updated.matchedCount === 1;
+};
+
+/** A delegated private upload publication must serialize with the current
+ * account's upload-permission change or deletion, as well as session revoke.
+ * Keep the same Things-first identity and permission policy as ordinary auth. */
+export async function fencePrivateUploadPermission(id: string, token: string, session: any, signal: AbortSignal) {
+	if (!session?.inTransaction()) throw Error('Upload authorization requires the publication transaction');
+	const options = { session, signal };
+	const things = await getThingsCollection();
+	const filter = { shareId: id, thingtime: 'user' };
+	const row = await things.findOne(filter, options);
+	const eligible = (user: any) => user && user.accountKind !== 'service' && userPrivateUploadsEnabled(user);
+	if (row) {
+		if (!eligible(userThingToDoc(row))) return false;
+		const result = await things.updateOne({ _id: row._id, ...filter }, { $set: { fileSyncPublicationFence: token } }, options);
+		return result.matchedCount === 1;
+	}
+	if (!ObjectId.isValid(id)) return false;
+	const legacy = await getUsersCollection(), legacyFilter = { _id: new ObjectId(id) };
+	if (!eligible(await legacy.findOne(legacyFilter, options))) return false;
+	const result = await legacy.updateOne(legacyFilter, { $set: { fileSyncPublicationFence: token } }, options);
+	return result.matchedCount === 1;
+}
+
 // Batch form for bounded admin directories. Preserve caller order and the
 // same Things-first migration precedence as findUserById, while replacing up
 // to hundreds of two-store point reads with one query per physical store.

@@ -1,3 +1,4 @@
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
 import { themeVersionWriter } from './themeVersions';
 import { algorithmVersionWriter } from './algorithmVersions';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
@@ -154,7 +155,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 				return localThingReadProjection(row, all, LOCAL_WORKSPACE_OWNER, commentProjection);
 			}
 			const query = new URLSearchParams({ id, ...(key ? { key } : {}), ...(sharedRoot ? { sharedRoot } : {}), ...(commentProjection ? { commentProjection: 'true' } : {}) });
-			return publicWorkspaceRead(`/api/v1/things?${query}`, 'api.things', '1.31.0', options?.signal);
+			return publicWorkspaceRead(`/api/v1/things?${query}`, 'api.things', CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'], options?.signal);
 		},
 		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean; key?: string }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
@@ -169,7 +170,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			if (query.commentProjection && query.target) {
 				const params = new URLSearchParams({ target: query.target, thingtime: 'comment', commentProjection: 'true', limit: String(query.limit || 20),
 					...(query.key ? { key: query.key } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
-				return publicWorkspaceRead(`/api/v1/things?${params}`, 'api.things', '1.31.0', options?.signal);
+				return publicWorkspaceRead(`/api/v1/things?${params}`, 'api.things', CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'], options?.signal);
 			}
 			options?.signal?.throwIfAborted(); const result = await service().list(query); options?.signal?.throwIfAborted();
 			return { ok: true, ...result, things: result.things.map(project) };
@@ -239,7 +240,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			lease.assertCurrent(); return result;
 		}
 		const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
-		return publicWorkspaceRead(`/api/v1/${kind}s/browse?${query}`, `api.${kind}s-browse`, '1.0.0');
+		return publicWorkspaceRead(`/api/v1/${kind}s/browse?${query}`, `api.${kind}s-browse`, kind === 'component' ? CONTENT_EXECUTION_READ_REQUIREMENTS['api.components-browse'] : '1.0.0');
 	};
 	local.schemas = { ...local.schemas, list: async () => ({ ok: true, schemas: crystalSchemas() }), browse: browse('schema') };
 	local.components = { ...local.components, browse: browse('component') };
@@ -283,7 +284,7 @@ export async function resolveLocalWebpage(target: LocalWebpageTarget) {
 	const localReference = target.kind === 'id' && (target.id.startsWith('local-') || await things.hasReference(target.id));
 	lease.assertCurrent();
 	if (!resolved.page && target.kind === 'id' && !localReference) {
-		return publicWorkspaceRead(`/api/v1/webpages/resolve?id=${encodeURIComponent(target.id)}${target.key ? `&key=${encodeURIComponent(target.key)}` : ''}`, 'api.webpages-resolve', '1.3.0');
+		return publicWorkspaceRead(`/api/v1/webpages/resolve?id=${encodeURIComponent(target.id)}${target.key ? `&key=${encodeURIComponent(target.key)}` : ''}`, 'api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
 	}
 	return { ok: true, page: resolved.page ? localThingProjection(resolved.page, LOCAL_WORKSPACE_OWNER) : null,
 		source: resolved.page ? 'user' as const : null, components: resolved.components.map(row => localThingProjection(row, LOCAL_WORKSPACE_OWNER)), refs: resolved.refs };

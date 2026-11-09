@@ -40,6 +40,13 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 		assert(cspSources(applicationHeaders.headers['Content-Security-Policy'], 'connect-src').includes(hub), `Emitted application policy must allow the FedCM authority ${hub}`);
 	}
 	assert.ok(routes.indexOf(applicationHeaders) < routes.findIndex(route => route.handle === 'filesystem'));
+	const credentialReview = routes.find(route => route.src && new RegExp(route.src).test('/credentials/import/') &&
+		route.headers?.['X-Frame-Options'] === 'DENY');
+	assert.equal(credentialReview?.continue, true);
+	assert.deepEqual(cspSources(credentialReview.headers['Content-Security-Policy'], 'frame-ancestors'), ["'none'"]);
+	assert.ok(routes.indexOf(credentialReview) > routes.indexOf(applicationHeaders));
+	assert.ok(routes.indexOf(credentialReview) < routes.findIndex(route => route.handle === 'filesystem'));
+
 	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
 	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
 	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
@@ -74,7 +81,7 @@ test('Vercel cron path and schedule pairs are unique', () => {
 	assert.equal(new Set(cronKeys).size, cronKeys.length, 'vercel.json must not register the same cron path and schedule twice');
 });
 
-test('recording processing, attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
+test('scheduled processing, cleanup, sync, and notification jobs are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
 		{ path: '/api/v1/auth/invites/expire', schedule: '11 * * * *' },
 		{
@@ -97,7 +104,9 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
 		},
-		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' },
+		{ path: '/api/v1/backups/run', schedule: '*/5 * * * *' },
+		{ path: '/api/v1/devices/observations/cleanup', schedule: '*/15 * * * *' }
 	]);
 });
 

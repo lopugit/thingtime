@@ -82,12 +82,10 @@ config.routes = [
     },
     continue: true
   },
-  // The /authorize consent popup must never render inside a frame (UI-redress
-  // hardening; token delivery already requires window.opener + a validated
-  // origin). Headers-only route: stamp and continue matching, so the page is
-  // still served by the SPA fallback below.
+  // Keep consent and credential review pages out of frames while allowing
+  // the SPA fallback to serve their documents.
   {
-    src: '^/authorize/?$',
+    src: '^/(?:authorize|credentials/import)/?$',
     headers: {
       'X-Frame-Options': 'DENY',
       'Content-Security-Policy': authorizeCsp

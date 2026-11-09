@@ -1,7 +1,7 @@
 import { createVersionGraphTools, type TimelineGraphNode } from './versionGraph.ts';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from './snapshotParts.ts';
-import { copyBoundedJson } from '../utils/boundedJson.ts';
-import { PUBLISHED_PREVIEW_MAX_BYTES, type VersionRequest } from './publishedVersion.ts';
+import { copyTimelineContent } from './contentJson.ts';
+import type { VersionRequest } from './publishedVersion.ts';
 import type { TimelineEntry, TimelineSnapshot, TimelineEvent } from './contract.ts';
 import { mergeVersionValues, versionContentEquals } from './versions.ts';
 import { isProtectedThingtime } from '../schemas/registry';
@@ -230,7 +230,7 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	};
 	try {
 		if (request.command === 'preview-version')
-			copyBoundedJson(preview, { maxBytes: PUBLISHED_PREVIEW_MAX_BYTES, maxDepth: 100, maxNodes: 800_000 }, 'Version comparison');
+			copyTimelineContent(preview, 'Version comparison', 4);
 	} catch {
 		return reject(413, 'This comparison is too large to preview. Its recorded versions are still retained.');
 	}

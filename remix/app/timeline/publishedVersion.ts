@@ -1,5 +1,6 @@
 import { themeContentValue, THEME_CONTENT_ADAPTER } from './themeContent';
 import { algorithmContentValue, ALGORITHM_CONTENT_ADAPTER } from './algorithmContent';
+import { copyTimelineContent, TIMELINE_CONTENT_MAX_DEPTH } from './contentJson.ts';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { componentBindingSnapshot, webpageComponentRefs } from './componentBindings.ts';
 import { componentBlocks } from './componentMerge.ts';
@@ -8,6 +9,7 @@ import { type TimelineSnapshot } from './contract.ts';
 import { versionContent, type VersionChoices, type VersionConflict } from './versions.ts';
 
 /** Three independently bounded content snapshots plus component comparison. */
+// Legacy compatibility value; materialized content no longer uses this allowance.
 export const PUBLISHED_PREVIEW_MAX_BYTES = 16 * 1024 * 1024;
 /** The label is the only signal old and new clients share for an undo: the
  * committed event keeps operation 'restore', never a new operation value. */
@@ -105,13 +107,13 @@ export function parseVersionRequest(input: unknown): VersionRequest {
 	return value as VersionRequest;
 }
 function checkConflicts(value: unknown) {
-	if (!Array.isArray(value) || value.length > 2000) throw new Error('Invalid version conflicts.');
+	if (!Array.isArray(value)) throw new Error('Invalid version conflicts.');
 	const seen = new Set<string>();
 	for (const conflict of value) {
 		if (
 			!keys(conflict, ['path', 'base', 'current', 'incoming']) ||
 			!Array.isArray(conflict.path) ||
-			conflict.path.length > 96 ||
+			conflict.path.length > TIMELINE_CONTENT_MAX_DEPTH ||
 			conflict.path.some((part: unknown) => typeof part !== 'string')
 		)
 			throw new Error('Invalid version conflict.');
@@ -126,11 +128,7 @@ function checkConflicts(value: unknown) {
 	}
 }
 export function parsePublishedVersionPreview(input: unknown, eventId: string, thingId: string, request: VersionRequest): PublishedVersionPreview {
-	const value = copyBoundedJson(
-		input,
-		{ maxBytes: PUBLISHED_PREVIEW_MAX_BYTES, maxDepth: 100, maxNodes: 800_000, sortKeys: true },
-		'Version preview'
-	) as any;
+	const value = copyTimelineContent(input, 'Version preview', 4) as any;
 	if (
 		!keys(value, [
 			'eventId',

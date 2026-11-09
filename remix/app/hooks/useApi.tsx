@@ -7,11 +7,18 @@ import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace, type WorkspaceUser } from './useWorkspaceUser';
 import { accountApi, startAccountWorkspaceSync, type AccountLocalView } from '../local-workspace/accountApi.client';
 import { anonymousApi } from '../local-workspace/api.client';
+import { requireSharedContentCapability, sharedContentWrite, SHARED_CONTENT_REQUIREMENTS } from '~/utils/sharedContentCapabilities';
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
+import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
+import type { BackupJobView } from '~/backups/workflow';
+import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { THING_STORAGE_CLOUD_WRITE_REQUIREMENTS } from '~/utils/thingStoragePolicy';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
 import type { TimelineScope } from '~/timeline/contract';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
@@ -51,7 +58,7 @@ import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStr
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
-import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { createApiFailure, readApiResponsePayload, ThingtimeApiError } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 import { createOwnedListClient } from './ownedListClient';
@@ -63,7 +70,7 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string; storageMode?: 'cloud' };
 const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
@@ -164,10 +171,20 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
   const ownedAlgorithms = useMemo(() => createOwnedListClient({ resource: 'algorithms', minimumVersion: '1.2.0', request: getJson, requireCapability: requireThingtimeCapability, scope: ownedListScope, initialScope: { actor: actionUser?.id, dataPlane, ...ownedIdentity } }), [getJson, ownedListScope, actionUser?.id, dataPlane, ownedIdentity]);
 
   const v1 = {
+    backups: {
+      destinations: useCallback(async (scope: TimelineScope, options?: { signal?: AbortSignal }): Promise<BackupDestinationsResult> => {
+        if (scope.dataPlane !== 'home') throw Error('Backups require home storage.');
+        for (const [feature, minimum] of Object.entries(BACKUP_DESTINATIONS_REQUIREMENTS))
+          await requireThingtimeCapability(feature, minimum, scope.apiOrigin);
+        options?.signal?.throwIfAborted();
+        return getJson(BACKUP_DESTINATIONS_PATH, { ...options, expectedActor: scope.ownerId,
+          expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [getJson])
+    },
     files: {
       read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
-        await requireThingtimeCapability('api.files', '1.0.0', scope.apiOrigin);
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
         await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0', scope.apiOrigin);
         const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
@@ -178,7 +195,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
         if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
         const command = parseCloudFileCommit(input);
-        await requireThingtimeCapability('api.files', command.symbolicLink ? '1.9.0' : '1.0.0', scope.apiOrigin);
+        await requireSharedContentCapability('api.files', { expectedApiOrigin: scope.apiOrigin });
         await requireThingtimeCapability('api.actions-run', '1.7.0', scope.apiOrigin);
         return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
       }, [asyncFetcher])
@@ -186,7 +203,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', '1.5.0');
+        await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -208,11 +225,11 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
       }, [getJson]),
       checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.8.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', request.componentChoices === undefined ? '1.7.0' : '1.11.0');
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
@@ -238,7 +255,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }, [asyncFetcher]),
       // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
       exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal; adapter?: string }) => {
-        await requireThingtimeCapability('api.timeline', timelineVersionExportRequirement(options?.adapter));
+        await requireThingtimeCapability('api.timeline', options?.adapter ? timelineVersionExportRequirement(options.adapter) : SHARED_CONTENT_REQUIREMENTS['api.timeline']);
         const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
         return parseTimelineVersionExport(result, {ownerId: scope.ownerId, id: eventId}, true);
       }, [getJson]),
@@ -257,8 +274,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
-        // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
-        await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        // Full content operations require the corrected broad-snapshot reader.
+        await requireSharedContentCapability('api.timeline');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
@@ -495,13 +512,34 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
       models: useCallback(async () => {
+        const owner = actionActor.current;
         const result = await getJson('/api/v1/ai/models');
+        // The signed desktop's loopback route contributes the redacted plan
+        // catalogue. A website or another desktop cannot expose these records.
+        if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && owner && !character && planeRef.current === 'home') {
+          try {
+            await requireThingtimeCapability('api.ai-chatgpt-plan', '1.2.0');
+            const plan = await fetch('/api/v1/ai/chatgpt-plan', { credentials: 'same-origin', cache: 'no-store', headers: {
+              'X-Thingtime-Expected-Actor': owner, 'X-Thingtime-Expected-User': owner, [EXPECTED_DATA_PLANE_HEADER]: 'home'
+            } });
+            if (plan.ok) {
+              const status = await plan.json();
+              if (status.storageMode === 'device' && status.deviceChatAvailable === true && actionActor.current === owner && planeRef.current === 'home' && Array.isArray(status.accounts)) {
+                return { ...result, vaultProviders: [...(result.vaultProviders ?? []), ...status.accounts.filter((account: any) => typeof account?.id === 'string').map((account: any) => ({
+                  id: account.id, name: `ChatGPT plan · this device · ${account.id.slice(-8)} · ${account.label}`, kind: 'openai', model: account.model, endpointHost: 'api.openai.com',
+                  available: account.connected === true && !!account.model, planChatEligible: account.connected === true && !!account.model,
+                  realtimeModels: []
+                }))] };
+              }
+            }
+          } catch { /* Keep the ordinary model catalogue usable during device loss. */ }
+        }
         if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
           try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;
-      }, [getJson]),
+      }, [getJson, character]),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
@@ -775,7 +813,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       },
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
-      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, {
+        ...options, ownerId: actionActor.current, dataPlane: planeRef.current
+      }), []),
       // direct voice (design note §6.1): the provider-minted five-minute
       // realtime credential for one of the viewer's own Secure Vault
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
@@ -917,11 +957,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 						},
 						options?: ThingRequestOptions
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
-						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
-						if (args.purpose === 'recording-import') {
-							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
-						}
+						await requireSharedContentCapability('api.attachment-uploads', options);
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
@@ -955,6 +992,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 				),
 				complete: useCallback(
 					async (args: { uploadId: string }, options?: ThingRequestOptions) => {
+            await requireSharedContentCapability('api.attachment-upload-complete', options);
 						const ret = asyncFetcher.submit(
 							{ uploadId: args?.uploadId },
 							{
@@ -999,14 +1037,15 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 			// binds/orders/deletes like an upload but its bytes stay on the original
 			// site (duplicates allowed; unbound mints expire in 24h)
 			link: useCallback(
-				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: { signal?: AbortSignal }) => {
+				async (args: { url: string; purpose?: 'post' | 'comment'; mediaKind?: 'image' | 'video' | 'file' }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-link', options);
 					const ret = asyncFetcher.submit(
 						{
 							url: args?.url,
 							...(args?.purpose && args.purpose !== 'post' ? { purpose: args.purpose } : {}),
 							...(args?.mediaKind ? { mediaKind: args.mediaKind } : {})
 						},
-						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', signal: options?.signal }
+						{ action: '/api/v1/attachments/link', errorContext: 'add linked media', ...options }
 					);
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
@@ -1016,16 +1055,18 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 			// owner display metadata on a ready attachment (media page + lightbox
 			// text) — omit a field to keep it, null/'' clears it
 			annotate: useCallback(
-				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }) =>
-					asyncFetcher.submit(
+				async (args: { id: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.attachment-annotate', options);
+					return asyncFetcher.submit(
 						{
 							id: args?.id,
 							...(args && 'filenamePreview' in args ? { filenamePreview: args.filenamePreview } : {}),
 							...(args && 'title' in args ? { title: args.title } : {}),
 							...(args && 'description' in args ? { description: args.description } : {})
 						},
-						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details' }
-					),
+						{ action: '/api/v1/attachments/annotate', errorContext: 'save media details', ...options }
+					);
+        },
 				[asyncFetcher]
 			)
 		},
@@ -1148,9 +1189,19 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         [asyncFetcher]
       )
     },
+    deviceFolders: {
+      inspect: useCallback(async (deviceId?: string, options?: ThingRequestOptions, cursor?: string) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/devices/folders${toQuery({ deviceId, cursor })}`, options);
+      }, [getJson]),
+      resolve: useCallback(async (body: { deviceId: string; connectionId?: string; name?: string }, options?: ThingRequestOptions) => {
+        await requireThingtimeCapability('api.devices-folders', '1.0.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(body, { action: '/api/v1/devices/folders', ...options, errorContext: 'open the device folder' });
+      }, [asyncFetcher])
+    },
     things: {
       fork: useCallback(async (args: { id: string; key?: string }) => {
-        await requireThingtimeCapability('api.things-fork', '1.8.0');
+        await requireThingtimeCapability('api.things-fork', '1.8.1');
         return asyncFetcher.submit({ id: args.id, key: args.key }, { action: '/api/v1/things/fork' });
       }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
@@ -1170,7 +1221,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-feed', '1.8.0');
+        await requireSharedContentCapability('api.things-feed');
         return getJson(`/api/v1/things/feed${toQuery(args)}`);
       }, [getJson]),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
@@ -1191,18 +1242,21 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+        async (args, options?: ThingRequestOptions & { onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, workspace: _workspace, ...rest } = args || {};
-          if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
+          await requireSharedContentCapability('api.things-search', options);
           if (rest.anon && !conditions && rest.near === undefined) {
-            return getJson(`/api/v1/things/search${toQuery(rest)}`);
+            return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
-          return asyncFetcher.submit({ ...rest, conditions, mode }, { action: '/api/v1/things/search', signal: options?.signal });
+          return asyncFetcher.submit({ ...rest, conditions, mode }, { action: '/api/v1/things/search', ...options, expectedDataPlane });
         },
         [asyncFetcher, getJson]
       ),
       userPosts: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-user', '1.7.0');
+        await requireSharedContentCapability('api.things-user');
         await requireThingtimeCapability('api.attachment-content', '1.8.0');
         return getJson(`/api/v1/things/user${toQuery(args)}`);
       }, [getJson]),
@@ -1214,20 +1268,53 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 			get: useCallback(
 				async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
-          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.40.0');
-          await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+          const ownerId = options?.expectedActor ?? actionActor.current;
+          const generation = rootIdentity.read().generation, origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== ownerId ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Account changed', 'AbortError');
+          };
+          const storageScope = origin && !character && !options?.characterId && ownerId && expectedDataPlane === 'home' &&
+            options?.storageMode !== 'cloud' && !args?.key && !args?.sharedRoot && !args?.commentProjection && !args?.commentSort &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)
+            ? { apiOrigin: origin, ownerId, dataPlane: expectedDataPlane } : null;
+          let replica: Awaited<ReturnType<typeof import('../storage/thingReplicas.client').readStoredThing>> = null;
+          if (storageScope && typeof args?.id === 'string') {
+            try { replica = await (await import('../storage/thingReplicas.client')).readStoredThing(storageScope, args.id, guard); }
+            catch { guard(); /* Browser storage may be unavailable; normal cloud reads still work. */ }
+          }
+          if (replica && navigator.onLine === false) {
+            guard(); return structuredClone(replica.response);
+          }
+          try {
+            if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+            if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+            await requireSharedContentCapability('api.things', options);
+            await requireSharedContentCapability('api.attachment-content', options);
+            const cloud = await getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+            if (replica && cloud?.ok === true && cloud.thing?.id === args?.id &&
+                (!replica.policy.policy.cloudSync || replica.pendingMutation)) {
+              guard(); return structuredClone(replica.response);
+            }
+            return cloud;
+          } catch (error) {
+            if (replica && error instanceof ThingtimeApiError && (error.status === null || error.status >= 500)) {
+              guard(); return structuredClone(replica.response);
+            }
+            throw error;
+          }
         },
-				[getJson]
+				[getJson, character]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          await requireThingtimeCapability('api.things', args?.builderApp ? '1.45.0' : args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
+          await requireSharedContentCapability('api.things', options);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1253,6 +1340,41 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          const storageOwner = expectedActor ?? actionActor.current, generation = rootIdentity.read().generation;
+          const origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== storageOwner ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Storage scope changed', 'AbortError');
+          };
+          let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
+          if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
+            expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)) {
+            const replicas = await import('../storage/thingReplicas.client');
+            const storageScope = { apiOrigin: origin, ownerId: storageOwner, dataPlane: expectedDataPlane };
+            if (typeof window.indexedDB !== 'undefined') {
+              try {
+                const local = await replicas.queueStoredThingUpdate(storageScope, args, guard);
+                if (local) return local;
+              } catch (error) {
+                if (!(error instanceof replicas.ReplicaLookupUnavailable)) throw error;
+              }
+            }
+            confirmStorageCloudWrite = () => replicas.checkGenericCloudThingUpdate(storageScope, args.id, guard, () => {
+              rootIdentity.changed(); refreshRootData();
+            }, options?.signal);
+          }
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
+            await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
+          }
+          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things-update', '1.22.0', options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1265,9 +1387,23 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
           else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things-update', '1.18.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          const expectedStoragePolicyRevision = options?.storageMode === 'cloud'
+            ? args?.expectedStoragePolicyRevision : await confirmStorageCloudWrite?.();
+          let writeOrigin = options?.expectedApiOrigin, writeActor = expectedActor;
+          if (expectedStoragePolicyRevision !== undefined) {
+            if (!origin || !storageOwner || character || options?.characterId || expectedDataPlane !== 'home' ||
+                (writeOrigin && writeOrigin !== origin))
+              throw new DOMException('Storage scope changed', 'AbortError');
+            for (const [feature, minimum] of Object.entries(THING_STORAGE_CLOUD_WRITE_REQUIREMENTS))
+              await requireThingtimeCapability(feature, minimum, origin);
+            guard();
+            writeOrigin = origin;
+            writeActor = storageOwner;
+          }
           options?.signal?.throwIfAborted();
           return asyncFetcher.submit(
             {
@@ -1276,6 +1412,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(expectedStoragePolicyRevision !== undefined ? { expectedStoragePolicyRevision } : {}),
               ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
@@ -1289,10 +1426,11 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor: writeActor, expectedDataPlane,
+              expectedApiOrigin: writeOrigin, signal: options?.signal }
           );
         },
-        [asyncFetcher]
+        [asyncFetcher, character]
       ),
       renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
         await requireThingtimeCapability('api.things', '1.27.0');
@@ -1301,7 +1439,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
         async (args) => {
-          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
+          await requireSharedContentCapability('api.things-bulk');
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1318,6 +1456,11 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       upsert: useCallback(
         async (args) => {
+          if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (args?.crystal?.activationAction !== undefined || (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure'))) {
+            await requireThingtimeCapability('api.things', '1.56.0');
+          }
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1342,6 +1485,14 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'things.ensure')) {
+            await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
+          }
+          if (args?.crystal?.activationAction !== undefined) await requireThingtimeCapability('api.things', '1.56.0', options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1353,7 +1504,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
           else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.40.0') await requireThingtimeCapability('api.things', '1.49.0');
+          else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
@@ -1401,7 +1553,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-          await requireThingtimeCapability('api.things-comment', '1.8.0');
+          await requireSharedContentCapability('api.things-comment');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
@@ -1416,7 +1568,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       share: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-share', '1.3.0');
+          await requireSharedContentCapability('api.things-share');
           return asyncFetcher.submit(
             // tags: the quote caption's harvested inline #hashtags — merged
             // server-side with the tags carried from the original post
@@ -1757,7 +1909,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     },
     components: {
       // paginated component browsing — { q, sort, cursor, limit, lib, category, library, mine }
-      browse: useCallback(async (args) => getJson(`/api/v1/components/browse${toQuery(args)}`), [getJson])
+      browse: useCallback(async (args) => { await requireThingtimeCapability('api.components-browse', CONTENT_EXECUTION_READ_REQUIREMENTS['api.components-browse']); return getJson(`/api/v1/components/browse${toQuery(args)}`); }, [getJson])
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {
@@ -1767,18 +1919,21 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => {
+      run: useCallback(async (args, options?: { signal?: AbortSignal }) => {
         const actor = actionActor.current;
         const principal = actionPrincipal.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', '1.37.0');
+        await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane, signal: options?.signal });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery, principal && principal !== actor ? principal : undefined));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
-        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+        options?.signal?.throwIfAborted();
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current, undefined, undefined, args?.source === 'activation' ? {
+          signal: options?.signal, expectedDataPlane: expectedPlane, currentDataPlane: () => planeRef.current
+        } : undefined));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [getJson])
@@ -1789,6 +1944,36 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     }
   };
 
+  const backupWorkspaceRequest = useCallback(async (query: Record<string, unknown> | null, command: BackupWorkspaceCommand | null, options: ThingRequestOptions) => {
+    const identity = rootIdentity.read();
+    const actor = actionActor.current;
+    const origin = options?.expectedApiOrigin;
+    const check = () => {
+      options?.signal?.throwIfAborted();
+      if (!actor || options?.expectedActor !== actor || options?.expectedDataPlane !== 'home' || planeRef.current !== 'home' ||
+          !origin || new URL(origin).origin !== origin || identity.pending || rootIdentity.read().generation !== identity.generation ||
+          actionActor.current !== actor || character) throw Error('The backup account, origin or authorization changed.');
+    };
+    check();
+    for (const [feature, minimum] of Object.entries(BACKUP_WORKSPACE_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum, origin);
+    check();
+    const payload = command?.action === 'review' ? { ...command, selection: { snapshotId: command.selection.snapshotId, sourceRootId: command.selection.sourceRootId, destination: { id: command.selection.destination.id, revision: command.selection.destination.revision } } } : command;
+    const result = payload ? await asyncFetcher.submit(payload, { ...options, action: BACKUP_WORKSPACE_PATH, errorContext: 'manage this backup operation' }) :
+      await getJson(BACKUP_WORKSPACE_PATH + toQuery(query!), options);
+    check();
+    if (result?.ok !== true) throw Error('The backup response is unavailable or changed.');
+    return result;
+  }, [asyncFetcher, getJson, character]);
+  const getBackupWorkspaceCatalog = useCallback((query: { snapshotCursor?: string; jobCursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspaceCatalog & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'catalog' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceEntries = useCallback((query: { id: string; cursor?: string }, options: ThingRequestOptions): Promise<BackupWorkspacePage<BackupWorkspaceEntry> & { ok: true }> =>
+    backupWorkspaceRequest({ ...query, view: 'snapshot' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceJob = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest({ ...query, view: 'job' }, null, options), [backupWorkspaceRequest]);
+  const getBackupWorkspaceReview = useCallback((query: { id: string }, options: ThingRequestOptions): Promise<{ ok: true; review: BackupWorkspaceReview }> =>
+    backupWorkspaceRequest({ ...query, view: 'review' }, null, options), [backupWorkspaceRequest]);
+  const sendBackupWorkspaceCommand = useCallback((command: BackupWorkspaceCommand, options: ThingRequestOptions): Promise<{ ok: true; job: BackupJobView }> =>
+    backupWorkspaceRequest(null, command, options), [backupWorkspaceRequest]);
   useEffect(() => {
     if (actionUser?.id && !actionUser.temporary && dataPlane && (!delegated || principalId)) {
       const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane, ...(delegated ? {delegatedBy:principalId} : {}) };
@@ -1799,9 +1984,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
   const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
   const identity = rootIdentity.read();
   const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
-    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null,
+    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null, view.localPlane || null, view.cloudOnly === true,
     actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl, delegated, principalId]);
-  return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
+  return { getBackupWorkspaceCatalog, getBackupWorkspaceEntries, getBackupWorkspaceJob, getBackupWorkspaceReview, sendBackupWorkspaceCommand, v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
     delegated ? principalId && actionUser && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view, principalId) : characterApi(remote)
     : offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane, view)
     : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane, view)

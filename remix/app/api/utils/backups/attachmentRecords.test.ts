@@ -73,3 +73,11 @@ test('missing immutable versions, lifecycle corruption, expired drafts and forei
 		await assert.rejects(backupAttachmentFromDoc(f.doc, 'owner', time, async () => ({ ...f.head, ...patch })));
 	}
 });
+
+test('empty stored file bytes use the canonical null backup wrapper while retaining exact attachment identity', async () => {
+ const fixture = await backupAttachmentFixture('owner', 'empty-file-attachment', Buffer.alloc(0), 'file', 'file-one');
+ const record = await backupAttachmentFromDoc(fixture.doc, 'owner', time, async () => ({ ...fixture.head, checksumType: 'FULL_OBJECT', checksumSha256: Buffer.from(fixture.content.fingerprint.sha256, 'hex').toString('base64') }));
+ const item = backupAttachmentItem(record, 0);
+ assert.deepEqual(item.content, { size: 0, fingerprint: null });
+ assert.deepEqual(backupAttachmentItemContent(item), fixture.content);
+});

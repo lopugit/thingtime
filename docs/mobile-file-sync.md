@@ -4151,3 +4151,36 @@ The folder progress view includes these receipts after strict planning without
 counting the same discovered path twice. Totals stay provisional through
 strict discovery, and the transfer heading follows the saved directions after
 the live byte sample ends.
+
+## Bounded compound Mac upload transport — 2026-11-06
+
+Native `fileSingleUploadVersion` 1.0.0 independently negotiates the
+`upload-single` byte transport. It does not advertise iOS/Android multipart or
+background-upload support. A regular nonempty file eligible for the existing
+`MobileFolderBulkReader.maximumFileBytes` processing window can use the compound
+path; larger files, multipart files, symbolic links, empty files, older/missing
+capabilities and custom mutation policies retain the existing paths. This is a
+processing window, not a product file-size limit.
+
+The original single-file journal reservation, upload request and operation IDs
+remain authoritative. The native request keeps fresh identity checks at entry
+and exit. It strongly reopens and hashes the source before emission, after
+emission before PUT, after PUT, and after stored-fingerprint verification;
+coordinated descriptors do not survive a callback. Local grant and current
+network/power conditions are checked around every callback and during a long
+PUT. Electron verifies the current account, frame/endpoint generation, exact
+private configuration owner/revision/canonical data and resource policy before
+uploading/completing, monitors authority during PUT, and uses the shared
+governed hash/transfer worker. Lost PUT replies retain unknown traffic and verify
+the same attachment; retries retain request identity. Existing upload approval,
+accounting and abandoned-attachment cleanup remain in their canonical APIs.
+
+The compound result binds attachment ID, stored version, size and fingerprint;
+it never publishes a file or calls `/files/batches`. The shared single-file
+executor checks that proof and then invokes its unchanged guarded `/files`
+commit and `beforeFilePublication` hook. A source/authority/proof failure cannot
+reach that hook. Accepted file receipts are looked up before source work on a
+retry. Source replacement, truncation/growth, stored-proof mismatch, custom
+policy fallback and capability compatibility have focused native/host/client
+coverage. Synthetic transport coverage remains separate from signed installed
+acceptance and measured upload latency.

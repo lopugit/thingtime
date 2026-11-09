@@ -439,6 +439,144 @@ final class CommanderWebViewTests: XCTestCase {
     }
   }
 
+  func testResizeBorderWindowServerTargetingAndMotionDispatch() async throws {
+    let ready = DaemonReady(
+      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
+      sessionToken: "test-session", nativeToken: "test-native", pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
+      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
+      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(ready: ready, bridge: bridge)
+    let panel = controller.panelForTesting
+    let content = try XCTUnwrap(panel.contentView as? CommanderLauncherContentView)
+    let previousCursor = NSCursor.current
+    defer {
+      previousCursor.set()
+      content.webView.navigationDelegate = content.webView
+      controller.shutdown()
+    }
+    let loaded = expectation(description: "Opaque WebKit surface inside transparent window")
+    let fixtureDelegate = CommanderCursorFixtureNavigationDelegate { loaded.fulfill() }
+    content.webView.navigationDelegate = fixtureDelegate
+    content.webView.loadHTMLString("""
+      <!doctype html><style>html,body { margin:0; width:100%; height:100%; background:#222; cursor:text }</style>
+      <input style="position:absolute;left:40%;top:40%" value="editable">
+      """, baseURL: nil)
+    await fulfillment(of: [loaded], timeout: 10)
+    let screen = try XCTUnwrap(NSScreen.main)
+    panel.orderFrontRegardless()
+    // This intentionally remains non-key, as a pinned launcher can be.
+    XCTAssertFalse(panel.isKeyWindow)
+    XCTAssertTrue(panel.acceptsMouseMovedEvents)
+    for mode in [LauncherWindowMode.standard, .compact] {
+      controller.setWindowMode(mode)
+      for size in [mode.size, mode.minimumSize] {
+        panel.setFrame(NSRect(x: screen.visibleFrame.midX - size.width / 2,
+                             y: screen.visibleFrame.midY - size.height / 2,
+                             width: size.width, height: size.height), display: true)
+        content.layoutSubtreeIfNeeded()
+        panel.display()
+        // Let the actual WebKit backing store reach WindowServer. No OS pointer
+        // movement or event injection is used by this integration check.
+        try await Task.sleep(for: .milliseconds(300))
+        let center = NSPoint(x: content.bounds.midX, y: content.bounds.midY)
+        let centerTarget = NSWindow.windowNumber(at: panel.convertPoint(toScreen: center),
+                                                belowWindowWithWindowNumber: 0)
+        try XCTSkipUnless(centerTarget == panel.windowNumber,
+                          "WindowServer fixture is unavailable or occluded; cannot verify native targeting")
+        func motion(at point: NSPoint) throws -> NSEvent {
+          try XCTUnwrap(NSEvent.mouseEvent(
+            with: .mouseMoved, location: content.convert(point, to: nil), modifierFlags: [], timestamp: 1,
+            windowNumber: panel.windowNumber, context: nil, eventNumber: 1, clickCount: 0, pressure: 0
+          ))
+        }
+        for handle in content.resizeHandles {
+          handle.updateTrackingAreas()
+          XCTAssertTrue(handle.trackingAreas.contains {
+            $0.options.contains(.activeAlways) && $0.options.contains(.mouseMoved)
+          })
+          // Cover visible and transparent sides, including the rounded corners
+          // where WebKit's mask contains no backing pixels at all.
+          for point in [
+            NSPoint(x: handle.frame.minX + 1, y: handle.frame.minY + 1),
+            NSPoint(x: handle.frame.midX, y: handle.frame.midY),
+            NSPoint(x: handle.frame.maxX - 1, y: handle.frame.maxY - 1),
+          ] {
+            let target = NSWindow.windowNumber(at: panel.convertPoint(toScreen: content.convert(point, to: nil)),
+                                              belowWindowWithWindowNumber: 0)
+            XCTAssertEqual(target, panel.windowNumber, "Native resize region must target the launcher at \(point)")
+            // Emulate a competing cursor reset before each real window event,
+            // without calling the handle's cursorUpdate implementation directly.
+            NSCursor.arrow.set()
+            panel.sendEvent(try motion(at: point))
+            XCTAssertTrue(NSCursor.current === handle.resizeCursor,
+                          "Motion must keep native ownership for \(handle.edges) at \(point)")
+          }
+        }
+        let left = try XCTUnwrap(content.resizeHandles.first { $0.edges == .left })
+        let right = try XCTUnwrap(content.resizeHandles.first { $0.edges == .right })
+        let rightPoint = NSPoint(x: right.frame.midX, y: right.frame.midY)
+        panel.sendEvent(try motion(at: NSPoint(x: left.frame.midX, y: left.frame.midY)))
+        for type: NSEvent.EventType in [.mouseEntered, .mouseExited] {
+          // A delayed exit from the old area must not undo the new area's
+          // cursor, even where macOS 14 reuses the same horizontal cursor.
+          panel.sendEvent(try XCTUnwrap(NSEvent.enterExitEvent(
+            with: type, location: content.convert(rightPoint, to: nil), modifierFlags: [], timestamp: 2,
+            windowNumber: panel.windowNumber, context: nil, eventNumber: 2,
+            trackingNumber: 0, userData: nil
+          )))
+          XCTAssertTrue(NSCursor.current === right.resizeCursor)
+        }
+        print("RESIZE_WINDOW_TARGET mode=\(mode) size=\(size) checked=24 panel=\(panel.windowNumber)")
+        panel.sendEvent(try motion(at: center))
+        XCTAssertFalse(content.resizeHandles.contains { NSCursor.current === $0.resizeCursor })
+        for cursor in [NSCursor.iBeam, .pointingHand] {
+          cursor.set()
+          panel.sendEvent(try motion(at: center))
+          XCTAssertTrue(NSCursor.current === cursor, "Central content keeps its text/link cursor")
+        }
+        let bottom = try XCTUnwrap(content.resizeHandles.first { $0.edges == .bottom })
+        let exterior = NSPoint(x: bottom.frame.midX, y: bottom.frame.minY + 1)
+        controller.setCustomWindowResizeHandling(false)
+        panel.display()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(content.resizeHandles.allSatisfy(\.isHidden))
+        XCTAssertNotEqual(NSWindow.windowNumber(at: panel.convertPoint(toScreen: exterior),
+                                               belowWindowWithWindowNumber: 0), panel.windowNumber,
+                          "Disabling custom resize removes the exterior input surface")
+        NSCursor.iBeam.set()
+        panel.sendEvent(try motion(at: exterior))
+        XCTAssertTrue(NSCursor.current === NSCursor.iBeam)
+        controller.setCustomWindowResizeHandling(true)
+      }
+    }
+    let right = try XCTUnwrap(content.resizeHandles.first { $0.edges == .right })
+    let rightPoint = NSPoint(x: right.frame.midX, y: right.frame.midY)
+    panel.orderOut(nil)
+    for type: NSEvent.EventType in [.mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate] {
+      let event: NSEvent
+      if type == .mouseMoved {
+        event = try XCTUnwrap(NSEvent.mouseEvent(
+          with: type, location: rightPoint, modifierFlags: [], timestamp: 3,
+          windowNumber: panel.windowNumber, context: nil, eventNumber: 3, clickCount: 0, pressure: 0
+        ))
+      } else {
+        event = try XCTUnwrap(NSEvent.enterExitEvent(
+          with: type, location: rightPoint, modifierFlags: [], timestamp: 3,
+          windowNumber: panel.windowNumber, context: nil, eventNumber: 3,
+          trackingNumber: 0, userData: nil
+        ))
+      }
+      NSCursor.pointingHand.set()
+      panel.sendEvent(event)
+      XCTAssertTrue(NSCursor.current === NSCursor.pointingHand,
+                    "Hidden panel must ignore queued \(type) cursor ownership")
+    }
+  }
+
   func testCustomResizeContinuesAcrossPassiveEventsUntilMouseUp() throws {
     let ready = DaemonReady(
       type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
@@ -462,6 +600,8 @@ final class CommanderWebViewTests: XCTestCase {
     }
     func passiveEvent(_ type: NSEvent.EventType) throws -> NSEvent {
       switch type {
+      case .mouseMoved:
+        return try mouseEvent(.mouseMoved, at: panel.frame.origin)
       case .cursorUpdate, .mouseEntered, .mouseExited:
         return try XCTUnwrap(NSEvent.enterExitEvent(
           with: type, location: .zero, modifierFlags: [], timestamp: 0,
@@ -482,7 +622,7 @@ final class CommanderWebViewTests: XCTestCase {
       }
     }
     let passiveTypes: [NSEvent.EventType] = [
-      .cursorUpdate, .mouseEntered, .mouseExited, .appKitDefined,
+      .mouseMoved, .cursorUpdate, .mouseEntered, .mouseExited, .appKitDefined,
       .systemDefined, .applicationDefined, .periodic, .flagsChanged,
     ]
 

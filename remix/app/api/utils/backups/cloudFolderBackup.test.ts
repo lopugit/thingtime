@@ -12,7 +12,7 @@ import { BACKUP_METADATA_BYTES } from '../../../backups/manifest';
 import { openLocalBackupStore } from './localBackupStore';
 import { openBackupItem, openSealedBackup } from './portableBackup';
 import { CLOUD_INVENTORY_PAGE_ENTRIES } from '../../../fileSync/cloudInventoryPages';
-import { prepareCloudFolderBackup, resumeCloudFolderBackup, CLOUD_BACKUP_FOLDER_ADAPTER, type CloudBackupRuntime } from './cloudFolderBackup';
+import { prepareCloudFolderBackup, resumeCloudFolderBackup, openAccountBackupRangeSource, CLOUD_BACKUP_FOLDER_ADAPTER, type CloudBackupRuntime } from './cloudFolderBackup';
 
 async function fixture() {
 	const bytes = Buffer.alloc(8 * 1024 * 1024 + 17, 42),
@@ -115,6 +115,19 @@ async function fixture() {
 	const store = await openLocalBackupStore(directory);
 	return { id, file, root, inventory, scope, state, runtime, store, bytes, close: () => rm(directory, { recursive: true, force: true }) };
 }
+
+test('one bounded account range source negotiates, retains exact version and rejects item/account/version substitution', async () => {
+	const f = await fixture();
+	try {
+		const item = { ordinal: 0, thingId: f.file.id, revision: f.file.revision, snapshot: { adapter: 'file-content', version: 1, value: f.file }, content: { size: f.bytes.length, fingerprint: f.file.content.fingerprint } };
+		const source = await openAccountBackupRangeSource(item, f.runtime);
+		assert.equal(f.state.retentionRequests, 1); assert.equal(f.state.inventoryReads, 0);
+		assert.deepEqual(Buffer.from(await source.read(item, 0, 1024)), f.bytes.subarray(0, 1024));
+		await assert.rejects(source.read({ ...item, revision: 'different' }, 0, 1024), /item changed/);
+		f.state.wrongVersion = true; await assert.rejects(source.read(item, 0, 1024), /version changed/);
+		f.state.wrongVersion = false; f.scope.ownerId = 'other'; await assert.rejects(source.read(item, 0, 1024), /account or origin changed/);
+	} finally { await f.close(); }
+});
 
 test('freezes the complete selected tree, keeps empty folders and resumes pinned bytes without rescanning the live tree', async () => {
 	const f = await fixture();

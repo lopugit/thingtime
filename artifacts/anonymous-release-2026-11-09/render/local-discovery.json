@@ -1,0 +1,19 @@
+{
+  "scope": "Canonical local stdio CLI tool discovery and capability configuration only; browser capture is the separate Docker SDK test.",
+  "toolCount": 9,
+  "renderToolSchemaPresent": true,
+  "archiveToolsPreserved": true,
+  "readOnlyHintsVerified": true,
+  "renderIsolation": {
+    "mode": "isolated-per-render",
+    "configured": true,
+    "diagnostic": "Configured; Docker endpoint, cached image and offline assets are verified lazily on each render. This status is configuration evidence only.",
+    "accountAccess": false,
+    "persistence": false,
+    "network": "none",
+    "hostFallback": false,
+    "workDeadlineMs": 150000,
+    "cleanupMaxMs": 76000,
+    "totalMaxMs": 226000
+  }
+}

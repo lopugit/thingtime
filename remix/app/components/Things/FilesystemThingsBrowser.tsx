@@ -18,6 +18,8 @@ import { filesystemName, itemLocation, transferFilesystem } from './filesystemTr
 import { bundleFromPlan } from '~/utils/thingTransfer/browser';
 import { ThingContextMenu } from '../Thingtime/ContextMenu/ThingContextMenu';
 import { useThingContextMenu } from '../Thingtime/ContextMenu/useThingContextMenu';
+import { thingStorageHref } from './thingStorageNavigation';
+import { THING_ACTIONS } from '~/schemas/thingActions';
 import { TRANSFER_DIALOG_Z, TRANSFER_MENU_Z } from './transferLayers';
 
 const listings = new Map<string, ThingsThing[]>();
@@ -42,6 +44,9 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
   const ownerId = user?.id || '';
   const localOnly = !!user?.localOnly;
   const api = useApi(), apiRef = useRef(api); apiRef.current = api;
+  const navigate = useNavigate();
+  const canManageStorage = (item: ThingsThing) => !!ownerId && !localOnly && !user?.offline && !user?.temporary && item.author?.id === ownerId &&
+    !item.inode && (isCloudFilesystemFile(item) || isFolder(item) || item.thingtime.includes('attachment'));
   const [location, setLocation] = useState<FileLocation>(() => deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId });
   useEffect(() => {
     setLocation(current => (current.deviceId === deviceId && (deviceId ? current.path === initialPath : current.folderId === initialFolderId)) ? current : (deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId }));
@@ -338,6 +343,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     if (verb === 'copy' || verb === 'cut') copy(verb, chosen);
     else if (verb === 'paste-into') paste(itemLocation(item));
     else if (verb === 'open' || verb === 'download') open(item);
+    else if (verb === 'storage-placement' && canManageStorage(item)) navigate(thingStorageHref(item.id, { dataPlane: 'home', fromThings: true }));
   };
   const visible = useMemo(() => items.filter(item => isFilesystemItem(item) &&
     filesystemName(item).toLowerCase().includes(query.toLowerCase()) && (kind === 'all' || (kind === 'folder') === isFolder(item)))
@@ -356,6 +362,8 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     onFolderDragOver: () => {}, onFolderDragLeave: () => {}, onFolderDrop: () => {},
     itemMenuFor: item => ({ sections: [{ id: 'files', actions: [
       { id: 'open', command: 'open', label: isFolder(item) ? 'Open folder' : 'Download', icon: isFolder(item) ? '📁' : '📥', disabled: busy || (!!item.inode && !['folder', 'file'].includes(item.inode.type)) },
+      ...(canManageStorage(item) ? [{ ...THING_ACTIONS['storage-placement'],
+        href: thingStorageHref(item.id, { dataPlane: 'home', fromThings: true }), disabled: busy }] : []),
       { id: 'copy', command: 'copy', label: 'Copy', icon: '📋', disabled: busy },
       { id: 'cut', command: 'cut', label: 'Cut to move', icon: '✂️', disabled: busy },
       ...(isFolder(item) ? [{ id: 'paste-into', command: 'paste-into', label: 'Paste into folder', icon: '📥', disabled: busy || !clipboard }] : [])

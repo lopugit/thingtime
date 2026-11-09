@@ -49,6 +49,28 @@ test('account Action effects commit with the existing queue and sync without exe
   await f.sync.remove([action.id]);assert.equal((await f.actions.runs()).runs.length,0);
  }finally{await f.db.close();}
 });
+test('a retained server restoration hold blocks local Action execution until a newer explicit release', async () => {
+ const f = fixture();
+ try {
+  const action = await f.sync.things.create(definition([{ op: 'return', value: 'safe to run' }]));
+  await f.sync.sync(f.transport);
+  const remote = f.remote.get(action.id)!;
+  await f.sync.remember({ ...remote, executionHeld: true }, 20);
+  await f.sync.things.update({ id: action.id, crystal: { name: 'Device edits remain' } });
+  await f.sync.remember(remote, 30); // an omitted field cannot release a known hold
+  await f.sync.remember({ ...remote, executionHeld: false }, 19);
+  assert.equal((await f.sync.view(action.id))?.executionHeld, true);
+  await assert.rejects(f.actions.canRunLocally(action.id), /still restoring/);
+  await assert.rejects(f.actions.run({ action: action.id }), /still restoring/);
+  assert.equal((await f.actions.runs({ action: action.id })).runs.length, 0);
+  await f.sync.remember({ ...remote, executionHeld: false }, 31);
+  await f.sync.remember({ ...remote, executionHeld: true }, 21); // late held response
+  assert.equal((await f.sync.view(action.id))?.crystal.name, 'Device edits remain');
+  const outcome = await f.actions.run({ action: action.id });
+  assert.equal(outcome.status, 'ok', outcome.error);
+  assert.equal(outcome.result, 'safe to run');
+ } finally { await f.db.close(); }
+});
 test('account browser and nested data Actions use the same queued adapter',async()=>{
  const f=fixture();try{
   const schema=await f.sync.things.create({thingtime:['schema'],crystal:{name:'offline-note',fields:[{name:'name',type:'string'}]}});

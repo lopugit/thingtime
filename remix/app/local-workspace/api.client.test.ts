@@ -1,3 +1,4 @@
+import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
@@ -116,7 +117,7 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 	const origin = 'https://thingtime.example';
 	let publicReads = 0, remoteCalls = 0;
 	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (_input: RequestInfo | URL, options?: RequestInit) => {
-		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared', 'things-feed', 'things'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : id === 'things-feed' ? '1.8.0' : id === 'things' ? '1.31.0' : '1.0.0' }])) });
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared', 'things-feed', 'things'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : id === 'things-feed' ? '1.8.0' : id === 'things' ? CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'] : '1.0.0' }])) });
 		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error'); publicReads++;
 		const url = new URL(String(_input), origin);
 		if (url.pathname === '/api/v1/things/feed') { assert.equal(url.searchParams.get('algorithm'), 'latest'); return Response.json({ ok: true, posts: [{ id: 'public-post', type: 'text', author: { id: 'author' }, tags: ['art'], createdAt: '2026-10-16T00:00:00.000Z' }], nextCursor: null }); }
@@ -207,7 +208,7 @@ test('anonymous public discussion reads preserve bounded projection and omit acc
 	const origin = 'https://thingtime.example'; // One document's capability cache keeps one origin.
 	const queries: URLSearchParams[] = [];
 	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (input: RequestInfo | URL, options?: RequestInit) => {
-		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: '1.31.0' } } });
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: CONTENT_EXECUTION_READ_REQUIREMENTS['api.things'] } } });
 		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error');
 		const url = new URL(String(input), origin); assert.equal(url.pathname, '/api/v1/things'); queries.push(url.searchParams);
 		return Response.json(url.searchParams.has('target') ? { ok: true, comments: [{ id: 'public-comment' }], nextCursor: null } : { ok: true, discussion: { id: 'public-thing' } });

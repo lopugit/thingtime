@@ -1,0 +1,69 @@
+{
+  "ok": true,
+  "observedAt": "2026-11-09T11:56:15.855939+00:00",
+  "scope": "Exact Docker session resources and unchanged pre-existing labeled inventory; no daemon-wide pruning",
+  "baselineCounts": {
+    "containers": 0,
+    "volumes": 3
+  },
+  "labeledInventoryUnchanged": true,
+  "verifiedOwnedSessionCount": 1,
+  "containers": {
+    "thingtime-render-36a306aa-d04d-463f-82b9-ccc3ed682de0-stage": [
+      "attach",
+      "create",
+      "destroy",
+      "die",
+      "start"
+    ],
+    "thingtime-render-36a306aa-d04d-463f-82b9-ccc3ed682de0": [
+      "attach",
+      "create",
+      "destroy",
+      "die",
+      "start"
+    ]
+  },
+  "volumes": {
+    "thingtime-render-36a306aa-d04d-463f-82b9-ccc3ed682de0-assets": [
+      "create",
+      "destroy",
+      "mount",
+      "unmount"
+    ]
+  },
+  "liveConfigObservations": [
+    {
+      "role": "stage",
+      "session": "thingtime-render-36a306aa-d04d-463f-82b9-ccc3ed682de0",
+      "user": "0:0",
+      "network": "none",
+      "readonlyRoot": true,
+      "capDropAll": true,
+      "noNewPrivileges": true,
+      "seccomp": false,
+      "onlyOwnedVolume": true,
+      "assetVolumeReadOnly": false,
+      "noBindMounts": true,
+      "mountsDockerSocket": false,
+      "sandboxNotDisabled": true,
+      "observedAt": "2026-11-09T11:55:04.620Z"
+    },
+    {
+      "role": "renderer",
+      "session": "thingtime-render-36a306aa-d04d-463f-82b9-ccc3ed682de0",
+      "user": "1001:1001",
+      "network": "none",
+      "readonlyRoot": true,
+      "capDropAll": true,
+      "noNewPrivileges": true,
+      "seccomp": true,
+      "onlyOwnedVolume": true,
+      "assetVolumeReadOnly": true,
+      "noBindMounts": true,
+      "mountsDockerSocket": false,
+      "sandboxNotDisabled": true,
+      "observedAt": "2026-11-09T11:55:09.071Z"
+    }
+  ]
+}

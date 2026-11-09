@@ -63,6 +63,7 @@ export async function* readNativeIndexChanges(input: {
 	afterSequence: number;
 	signal: AbortSignal;
 	readyToFinish?(): Promise<boolean>;
+	waitForFinish?(signal: AbortSignal): Promise<void>;
 	excludedPaths?: string[];
 	ignoreRules?: string;
 	pageSize?: number;
@@ -85,20 +86,41 @@ export async function* readNativeIndexChanges(input: {
 	let generation = begun.changesPage?.generation,
 		afterSequence = input.afterSequence,
 		indexed = false,
+		hasMore = false,
 		pollAfterFinish = false;
 	for (;;) {
 		input.signal.throwIfAborted();
-		const finish = indexed && !pollAfterFinish && !!input.readyToFinish && (await input.readyToFinish());
+		const mustPoll = pollAfterFinish;
+		const finish = indexed && !hasMore && !mustPoll && !!input.readyToFinish && (await input.readyToFinish());
+		input.signal.throwIfAborted();
 		pollAfterFinish = finish;
 		let result: FolderResult;
 		try {
-			result = await input.request(
-				input.ownerId,
-				finish
-					? { action: 'scan-stream-finish', ...common, afterSequence }
-					: { action: 'scan-changes', ...common, afterSequence, pageSize, waitMilliseconds: indexed ? 2_000 : 25_000 },
-				input.signal
-			);
+			const request: FolderRequest = finish
+				? { action: 'scan-stream-finish', ...common, afterSequence }
+				: { action: 'scan-changes', ...common, afterSequence, pageSize,
+					waitMilliseconds: indexed && (!input.waitForFinish || mustPoll) ? 2_000 : 25_000 };
+			if (indexed && !hasMore && !finish && !mustPoll && input.readyToFinish && input.waitForFinish) {
+				// Keep the native watcher live. Only this long-poll request is
+				// cancelled when the consumer drains; finish rechecks native state.
+				const read = new AbortController(), ready = new AbortController();
+				const abort = () => { read.abort(input.signal.reason); ready.abort(input.signal.reason); };
+				input.signal.addEventListener('abort', abort, { once: true });
+				try {
+					input.signal.throwIfAborted();
+					const winner = await Promise.race([
+						Promise.resolve().then(() => input.request(input.ownerId, request, read.signal)).then(result => ({ result })),
+						Promise.resolve().then(() => input.waitForFinish!(ready.signal)).then(() => null)
+					]);
+					input.signal.throwIfAborted();
+					if (winner === null) continue; // Never consume a discarded page's cursor.
+					result = winner.result;
+				} finally {
+					input.signal.removeEventListener('abort', abort);
+					read.abort();
+					ready.abort();
+				}
+			} else result = await input.request(input.ownerId, request, input.signal);
 		} catch (error) {
 			input.signal.throwIfAborted();
 			// Only the exact trusted host identity marker gets this typed reason.
@@ -121,6 +143,7 @@ export async function* readNativeIndexChanges(input: {
 		if (generation !== undefined && page.generation !== generation) throw Error('Native streaming generation changed.');
 		generation = page.generation;
 		indexed = page.state === 'indexed';
+		hasMore = page.hasMore;
 		if (page.changes.some((c) => isNativeScanExcluded(c.entry.path, exclusions) || ignore.ignored(c.entry.path, c.entry.kind)))
 			throw Error('Native streaming index included an excluded path.');
 		if (page.state === 'interrupted')

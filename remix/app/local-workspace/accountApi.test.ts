@@ -260,7 +260,7 @@ test('account folder lists overlay pending placement on fresh and cached pages w
  const first = row('owned-move-source'), folder = row('owned-move-folder', 'folder'), foreign = { ...row('foreign'), author: { id: 'other-account' } };
  Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async (input: string, init?: RequestInit) => {
   const url = new URL(input, scope.origin);
-  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.52.0' }, 'api.things-update': { version: '1.10.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   requests.push(`${init?.method || 'GET'} ${url.pathname}`); assert.equal(init?.method, 'GET');
   assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Actor'), scope.ownerId);
   assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Data-Plane'), scope.dataPlane);

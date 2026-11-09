@@ -3,6 +3,7 @@ import Foundation
 import XCTest
 
 enum RustIndexFixture {
+    #if os(macOS)
     static func executable() throws -> URL {
         let project = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -16,8 +17,19 @@ enum RustIndexFixture {
         return helper
     }
 
+    #endif
+
+    /// Keep shared inventory assertions on the real transport supported by each platform.
+    static func transport(database: URL, helper: URL? = nil) throws -> any RustInventoryTransport {
+        #if os(macOS)
+        return RustProcessInventoryTransport(helper: try helper ?? executable(), database: database)
+        #else
+        return RustEmbeddedInventoryTransport(database: database)
+        #endif
+    }
+
     static func inventory(directory: URL, helper: URL? = nil) throws -> MobileFolderInventory {
         let database = directory.deletingLastPathComponent().appendingPathComponent(".shared-index/filesystem-index.sqlite3")
-        return try MobileFolderInventory(directory: directory, commanderIndexer: helper ?? executable(), database: database)
+        return try MobileFolderInventory(directory: directory, transport: transport(database: database, helper: helper), database: database)
     }
 }

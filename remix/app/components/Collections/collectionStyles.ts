@@ -110,4 +110,7 @@ export const collectionStyles = `
 		flex: 1 1 95px;
 	}
 }
+.tt-collection-progress{display:inline-block;width:12px;height:12px;border:2px solid var(--tt-border,#ddd);border-top-color:var(--tt-muted,#666);border-radius:50%;animation:tt-collection-spin .8s linear infinite}
+@keyframes tt-collection-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.tt-collection-progress{animation:none}}
 `;

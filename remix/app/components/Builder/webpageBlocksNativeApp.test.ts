@@ -156,12 +156,12 @@ test('expanded collections activate saved sources only on the live page', () => 
 		props: { label: 'Favourite places', source: { action: 'read-places', inputs: {}, itemsPath: 'items' } },
 		children: [{ id: 'place-name', type: 'text', text: '{item.title}' }]
 	}];
-	// A signed-out live viewer receives the source access boundary rather than
-	// the silent empty success produced when NativeControlsEnabled is absent.
+	// A live viewer whose local workspace is not yet confirmed sees the
+	// workspace boundary, not a sign-in requirement or a silent empty result.
 	const live = renderPage({ blocks, interactive: true, signedIn: false });
-	assert.match(live, /Sign in to load these records/);
+	assert.match(live, /Open a workspace to load these records/);
 	for (const chrome of [null, chromeFor('builder'), chromeFor('edit')]) {
 		const inert = renderPage({ blocks, interactive: chrome?.seamlessMode === 'edit', chrome, signedIn: false });
-		assert.doesNotMatch(inert, /Sign in to load these records/);
+		assert.doesNotMatch(inert, /Open a workspace to load these records/);
 	}
 });

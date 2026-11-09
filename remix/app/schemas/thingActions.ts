@@ -4,9 +4,11 @@
 export const THING_ACTIONS = {
   open: { id: 'open', command: 'open', label: 'Open Thing', icon: '🔎', lucide: 'external-link' },
   inspect: { id: 'inspect', command: 'inspect', label: 'View Thing data', icon: '💎', lucide: 'braces' },
+  'storage-placement': { id: 'storage-placement', command: 'storage-placement', label: 'Storage settings', icon: '💾', lucide: 'hard-drive' },
   history: { id: 'history', command: 'history', label: 'History', icon: '🕰️', lucide: 'clock' },
   'copy-link': { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' },
   download: { id: 'download', command: 'download', label: 'Download…', icon: '📥', lucide: 'download' },
+  'share-preview': { id: 'share-preview', command: 'share-preview', label: 'Share link & customise preview', icon: '🖼️', lucide: 'image' },
   rename: { id: 'rename', command: 'rename', label: 'Rename', icon: '✏️', lucide: 'text-cursor-input' },
   edit: { id: 'edit', command: 'edit', label: 'Edit', icon: '✏️', lucide: 'pen-line' },
   share: { id: 'share', command: 'share', label: 'Share / permissions', icon: '🌐', lucide: 'share-2' },

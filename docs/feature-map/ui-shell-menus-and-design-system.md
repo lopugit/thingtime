@@ -1,6 +1,73 @@
 # UI shell, menus and design system
 
+## Editable LiDAR capture controls
+
+The Things root shows an editable LiDAR scan section on iOS. Its
+`SettingsDocumentHost` uses separate heading, description, start, retry, status,
+and receipt-link blocks. `useTtActionClicks` also lets a saved Builder button
+open the same scanner with the allowlisted `$ui` native capability `lidar.scan`.
+Only direct activation of a regular button can request capture. The native
+scanner requires a separate Start gesture before opening the camera.
+
+`LidarScanProvider` checks the current Home account and compatible iOS
+`lidarVersion`; native replies must match the exact request, owner and origin.
+An iPhone or iPad browser can hand off its HTTPS origin to the app, where the
+app independently checks the account. Local originals and upload retries stay
+in native storage. Run `lidarScanBridge.test.ts` and
+`remix/scripts/lidar-scan.browser.mjs`. See [native LiDAR scans](../native-lidar-scans.md)
+for the bridge, archive and hardware acceptance.
+
+## Native mobile background presence
+
+`MobileDevicePresenceBootstrap` owns the Activity manager preference and identity
+fence. `mobileDeviceBridge` negotiates iOS pairing bridge 1.1.0 before requesting
+`presence(enabled:true)`; 1.0.0 hosts retain foreground `status`. Identity changes
+and stopping the activity withdraw background approval even between requests;
+ordinary page hiding only cancels the foreground request. Native
+`MobileDeviceBackgroundPresence` registers Background App Refresh, keeps one
+foreground-verified origin/owner binding and sends scoped device-bearer check-ins
+without using web cookies. iOS controls timing. See `iOS/README.md` and the mobile
+presence checklist in `TESTING.md`; run native lifecycle/pairing and web bridge/
+presence tests together.
+
+## Incoming sharing and contextual toolbar
+
+`/share` uses the focused shell in `app/root.tsx`, with the existing Post,
+Messenger and Things destination interfaces. `IncomingShare/ContextActionToolbar`
+accepts registered action descriptors and the active context. Its persisted
+`SettingsDocumentHost` document contains individually editable buttons, labels,
+icons and accents; `TransientBlockHost` binds selection and permitted actions.
+`ThingsPage.locationPicker` retains folder navigation and creation while keeping
+**Save here** above the measured, full-width toolbar. See
+[incoming sharing](../incoming-sharing.md) and the incoming-sharing checklist in
+`TESTING.md`; `scripts/incoming-share-acceptance.mjs` exercises real disposable
+API data and desktop/mobile rendering.
+
+`ContextActionDock`, `useContextViewportDock` and `contextViewport` share keyboard
+placement across the toolbar and existing destination controls. Keep CSS layout
+coordinates distinct from client rectangles when WebKit pans its visual
+viewport; count the pan once. Focus reveal uses measured control bounds and
+bounded settling, while the Builder blocks remain individually editable.
+`test:attachments` includes the IncomingShare viewport/bridge regressions.
+
 ## Editable map markers and connector settings
+
+Saved `tt-rich-text` fields/read views reuse `LongTextEditor`/`RichTextBlocks`.
+`componentFormFields.ts` captures native fields at activation and awaits trusted
+editor adapters before confirmation/dispatch; JSON plus optional plain text share
+one snapshot. `tt-menu contextMenu:true` adopts editable target/content slots and
+an ordinary touch trigger. The native popup remains mounted while hidden, uses
+its owning document/window, and leaves field typing/toolbars alone. The safe
+intrinsic allowlists, `templateToBlocks` and `HtmlBlockElement` share both tags.
+Run authored-control, template, editor, capability and composed browser checks.
+
+Map overlays accept optional visual scale/SDK zoom adaptation and explicit keyed
+association. `Maps/mapboxScale.ts` keeps SDK anchor transforms intact;
+`mapboxGrouping.ts` preserves every original authorized member without coordinate
+merging. `markerGroup` and `map` scopes supply editable badge/menu composition.
+Ordinal labels are computed from all rank-sorted items before coordinate filtering.
+No application-specific menu or marker definition is committed. See the canonical
+Builder guide and `TESTING.md` for input, iframe, grouping and mobile acceptance.
 
 Saved `tt-mapbox` Webpage elements may contain ordinary editable child blocks,
 including literal saved Component references. The existing resolver and sharing
@@ -45,9 +112,21 @@ components; reuse them instead of adding parallel versions.
 
 Device sync management is available to the signed-in device owner in browsers
 through `DeviceSyncPanel` and `RemoteDeviceSync`, independently of local pairing.
-The installed app retains direct controls for its own device. Remote controls use
+The installed app retains direct controls for its own device. Connection editor
+journals preserve multiple drafts per origin/account/storage plane/device,
+including legacy single drafts and incomplete resource input; only explicit
+Save or Discard removes the selected draft. `test-sync-drafts-ui.mjs` covers
+Add, switching, collapse/reopen, reload and account/device isolation. Remote controls use
 editable settings blocks and the existing configuration form; see
 [browser device sync](../browser-device-sync.md) and its browser/installed checks.
+
+Lopu’s floating shortcut is opt-in through `settings.lopu.launcher`. The chat
+composer gear and Settings → Lopu share that persisted preference through
+`useLopuChat` / `useLopuSettings`; `LopuHost` honors it even when minimised.
+Navigation can always reopen the chat. Missing preferences default off while
+explicit saved choices survive. See the unified Lopu checklist in `TESTING.md`.
+
+Mobile native presence is owned by `Devices/MobileDevicePresenceBootstrap` in the authenticated root shell, separately from sync admissions and page lifetime. `mobileDevicePresence.ts` refreshes saved native pairing status while visible, on resume/online/bridge readiness, with bounded retry backoff and immediate identity cancellation. Settings/setup retains explicit pairing; it does not own a second polling loop. Run its deterministic lifecycle tests and the mobile-presence checklist in `TESTING.md`.
 
 ## Where the code lives
 
@@ -336,11 +415,18 @@ links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 owns the launcher's native edge/corner resize gesture. Passive cursor and tracking
 events must preserve that gesture; release, deliberate input and lifecycle changes
 end it. `CommanderLauncherContentView.swift` places eight native resize handles
-above WebKit; their bounded regions also drive panel hit testing so the hover
-cursor and drag target agree. Central content remains owned by WebKit.
+above WebKit; their bounded, minimally painted regions keep the transparent outer half in WindowServer's
+input surface as well as AppKit hit testing. Separate always-active movement tracking supports non-key pinned
+panels; panel motion dispatch selects the existing native handle cursor without rebuilding region geometry.
+Central content retains WebKit cursors, and disabling custom resizing hides both input and painted handles.
 `CommanderWebView.swift` supplies anchored frame geometry. Regression coverage is
 in `CommanderWebViewTests.swift`, with native hover/drag acceptance in
 `Commander/docs/TESTING.md`.
+
+The native launcher emits reopen and command shortcut events into its retained
+web view. `useCommander.ts` gives each command view opening a fresh session;
+`App.tsx` uses it to mount a new `EmojiPicker` with a blank search while retaining
+locally saved preferences. `useCommander.test.tsx` covers a same-batch reopen.
 
 The desktop launcher gear reuses `builtin:settings` / `open-settings` in
 `Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
@@ -400,3 +486,113 @@ passkeys link targets `/settings/security#account-passkeys`. Browser approval at
 hosts; passwords and signing keys never enter layout blocks. Check keyboard,
 Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
 real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).
+
+
+## Automatic page titles and social previews
+
+`app/utils/pageTitle.ts` and the server's shared social resolver use
+`automaticRoutePreview.ts`. `scripts/generate-route-previews.mjs` discovers the
+real eager/lazy/nested/index route tree from `app/routes.tsx` without importing
+pages. Vite watches route/module changes; Vite and Nitro builds regenerate the
+portable `automaticRoutePreviews.generated.json`. New ordinary routes receive
+safe pattern-derived copy and a branded image automatically. Parameter values,
+queries/fragments and wildcard/unknown paths do not supply metadata text.
+
+Optional literal `socialPreview` exports customize display copy/card variant;
+`pageTitle` is the document-title label, independent of the share headline.
+No backend page-metadata registry is maintained. For saved `/p/:id` and `/t/:id`
+pages, supported anonymous public headings/prose/managed images supply defaults;
+existing saved `name`/`description` fields override them. The extractor does not
+execute Actions, sources or client JavaScript, infer private bindings, or expose
+system `siteRoute` layouts. Access/indexability and attachment ACLs remain in
+the canonical server paths. Run `test:social-previews`; see
+[the metadata contract](../seo-social-metadata.md) and TESTING's social-unfurl
+checklist. Live rendered/crawler acceptance remains a separate check.
+
+### Customised link previews
+
+`Sharing/SharePreviewHost.tsx` supplies the shared modal opened by the canonical
+`share-preview` Thing verb, Things library menus, profile links and generated
+invite links. `sharePreviewBlocks.ts` is an individually editable settings
+layout with repeated theme/layout choice templates; `TransientBlockHost` binds
+only public metadata and ephemeral presentation/copy actions. Themes and layout
+travel as `previewTheme`/`previewLayout` on the copied destination. Existing
+navigation/access parameters remain intact; anonymous metadata lookups exclude
+unrelated queries and fragments and require `api.social-previews` 1.2.0.
+The live card loads the server's actual `/social-card` PNG and retains its
+previous image during refresh. Account, data-plane, route and request changes
+fence responses and close obsolete dialogs. Run `test:things` for menu, link and
+editable-document contracts, then browser acceptance for desktop/mobile,
+selection, copy, error/retry, save/reload and nested Builder edits.
+
+## Share preview customisation
+
+`Sharing/SharePreviewHost.tsx` hosts one shared modal from `share-preview`
+context-menu actions. `sharePreviewBlocks.ts` is its individually editable
+Settings document; `TransientBlockHost` supplies only temporary selection and
+copy/share controls. `sharePreviewLink.ts` preserves the exact same-origin
+navigation destination, including fragments, while the anonymous metadata
+lookup omits unrelated values. The server PNG is the displayed preview.
+`sharePreviewLink.test.ts` covers link preservation/refusal;
+`scripts/share-preview-acceptance.mjs` covers disposable real API and browser
+acceptance. See `docs/seo-social-metadata.md` for template/capability contracts.
+
+Builder rich text inside responsive viewport documents loads the same Editor.js
+library and standard tools in the holder's document via the fixed bundled
+`Editor/editorJsRuntime.entry.ts` module. `editorJsRuntime.ts` shares a load per
+document and permits recovery after load failure; it does not start another app
+or API runtime. Selection, tool panels, keyboard guards and cleanup use the
+owning document. `Builder/authoredControlOwnership.ts` follows actual same-origin
+iframe ancestry for React portal controls while refusing unrelated documents.
+The real API regression is `npm --prefix remix run test:authored-controls:browser`
+(requires a built node-server handler, mongod and isolated Playwright/Chromium).
+
+Authored `tt-menu` lifetime follows its owned popup/target DOM elements, not
+React children reference identity. Same-record source refreshes reconcile
+conditional triggers and item roles without hiding the popup or moving focus.
+A payload-free local activation acknowledgement in
+`Builder/componentControlActivation.ts` from the existing Action handler dismisses the owning menu only after native validity and awaited rich
+snapshots succeed. Native submit dismisses on its valid submit event. Invalid
+fields retain their menu and validation focus; click propagation is irrelevant.
+Actual slot replacement, disable and unmount end the binding. `scripts/routes-map.browser.mjs` covers same-popup refresh, conditional controls, replacement/disable,
+keyboard focus and iframe ownership; the real API authored-control fixture
+retains ordinary/rich form submission coverage.
+
+## Inert previews during reviewed creation
+
+`Builder/ContentExecutionHold.tsx` composes the server-derived `executionHeld`
+flag through Components, Webpages and nested renderers. Held content stays
+readable; source Actions, local/pseudo controls, native/upload mounts, pending
+confirmation and delayed native callbacks remain disabled until release.
+`liveComponent`, `PageActionSurface`, the shared action-click hook, detail
+surfaces and the HTML/Chakra renderers share the same inherited gate; a child
+cannot release an ancestor hold. The server independently checks immutable
+completion before both server and browser Action admission.
+Run `test:content-execution:browser` for synthetic API desktop/mobile, scroll,
+nested controls, live release and retained draft checks; the separate
+`test:backups:ordinary-restore` proves real-replica projection/receipt behavior.
+A projected folder `creationProgress` is not a finished restore dashboard,
+folder badge or installed-app acceptance.
+
+
+## Detail-page Schema revalidation
+
+`routes/thing.tsx` binds a live Schema template to origin, viewer/data plane,
+Thing, Schema, link and root-identity generation. A separate refresh generation
+invalidates execution before an async read starts, retains only the same-scope
+template on transient failure, and aborts/ignores stale reads. Refusal clears the
+template. The unscoped list-template cache cannot establish this provenance.
+`ContentExecutionScope` blocks activation/native callbacks quietly;
+`ContentExecutionBoundary` preserves actual restoring ancestry and stable fields.
+The parent page runtime remains stable during verification to retain drafts.
+Run `test:content-execution:browser` and the real compiled
+`test:content-execution:route` fixture; see the Schema checklist in `TESTING.md`.
+
+Device contact badges use `Devices/deviceStatusPresentation.ts` across cards,
+lists, details, connector status and desktop node controls. Offline/stale contact
+and the queue-compatible `degraded` enum render as one neutral “Last seen …”
+label. Only `lastSeenAt` supplies contact time; missing/invalid times remain
+unknown. Pairing, approval, permission, compatibility and concrete errors keep
+their independent safety meanings. Run `deviceStatusPresentation.test.ts` with
+the device component tests; machine status contracts and action admission stay
+unchanged.

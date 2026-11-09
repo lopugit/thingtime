@@ -454,3 +454,15 @@ test('dateAdd refuses an out-of-range result instead of throwing a raw RangeErro
 	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'day']), '2026-02-01T00:00:00.000Z');
 	assert.equal(run(['dateAdd', '2026-01-31T00:00:00.000Z', 1, 'year']), '2027-01-31T00:00:00.000Z');
 });
+
+
+test('URI components encode delimiters and Unicode with deterministic type and malformed-text refusals', () => {
+ assert.equal(run(['encodeURIComponent', "A & B/#?%=+é東京😀!'()*"]), "A%20%26%20B%2F%23%3F%25%3D%2B%C3%A9%E6%9D%B1%E4%BA%AC%F0%9F%98%80!'()*");
+ for (const value of [null, undefined, '']) assert.equal(run(['encodeURIComponent', value]), '');
+ for (const value of [42, false, [], {}]) assert.throws(() => run(['encodeURIComponent', value]), /expected text or null/);
+ for (const value of ['\ud800', '\udc00', 'a\ud800b', '\ud800\ud800']) assert.throws(() => run(['encodeURIComponent', value]), /^Error: encodeURIComponent requires well-formed UTF-16 text$/);
+ assert.throws(() => run(['encodeURIComponent']), /arg/);
+ assert.throws(() => run(['encodeURIComponent', 'a', 'b']), /arg/);
+ assert.throws(() => run(['encodeURIComponent', 'é'.repeat(MAX_EXPRESSION_STRING_CHARS)]), /Expression text caps/);
+ assert.equal(run(['concat', 'https://maps.example/?q=', {ttExpr: ['encodeURIComponent', '$address']}], {address: '7 A&B St'}), 'https://maps.example/?q=7%20A%26B%20St');
+});

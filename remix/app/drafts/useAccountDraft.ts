@@ -35,6 +35,7 @@ export function useAccountDraft({
 	}, [binding, requestInput]);
 	const origin = typeof location === 'undefined' ? '' : location.origin;
 	const key = binding ? workspaceDraftRecoveryKey(origin, actor || 'guest', context, binding.scope) : `tt-account-draft:${origin}:${actor || 'guest'}:${context}:workspace-store:unconfirmed`;
+	const [resumeComplete, setResumeComplete] = React.useState(false);
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
 	const [deviceError, setDeviceError] = React.useState('');
@@ -98,6 +99,7 @@ export function useAccountDraft({
 	);
 	React.useEffect(() => {
 		scope.active = true;
+		setResumeComplete(false);
 		let cancelled = false;
 		const retryRetired = async () => {
 			const prefix = `${key}:retired:`;
@@ -129,7 +131,10 @@ export function useAccountDraft({
 		};
 		void retryRetired();
 		const resume = () => {
-			if (cancelled || !scope.current() || scope.touched || session.current() || recovery.error || !actor || !resumeRemote || localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) === 'false') return;
+			if (cancelled || !scope.current() || scope.touched || session.current() || recovery.error || !actor || !resumeRemote || localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) === 'false') {
+				if (!cancelled) setResumeComplete(true);
+				return;
+			}
 			void request<{ drafts: DraftSummary[] }>(actor, undefined, { context, surface })
 				.then(async (result) => {
 					const found = result.drafts.find((entry) => entry.mode === 'draft' && !localStorage.getItem(`${key}:retired:${entry.id}`));
@@ -138,8 +143,8 @@ export function useAccountDraft({
 					if (!cancelled && !scope.touched) await accept(response.draft);
 				})
 				.catch((failure) => {
-					if (!cancelled) setError(failure.message || 'Could not check account drafts');
-				});
+					if (!cancelled && scope.current()) setError(failure.message || 'Could not check account drafts');
+				}).finally(() => { if (!cancelled && scope.current()) setResumeComplete(true); });
 		};
 		const local = session.current();
 		if (local) {
@@ -152,6 +157,7 @@ export function useAccountDraft({
 			restore.current({ ...local.content, id: local.id, revision: local.revision, mode: 'draft', createdAt: '', updatedAt: '' });
 			if (local.dirty !== false || local.pending || local.pendingCopy) void session.retry().catch(() => {});
 			else setStatus('saved');
+			setResumeComplete(true);
 		} else resume();
 		const flush = () => {
 			void session.flush().catch(() => {});
@@ -225,6 +231,7 @@ export function useAccountDraft({
 		});
 	}, [actor, key, session, scope, request]);
 	return {
+		resumeComplete,
 		retire,
 		forget: async (id: string) => {
 			if (session.current()?.id === id) {

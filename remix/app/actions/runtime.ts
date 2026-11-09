@@ -5,6 +5,7 @@ import {
 	ACTION_LIMIT_DEFAULTS,
 	MAX_ACTION_EACH_ITEMS,
 	MAX_ACTION_RUN_ERROR_CHARS,
+	MAX_ACTION_STEP_STRING_CHARS,
 	MAX_ACTION_TRACE_ENTRIES,
 	ACL_OWNER,
 	parseActionRef,
@@ -24,6 +25,7 @@ export type ActionRuntimeHost = {
 		options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
 	): Promise<Fail | ActionProgram>;
 	resolveSchemaRef(reference: string): Promise<{ id: string; name: string }>;
+	ensureThing?(identity: { actionId: string; key: string }, schema: { id: string; name: string }, values: Record<string, unknown>, folderId?: string): Promise<Fail | { ok: true; doc: { shareId: string; crystal?: unknown } }>;
 	getThing(id: string): Promise<Fail | { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown; author?: { id: string } } }>;
 	createThing(input: Record<string, unknown>): Promise<Fail | { ok: true; doc: { shareId: string; crystal?: unknown } }>;
 	updateThing(id: string, input: { crystal: Record<string, unknown> }): Promise<Fail | { ok: true; thing: { id: string; crystal: unknown } }>;
@@ -351,6 +353,32 @@ export const executeProgram = async (
 			} else if (step.op === 'fail') {
 				const message = resolveValue(step.message, scope);
 				runError(typeof message === 'string' && message.trim() ? message.slice(0, MAX_ACTION_RUN_ERROR_CHARS) : `Step ${label} refused the run`);
+			} else if (step.op === 'things.ensure') {
+				if (budget.operationPolicy) runError(`Step ${label} cannot ensure Things in a restricted Action run`);
+				const ensure = host.ensureThing;
+				if (!ensure) return runError(`Step ${label} cannot ensure Things in this workspace`);
+				const schema = await host.resolveSchemaRef(String(step.schema));
+				for (const capability of ['things.create', 'things.read']) {
+					const allowed = capabilityOf(effective, capability);
+					if (!allowed || !schemaScopeAllows(allowed, [schema.name, schema.id])) {
+						runError(`Step ${label} ensures "${schema.name}" outside the declared ${capability} schema scope`);
+					}
+				}
+				const key = resolveValue(step.key, scope);
+				if (typeof key !== 'string' || !key.trim() || key.length > MAX_ACTION_STEP_STRING_CHARS) {
+					return runError(`Step ${label} key must resolve to non-empty text within the Action value budget`);
+				}
+				const values = resolveValue(step.values, scope);
+				if (!values || typeof values !== 'object' || Array.isArray(values)) return runError(`Step ${label} values resolved to non-object data`);
+				const folderId = resolveValue(step.folderId, scope);
+				if (step.folderId !== undefined && (typeof folderId !== 'string' || !folderId.trim())) {
+					return runError(`Step ${label} folderId resolved to a non-string or empty id`);
+				}
+				const ensured = await ensure({ actionId: program.id, key: key.trim() }, schema, values as Record<string, unknown>, typeof folderId === 'string' ? folderId.trim() : undefined);
+				if (ensured.ok === false) return runError(`Step ${label} ensure failed: ${ensured.error}`);
+				const doc = ensured.doc;
+				target = doc.shareId;
+				scope.steps[index] = { id: doc.shareId, crystal: doc.crystal, schema: schema.name, schemaId: schema.id };
 			} else if (step.op === 'things.create') {
 				const schema = await host.resolveSchemaRef(String(step.schema));
 				// Save-time coverage proves the program's OWN declaration; this

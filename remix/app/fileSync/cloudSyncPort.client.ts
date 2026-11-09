@@ -10,7 +10,7 @@ import { createCloudFileTransport, createCloudRetentionTransport, createCloudFol
 import { parseCloudSyncRun, parseCloudWrite, isCloudFolderWrite, type CloudWrite } from './cloudWrite';
 import type { FingerprintSource } from './contentFingerprint';
 import { sameSyncScope, sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
-import { validateSyncReceipt, type SyncExecutionPort, type SyncRun } from './execute';
+import { validateSyncReceipt, type SyncExecutionPort, type SyncOperation, type SyncRun } from './execute';
 import type { TransferActivity } from './transferActivity';
 
 import type { CloudOperationBinding } from './cloudBinding';
@@ -31,13 +31,14 @@ export type CloudSyncPortInput = {
 	progress?: (path: string, bytes: number, total: number, direction?: 'upload' | 'download') => void;
 	transfer?: (activity: TransferActivity) => void;
 };
+type BoundCloudSyncPort = Omit<SyncExecutionPort, 'persist'> & { deferUpload(operation: SyncOperation): Promise<import('./contentFingerprint').NativeDeferredFileResult | null> };
 const defaultRuntime = (input: CloudSyncPortInput): CloudTransportRuntime => ({ currentScope: input.currentScope,
 	origin: () => window.location.origin, fetch: (url, init) => fetch(url, init), requireCapability: requireThingtimeCapability });
 
 /** The same per-operation transport for legacy arrays and durable indexed
  * bindings. A binding is preparation metadata, never current authorization. */
 export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, bindings: CloudOperationBindings,
-	input: CloudSyncPortInput, runtime: CloudTransportRuntime = defaultRuntime(input)): Omit<SyncExecutionPort, 'persist'> {
+	input: CloudSyncPortInput, runtime: CloudTransportRuntime = defaultRuntime(input)): BoundCloudSyncPort {
 	const scope = structuredClone(savedScope), { check } = cloudRequests(runtime, scope, input.signal);
 	// One serialized operation is active; never retain a growing set of paths/IDs.
 	let appliedId: string | undefined;
@@ -91,6 +92,22 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 
 	return {
 		currentScope: input.currentScope,
+		...(version === 1 && runtime.automaticStoragePlacement ? {
+			admit: async (operation: SyncOperation) => runtime.automaticStoragePlacement!.admit(operation.mutation, true)
+		} : {}),
+		deferUpload: async operation => {
+			const m = operation.mutation;
+			if (version !== 1 || operation.confirmed || m.kind !== 'copy' || m.from !== 'local' ||
+				m.source.kind !== 'file' || m.source.size <= 0 || !m.source.fingerprint || m.path.includes('/')) return null;
+			const { write } = await get(operation.id, scope);
+			if (JSON.stringify(operation) !== JSON.stringify(write.operation)) throw Error('Deferred operation changed.');
+			await runtime.automaticStoragePlacement?.admit(m, true);
+			const file = createCloudFileTransport(runtime, write, input.signal);
+			if (!sameSyncStamp(m.source, await input.readLocal(m.path)) || !sameSyncStamp(m.expectedTarget, await file.read()))
+				return null;
+			check();
+			return file.deferUpload(await input.openSource(m.source));
+		},
 		confirmed: (operation, receipt) => {
 			check(); validateSyncReceipt(operation, scope, receipt);
 			if (appliedId !== operation.id) return;
@@ -127,6 +144,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			const { write, trashContext } = await get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
+			if (version === 1) await runtime.automaticStoragePlacement?.admit(operation.mutation);
 			appliedId = operation.id;
 
 			if (isLocalTrash(write)) {
@@ -154,6 +172,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				if (source) await source.verify!();
 				if (!sameSyncStamp(m.source, await readLocalSource(write))) throw Error('Cloud path changed before local publication.');
 				check();
+				await runtime.automaticStoragePlacement?.admit(m, true);
 				await input.beforeLocalPublication?.(operation.id);
 				check();
 				const result = await input.localTarget!.publish(structuredClone(operation), { ...scope }, structuredClone(staged));
@@ -194,7 +213,7 @@ export function createCloudSyncPort(saved: SyncRun, input: CloudSyncPortInput & 
  * existing foreground sync. No operation becomes executable during preparation. */
 export async function createPagedCloudSyncPort(spec: PagedRunSpec,
 	configuration: FileSyncConfiguration, journal: PagedRunJournal,
-	input: CloudSyncPortInput, runtime: CloudTransportRuntime = defaultRuntime(input)): Promise<Omit<SyncExecutionPort, 'persist'>> {
+	input: CloudSyncPortInput, runtime: CloudTransportRuntime = defaultRuntime(input)): Promise<BoundCloudSyncPort> {
 	const saved = structuredClone(configuration), run = structuredClone(spec);
 	if (input.cloudRootId && input.cloudRootId !== saved.remoteFolderId) throw Error('Saved cloud roots disagree.');
 	if ((await journal.beginCloud(run, saved)).phase !== 'ready') throw Error('Complete cloud bindings before executing.');

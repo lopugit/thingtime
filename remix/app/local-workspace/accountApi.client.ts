@@ -207,7 +207,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
 	return { sync, suites, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection, algorithms, algorithmWorker };
 }
-export type AccountLocalView = { localPlane?: 'home' };
+export type AccountLocalView = { localPlane?: 'home'; cloudOnly?: boolean };
 export const accountWorkspaceWorker = (authorityScope: AccountScope, view: AccountLocalView = {}) => {
 	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
 	const scope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
@@ -262,6 +262,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		return new Proxy(value, { get(target, key) { if (!wrapped.has(key)) wrapped.set(key, guard(Reflect.get(target, key))); return wrapped.get(key); } });
 	};
 	const online = guard(remote) as T;
+	// System shares have a durable native submission and need exact account
+	// receipts for file binding and dismissal. Keep their transport cloud-scoped.
+	if (view.cloudOnly) return online;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
 	const projectFile = (thing: any) => project({ ...localThingProjection(thing, owner.id), ...(thing.localAttachment?.accountFileId ? { accountFileId: thing.localAttachment.accountFileId } : {}), crystal: { ...thing.crystal,
@@ -647,10 +650,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
   requested.ownerId === scope.ownerId && requested.delegatedBy === scope.delegatedBy && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
   actions: { ...online.actions,
-   run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}) => {
+   run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}, options?: { signal?: AbortSignal }) => {
+    options?.signal?.throwIfAborted();
     const service = worker(), actions = new LocalActions(service.db, scope, service.lease, service.sync);
-    if (typeof args.action !== 'string' || !await actions.canRunLocally(args.action)) return online.actions.run(args);
-    try { return await actions.run({...args,action:args.action}); }
+    if (typeof args.action !== 'string' || !await actions.canRunLocally(args.action)) return online.actions.run(args, options);
+    options?.signal?.throwIfAborted();
+    try { return await actions.run({...args,action:args.action}, options?.signal); }
     finally { changed(); } // Partial local effects also have independent queued sync.
    },
    runs: async (args: {action?:string;limit?:number} = {}) => {
@@ -1040,7 +1045,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			changed();
 			return { ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(await sync.view(row.id)), savedLocally: true };
 		},
-		update: async (input: AccountThingWrite & { id: string }) => {
+		update: async (input: AccountThingWrite & { id: string }, options?: { signal?: AbortSignal; storageMode?: 'cloud' }) => {
+			if (options?.storageMode === 'cloud') return online.things.update(input, options);
 			const { sync } = worker();
 			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 			let cached = await sync.view(input.id);
@@ -1061,8 +1067,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			await sync.things.update(input); changed();
 			return { ok: true, thing: project(await sync.view(input.id)), savedLocally: true };
 		},
-		get: async (args: any, options?: { signal?: AbortSignal }) => {
+		get: async (args: any, options?: { signal?: AbortSignal; storageMode?: 'cloud' }) => {
 			facadeLease.assertCurrent();
+			if (options?.storageMode === 'cloud') return online.things.get(args, options);
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['id','key','commentProjection'].includes(key))) return readDiscussion(args, options);
 			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
 				const startedAt = Date.now();
@@ -1097,7 +1104,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 			const cached = await sync.view(args.id);
 			if (cached) {
-				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
+				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(result => {
+					if (result.thing?.executionHeld !== cached.executionHeld) announceLocalWorkspaceChange([args.id]);
+				}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
 			}
 			const result = await refresh(args, options?.signal);
@@ -1164,17 +1173,18 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
  const args = target.kind === 'id' ? { id: target.id, ...(target.key ? { key: target.key } : {}) } : target.kind === 'path' ? { path: target.path } : { global: '1' };
  if (target.kind === 'id' && target.key) return transport.resolve(args);
  const refresh = async () => {
+  const startedAt = Date.now();
   const result = await transport.resolve(args);
   if (result.page?.id && await sync.isDeleted(result.page.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
   if (result.page?.author?.id === scope.ownerId && accountThingCanCache(result.page)) {
-   await sync.remember(result.page);
-   for (const component of result.components || []) if (component.author?.id === scope.ownerId && accountThingCanCache(component)) await sync.remember(component);
+   await sync.remember(result.page, startedAt);
+   for (const component of result.components || []) if (component.author?.id === scope.ownerId && accountThingCanCache(component)) await sync.remember(component, startedAt);
    // Retain only validated component content from this authorized resolution,
    // scoped to this account and page. It confers no ownership or write access.
    const components = (result.components || []).map((component: any) => {
     const check = validateThingtimeCrystal(['component'], snapshotTransferValue(component.crystal));
     if (!check.ok || typeof component.id !== 'string') throw new WorkspaceError('INVALID_COMPONENT', 'Invalid resolved component');
-    return { id: component.id, thingtime: ['component'], crystal: check.crystal };
+    return { id: component.id, thingtime: ['component'], crystal: check.crystal, ...(typeof component.executionHeld === 'boolean' ? { executionHeld: component.executionHeld } : {}) };
    });
    await db.transaction(scope, 'readwrite', lease, tx => tx.put('page-components', result.page.id, { components, refs: result.refs || {} }));
   }
@@ -1187,9 +1197,12 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
   if (target.kind === 'id' && await sync.isDeleted(target.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
   return refresh();
  }
- if (canRefresh) void refresh().catch(() => {});
+ if (canRefresh && (local.page.executionHeld || local.components.some(row => row.executionHeld))) {
+  try { await refresh(); }
+  catch (error) { if ([403, 404, 410].includes(Number((error as any)?.status))) throw error; }
+ } else if (canRefresh) void refresh().catch(() => {});
  const dependencies = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ components: any[]; refs: Record<string, string | null> }>('page-components', local.page!.id));
- const components = new Map(local.components.map(row => [row.id, row]));
+ const components = new Map((await sync.views(local.components.map(row => row.id))).map(row => [row.id, row]));
  for (const [ref, id] of Object.entries(local.refs)) if (!id) {
   const savedId = dependencies?.refs[ref], saved = dependencies?.components.find(row => row.id === savedId);
   if (saved && !await sync.isDeleted(saved.id)) { components.set(saved.id, saved); local.refs[ref] = saved.id; }

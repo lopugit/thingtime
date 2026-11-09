@@ -32,7 +32,7 @@ export function createSyncTaskRuntime() {
 	let snapshot: SyncTaskSnapshot | null = null;
 	let active: AbortController | undefined;
 	let saveStop: (() => Promise<void>) | undefined;
-	let suspensionMessage: string | undefined;
+	let suspensionMessage: string | undefined, suspensionWaiting = false;
 	let transferSession: ReturnType<typeof createTransferActivitySession> | undefined;
 	const listeners = new Set<() => void>();
 	const pausedScopes = new Set<string>();
@@ -48,13 +48,14 @@ export function createSyncTaskRuntime() {
 		read: () => snapshot,
 		subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
 		isPaused: (scope: SyncScope) => pausedScopes.has(syncScopeKey(scope)),
+		resumeScope: (scope: SyncScope) => { pausedScopes.delete(syncScopeKey(scope)); },
 		async cancel(scope: SyncScope) {
 			// Install the scope barrier synchronously, including idle discovery races.
 			pausedScopes.add(syncScopeKey(scope));
 			if (!snapshot || syncScopeKey(scope) !== syncScopeKey(snapshot.scope) || !active) return;
 			if (pendingStop) return pendingStop;
 			const controller = active;
-			suspensionMessage = 'Transfer stopped. Saved work can be resumed.';
+			suspensionMessage = 'Transfer stopped. Saved work can be resumed.'; suspensionWaiting = false;
 			let resolve!: () => void, reject!: (error: unknown) => void;
 			const stopping = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
 			pendingStop = stopping;
@@ -73,16 +74,16 @@ export function createSyncTaskRuntime() {
 		},
 		// Lifecycle interruption preserves runnable admission. Only cancel saves
 		// the user's durable Stop, so returning to the foreground can recover.
-		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
+		suspend(message: string, waiting = false) { if (active && !active.signal.aborted) { suspensionMessage = message; suspensionWaiting = waiting; active.abort(); } },
 		invalidate() { active?.abort(); transferSession?.clear(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>, options?: { automatic?: boolean }) {
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>, options?: { automatic?: boolean; persistTerminal?: (progress: ForegroundSyncProgress) => void }) {
 			if (options?.automatic && pausedScopes.has(syncScopeKey(scope))) return;
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			if (!options?.automatic) pausedScopes.delete(syncScopeKey(scope));
 			pendingStop = undefined;
 			syncScopeKey(scope);
 			const controller = new AbortController(); active = controller; saveStop = onStop;
-			suspensionMessage = undefined;
+			suspensionMessage = undefined; suspensionWaiting = false;
 			const transfers = createTransferActivitySession(); transferSession = transfers;
 			publish({ scope: structuredClone(scope), active: true, status: 'running', transferSeries: transfers.series, progress: { stage: 'checking', confirmed: 0, total: 0 } });
 			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
@@ -98,8 +99,8 @@ export function createSyncTaskRuntime() {
 			};
 			try { await run(controller.signal, update); }
 			catch (error) {
-				const waiting = !controller.signal.aborted && (error instanceof SyncConditionsWait || error instanceof NativeInventoryRetryWait || error instanceof SyncConnectionWait);
-				if (snapshot) publish({ ...snapshot, waiting, status: snapshot.stopping && snapshot.status === 'error' ? 'error' : controller.signal.aborted || waiting ? 'paused' : 'error', progress: { ...snapshot.progress,
+				const waiting = controller.signal.aborted ? suspensionWaiting : (error instanceof SyncConditionsWait || error instanceof NativeInventoryRetryWait || error instanceof SyncConnectionWait);
+				if (snapshot) publish({ ...snapshot, waiting, status: snapshot.stopping && snapshot.status === 'error' ? 'error' : controller.signal.aborted || waiting ? 'paused' : 'error', progress: { ...snapshot.progress, waiting,
 					message: snapshot.stopping ? snapshot.progress.message : controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
@@ -110,7 +111,10 @@ export function createSyncTaskRuntime() {
 				if (snapshot) publish({ ...snapshot, active: false, stopping: false,
 					status: snapshot.status === 'running' ? (snapshot.progress.stage === 'complete' ? 'complete' : 'paused') : snapshot.status,
 					pagedReview: undefined, legacyReview: undefined });
-				if (active === controller) { active = undefined; saveStop = undefined; pendingStop = undefined; }
+				if (active === controller) {
+					if (snapshot) { try { options?.persistTerminal?.(snapshot.progress); } catch { /* The journal remains authoritative. */ } }
+					active = undefined; saveStop = undefined; pendingStop = undefined;
+				}
 			}
 		}
 	};

@@ -169,22 +169,23 @@ test('missing compact ancestry refuses instead of exporting current content', as
 	}
 });
 
-test('serialized archive size is bounded even when the retained event fits', async () => {
+test('device archive and download preserve exact content beyond the individual event byte limit', async () => {
 	const h = await fixture();
 	try {
+		const text = 'a'.repeat(2_200_000);
 		const large = parseTimelineEvent({
 			...h.original.event,
 			id: randomUUID(),
 			operationId: randomUUID(),
-			after: { ...h.original.event.after!, value: { ...(h.original.event.after!.value as any), crystal: { text: 'a'.repeat(2200000) } } }
+			after: { ...h.original.event.after!, value: { ...(h.original.event.after!.value as any), crystal: { text } } }
 		});
 		assert.ok(new TextEncoder().encode(JSON.stringify(large)).length < TIMELINE_EVENT_MAX_BYTES);
 		await h.db.transaction(scope, 'readwrite', lease, (tx) => appendLocalTimeline(tx, large));
-		await assert.rejects(
-			h.history.exportVersion(large.id),
-			(error: any) => error.status === 413 && /remains retained in this device/.test(error.message)
-		);
-		assert.equal((await h.history.entry(large.id)).entry.event.id, large.id);
+		const result = await h.history.exportVersion(large.id);
+		assert.ok(new TextEncoder().encode(JSON.stringify(result.export)).length > TIMELINE_EVENT_MAX_BYTES);
+		assert.deepEqual(result.export.event, large);
+		assert.equal((timelineExportRecord(result, large).content.value as any).crystal.text, text);
+		assert.deepEqual((await h.history.entry(large.id)).entry.event, large);
 	} finally {
 		await h.db.close();
 	}

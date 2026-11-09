@@ -359,11 +359,15 @@
 }
 
 .actions-panel {
+  --actions-top: 98px;
   position: absolute;
   z-index: 3;
-  top: 98px;
+  top: var(--actions-top);
   right: 44px;
   width: 270px;
+  max-height: calc(100% - var(--actions-top) - 8px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -885,22 +889,27 @@
   background: var(--line);
 }
 .emoji-picker-panel .actions-panel {
-  top: 72px;
+  --actions-top: 72px;
   right: 32px;
 }
 .actions-panel header {
+  flex: none;
   padding: 15px 17px 10px;
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 650;
 }
 .actions-list {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 0 7px 8px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 .action-row {
+  flex: none;
   min-height: 42px;
   display: grid;
   grid-template-columns: 24px 1fr auto;

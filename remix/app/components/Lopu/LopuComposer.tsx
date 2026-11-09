@@ -22,7 +22,7 @@ import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx, lop
 const MAX_TEXTAREA_HEIGHT = 168;
 export { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 
-export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean; hearMeOut?: boolean };
+export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean; launcher?: boolean; hearMeOut?: boolean };
 
 export type LopuComposerProps = {
 	attachments?: React.ReactNode;
@@ -396,6 +396,11 @@ export const LopuComposer = ({
 										<LopuCredentialSettings value={settings} models={models} providers={vaultProviders || []} onChange={onSettingsChange} disabled={disabled || streaming} />
 										{preferences ? (
 											<>
+                                                <SettingsRow
+                                                    label="Floating Lopu icon"
+                                                    hint="Show a draggable shortcut on other pages. You can always open Lopu from navigation."
+                                                    control={<LopuToggle checked={!!preferences.launcher} onChange={next => onPreferencesChange?.({ launcher: next })} label="Show floating Lopu icon" />}
+                                                />
                                                 <SettingsRow
                                                     label="Hear me out"
                                                     hint="Dictation waits for Send. After 10 seconds of silence, asks ‘Send now?’"

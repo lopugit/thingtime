@@ -39,6 +39,7 @@ export type NotificationItem = {
 };
 
 export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; label: string; hint: string }> = {
+  'device-alert': {emoji:'🔔',label:'Device alert',hint:'A message sent to one of your paired devices.'},
   'friend-request': { emoji: '🤝', label: 'Friend requests', hint: 'Someone asks to be your friend' },
   'friend-accepted': { emoji: '💚', label: 'Request accepted', hint: 'A friend request you sent is accepted' },
   'new-follower': { emoji: '👀', label: 'New followers', hint: 'Someone starts following you' },

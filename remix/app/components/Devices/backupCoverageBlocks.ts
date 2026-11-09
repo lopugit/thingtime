@@ -27,7 +27,7 @@ export const backupCoverageBlocks: WebpageBlock[] = [{ id: 'backup-coverage', ty
 	] }];
 const reasons: Record<NativeScanSkip['reason'], string> = {
 	symlink: 'Symbolic link — target not followed', special: 'Unsupported filesystem entry', fifo: 'Named pipe — live stream not read',
-	socket: 'Socket — live process state not read', device: 'Device entry — device not opened', unreadable: 'Unreadable', changed: 'Changed during indexing',
+	socket: 'Socket — live process state not read', device: 'Device entry — device not opened', 'cloud-original': 'Original only in iCloud', unreadable: 'Unreadable', changed: 'Changed during indexing',
 	'invalid-path': 'Filename cannot yet be represented safely', 'duplicate-identity': 'Shared file identity requires hard-link support', 'path-collision': 'Filename collision requires review'
 };
 export function backupCoverageDisplay(page: NativeSkippedPage | null | undefined, busy: boolean, error = '') {

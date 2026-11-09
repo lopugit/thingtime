@@ -4,6 +4,7 @@ import { LocalMediaDiagnostics } from './local-workspace/media.client';
 import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { BrowserExtensionAccountBridge } from './components/Passwords/BrowserExtensionAccountBridge';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { MobileDevicePresenceBootstrap } from './components/Devices/MobileDevicePresenceBootstrap';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { RemoteSyncBootstrap } from './fileSync/RemoteSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
@@ -21,13 +22,17 @@ import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
+import { LocalApiView } from './local-workspace/LocalApiView';
 import { WorkspaceThingtimeProvider } from './local-workspace/WorkspaceThingtimeProvider';
+import { SharePreviewHost } from './components/Sharing/SharePreviewHost';
 import { TimelineHost } from './components/Timeline/TimelineHost';
+import { ThingReplicaSyncHost } from './storage/ThingReplicaSyncHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
 import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
+import { LidarScanProvider } from './components/NativeBridge/LidarScanProvider';
 import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHost';
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
@@ -70,6 +75,8 @@ try {
   setThingtime(globalThis);
 }
 
+const incomingShareApiView = { cloudOnly: true } as const;
+
 export default function App() {
   const rootData = useLoaderData() as ClientRootData & { clientIdentityGeneration: number };
   const contentOwnerId = rootData.offlineWorkspace?.ownerId || (rootData.user && !rootData.user.temporary ? rootData.user.id : undefined);
@@ -79,7 +86,7 @@ export default function App() {
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');
   const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
-  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isAuthorizePopup = isStandalonePage || pathname === '/share' || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, contentOwnerId || LOCAL_WORKSPACE_OWNER, rootData.clientIdentityGeneration),
@@ -134,6 +141,9 @@ export default function App() {
 
   if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 
+  const nativeOwner = !identity.pending && rootData.dataPlane === 'home' && rootData.user?.accountKind === 'user' &&
+    !rootData.user.temporary && !rootData.user.isCharacter ? rootData.user.id : undefined;
+
   return (
     <ChakraWrapper>
       <GlobalStyles />
@@ -147,7 +157,8 @@ export default function App() {
       <WorkspaceThingtimeProvider>
         <ThingDraftsProvider>
          <TimelineProvider>
-         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
+         <LidarScanProvider ownerId={nativeOwner} generation={identity.generation}>
+         {mounted && !isAuthorizePopup ? <><TimelineHost /><ThingReplicaSyncHost ownerId={nativeOwner} generation={identity.generation} dataPlane={rootData.dataPlane} /><SharePreviewHost /></> : null}
         <VisualSettingsHost />
         {mounted ? <BrowserExtensionAccountBridge /> : null}
         <LopuPageTracker />
@@ -155,10 +166,10 @@ export default function App() {
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
-        {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
-          rootData.user.accountKind === 'user' && !rootData.user.temporary && !rootData.user.isCharacter ?
-          <><NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} />
-          <RemoteSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /></> : null}
+        {mounted && nativeOwner ?
+          <><MobileDevicePresenceBootstrap ownerId={nativeOwner} generation={identity.generation} />
+          <NativeSyncBootstrap ownerId={nativeOwner} generation={identity.generation} />
+          <RemoteSyncBootstrap ownerId={nativeOwner} generation={identity.generation} /></> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
@@ -168,7 +179,7 @@ export default function App() {
         {isAuthorizePopup ? null : <Nav />}
         <div id="lopuPageScroll">
         {isAuthorizePopup ? (
-          <Outlet />
+          pathname === '/share' ? <LocalApiView.Provider value={incomingShareApiView}><Outlet /></LocalApiView.Provider> : <Outlet />
         ) : (
           <Main>
             <AccountSyncStatus />
@@ -196,6 +207,7 @@ export default function App() {
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         {!isStandalonePage ? <ConfettiCanvas /> : null}
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
+         </LidarScanProvider>
          </TimelineProvider>
         </ThingDraftsProvider>
       </WorkspaceThingtimeProvider>

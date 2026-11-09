@@ -381,6 +381,7 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 	const allCapabilities = [...device.capabilities, ...device.connectors.flatMap((connector) => connector.capabilities)];
 	return {
 		id: device.id,
+		rootFolderId: device.rootFolderId,
 		name: device.name || 'Computer',
 		platform: device.platform,
 		// The cloud projection proves the paired node exists, but does not expose
