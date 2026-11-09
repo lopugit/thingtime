@@ -90,7 +90,7 @@ test('Messenger custom-emoji parsing and projections publish a compatible correc
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://emoji.test');
   for (const feature of ['api.chats-messages', 'api.chats-messages-edit', 'api.chats-react']) {
-    const expected = feature === 'api.chats-messages' ? '1.4.0' : feature === 'api.chats-messages-edit' ? '1.2.0' : feature === 'api.chats-react' ? '1.0.3' : '1.0.2';
+    const expected = feature === 'api.chats-messages' ? '1.5.0' : feature === 'api.chats-messages-edit' ? '1.2.0' : feature === 'api.chats-react' ? '1.0.3' : '1.0.2';
     assert.equal(source.features[feature], expected); assert.equal(origin.features[feature].version, expected);
     assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
     assert.equal(capabilitySatisfies('1.0.2', '1.0.1'), true);
@@ -321,7 +321,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.7.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.6.1');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.21.1');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.22.0');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -333,7 +333,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.21.1');
+    assert.equal(version, '1.22.0');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);
@@ -718,7 +718,7 @@ test('shared content input and projection contracts agree on both origin manifes
 
 
 test('authenticated shared-content body contracts publish deliberate minors in both manifests', () => {
- const expected = {'api.things':'1.55.0','api.things-update':'1.21.0','api.things-comment':'1.11.0','api.chats-messages':'1.4.0','api.chats-messages-edit':'1.2.0','api.attachment-uploads':'1.10.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.12.2'};
+ const expected = {'api.things':'1.55.0','api.things-update':'1.21.0','api.things-comment':'1.11.0','api.chats-messages':'1.5.0','api.chats-messages-edit':'1.2.0','api.attachment-uploads':'1.10.0','api.attachment-annotate':'1.3.0','api.attachment-link':'1.2.0','api.files':'1.12.2'};
  const source=createApiCapabilitiesManifest(), runtime=thingtimeCapabilityManifest('https://shared-content.test');
  for (const [feature,version] of Object.entries(expected)) {
   assert.equal(source.features[feature],version); assert.equal(runtime.features[feature].version,version);
