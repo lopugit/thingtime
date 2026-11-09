@@ -2306,6 +2306,11 @@ email whose link points at the attacker.
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
       than an `outputDirectory` selected by the dashboard.
+- [ ] Confirm the emitted Nitro function loads bcrypt from its packaged native
+      binding. Linux builds must reject symbols newer than Vercel's glibc 2.34.
+      The emitted binding must verify existing bcrypt 5 hashes and fresh hashes
+      at the requested cost. Before promotion, confirm the staged deployment's
+      app shell and Nitro capability manifest respond successfully.
 - [ ] Confirm the Vercel output verifier rejects any server chunk that leaves
       `unicode-emoji-json/data-by-emoji.json` as a runtime package lookup
       without tracing the JSON asset. In an isolated copy of the generated
