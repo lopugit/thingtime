@@ -187,6 +187,7 @@ export type PublicLopuMessageMeta = {
 	segmentIndex: number;
 	segmentCount: number;
 	// assistant rows only
+	deviceTranscript?: true;
 	model?: string | null;
 	effort?: string | null;
 	speed?: string | null;
@@ -221,6 +222,7 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 	if (raw.continuation === true) meta.continuation = true;
 	if (typeof raw.continuationSafe === 'boolean') meta.continuationSafe = raw.continuationSafe;
 	if (role !== 'assistant') return meta;
+	if (raw.deviceTranscript === true) return { ...meta, deviceTranscript: true };
 	if (nonNegativeInt(raw.recoveryFailures) !== undefined) meta.recoveryFailures = Number(raw.recoveryFailures);
 	meta.model = text(raw.model, 128) || null;
 	meta.effort = text(raw.effort, 32) || null;

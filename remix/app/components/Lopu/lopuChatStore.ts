@@ -28,7 +28,8 @@ import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTa
 
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import type { ChatMessage, ChatSummary } from '~/components/Messenger/messengerTypes';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { isDeviceAiProvider } from '~/utils/deviceAiProvider';
 import { parsePartialJson } from '~/utils/partialJson';
 import {
 	applyLopuPartialComponent,
@@ -215,6 +216,7 @@ let state: LopuStoreState = createInitialState();
 const listeners = new Set<() => void>();
 let client: LopuApiClient | null = null;
 const controllers = new Map<string, AbortController>();
+const deviceTurns = new Set<string>();
 const stoppedRequests = new Set<string>();
 let noticeSeq = 0;
 let emitScheduled = false;
@@ -533,6 +535,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
   accessWrites.clear(); accessRevisions.clear();
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+	deviceTurns.clear();
  stoppedRequests.clear();
 	bindAiTaskOwner(userId);
  bindLopuQueue(userId);
@@ -1209,14 +1212,25 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const generation = accountGeneration;
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
-	const requestId = continuation ? await continuationRequestId(chatId!, continuation.previousRequestId) : options.requestId ?? uuid();
- // Computing a continuation id is asynchronous; an account/source change
- // or Stop during that gap must not dispatch through a newly bound client.
- if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'This continuation was cancelled before sending.',text:trimmed};
 	const targetChat = chatId ? state.chats.find(chat => chat.id === chatId) : null;
   const base = chatId && chatId !== state.activeChatId
     ? reconcileLopuSettings(settingsFromChat(targetChat), state.models, state.defaults, knownVaultProviders()) : state.settings;
   const settings = mergeSettingsPatch(options.settings || {}, base);
+	const device = isDeviceAiProvider(settings.providerId);
+	// Keep only a local fingerprint and the operation ID across reload. A
+	// restored composer draft retries exactly the same encrypted device outbox
+	// entry instead of spending the plan again under a new ID.
+	const retryKey = device && typeof window !== 'undefined' && globalThis.crypto?.subtle && !continuation ?
+		`tt-device-lopu-retry:${Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
+			JSON.stringify([window.location.origin, userId, settings.providerId, chatId, trimmed]))))).map(byte => byte.toString(16).padStart(2, '0')).join('')}` : null;
+	const storedRequest = retryKey ? readLocalCache<string>(retryKey) : null;
+	const requestId = continuation ? await continuationRequestId(chatId!, continuation.previousRequestId) :
+		options.requestId ?? (typeof storedRequest === 'string' && /^[\w-]{1,128}$/.test(storedRequest) ? storedRequest : uuid());
+	// An asynchronous fingerprint or continuation ID must not cross an account change.
+	if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'The active account changed before sending.',text:trimmed};
+	if (device && Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)))
+		return { ok: false, error: 'Lopu is already replying in this chat.', text: trimmed };
+	if (retryKey) writeLocalCache(retryKey, requestId);
 	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
@@ -1229,6 +1243,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
  turn = { ...turn, ...(continuation ? { continuation: true } : {}) };
 	const abort = new AbortController();
 	controllers.set(requestId, abort);
+	if (device) { deviceTurns.add(requestId); stoppedRequests.delete(requestId); }
 	rememberTurn(turn);
 	setState({ streamingId: requestId, sending: true, error: null });
 
@@ -1360,7 +1375,10 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 			}
 		}
 	} finally {
-		controllers.delete(requestId);
+		if (controllers.get(requestId) === abort) {
+			controllers.delete(requestId);
+			deviceTurns.delete(requestId);
+		}
 	}
 
 	// paints from tool calls that never finished go back to how the page was
@@ -1386,6 +1404,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	}
 
 	const assistantRows = buildAssistantMessages(turn, userId);
+	if (retryKey && turn.status === 'done') clearLocalCache(retryKey);
 	appendMessages(finalChatId, assistantRows);
 	upsertChatSummary(finalChatId, turn, assistantRows);
 	setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: failure });
@@ -1412,6 +1431,7 @@ export const abortLopuTurn = (): void => {
  pauseLopuQueue(true);
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
  if (turn) stoppedRequests.add(turn.requestId);
+ if (turn && deviceTurns.has(turn.requestId)) { controllers.get(turn.requestId)?.abort(); return; }
  const pending = [...state.turnOrder].reverse().map(id => state.turns[id]).find(item => item.chatId === state.activeChatId && shouldAutoContinueLopuReply(item));
  if (!turn && pending) { setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== pending.chatId) })); stoppedRequests.add(pending.requestId); void stopAiTaskRequest(pending.requestId).catch(() => notice('Could not stop the recovery.', { status: 'error' })); }
  const runningTask = getAiTasks().find(task => isRunningLopuChatTask(task, state.activeChatId));
@@ -1496,6 +1516,7 @@ export const selectLopuProviderNames = (snapshot: LopuStoreState): Record<string
 export const resetLopuStoreForTests = () => {
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+	deviceTurns.clear();
  stoppedRequests.clear();
 	client = null;
 	undoSnapshots.clear();

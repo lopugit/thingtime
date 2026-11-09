@@ -631,7 +631,16 @@ produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
 Public docs and capability discovery remain local and available.
 
 
-`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
+`api.ai-chatgpt-plan` 1.2.0 adds OS-protected device storage and redacted text
+availability to the signed desktop's existing loopback flow. The desktop
+verifies the current session against its selected account API and leaves remote
+self-hosted plan runtimes available. `api.lopu-chats-reply` 1.22.0 routes a
+device pin only on the desktop owning the grant; there is no hosted inference or
+billing fallback. The desktop negotiates `api.lopu-chats-device-turns` 1.0.0 on
+the exact remote API for text history and idempotent private transcript writes.
+The transcript route cannot invoke models, tools, actions, or billing. Both
+manifests use the canonical docs registry. Verify the plan, API capabilities,
+API fallback and Lopu stream suites, then run installed-app acceptance in TESTING.
 
 General compressor storage adds `api.things` 1.41.0, `api.things-update`
 1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
