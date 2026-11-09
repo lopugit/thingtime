@@ -16,6 +16,7 @@ import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/att
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
 import { thingBrowseHref } from './thingsLocation';
+import { thingStorageHref } from './thingStorageNavigation';
 
 import {
   THINGS_GROUP_OPTIONS,
@@ -42,9 +43,10 @@ export type ThingsItemMenuArgs = {
   ownerId?: string;
   locationSearch?: string;
   builderMode?: boolean;
+  dataPlane?: string | null;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane }: ThingsItemMenuArgs): ThingContextMenuModel => {
   if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
@@ -54,6 +56,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
+    'storage-placement': actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
     open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),

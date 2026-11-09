@@ -3,6 +3,7 @@ import { withSyncRootLock } from './journal.client';
 import { type PagedRunJournal, type PagedRunProgress, type PagedRunSpec } from './pagedRunJournal';
 import { ExactCloudSyncDestinationChanged } from './cloudSyncDestination';
 import { sameSyncContent, sameSyncScope, sameSyncStamp, type SyncScope } from './reconcile';
+import { AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
 
 /** Resume only already prepared operations. Adapters must supply the same live
  * authorization, exact destination guards and durable receipts as normal sync. */
@@ -25,9 +26,18 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 		if (!operation) throw Error('Sync run has no next operation.');
 		await options.prepare?.(operation); check();
 		let receipt: Awaited<ReturnType<typeof executeSyncOperation>>;
-		try { receipt = await executeSyncOperation(operation, scope, port, options.signal); }
+		let firstDispatch = false;
+		try { receipt = await executeSyncOperation(operation, scope, port.admit ? { ...port, apply: async (op, currentScope) => {
+			firstDispatch = await journal.markStreamCanonicalDispatch(spec, op.id); check();
+			return port.apply(op, currentScope);
+		} } : port, options.signal); }
 		catch (error) {
 			check();
+			if (error instanceof AutomaticStoragePlacementExcluded) {
+				state = await journal.omitStoragePlacementOperation(spec, operation, firstDispatch); check();
+				options.omitted?.(operation); options.changed?.(state);
+				continue;
+			}
 			if (spec.photoAssetOrder && error instanceof SyncObservationChangedError && error.sourceChanged) {
 				state = await journal.omitPhotoOperation(spec, operation); check();
 				options.omitted?.(operation); options.changed?.(state);

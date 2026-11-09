@@ -23,6 +23,13 @@ constraints; a write failure or interruption must preserve an explicitly partial
 capture. Raw imagery makes these archives large. No deliberate frame decimation
 or lossy image compression is applied by the scanner.
 
+Archive fingerprinting and multipart staging drain Foundation's autoreleased
+read/write buffers after each 64 KiB chunk. A detached task's outer pool must
+not retain buffers across a multi-gigabyte archive. `LiDARUploadMemoryTests`
+checks resident-memory growth with a sparse archive; seal validation and
+first/last-part checks separately cover real TAR structure and byte integrity.
+An app exit is not, by itself, a confirmed iOS memory-termination report.
+
 ## Ownership and recovery
 
 A scan ID, selected origin and verified owner are reserved before recording.
