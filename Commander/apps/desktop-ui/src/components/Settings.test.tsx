@@ -187,6 +187,7 @@ function state(): CommanderState {
     error: null,
     notice: null,
     activeView: null,
+    activeViewSession: 0,
     setQuery: vi.fn(),
     setSelectedIndex: vi.fn(),
     setActionsOpen: vi.fn(),

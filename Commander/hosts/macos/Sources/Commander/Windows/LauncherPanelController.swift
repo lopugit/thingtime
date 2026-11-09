@@ -4,9 +4,13 @@ import ApplicationServices
 private final class CommanderPanel: NSPanel {
   var usesCustomWindowResizeHandling = true {
     didSet {
-      if !usesCustomWindowResizeHandling { cancelResizeSession() }
+      if !usesCustomWindowResizeHandling {
+        cancelResizeSession()
+        releaseHoverResizeCursor()
+      }
     }
   }
+  private var hoverResizeCursor: NSCursor?
   private var resizeSession: (
     edges: CommanderResizeEdges,
     frame: NSRect,
@@ -28,9 +32,28 @@ private final class CommanderPanel: NSPanel {
   }
 
   override func sendEvent(_ event: NSEvent) {
+    // Resolve the current point after AppKit dispatches overlapping tracking
+    // areas. Entry/exit order is not guaranteed, and continued motion must also
+    // select the border cursor when a pinned panel is not the key window.
+    defer {
+      switch event.type {
+      case .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate:
+        updateHoverResizeCursor(at: event.locationInWindow)
+      default: break
+      }
+    }
+    if !isVisible {
+      switch event.type {
+      case .mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate:
+        // Queued tracking callbacks must not change another window's cursor
+        // after this panel has been hidden or closed.
+        return
+      default: break
+      }
+    }
     if resizeSession != nil {
       switch event.type {
-      case .leftMouseDragged, .cursorUpdate, .mouseEntered, .mouseExited,
+      case .leftMouseDragged, .mouseMoved, .cursorUpdate, .mouseEntered, .mouseExited,
            .appKitDefined, .systemDefined, .applicationDefined, .periodic, .flagsChanged:
         // Tracking and framework notifications can arrive between drag steps,
         // including after setFrame moves a tracking boundary. A modifier change
@@ -80,6 +103,31 @@ private final class CommanderPanel: NSPanel {
     super.sendEvent(event)
   }
 
+  private func updateHoverResizeCursor(at point: NSPoint) {
+    guard isVisible, usesCustomWindowResizeHandling, styleMask.contains(.resizable),
+          let content = contentView as? CommanderLauncherContentView else {
+      releaseHoverResizeCursor()
+      return
+    }
+    let localPoint = content.convert(point, from: nil)
+    let handle = content.resizeHandles.first { handle in
+      guard !handle.isHidden else { return false }
+      if let resizeSession { return handle.edges == resizeSession.edges }
+      return handle.frame.contains(localPoint)
+    }
+    guard let handle else {
+      releaseHoverResizeCursor()
+      return
+    }
+    hoverResizeCursor = handle.resizeCursor
+    handle.resizeCursor.set()
+  }
+
+  private func releaseHoverResizeCursor() {
+    if let hoverResizeCursor, NSCursor.current === hoverResizeCursor { NSCursor.arrow.set() }
+    hoverResizeCursor = nil
+  }
+
   override func performDrag(with event: NSEvent) {
     // The web UI's draggable regions use AppKit's drag loop. It must never
     // inherit an earlier edge-resize session.
@@ -89,6 +137,7 @@ private final class CommanderPanel: NSPanel {
 
   override func resignKey() {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.resignKey()
   }
 
@@ -99,11 +148,13 @@ private final class CommanderPanel: NSPanel {
 
   override func orderOut(_ sender: Any?) {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.orderOut(sender)
   }
 
   override func close() {
     cancelResizeSession()
+    releaseHoverResizeCursor()
     super.close()
   }
 }
@@ -187,6 +238,7 @@ final class LauncherPanelController: NSObject, NSWindowDelegate {
     // A nonactivating panel can be automatically hidden while AppKit still reports
     // it as visible. Commander owns dismissal through windowDidResignKey instead.
     panel.hidesOnDeactivate = false
+    panel.acceptsMouseMovedEvents = true
     panel.animationBehavior = .utilityWindow
     panel.minSize = LauncherWindowMode.standard.minimumSize
     panel.contentView = launcherContentView

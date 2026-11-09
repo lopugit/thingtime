@@ -5524,7 +5524,11 @@ halves.
       Slowly hover along each edge and corner, pause, then move between the border and nearby content: the resize
       cursor must remain stable throughout the same band that accepts a drag. Repeat after resizing and switching
       compact/default modes; text selection, header buttons and result actions must retain their normal cursors
-      and input. An endpoint-only automated drag does not establish hover-cursor stability.
+      and input. Keep a pinned launcher non-key and repeat. Verify WindowServer targets the launcher across the
+      transparent exterior half of each resize band, including rounded corners; AppKit hitTest alone does not prove
+      OS event targeting. Run Commander's loaded-WebKit WindowServer/motion regression, including disabled-band
+      removal and central text/link cursor restoration. An endpoint-only automated drag does not establish
+      physical hover-cursor stability.
       Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.
@@ -8489,6 +8493,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 ## Commander emoji paste recovery
 
+- [ ] Follow `Commander/docs/TESTING.md` for reopening Emoji & Symbols: every new opening starts with a blank, focused search, including shortcut reopen in a reused launcher; recents and skin tone persist.
 - [ ] Seed a disposable clipboard value, paste an emoji into TextEdit and a browser text field, and verify the emoji arrives before restoration. Repeat with a busy destination, rapid Return presses, and two Commander windows. Copy a new value during the paste and verify restoration never overwrites that new copy; check Paste and Keep a Copy separately.
 - [ ] Open Commander over a text editor, dismiss the root launcher with Escape, and immediately type: input must return to the original editor. Escape from Actions must only close Actions. Clicking another app, opening a result, or switching to Commander Settings must not reactivate an older destination. Repeat with a pinned launcher.
 

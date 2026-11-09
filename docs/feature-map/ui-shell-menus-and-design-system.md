@@ -324,11 +324,18 @@ links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
 owns the launcher's native edge/corner resize gesture. Passive cursor and tracking
 events must preserve that gesture; release, deliberate input and lifecycle changes
 end it. `CommanderLauncherContentView.swift` places eight native resize handles
-above WebKit; their bounded regions also drive panel hit testing so the hover
-cursor and drag target agree. Central content remains owned by WebKit.
+above WebKit; their bounded, minimally painted regions keep the transparent outer half in WindowServer's
+input surface as well as AppKit hit testing. Separate always-active movement tracking supports non-key pinned
+panels; panel motion dispatch selects the existing native handle cursor without rebuilding region geometry.
+Central content retains WebKit cursors, and disabling custom resizing hides both input and painted handles.
 `CommanderWebView.swift` supplies anchored frame geometry. Regression coverage is
 in `CommanderWebViewTests.swift`, with native hover/drag acceptance in
 `Commander/docs/TESTING.md`.
+
+The native launcher emits reopen and command shortcut events into its retained
+web view. `useCommander.ts` gives each command view opening a fresh session;
+`App.tsx` uses it to mount a new `EmojiPicker` with a blank search while retaining
+locally saved preferences. `useCommander.test.tsx` covers a same-batch reopen.
 
 The desktop launcher gear reuses `builtin:settings` / `open-settings` in
 `Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
