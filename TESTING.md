@@ -11404,7 +11404,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - For hosted activation, build the pinned Linux renderer image and verify its
   locked nonroot user is the real SDK session identity without sudo. Confirm the
   exact renderer SHA-256, no routes, denied outbound network, no Linux capabilities
-  and no new privileges before sending bytes. On a real snapshot clone, verify
+  and no new privileges before sending bytes. In disposable Linux, give a
+  nonroot test process ambient `CAP_DAC_OVERRIDE` and `CAP_SETPCAP`, verify it
+  can write a root-owned `0644` fixture, then run the production `setpriv`
+  prefix. Verify the same UID, all five capability sets zero, no new privileges,
+  and write access refused. On a real snapshot clone, verify
   private input ownership, exact JSON/PNG readback and a refused bad crop, with
   both workers deleted. Reject missing or wrong identity evidence before upload.
 - Reject malformed/oversized input, duplicate/ambiguous/missing references,

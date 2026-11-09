@@ -41,7 +41,7 @@ const workerIdentity = [
   'test -d /ms-playwright',
   'test ! -w /ms-playwright',
   'test "$(/usr/bin/grep -Ec "^(Uid|Gid):([[:space:]]+10001){4}$" /proc/self/status)" = 2',
-  'test "$(/usr/bin/grep -Ec "^Cap(Inh|Prm|Eff|Amb):[[:space:]]+0+$" /proc/self/status)" = 4',
+  'test "$(/usr/bin/grep -Ec "^Cap(Inh|Prm|Eff|Bnd|Amb):[[:space:]]+0+$" /proc/self/status)" = 5',
   '/usr/bin/grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/self/status'
 ].join('\n');
 const workerProbe = [workerIdentity,
@@ -64,7 +64,10 @@ const workerCommand = [workerIdentity,
 
 const workerInvocation = (script: string, timeoutMs: number, signal: AbortSignal) => ({
   cmd: '/usr/bin/setpriv',
-  args: ['--no-new-privs', '/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin',
+  // Vercel can start a nonroot image user with ambient capabilities. Clear
+  // them and the bounding set before exec, then verify all five sets above.
+  args: ['--no-new-privs', '--inh-caps=-all', '--ambient-caps=-all', '--bounding-set=-all',
+    '/usr/bin/env', '-i', 'PATH=/usr/local/bin:/usr/bin:/bin',
     'HOME=' + workerHome, 'TMPDIR=/tmp', 'PLAYWRIGHT_BROWSERS_PATH=/ms-playwright', '/bin/sh', '-ec', script],
   cwd: workerHome, signal, timeoutMs
 });

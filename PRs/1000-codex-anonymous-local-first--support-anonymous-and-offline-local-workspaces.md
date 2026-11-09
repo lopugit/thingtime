@@ -8,8 +8,15 @@ A failed worker update now falls back to the previous complete offline shell.
 Isolated Chromium recovered the exact cached document and verified the normal
 importer during a TCP outage. The hosted renderer uses a fixed non-root image
 identity and checks the verified session before accepting draft bytes. The
-combined build and checks passed. The live provider bootstrap failed its
-identity guard before creating a snapshot or running a render.
+combined build and checks passed. Provider diagnostics found ambient Linux
+capabilities on the non-root worker, so the probe and job now explicitly
+drop and check all five capability sets. The corrected Vercel snapshot
+passed a real render, invalid-crop refusal and independent cleanup readback.
+A fresh candidate with 30-day retention passed both jobs and replaced the
+superseded 24-hour test snapshot. Connected-host configuration and downloadable-file delivery remain open.
+The home-workspace fixture now isolates its workers and retains the generic
+authority refusal assertions. The workspace suite passed 915 tests with 110
+opt-in skips, plus five offline-shell passes.
 [Verification and limits](../artifacts/anonymous-release-2026-11-09/final-main/README.md#offline-shell-and-hosted-worker--10-november-2026).
 
 ## Installer follow-up — 2026-11-10

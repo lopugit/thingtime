@@ -9,7 +9,7 @@ import { bundleFromPlan } from '../utils/thingTransfer/browser';
 
 const selected = { kind: 'account', origin: 'https://home-facade.example', ownerId: 'owner', dataPlane: 'custom-' + 'a'.repeat(64) } as const;
 
-test('home facade uses normal library/import/export adapters without granting home remote authority', async () => {
+test('home facade uses normal library/import/export adapters without granting home remote authority', { timeout: 10_000 }, async () => {
  const original = { window: globalThis.window, indexedDB: globalThis.indexedDB, IDBKeyRange: globalThis.IDBKeyRange, fetch: globalThis.fetch };
  const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
  const target = new EventTarget(), nav = {onLine: false}; let requests = 0;
@@ -45,21 +45,36 @@ test('home facade uses normal library/import/export adapters without granting ho
   assert.equal((await worker.sync.status()).length,2);
   assert.equal((await worker.themes.status()).length,1);
   assert.equal(requests,0);
+  // The selected-plane read above and the home algorithm lane are outside
+  // this authority check. Retire both before waking the home theme sender.
+  accountWorkspaceWorker(selected).stop();
+  worker.algorithmWorker!.stop();
+  let themePasses=0,themeReads=0,genericPasses=0;
+  let completeThemePass!: () => void;
+  const themePassFinished = new Promise<void>(resolve => { completeThemePass = resolve; });
+  const syncThemes=worker.themes.sync.bind(worker.themes);
+  worker.themes.sync=async(...args)=>{
+   try {
+    const result = await syncThemes(...args);
+    themePasses++;
+    return result;
+   } finally { completeThemePass(); }
+  };
+  // This fixture uses the supported snapshot adapter. Streaming negotiation
+  // is covered by its transport suite and would issue an unrelated fetch.
+  delete worker.themeTransport.catalogue;
+  worker.themeTransport.snapshot=async()=>{themeReads++;return [];};
+  worker.themeTransport.selection=async()=>({themeId:null,version:'theme-selection-v1:'+'a'.repeat(64)});
+  worker.sync.sync=async()=>{genericPasses++;throw Error('Home must be selected before sending generic content');};
   nav.onLine=true;
   await assert.rejects(api.actions.run({}),/workspace|offline/i);
   await assert.rejects(worker.transport.read({id:note.id}),/workspace|offline/i);
   assert.equal(requests,0,'verified custom identity cannot send generic home requests');
-  let themePasses=0,genericPasses=0;
-  const syncThemes=worker.themes.sync.bind(worker.themes);
-  worker.themes.sync=async(...args)=>{themePasses++;return syncThemes(...args);};
-  worker.themeTransport.snapshot=async()=>[];
-  worker.themeTransport.selection=async()=>({themeId:null,version:'theme-selection-v1:'+'a'.repeat(64)});
-  worker.algorithmWorker!.transport.snapshot=async()=>[];
-  worker.algorithmWorker!.transport.selection=async()=>({algorithmId:null,version:'algorithm-selection-v1:'+'a'.repeat(64)});
-  worker.sync.sync=async()=>{genericPasses++;throw Error('Home must be selected before sending generic content');};
   worker.wake();
-  for(let n=0;n<50&&!themePasses;n++)await new Promise(resolve=>setTimeout(resolve,2));
+  await themePassFinished;
   assert.equal(themePasses,1,'dedicated home theme sender can run under the selected account fence');
+  assert.equal(themeReads,1,'dedicated home theme refresh can run under the selected account fence');
+  assert.equal((await worker.themes.status())[0].state,'pending','the theme waits for its unsent home folder receipt');
   assert.equal(genericPasses,0,'a theme wake cannot start the generic home sender');
   assert.equal(requests,0);
   worker.stop();

@@ -67,12 +67,43 @@ hosted adapter refuses safely. The emitted offline worker matches the tested
 module, and the rebuilt renderer hash matches the earlier real isolated SDK
 capture.
 
-The live Vercel bootstrap verified the exact ready image and a nonpersistent
-session with deny-all networking, no routes or ports, one vCPU, 2048 MiB and a
-120-second bootstrap deadline. The guest exited 1 during the fixed identity
+The initial live Vercel bootstrap verified the exact ready image and a
+nonpersistent session with deny-all networking, no routes or ports, one vCPU,
+2048 MiB and a 120-second bootstrap deadline. The guest exited 1 during the fixed identity
 guard without returning the proof hash or the failed predicate. It stopped
 before transferring draft bytes, creating a snapshot or running a render.
 Independent provider reads returned HTTP 404 for all three disposable
-bootstrap sessions, and the project snapshot inventory was empty. Hosted
-activation and artifact delivery through the connected MCP host remain
-unverified.
+bootstrap sessions, and the project snapshot inventory was empty at that
+checkpoint.
+
+A diagnostic showed that the provider's non-root process retained ambient
+Linux capabilities. The corrected adapter drops the inheritable, ambient and
+bounding sets before running either shell and checks all five sets plus the
+kernel's no-new-privileges flag. The disposable Linux regression verified
+that the same UID could write a protected fixture with the injected ambient
+capability, then lost that access after the production prefix dropped it.
+The corrected source passed the 55 connector tests, targeted lint and the
+zero-error TypeScript ratchet. The recompiled Vercel server passed output
+verification and the 17-contract smoke. Both the packaged renderer and
+offline worker match their previously tested bytes.
+
+The corrected real Vercel preflight passed. A restored deny-all session
+verified the exact non-root identity, empty capability sets and pinned
+runner before both jobs. Sandboxed Chromium returned the canonical editable
+JSON, three viewport PNGs and the card crop. The negative job refused an
+invalid crop. Independent provider reads returned HTTP 404 for the bootstrap
+and both render VMs. The team repeated both jobs on a fresh 30-day
+candidate, retained that verified snapshot and confirmed deletion of the
+superseded 24-hour snapshot. The sanitized receipt contains status and hashes.
+The activation descriptor stays private.
+[Provider receipt](hosted-provider-safe-evidence.json)
+
+The CI home-workspace test had left catalogue transports active when it
+went online. The corrected fixture stops the unrelated workers, waits for
+the permitted theme pass, and retains the no-network and generic authority
+assertions. The local workspace suite passed 915 tests with 110 opt-in
+skips. Its five offline-shell tests passed separately. The repository's
+configured `test:unit` command completed with exit status 0.
+
+Hosted configuration and a downloadable-file call through the connected
+MCP host remain open.

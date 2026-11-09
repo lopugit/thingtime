@@ -8,8 +8,9 @@ The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
 configuration. `plugin.ts` dispatches only this exact tool without account
 resolution; `hostedRender.server.ts` enforces the canonical in-bundle validator,
 distributed admission and nonpersistent deny-all worker lifecycle. The
-adapter checks the fixed non-root identity, privilege flags, clean work
-directory and runner hash before writing the private input. Probe, command
+adapter checks the fixed non-root identity, drops and verifies all five Linux
+capability sets, and checks the work directory and runner hash before writing
+the private input. Probe, command
 and file transfer stay on the same verified Session.
 Keep the HTTP resource and local stdio formats on the shared renderer contract in
 `MCP/src/renderContract.ts`. Run `test:chatgpt`, `test:api-capabilities`, the

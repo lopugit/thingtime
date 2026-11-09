@@ -1,0 +1,29 @@
+{
+  "providerPreflight": "passed",
+  "renderedFiles": 5,
+  "verifiedChecks": [
+    "native render",
+    "canonical JSON",
+    "3 viewport PNGs",
+    "card PNG",
+    "exact artifact hashes/dimensions and text",
+    "bad crop refusal",
+    "stop and delete both render sandboxes"
+  ],
+  "runnerSha256": "cef2879afcf223ab766a9e486492573f7f7931f0ab53ef19c6a8f62d5762d9df",
+  "isolated": true,
+  "browserSandbox": true,
+  "allThreeVMsIndependently404": true,
+  "acceptedImageRetained": true,
+  "verifiedSnapshotRetained": true,
+  "retentionDays": 30,
+  "snapshotExpiresAt": "2026-12-09T13:47:08.355Z",
+  "superseded24HourSnapshotDeleted": true,
+  "supersededSnapshotDeletionReadback": "deleted",
+  "lifecycle": {
+    "totalBootstrapAndDiagnosticVMs": 6,
+    "productionCandidateBootstrapVMs": 1,
+    "productionCandidateRenderVMs": 2
+  },
+  "activatedOnProduction": false
+}

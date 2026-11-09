@@ -452,9 +452,12 @@ control-plane calls. It checks the immutable snapshot still exists, then
 requires the exact snapshot, no port, nonpersistent VM and
 [deny-all network policy](https://vercel.com/docs/sandbox). On that same
 session it verifies the locked image user and exact renderer SHA-256 before
-sending caller bytes. The fixed command checks the private input file before
-opening it and runs non-root without Linux capabilities and with no new
-privileges. Chromium's sandbox stays enabled. It
+sending caller bytes. An image user can start with ambient Linux capabilities,
+so both the probe and the worker explicitly drop the inheritable, ambient and
+bounding sets before executing the shell. Each verifies that all five sets are
+empty, including the permitted and effective sets, and that the kernel denies
+new privileges. The worker checks the private input file before opening it.
+Chromium's sandbox stays enabled. It
 receives a minimal clean environment. No provider credentials, Docker daemon,
 host filesystem, private Thing, or application store enters the VM. A shared,
 fail-closed admission window permits at most two validation attempts per IP

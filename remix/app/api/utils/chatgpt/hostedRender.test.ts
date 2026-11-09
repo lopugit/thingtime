@@ -37,14 +37,15 @@ function worker(reply: () => Readable | null, options: {
   probe?: { exitCode: number; stdout: string }; onRun?: (signal: AbortSignal) => Promise<void>
 } = {}) {
   const events: string[] = [];
-  const calls: { content?: string; inputMode?: number; probe?: unknown; command?: unknown; cleanupSignal?: AbortSignal } = {};
+  type Invocation = { cmd: string; args: string[]; signal: AbortSignal };
+  const calls: { content?: string; inputMode?: number; probe?: Invocation; command?: Invocation; cleanupSignal?: AbortSignal } = {};
   const session = {
     sourceSnapshotId: config.snapshotId, networkPolicy: options.blocked ? 'allow-all' : 'deny-all',
     routes: [], timeout: 70_000, status: 'running', vcpus: 1, memory: 2048,
     async writeFiles(files: { content: Buffer; mode: number }[]) {
       events.push('write'); calls.content = files[0].content.toString(); calls.inputMode = files[0].mode;
     },
-    async runCommand(command: { signal: AbortSignal }) {
+    async runCommand(command: Invocation) {
       if (!calls.probe) {
         events.push('probe'); calls.probe = command;
         const probe = options.probe ?? { exitCode: 0, stdout: (options.rendererHash ?? config.rendererHash) + '\n' };
@@ -99,7 +100,14 @@ test('isolated render returns real JSON and PNG bytes once, after exact VM clean
   assert.doesNotMatch(JSON.stringify([fixture.calls.probe, fixture.calls.command]), /caller-content|authorization|token|sudo/i);
   assert.match(JSON.stringify(fixture.calls.probe), /10001:10001:thingtime-renderer/);
   assert.match(JSON.stringify(fixture.calls.probe), /sha256sum/);
-  assert.match(JSON.stringify(fixture.calls.command), /no-new-privs/);
+  for (const invocation of [fixture.calls.probe, fixture.calls.command]) {
+    assert.ok(invocation);
+    assert.equal(invocation.cmd, '/usr/bin/setpriv');
+    assert.deepEqual(invocation.args.slice(0, 6), [
+      '--no-new-privs', '--inh-caps=-all', '--ambient-caps=-all', '--bounding-set=-all', '/usr/bin/env', '-i'
+    ]);
+    assert.match(invocation.args.at(-1)!, /Cap\(Inh\|Prm\|Eff\|Bnd\|Amb\)/);
+  }
   assert.match(JSON.stringify(fixture.calls.command), /10001:10001:600/);
   assert.match(JSON.stringify(fixture.calls.command), /mkdir render-job\.lock/);
   assert.equal(JSON.parse(reply).id, 7);

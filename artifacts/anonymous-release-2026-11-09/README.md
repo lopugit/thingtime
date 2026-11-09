@@ -17,8 +17,11 @@ traces cannot establish which mechanism caused each earlier failure.
 
 The hosted adapter uses a fixed non-root image identity and checks the pinned
 session, privilege flags, work directory and renderer hash before writing draft
-bytes. The [combined verification](final-main/README.md) separates local
-checks, provider results and deployed host acceptance.
+bytes. Real provider preflight passed after the worker explicitly dropped
+ambient Linux capabilities. The restored snapshot produced editable JSON and
+four PNGs in sandboxed Chromium, refused an invalid crop and passed cleanup
+readback. [Provider receipt](final-main/hosted-provider-safe-evidence.json) ·
+[Combined verification](final-main/README.md)
 
 ## Scheduled activation integration
 
@@ -40,8 +43,8 @@ The canonical hosted `thingtime` MCP now contains an optional anonymous renderer
 adapter. It stays unavailable until a pinned, isolated provider snapshot passes
 the exact-origin preflight and is configured through the existing operator vault.
 Source tests cover effective sandbox policy, admission, cancellation, cleanup,
-canonical hashes, validated PNGs, diagnostics and account-tool refusals. A real
-provider snapshot and a file-returning call in the intended host remain unverified.
+canonical hashes, validated PNGs, diagnostics and account-tool refusals. This
+earlier checkpoint preceded the provider pass recorded above.
 
 The draft regression now supplies the browser/identity context used by incoming
 shares and verifies their explicit cloud scope (52 passed, nine opt-in skips).
@@ -103,10 +106,9 @@ network-none and read-only with its existing sandbox, seccomp and cleanup.
   The two controlled reproduction paths now have focused coverage.
 - Remaining identity/origin/data-plane/Character and media/provider/vault/native
   device acceptance matrix in `docs/local-workspaces.md`.
-- The current one hosted `thingtime` connection advertises 37 tools and no renderer.
-  Local SDK resources do not prove a downloadable artifact call from that host.
-  Activate/verify the canonical hosted adapter and its isolated worker boundary;
-  do not add another feature-specific MCP or bypass account-tool authentication.
+- Configure the verified snapshot for the exact intended origin and verify the
+  canonical hosted MCP advertises the renderer. Complete a call that returns
+  downloadable artifacts in the connected host and verify account-tool refusals.
 - Final-head CI, reachable preview functional acceptance, and authorized release
   plus installed-native verification. No production feature acceptance is claimed here.
 - Private lifecycle reporting still lacks the independent `agents.report` grant.

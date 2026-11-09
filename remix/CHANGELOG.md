@@ -150,7 +150,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   before simulating a transport outage in Builder acceptance. **Codex (AI)**
 
 - 2026-11-10 — Run hosted draft jobs as the renderer image's fixed non-root
-  identity and check the session and runner before receiving draft bytes.
+  identity. Drop and check all five Linux capability sets before receiving
+  draft bytes. The corrected restored snapshot passed real rendering,
+  invalid-crop refusal and cleanup in Vercel.
   [Verification](../artifacts/anonymous-release-2026-11-09/final-main/README.md).
   **Codex (AI)**
 
