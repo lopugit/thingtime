@@ -424,6 +424,7 @@ final class NativeDeferredUpload {
         if let unavailable = run.unavailableOriginals { result["unavailableOriginals"] = unavailable }
         if continuedRun?.sameRun(run) == true && executionLease?.continuedActive == true { result["continuation"] = "active" }
         if var activity = activity(for: run)?.snapshot() ?? run.activity {
+            if activePhotoRun?.sameRun(run) != true { activity.cloudPreparationFraction = nil }
             if ["waiting", "paused", "needs-review"].contains(stage) {
                 activity.phase = .waiting
                 activity.downloadFraction = nil
@@ -527,6 +528,7 @@ final class NativeDeferredUpload {
         live.deferAfterSystemInterruption()
         let observed = activity(for: live) ?? NativePhotoRunActivity(live.activity)
         observed.phase(.waiting, reason: .interrupted)
+        _ = observed.cloudPreparation(nil)
         observed.background(.waiting)
         live.activity = observed.snapshot()
         // Apple delivers expiration and its own cancellation through this
@@ -968,6 +970,7 @@ final class NativeDeferredUpload {
         defer { activePhotoRun = nil; currentFile = nil; originalsRemaining = nil }
         let activity = NativePhotoRunActivity(run.activity)
         photoActivity = (proposed, activity)
+        _ = activity.cloudPreparation(nil)
         activity.phase(.verifying)
         func checkpoint() throws {
             run.activity = activity.snapshot()
@@ -1002,6 +1005,10 @@ final class NativeDeferredUpload {
                 case .checkingOriginals:
                     self.reportContinuedWork(proposed, subtitle: "Checking Photos originals…")
                 case .publishing: self.reportContinuedWork(proposed, subtitle: "Verifying the saved cloud copy…")
+                case .waiting:
+                    if let fraction = snapshot.cloudPreparationFraction {
+                        self.reportContinuedWork(proposed, subtitle: "Downloading an iCloud original · \(Int(fraction * 100))%")
+                    }
                 default: break
                 }
             }
@@ -1023,20 +1030,74 @@ final class NativeDeferredUpload {
             _ = try check()
         }
         let grant = try check()
-        let download = conditions.control(for: authorization)?.reporting { fraction in
+        let control = conditions.control(for: authorization)
+        let download = control?.reporting { fraction in
             if activity.download(fraction) { announce(false) }
         }
-        let staging = NativeUploadPartStaging(scope: run.scope, grant: grant, photos: photos, store: parts, download: download)
+        var cloudWork: Task<Void, Never>?
+        var preparedCloud: PhotoLibraryReader.PreparedCloudOriginal?
+        var cloudFailure: Error?
+        defer {
+            cloudWork?.cancel()
+            _ = activity.cloudPreparation(nil)
+            if let preparedCloud { photos.releaseDeferredCloudOriginal(preparedCloud) }
+        }
+        func deferredOriginalsRemain() async throws -> Bool {
+            let pending = Task.detached { try photos.hasDeferredCloudOriginals(scope: photoScope, request: queue) }
+            return try await withTaskCancellationHandler(operation: { try await pending.value }, onCancel: { pending.cancel() })
+        }
+        func startCloudWork() async throws {
+            guard startWithSingleAsset, cloudWork == nil, preparedCloud == nil else { return }
+            let next = Task.detached { try photos.nextDeferredCloudOriginal(scope: photoScope, request: queue) }
+            guard let original = try await withTaskCancellationHandler(operation: { try await next.value }, onCancel: { next.cancel() }) else { return }
+            _ = try check()
+            cloudFailure = nil
+            let reporting = control?.reporting { fraction in
+                if activity.cloudPreparation(fraction) { announce(false) }
+            }
+            let read = Task.detached {
+                try photos.prepareDeferredCloudOriginal(scope: photoScope, resource: original, control: reporting,
+                    authorize: { try conditions.verify(authorization) })
+            }
+            cloudWork = Task { @MainActor in
+                var authorityError: Error?
+                let watchdog = Task {
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(15)); try await authorize() }
+                        catch {
+                            if !Task.isCancelled { authorityError = error; read.cancel() }
+                            return
+                        }
+                    }
+                }
+                defer {
+                    watchdog.cancel(); cloudWork = nil
+                    if activity.cloudPreparation(nil) { announce(false) }
+                }
+                do {
+                    let ready = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
+                    try Task.checkCancellation()
+                    try await authorize()
+                    preparedCloud = ready
+                } catch {
+                    if !Task.isCancelled { cloudFailure = authorityError ?? error }
+                }
+            }
+        }
         if run.retryCloudGaps, run.batch == nil {
             try await authorize()
-            let retry = Task.detached { try photos.retryUnavailableQueueOriginals(scope: photoScope, request: queue) }
-            try await withTaskCancellationHandler(operation: { try await retry.value }, onCancel: { retry.cancel() })
+            let retainedDeferred = startWithSingleAsset ? try await deferredOriginalsRemain() : false
+            if !retainedDeferred {
+                let retry = Task.detached { try photos.retryUnavailableQueueOriginals(scope: photoScope, request: queue) }
+                try await withTaskCancellationHandler(operation: { try await retry.value }, onCancel: { retry.cancel() })
+            }
             _ = try check()
             run.retryCloudGaps = false; try checkpoint()
         }
 
         while true {
             try await authorize()
+            if run.batch == nil { try await startCloudWork() }
             if run.batch == nil {
                 activity.phase(.indexing)
                 reportPhotoProgress(run)
@@ -1045,7 +1106,7 @@ final class NativeDeferredUpload {
                     run.captureId = UUID().uuidString.lowercased()
                     try checkpoint()
                 }
-                let id = run.captureId!
+                let id = run.captureId!, selectedDeferred = preparedCloud
                 let preparation = Task.detached {
                     if let sealed = try photos.status(scope: photoScope, id: id, allowCloudGaps: true, queueRequest: queue) {
                         return sealed
@@ -1055,7 +1116,8 @@ final class NativeDeferredUpload {
                     // the reviewed asset selection and receipts stay intact.
                     try photos.discard(scope: photoScope, capture: .init(id: id, generation: id, totalEntries: 0))
                     let capture = try photos.prepareCapture(scope: photoScope, id: id, generation: id, allowCloudGaps: true,
-                        download: download, queueRequest: queue, startWithSingleAsset: startWithSingleAsset, activity: { progress in
+                        download: startWithSingleAsset ? nil : download, queueRequest: queue, startWithSingleAsset: startWithSingleAsset,
+                        preparedDeferred: selectedDeferred, activity: { progress in
                             if activity.capture(progress) {
                                 if case .enumerating(let discovery) = progress { announce(discovery.inspected == 1 && discovery.latest != nil) }
                                 else { announce(false) }
@@ -1091,6 +1153,8 @@ final class NativeDeferredUpload {
                 try checkpoint()
             }
             guard let batch = run.batch, let id = run.captureId else { throw MobileFolderStore.Failure.invalid }
+            let staging = NativeUploadPartStaging(scope: run.scope, grant: grant, photos: photos, store: parts,
+                download: cloudWork == nil ? download : nil)
             let read = Task.detached { try photos.queueBatchEntries(scope: photoScope, request: queue, batchId: batch.id) }
             let originals = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
             originalsRemaining = batch.remainingKnown == false ? nil : Int64(batch.pending) + Int64(originals.count)
@@ -1139,13 +1203,20 @@ final class NativeDeferredUpload {
             try await withTaskCancellationHandler(operation: { try await finish.value }, onCancel: { finish.cancel() })
             _ = try check()
             run.captureId = nil; run.batch = nil
+            if let ready = preparedCloud, batch.assetKeys.contains(ready.assetKey) {
+                photos.releaseDeferredCloudOriginal(ready)
+                preparedCloud = nil
+            }
             let finished = batch.remainingKnown != false && batch.assetKeys.isEmpty && batch.pending == 0
             if finished {
-                run.retryAt = Date(timeIntervalSinceNow: 300); run.retryCloudGaps = batch.unavailable > 0
-                run.stage = batch.unavailable == 0 ? "complete" : "waiting"
-                activity.phase(batch.unavailable == 0 ? .complete : .waiting)
-                if activity.snapshot().backgroundRequest == .active {
-                    activity.background(batch.unavailable == 0 ? .complete : .waiting)
+                let retainedDeferred = startWithSingleAsset ? try await deferredOriginalsRemain() : false
+                let complete = batch.unavailable == 0 && !retainedDeferred
+                run.retryAt = Date(timeIntervalSinceNow: 300)
+                run.retryCloudGaps = !complete
+                run.stage = complete ? "complete" : "waiting"
+                activity.phase(complete ? .complete : .waiting, reason: cloudFailure.flatMap(NativePhotoRunActivity.reason(for:)))
+                if activity.snapshot().backgroundRequest == .active && (complete || cloudWork == nil && preparedCloud == nil) {
+                    activity.background(complete ? .complete : .waiting)
                 }
             } else {
                 run.stage = "preparing"
@@ -1156,7 +1227,22 @@ final class NativeDeferredUpload {
             // consumed temporary index generation and keep the next cursor.
             let cleanup = Task.detached { try? photos.discard(scope: photoScope, capture: .init(id: id, generation: id, totalEntries: 0)) }
             await cleanup.value
-            if finished { return }
+            if finished {
+                if let cloudWork {
+                    await withTaskCancellationHandler(operation: { await cloudWork.value }, onCancel: { cloudWork.cancel() })
+                }
+                try Task.checkCancellation()
+                if preparedCloud != nil {
+                    run.retryAt = .distantPast; run.retryCloudGaps = false; run.stage = "ready"
+                    try checkpoint()
+                    continue
+                }
+                if let cloudFailure {
+                    activity.phase(.waiting, reason: NativePhotoRunActivity.reason(for: cloudFailure))
+                    try checkpoint(); reportPhotoProgress(run)
+                }
+                return
+            }
         }
     }
 

@@ -57,6 +57,7 @@ struct OrderedPhotoCheckpoint: Codable {
     var undated = 0
     var indexed = PhotoLibraryReader.IndexedLibrary()
     var unavailable = 0
+    var passID: UUID? = UUID()
 }
 
 protocol OrderedPhotoInventory: AnyObject {
@@ -180,6 +181,19 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     private var queue: (scope: Scope, value: PhotoBackupQueue)?
     private let queueDirectory: URL?
     private var membership: (scope: Scope, revision: String?, resources: [String: PhotoResource])?
+    /// A verified network read remains pinned while the same asset group is
+    /// staged and published. Its directory is independent of the regular cache.
+    public final class PreparedCloudOriginal: @unchecked Sendable {
+        fileprivate let scope: Scope
+        fileprivate let resource: PhotoResource
+        fileprivate let directory: URL
+        fileprivate init(scope: Scope, resource: PhotoResource, directory: URL) {
+            self.scope = scope; self.resource = resource; self.directory = directory
+        }
+        deinit { try? FileManager.default.removeItem(at: directory) }
+        public var assetKey: String { PhotoLibraryReader.hash(Data(resource.asset.utf8)) }
+    }
+    private var prefetched: PreparedCloudOriginal?
     private var cached: (scope: Scope, resource: PhotoResource, entry: MobileFolderReader.Entry, native: MobileFolderReader.Entry, bookmark: Data)?
     public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
                 queueDirectory: URL? = nil) {
@@ -315,6 +329,14 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         }
         _ = try requireClient()
         clear()
+        if let prefetched, prefetched.scope == scope, prefetched.resource == resource {
+            let bookmark = try FolderBookmark.create(prefetched.directory)
+            let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
+            try require(); try provider.validate(resource)
+            let entry = try project(native, resource: resource)
+            cached = (scope, resource, entry, native, bookmark)
+            return (entry, native, bookmark)
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]); directory = root
         do {
@@ -441,12 +463,15 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false,
-                               startWithSingleAsset: Bool = false, activity: (CaptureProgress) -> Void = { _ in }) throws -> (Snapshot, PhotoBackupQueue.Work) {
+                               startWithSingleAsset: Bool = false, preparedDeferred: PhotoResource? = nil,
+                               activity: (CaptureProgress) -> Void = { _ in }) throws -> (Snapshot, PhotoBackupQueue.Work) {
         let work: PhotoBackupQueue.Work
         let indexed: IndexedLibrary
         if let ordered = provider as? any OrderedPhotoResourceProvider,
            try store.usesOrderedSelection(preferred: startWithSingleAsset) {
-            work = try store.selectOrdered(provider: ordered, replaceStale: replaceStale) { activity(.enumerating($0)) }
+            work = try store.selectOrdered(provider: ordered, replaceStale: replaceStale, preparedDeferred: preparedDeferred) {
+                activity(.enumerating($0))
+            }
             indexed = work.selection.orderedCursor?.indexed ?? .init()
         } else {
             let library = try snapshot(reuseForQueue: true, activity: activity)
@@ -483,11 +508,57 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         try require()
         let store = try queueStore(scope: scope, request: request)
-        if try store.mustRecheckTerminal(batchId) {
+        if try store.shouldLoadOrderedAssets(batchId) {
             let (_, work) = try batchSnapshot(scope: scope, store: store)
             guard work.selection.id == batchId else { throw Failure.changed }
+            try store.finish(batchId, orderedAssets: work.assets)
+        } else {
+            try store.finish(batchId)
         }
-        try store.finish(batchId)
+    }
+
+    public func hasDeferredCloudOriginals(scope: Scope, request: PhotoBackupQueueRequest) throws -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        return try queueStore(scope: scope, request: request).hasDeferredOriginals()
+    }
+
+    public func nextDeferredCloudOriginal(scope: Scope, request: PhotoBackupQueueRequest, now: Date = Date()) throws -> PhotoResource? {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        guard let ordered = provider as? any OrderedPhotoResourceProvider else { return nil }
+        return try queueStore(scope: scope, request: request).nextDeferred(provider: ordered, now: now)
+    }
+
+    public func prepareDeferredCloudOriginal(scope: Scope, resource: PhotoResource,
+                                             control: PhotoOriginalDownloadControl?,
+                                             authorize: () throws -> Void = {}) throws -> PreparedCloudOriginal {
+        // Do not hold the ordinary inventory/cache lock while PhotoKit reads
+        // iCloud. The caller owns one scoped preparation task and its lifetime.
+        try require(); try authorize(); try control?.authorize(); try provider.validate(resource)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-cloud-" + UUID().uuidString, isDirectory: true)
+        var attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        #if os(iOS)
+        attributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
+        #endif
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: attributes)
+        do {
+            let prepared = PreparedCloudOriginal(scope: scope, resource: resource, directory: directory)
+            let original = directory.appendingPathComponent("original")
+            if let control { try provider.download(resource, to: original, control: control) }
+            else { try provider.write(resource, to: original) }
+            try require(); try authorize(); try control?.authorize(); try provider.validate(resource)
+            return prepared
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    public func releaseDeferredCloudOriginal(_ prepared: PreparedCloudOriginal) {
+        lock.lock(); defer { lock.unlock() }
+        guard prefetched === prepared else { return }
+        clear(); prefetched = nil
     }
 
     public func capture(scope: Scope, id: String) throws -> MobileFolderInventory.Capture {
@@ -505,6 +576,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     public func prepareCapture(scope: Scope, id: String, generation: String, allowCloudGaps: Bool,
                                download: PhotoOriginalDownloadControl? = nil, maximumCloudDownloads: Int? = nil,
                                queueRequest: PhotoBackupQueueRequest? = nil, startWithSingleAsset: Bool = false,
+                               preparedDeferred: PreparedCloudOriginal? = nil,
                                progress: (Int, Int) -> Void = { _, _ in }, activity: (CaptureProgress) -> Void = { _ in },
                                authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
@@ -512,9 +584,15 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         let client = try requireClient(), generation = generation.lowercased()
         try authorize()
         guard queueRequest == nil || allowCloudGaps else { throw Failure.changed }
+        if let preparedDeferred {
+            guard queueRequest != nil, preparedDeferred.scope == scope else { throw Failure.changed }
+            try provider.validate(preparedDeferred.resource)
+            prefetched = preparedDeferred
+        }
         let batchStore = try queueRequest.map { try queueStore(scope: scope, request: $0) }
         let batch = try batchStore.map {
-            try batchSnapshot(scope: scope, store: $0, replaceStale: true, startWithSingleAsset: startWithSingleAsset, activity: activity)
+            try batchSnapshot(scope: scope, store: $0, replaceStale: true, startWithSingleAsset: startWithSingleAsset,
+                              preparedDeferred: preparedDeferred?.resource, activity: activity)
         }
         let start = try batch?.0 ?? snapshot()
         activity(.indexed(start.indexed))
@@ -547,7 +625,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                     skipped += gaps.count
                     let eligible = resources.filter { !retainedGaps.contains($0.path) }
                     let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
-                            if batch == nil, let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
+                            if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
@@ -872,7 +950,7 @@ public final class SystemPhotoResources: PhotoResourceProvider, OrderedPhotoReso
             }
             if !isDateBoundary(dated, position.dated) || !isDateBoundary(undated, position.undated) {
                 saved = .init(libraryToken: nil, dated: position.dated, undated: position.undated,
-                              indexed: position.indexed, unavailable: position.unavailable)
+                              indexed: position.indexed, unavailable: position.unavailable, passID: position.passID)
             }
             return saved
         }
@@ -923,7 +1001,7 @@ public final class SystemPhotoResources: PhotoResourceProvider, OrderedPhotoReso
         datedOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false), modified]
         undatedOptions.sortDescriptors = [modified]
         let dated = PHAsset.fetchAssets(with: datedOptions), undated = PHAsset.fetchAssets(with: undatedOptions)
-        let checkpoint: OrderedPhotoCheckpoint
+        var checkpoint: OrderedPhotoCheckpoint
         if let resuming, let token, let data = resuming.libraryToken,
            (try? NSKeyedUnarchiver.unarchivedObject(ofClass: PHPersistentChangeToken.self, from: data)) == token,
            (0...dated.count).contains(resuming.dated), (0...undated.count).contains(resuming.undated),
@@ -934,6 +1012,7 @@ public final class SystemPhotoResources: PhotoResourceProvider, OrderedPhotoReso
         } else {
             checkpoint = .init(libraryToken: token.flatMap { try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true) })
         }
+        if checkpoint.passID == nil { checkpoint.passID = UUID() }
         let inventory = DateOrderedInventory(provider: self, dated: dated, undated: undated, stamp: stamp, access: access,
                                              token: token, checkpoint: checkpoint)
         guard try inventory.isCurrent() else { throw PhotoLibraryReader.Failure.changed }

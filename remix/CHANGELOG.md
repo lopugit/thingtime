@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Continue date-ordered iPhone Photos backup while an iCloud
+  original downloads. Retain deferred originals across interruptions and show
+  measured iCloud retrieval alongside the active upload stage. **Codex (AI)**
+
 - 2026-11-11: Keep scoped file-sync reservations out of browser-session draft
   cleanup. A separate browser sign-out no longer interrupts a still-authorized
   native upload. Explicit cancellation and expiry still apply.

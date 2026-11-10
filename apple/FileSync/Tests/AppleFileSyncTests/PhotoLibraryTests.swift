@@ -10,6 +10,7 @@ private class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     var membershipRevision: UInt64?
     var attempts: [String] = []
     var onWrite: (() -> Void)?
+    var onDownload: ((PhotoOriginalDownloadControl) throws -> Void)?
     func access() -> String { permission }
     func membershipStamp() -> UInt64? { membershipRevision }
     func inventory() throws -> [PhotoResource] {
@@ -29,6 +30,7 @@ private class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
         try validate(resource); try control.authorize()
         guard let original = iCloud[resource.path] else { throw PhotoLibraryReader.Failure.cloudOriginal }
         downloads += 1
+        try onDownload?(control)
         try original.write(to: url)
         control.progress(1)
     }
@@ -410,6 +412,179 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertEqual(try restarted.queueBatchEntries(scope: scope, request: request, batchId: changed.id).first?.path, later.path)
         XCTAssertEqual(provider.attempts.filter { $0 == newest.path }.count, 1)
         XCTAssertEqual(provider.inventoryCalls, 0)
+    }
+
+    func testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches() async throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        let cloudBytes = Data([9, 6, 3])
+        let cloud = provider.add("cloud-newest", bytes: cloudBytes, captured: 90, kind: "photo")
+        provider.iCloud[cloud.path] = provider.bytes.removeValue(forKey: cloud.path)
+        let local = (0..<9).map { provider.add("local-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
+        let owner = try FileSyncOwnerScope(ownerId: "ordered-cloud", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ordered-cloud-queue-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let started = DispatchSemaphore(value: 0), allowFinish = DispatchSemaphore(value: 0)
+        provider.onDownload = { control in
+            control.progress(0.01)
+            started.signal()
+            guard allowFinish.wait(timeout: .now() + 15) == .success else { throw PhotoLibraryReader.Failure.readFailed }
+            try control.authorize()
+        }
+
+        func capture(_ reader: PhotoLibraryReader, prepared: PhotoLibraryReader.PreparedCloudOriginal? = nil) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let capture = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true, queueRequest: request,
+                startWithSingleAsset: true, preparedDeferred: prepared)
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: capture).photoQueue)
+        }
+
+        let initial = try makeReader(provider, queueDirectory: directory)
+        let firstAttempt = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertNil(try initial.nextDeferredCloudOriginal(scope: scope, request: request, now: firstAttempt))
+        let deferred = try capture(initial)
+        XCTAssertEqual(deferred.unavailable, 1)
+        XCTAssertEqual(deferred.remainingKnown, false)
+        XCTAssertTrue(try initial.queueBatchEntries(scope: scope, request: request, batchId: deferred.id).isEmpty)
+        try initial.finishQueueBatch(scope: scope, request: request, batchId: deferred.id)
+        XCTAssertEqual(try initial.nextDeferredCloudOriginal(scope: scope, request: request, now: firstAttempt), cloud)
+
+        let reopened = try makeReader(provider, queueDirectory: directory)
+        XCTAssertTrue(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+        XCTAssertNil(try reopened.nextDeferredCloudOriginal(scope: scope, request: request, now: firstAttempt.addingTimeInterval(299)))
+        let retry = firstAttempt.addingTimeInterval(300)
+        let candidate = try XCTUnwrap(reopened.nextDeferredCloudOriginal(scope: scope, request: request, now: retry))
+        XCTAssertEqual(candidate, cloud)
+        XCTAssertNil(try reopened.nextDeferredCloudOriginal(scope: scope, request: request, now: retry))
+        let read = Task.detached {
+            try reopened.prepareDeferredCloudOriginal(scope: scope, resource: candidate,
+                control: .init(authorize: { try Task.checkCancellation() }))
+        }
+        defer { allowFinish.signal(); read.cancel() }
+        let fetching = await Task.detached { started.wait(timeout: .now() + 5) == .success }.value
+        XCTAssertTrue(fetching)
+        var readyPaths: [String] = []
+        for count in [4, 4, 1] {
+            let ready = try capture(reopened)
+            let entries = try reopened.queueBatchEntries(scope: scope, request: request, batchId: ready.id)
+            XCTAssertEqual(entries.count, count)
+            readyPaths.append(contentsOf: entries.map(\.path))
+            try reopened.finishQueueBatch(scope: scope, request: request, batchId: ready.id)
+        }
+        XCTAssertEqual(readyPaths, local.reversed().map(\.path))
+        let incomplete = try capture(reopened)
+        XCTAssertTrue(incomplete.assetKeys.isEmpty)
+        XCTAssertEqual(incomplete.unavailable, 1)
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: incomplete.id)
+
+        allowFinish.signal()
+        let prepared = try await read.value
+        let recovered = try capture(reopened, prepared: prepared)
+        let original = try XCTUnwrap(reopened.queueBatchEntries(scope: scope, request: request, batchId: recovered.id).first)
+        XCTAssertEqual(original.path, cloud.path)
+        let part = try reopened.read(scope: scope, path: original.path, version: original.version, offset: 0, length: cloudBytes.count)
+        XCTAssertEqual(Data(base64Encoded: part.data), cloudBytes)
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: recovered.id)
+        reopened.releaseDeferredCloudOriginal(prepared)
+        let complete = try capture(reopened)
+        XCTAssertTrue(complete.assetKeys.isEmpty)
+        XCTAssertEqual(complete.unavailable, 0)
+        XCTAssertFalse(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+        XCTAssertEqual(provider.downloads, 1)
+    }
+
+    func testDeferredCompanionsGetATurnAndLocalReprobeDoesNotUseNetwork() throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        let newest = provider.add("live", bytes: Data([1]), captured: 90)
+        let companion = provider.add("live", index: 1, bytes: Data([2]), captured: 90)
+        let older = provider.add("older", bytes: Data([3]), captured: 80)
+        for resource in [newest, companion, older] { provider.iCloud[resource.path] = provider.bytes.removeValue(forKey: resource.path) }
+        let owner = try FileSyncOwnerScope(ownerId: "deferred-companions", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("deferred-companions-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let reader = try makeReader(provider, queueDirectory: directory)
+
+        func capture(_ reader: PhotoLibraryReader, prepared: PhotoLibraryReader.PreparedCloudOriginal? = nil) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let capture = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true,
+                queueRequest: request, startWithSingleAsset: true, preparedDeferred: prepared)
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: capture).photoQueue)
+        }
+
+        for _ in 0..<2 {
+            let batch = try capture(reader)
+            try reader.finishQueueBatch(scope: scope, request: request, batchId: batch.id)
+        }
+        let first = Date(timeIntervalSince1970: 1_800_000_000)
+        let firstCandidate = try XCTUnwrap(reader.nextDeferredCloudOriginal(scope: scope, request: request, now: first))
+        XCTAssertTrue([newest, companion].contains(firstCandidate))
+
+        let reopened = try makeReader(provider, queueDirectory: directory)
+        let second = try XCTUnwrap(reopened.nextDeferredCloudOriginal(scope: scope, request: request, now: first.addingTimeInterval(300)))
+        XCTAssertEqual(second, firstCandidate == newest ? companion : newest)
+        let third = try XCTUnwrap(reopened.nextDeferredCloudOriginal(scope: scope, request: request, now: first.addingTimeInterval(600)))
+        XCTAssertEqual(third, older)
+        provider.bytes[older.path] = provider.iCloud[older.path]
+        let local = try reopened.prepareDeferredCloudOriginal(scope: scope, resource: third, control: nil)
+        let resolved = try capture(reopened, prepared: local)
+        XCTAssertEqual(try reopened.queueBatchEntries(scope: scope, request: request, batchId: resolved.id).map(\.path), [older.path])
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: resolved.id)
+        reopened.releaseDeferredCloudOriginal(local)
+        XCTAssertEqual(provider.downloads, 0)
+        XCTAssertTrue(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+        XCTAssertEqual(try capture(reopened).unavailable, 2)
+    }
+
+    func testDiscardedSelectionWithOrphanedDeferredRecordDoesNotBlockLocalBackup() throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        let stale = provider.add("removed-cloud", bytes: Data([1]), captured: 90)
+        provider.iCloud[stale.path] = provider.bytes.removeValue(forKey: stale.path)
+        let local = provider.add("local", bytes: Data([2]), captured: 80)
+        let owner = try FileSyncOwnerScope(ownerId: "orphaned-cloud", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("orphaned-cloud-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let reader = try makeReader(provider, queueDirectory: directory)
+
+        func capture(_ reader: PhotoLibraryReader) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let capture = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true, queueRequest: request,
+                startWithSingleAsset: true)
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: capture).photoQueue)
+        }
+
+        let gap = try capture(reader)
+        let files = FileManager.default
+        let namespace = try XCTUnwrap(files.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
+        let epoch = namespace.appendingPathComponent(request.epoch.uuidString.lowercased())
+        let selectionFile = epoch.appendingPathComponent("current.json")
+        let selection = try Data(contentsOf: selectionFile)
+        try reader.finishQueueBatch(scope: scope, request: request, batchId: gap.id)
+        // Retain only what would exist after the deferred write but before the
+        // attempt, acknowledgement and cursor writes.
+        for path in ["attempts", "completed.json", "ordered-cursor.json"] {
+            try files.removeItem(at: epoch.appendingPathComponent(path))
+        }
+        try selection.write(to: selectionFile)
+        provider.records.removeAll { $0 == stale }
+        provider.membershipRevision = 10
+
+        let reopened = try makeReader(provider, queueDirectory: directory)
+        XCTAssertNil(try reopened.nextDeferredCloudOriginal(scope: scope, request: request))
+        let ready = try capture(reopened)
+        XCTAssertEqual(try reopened.queueBatchEntries(scope: scope, request: request, batchId: ready.id).map(\.path), [local.path])
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: ready.id)
+        XCTAssertTrue(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+        XCTAssertNil(try reopened.nextDeferredCloudOriginal(scope: scope, request: request))
+        XCTAssertFalse(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+        XCTAssertEqual(try capture(reopened).unavailable, 0)
     }
 
     func testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen() throws {
