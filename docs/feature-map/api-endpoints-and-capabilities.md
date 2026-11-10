@@ -138,12 +138,13 @@ Run `test:mongodb-connections`,
 `test:api-capabilities` and `scripts/mongodb-connections-acceptance.mjs`; see
 [connection inventory](../mongodb-connections.md).
 
-Private task reporting publishes `api.agent-reporting` 1.0.0 on
+Private task reporting publishes `api.agent-reporting` 1.1.0 on
 `POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
-the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
-and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
-publishes `api.chatgpt-oauth-authorize` 1.2.0 and `chatgpt.oauth` 1.11.0 for
-the issuer-bound Codex CIMD and its exact ephemeral loopback callback.
+the Nitro route map. Version 1.1.0 can reconcile an already saved coordination
+post with the same receipt and payload after moderation release, without
+writing the post again. The ChatGPT MCP surface publishes `api.chatgpt-mcp`
+2.2.0 and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
+publishes `api.chatgpt-oauth-authorize` 1.3.0 and `chatgpt.oauth` 1.12.0.
 The reporting tools
 negotiate reporting, Characters and overview at the connected account's exact
 origin, and require `agents.report` independently of `things`. Run
