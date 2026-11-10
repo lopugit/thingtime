@@ -8,11 +8,17 @@
 	<array>
 		<string>webcredentials:thingtime.com</string>
 	</array>
+	<key>com.apple.developer.authentication-services.autofill-credential-provider</key>
+	<true/>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>$(THINGTIME_WIDGET_GROUP)</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)</string>
 	</array>
 </dict>
 </plist>

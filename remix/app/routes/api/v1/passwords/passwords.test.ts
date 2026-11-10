@@ -128,6 +128,12 @@ test('title search and cursor reach the owner-scoped list without revealing valu
   assert.deepEqual((await response.json()).entries, []);
 });
 
+test('native setup owner verification uses the existing authenticated metadata GET contract', async () => {
+  const response = await createPasswordHandler(defaults)({ request: new Request('https://thingtime.example/api/v1/passwords') });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, ownerId: 'owner', configured: true, entries: [], nextCursor: null });
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+});
 
 test('revocation during icon metadata load withholds the entire private list', async () => {
   let checks = 0;

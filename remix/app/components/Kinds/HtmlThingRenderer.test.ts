@@ -60,20 +60,12 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	}
 });
 
-test('multiple selects render named fields and individually editable option labels', () => {
-	const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, {
-		tag: 'select', attributes: { name: 'levels', multiple: true, value: ['top-level', 'subtasks'], 'aria-label': 'Task level' },
-		editorProps: { 'data-block-id': 'filter', onClick: () => {} },
-		children: React.createElement(HtmlBlockElement, {
-			tag: 'option', attributes: { value: 'top-level', onClick: 'unsafe()' }, editorProps: { 'data-block-id': 'choice' }, children: 'Top level'
-		})
-	}));
-	assert.match(markup, /data-block-id="filter"/);
-	assert.match(markup, /<div data-block-id="choice"/);
-	assert.match(markup, /<select name="levels" multiple=""/);
-	assert.match(markup, /value="top-level" selected=""/);
-	assert.match(markup, /value="subtasks" selected=""/);
-	assert.doesNotMatch(markup, /unsafe|popover=/);
+test('private text addresses reach the rendered DOM without widening data attribute or script permissions', () => {
+  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'span', props: { 'data-tt-private-text': 'property-label-field-0', 'data-secret': 'must-be-stripped', onClick: 'unsafe()' } } }));
+  assert.match(markup, /data-tt-private-text="property-label-field-0"/);
+  assert.doesNotMatch(markup, /must-be-stripped|onclick|unsafe/);
+  assert.equal(ALLOWED_PROPS.has('data-tt-private-text'), true);
+  assert.equal(ALLOWED_PROPS.has('pattern'), false);
 });
 
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {

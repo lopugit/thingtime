@@ -22,6 +22,7 @@ struct ThingtimeWebView: View {
     @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
     @Environment(\.scenePhase) private var scenePhase
+    @State private var authenticatorSetup: AuthenticatorSetupDelivery?
     @State private var widgetPath: String?
     @State private var lidarRequest: UUID?
     @State private var invalidScanLink = false
@@ -30,6 +31,12 @@ struct ThingtimeWebView: View {
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
     @State private var deploymentsLoadState = DeploymentsLoadState.idle
+    @State private var destinationRequestID = UUID()
+    @State private var loadedDestination: ThingtimeWebDestination.Destination?
+    @State private var pendingDestination: ThingtimeWebDestination.Destination?
+    @State private var failedDestination: ThingtimeWebDestination.Destination?
+
+    private static let destinationSwitchError = "Could not switch destinations. Unlock this device, then retry. Your current destination is still open."
 
     private var staticDestinations: [ThingtimeWebDestination.Destination] {
         ThingtimeWebDestination.availableDestinations()
@@ -48,8 +55,17 @@ struct ThingtimeWebView: View {
         }
     }
 
+    private var pickerStaticDestinations: [ThingtimeWebDestination.Destination] {
+        guard let loadedDestination, !destinations.contains(where: { $0.id == loadedDestination.id }) else {
+            return staticDestinations
+        }
+        return staticDestinations + [loadedDestination]
+    }
+
     private var selectedDestination: ThingtimeWebDestination.Destination {
-        destinations.first(where: { $0.id == selectedDestinationID })
+        pendingDestination
+            ?? destinations.first(where: { $0.id == selectedDestinationID })
+            ?? (loadedDestination?.id == selectedDestinationID ? loadedDestination : nil)
             ?? destinations.first(where: { $0.id == ThingtimeWebDestination.defaultDestinationID })
             ?? ThingtimeWebDestination.production
     }
@@ -59,21 +75,14 @@ struct ThingtimeWebView: View {
             let drawerWidth = min(proxy.size.width - 48, 360)
 
             ZStack(alignment: .leading) {
-                VStack(spacing: 0) {
-                    if let pendingShare {
-                        Button {
-                            widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: pendingShare)?.absoluteString
-                            self.pendingShare = nil
-                        } label: {
-                            Label("Continue shared draft", systemImage: "square.and.pencil")
-                                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .background(.regularMaterial)
-                        .accessibilityHint("Opens your unfinished share in the post composer")
-                    }
-                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, lidarRequest: $lidarRequest)
-                        .ignoresSafeArea(.container, edges: [.bottom])
-                }
+                WebView(
+                    url: selectedDestination.url,
+                    widgetPath: $widgetPath,
+                    authenticatorSetup: $authenticatorSetup,
+                    destinationRequestID: destinationRequestID,
+                    onDestinationResult: destinationResult
+                )
+                .ignoresSafeArea(.container, edges: [.bottom])
 
                 if isDestinationPickerOpen {
                     Color.black.opacity(0.2)
@@ -85,7 +94,7 @@ struct ThingtimeWebView: View {
 
                 DestinationPickerDrawer(
                     deploymentSections: deploymentSections,
-                    staticDestinations: staticDestinations,
+                    staticDestinations: pickerStaticDestinations,
                     selectedDestinationID: selectedDestination.id,
                     deploymentsLoadState: deploymentsLoadState,
                     safeAreaInsets: proxy.safeAreaInsets,
@@ -94,7 +103,8 @@ struct ThingtimeWebView: View {
                     onClose: closeDestinationPicker,
                     onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
                     onMail: { closeDestinationPicker(); widgetPath = "/mail" },
-                    onScan: { closeDestinationPicker(); lidarRequest = UUID() }
+                    destinationSwitchError: failedDestination == nil ? nil : Self.destinationSwitchError,
+                    onRetryDestination: retryDestination
                 )
                 .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
@@ -114,16 +124,11 @@ struct ThingtimeWebView: View {
                 }
             }
             .onOpenURL { url in
-                if url.scheme == "thingtime", url.host == "scan" {
-                    if LiDARLaunchRoute.accepts(url, selectedOrigin: selectedDestination.url) {
-                        closeDestinationPicker(); lidarRequest = UUID()
-                    } else { invalidScanLink = true }
+                if ["otpauth", "otpauth-migration"].contains(url.scheme?.lowercased() ?? "") {
+                    // Validation and warm-delivery conflict handling live in the
+                    // native inbox. Never reinterpret setup data as a route.
+                    authenticatorSetup = AuthenticatorSetupDelivery(url: url)
                 } else { widgetPath = WidgetRoute.path(for: url) }
-            }
-            .alert("Scanner destination does not match", isPresented: $invalidScanLink) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Select the same Thingtime destination in the native drawer, then open the scanner again.")
             }
             .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction(); refreshPendingShare() } }
@@ -175,7 +180,9 @@ struct ThingtimeWebView: View {
             hasExplicitSelection: hasExplicitDestinationSelection,
             destinations: staticDestinations
         )
-        selectedDestinationID = startupSelection.selectedDestinationID
+        if startupSelection.selectedDestinationID != selectedDestinationID {
+            pendingDestination = staticDestinations.first(where: { $0.id == startupSelection.selectedDestinationID })
+        }
         lastConfiguredDestinationID = startupSelection.lastConfiguredDestinationID
         ensureSelectedDestinationIsAvailable()
     }
@@ -187,7 +194,9 @@ struct ThingtimeWebView: View {
             return
         }
 
-        selectedDestinationID = resolvedDestination.id
+        // Keep persisted selection tied to the accepted native root. A fallback
+        // caused by a refreshed deployment list goes through the same clear gate.
+        if pendingDestination == nil { pendingDestination = resolvedDestination }
     }
 
     private func openDestinationPicker() {
@@ -207,9 +216,38 @@ struct ThingtimeWebView: View {
     }
 
     private func select(_ destination: ThingtimeWebDestination.Destination) {
-        selectedDestinationID = destination.id
+        destinationRequestID = UUID()
+        failedDestination = nil
+        pendingDestination = loadedDestination?.url == destination.url ? nil : destination
+        if pendingDestination == nil { selectedDestinationID = destination.id }
         hasExplicitDestinationSelection = true
         closeDestinationPicker()
+    }
+
+    private func retryDestination() {
+        guard let destination = failedDestination else { return }
+        select(destination)
+    }
+
+    private func destinationResult(_ attemptedURL: URL, _ requestID: UUID, _ activeURL: URL, _ succeeded: Bool) {
+        // A delayed result from an older selection must never roll back a newer one.
+        guard destinationRequestID == requestID, selectedDestination.url == attemptedURL else { return }
+        let attemptedDestination = selectedDestination
+        let activeDestination = (attemptedDestination.url == activeURL ? attemptedDestination : nil)
+            ?? destinations.first(where: { $0.url == activeURL })
+            ?? (loadedDestination?.url == activeURL ? loadedDestination : nil)
+            ?? ThingtimeWebDestination.Destination(
+                id: activeURL.absoluteString, title: activeURL.host ?? "Current destination",
+                subtitle: activeURL.absoluteString, url: activeURL, source: .vercelDeployment
+            )
+        loadedDestination = activeDestination
+        selectedDestinationID = activeDestination.id
+        pendingDestination = nil
+        guard !succeeded else { return }
+        failedDestination = attemptedDestination
+        // The drawer reopens with the actual active selection and an explicit retry.
+        withAnimation(.easeOut(duration: 0.22)) { isDestinationPickerOpen = true }
+        UIAccessibility.post(notification: .announcement, argument: Self.destinationSwitchError)
     }
 
     @MainActor

@@ -119,42 +119,43 @@ before reopening a pool if a rollback promotes it again. Multiple warm gateway
 instances still have separate pools and monitoring sockets. This selects one
 deployment, **not one process or socket**, and does not change the Atlas tier.
 
-## Connections major2 rollout
+## PR996 branch compatibility
 
-PR992 deliberately requires major version 2 for `api.connections`,
-`api.connections-providers`, `api.connections-feed`, `api.connections-oauth-begin`,
-`api.connections-oauth-callback` and `api.connections-request`. Missing or major1
-backend contracts fail closed before forwarding credentials or consuming the
-request body; matching major2 still requires the advertised path and method.
-Never downgrade these requirements or select dedicated mode merely to make a
-preview appear accepted; this branch retains its intended proxy policy. The current preview master advertises Connections 1.0.0; that
-refusal is an expected compatibility gate and is not end-to-end completion.
-
-Deploy and verify a canonical environment backend implementing Connections 2
-before promoting it to the stable environment gateway and enabling dependent
-follower actions. Preserve the previous immutable gateway for assessed rollback.
-The frontend callback remains the exact frontend origin, never the gateway
-origin. Each gateway-owned `connections-*-oauth` vault bundle must contain that
-exact frontend origin under `environments[getDeploymentDataEnvironment().id]`.
-The gateway environment label (for example `preview`) is not a substitute for
-the actual data-environment ID (which may be `development` or a custom ID).
-Register each exact callback with the provider. Old env-only clients and
-unbound saved grants must reconnect through the major2 flow; never copy secrets
-between origins/environments or widen a network boundary as recovery.
+PR996 carries the merged `api.passwords` 1.4.0 contract. Every forwarded password
+operation requires that version, its exact registered path and HTTP method;
+compatible newer 1.x capabilities are accepted, while missing, older 1.x and
+breaking-major capabilities fail before body or credential forwarding. The branch retains the newer 1.1.0 gateway policy and
+its default proxy mode; dedicated mode is not an OAuth or acceptance workaround.
 
 ## Rollout and environment mapping
 
-The intended public mapping is production/main → `thingtime.com` with gateway
-environment `production` → production database; custom develop/develop →
-`dev.thingtime.com` with environment `develop` → development database; and
-standard previews → controlled `master.previews.thingtime.com` with environment
-`preview` → development database. The latest configuration audit confirmed that
-custom develop and previews currently use the same development cluster, separate
-from the production cluster. The coordinating task subsequently verified the
-master preview public manifest at gateway 1.0.1 and Connections 1.0.0. This branch
-advertises gateway 1.1.0 and retains Connections2; the newer policy and Connections
-contracts remain rollout gates. Public metadata does not prove authenticated
-provider, origin-allowlist or installed-client acceptance.
+The intended mapping separates the logical gateway environment from Vercel's
+credential target:
+
+| Deployment | Source | Vercel credential target | Gateway environment and origin | Database |
+| --- | --- | --- | --- | --- |
+| Production owner | Current `main` | Production | `production` / `https://thingtime.com` | Production |
+| Preview master owner | Current `main`, separately built for preview | Standard preview | `preview` / `https://master.previews.thingtime.com` | Development |
+| Ordinary PR preview | Exact PR head | Existing custom develop target | `preview` / `https://master.previews.thingtime.com` | Development |
+| Develop owner | Current `develop` | Custom develop | `develop` / `https://dev.thingtime.com` | Development |
+
+Ordinary PR deployments retain their existing Vercel credential scope. The
+protected publisher overrides only their gateway environment, origin and relay
+secret, using the exact preview-scoped secret. It does not copy all standard
+preview settings onto PR code: the two targets contain different sensitive
+settings. The historical `pr-N.previews.dev.thingtime.com` alias naming does not
+select the backend; the explicit gateway configuration does. Dedicated PRs
+retain that same credential target and run their own handlers against its
+configured development database.
+
+The latest configuration audit confirmed that custom develop and previews use
+the same development cluster, separate from production. Earlier rollout notes
+predated provisioning of the master preview alias. Verify its current
+origin-scoped manifest and API behavior before treating the 1.1.0 policy as
+deployed; alias existence and local source integration do not establish
+acceptance of that contract, and gateway activation across these origins
+remains pending. Do not treat the intended mapping as proof of live gateway
+operation.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -292,48 +293,13 @@ Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
 
-## PR992 integration verification — 26 October 2026
+## PR996 merge verification — 26 October 2026
 
-Network-denied gateway/capability/Mongo/admin-integration checks passed 272/272.
-The Connections/workflow/migration/readiness batch passed 238 pre-existing checks;
-all four new signed-relay OAuth cases passed after completing their synthetic
-live-session fixture. The fixed cases verify exact frontend callback and actual
-data-environment selection, one-use state, wrong/revoked sessions and concurrent
-refresh/account independence. Targeted lint passed 26 `.ts`/`.tsx` files with two
-pre-existing `apiDocs.ts` warnings. Existing ESLint does not parse `.mts`; those
-checks ran through Node. Raw TypeScript reported 92 diagnostics, none on added
-or modified lines; this is not a clean repository typecheck.
-
-A sanitized `node-server` build and both generic and synthetic Connections2
-built transport acceptance passed. The latter used the free range 19971–19978,
-a temporary replica set and real synthetic registration/cookies. It verified
-frontend callback preservation, callback replay refusal, exactly one provider
-exchange and one rotating refresh across two concurrent requests (200/401),
-credential-free responses, Vite root docs and promotion/rollback. Followers made
-zero MongoDB dials; initial DDL recorded 138 creates/51 drops with peak2, while
-an unchanged cold owner issued zero commands. Processes and disposable state
-were cleaned up. These local tests do not establish actual provider consent,
-current preview Connections2 support or installed native acceptance.
-
-
-## PR992 develop integration verification — 26 October 2026
-
-Fresh develop `cd6f8b8abc94270980bac216da2412ffef8578b1` was merged locally into
-PR992's existing branch. All 15 conflicts were resolved without changing its
-proxy default, Connections2 contracts or frontend/session/data-environment fences.
-Incoming gateway1.1 policy and explicit dedicated mode remain intact; the mode
-helper uses explicit validated return branches to avoid an incoming TS2322.
-The final 54 gateway/OAuth checks passed after that correction, alongside 517
-focused checks across gateway, capability, index, admin, Connections and workflow
-paths. Lint passed eight changed TS/TSX files with two existing docs warnings;
-raw TypeScript has 92 diagnostics and none on merge-added/modified lines.
-
-Final sanitized Nitro build and ten-port compiled acceptance passed on
-19971–19980. The runner verified an explicitly dedicated worker's independent
-replica and public shell metadata, proxy and signed Connections2 synthetic OAuth,
-callback replay refusal, concurrent rotating refresh, promotion/rollback and zero
-follower Mongo dials. Both initial index plans peaked at two commands; unchanged
-cold owner DDL remained zero. Processes and temporary data were cleaned up.
-This is local test evidence, not live canonical gateway1.1 / Connections2 or real
-provider/native acceptance. Graph refresh, merge completion and publication are
-handled separately by the coordinating task.
+The local reconciliation with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`
+keeps proxy mode as this branch default and preserves password contract 1.2.1.
+The test runner supports `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` as a bounded
+integer selecting ten fixed loopback ports (default 19771–19780). It checks all
+ports before spawning any test process, and its OS policy restricts every
+backend to those local ports. Dedicated acceptance uses a separate disposable
+replica rather than a deployed opt-out. This override belongs only to the test
+runner and does not change product routing or network policy.

@@ -33,6 +33,8 @@ export function settingsDocumentBlocks(value: unknown): WebpageBlock[] {
         (props && ['source', 'itemTemplate', 'render', 'template'].some(key => props[key] !== undefined)))
         throw new Error('Use intrinsic blocks and public display bindings inside settings.');
       const privateControl = props?.['data-tt-private-control'] !== undefined;
+      if (props?.['data-tt-private-text'] !== undefined && (block.tag !== 'span' || Boolean(block.text) || Boolean(block.html) || Boolean((block.children as unknown[])?.length)))
+        throw new Error('Private text values cannot be saved in a settings layout.');
       if (props && ((block.tag === 'input' && ['password', 'file'].includes(String(props.type))) || privateControl) &&
         (['value', 'defaultValue', 'default-value', ...(privateControl ? ['checked', 'defaultChecked'] : [])].some(key => props[key] !== undefined) ||
           (privateControl && (Boolean(block.text) || Boolean((block.children as unknown[])?.length)))))

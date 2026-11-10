@@ -1,0 +1,30 @@
+{
+  "challenge": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+  "rp": "passkeys.example.test",
+  "origin": "https://passkeys.example.test",
+  "registration": {
+    "clientExtensionResults": {},
+    "response": {
+      "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjIiwiY3Jvc3NPcmlnaW4iOmZhbHNlLCJvcmlnaW4iOiJodHRwczpcL1wvcGFzc2tleXMuZXhhbXBsZS50ZXN0IiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9",
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVik8afKY75eM_FQw8_fqs6D6-vB6HD-940QTTnHCRuV-ztdAAAAAAAAAAAAAAAAAAAAAAAAAAAAIMo4cCeaLCqpbq3b5XeGXeEgGQBKwLsBqezJ2cdrxw3vpQECAyYgASFYILZc8O6U5jxCIZciDYsFEaclLShlYJT2gyt-8O0ttbQDIlggH0QS70nPAuLso8fbgUOVHcMQQmvpBXjO_Jyb3kU9rUk",
+      "transports": [
+        "internal"
+      ]
+    },
+    "id": "yjhwJ5osKqlurdvld4Zd4SAZAErAuwGp7MnZx2vHDe8",
+    "rawId": "yjhwJ5osKqlurdvld4Zd4SAZAErAuwGp7MnZx2vHDe8",
+    "type": "public-key"
+  },
+  "authentication": {
+    "id": "yjhwJ5osKqlurdvld4Zd4SAZAErAuwGp7MnZx2vHDe8",
+    "response": {
+      "userHandle": "AQID",
+      "authenticatorData": "8afKY75eM_FQw8_fqs6D6-vB6HD-940QTTnHCRuV-zsdAAAAAA",
+      "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjSEJ3Y0hCd2NIQndjIiwiY3Jvc3NPcmlnaW4iOmZhbHNlLCJvcmlnaW4iOiJodHRwczpcL1wvcGFzc2tleXMuZXhhbXBsZS50ZXN0IiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
+      "signature": "MEYCIQDXc6Gw03BrJHL9wuUude4JO3l-eptyJbQ-B24Tt4wnKQIhAIhD3ZKN3Z50n1R_JPVHqhNm4lBW0CuPP-YzUMLJz204"
+    },
+    "type": "public-key",
+    "clientExtensionResults": {},
+    "rawId": "yjhwJ5osKqlurdvld4Zd4SAZAErAuwGp7MnZx2vHDe8"
+  }
+}

@@ -2,12 +2,61 @@ import SwiftUI
 import UIKit
 import WebKit
 
+// A failed protected-Keychain clear fences this request until the user chooses
+// another destination or explicitly retries. Ordinary SwiftUI updates cannot retry.
+struct DestinationNavigationFence {
+    struct Request: Equatable {
+        let url: URL
+        let id: UUID
+    }
+
+    enum Outcome: Equatable { case unchanged, allowed, failed, blocked }
+    private(set) var loadedRootURL: URL?
+    private(set) var latestRequest: Request?
+    private var failedRequest: Request?
+
+    mutating func prepare(_ request: Request, clearAuthority: () -> Bool) -> Outcome {
+        latestRequest = request
+        guard loadedRootURL != request.url else { return .unchanged }
+        guard failedRequest != request else { return .blocked }
+        if loadedRootURL != nil && !clearAuthority() {
+            failedRequest = request
+            return .failed
+        }
+        failedRequest = nil
+        loadedRootURL = request.url
+        return .allowed
+    }
+}
+
+struct AuthenticatorSetupDelivery {
+    let id = UUID()
+    let url: URL
+}
+
 struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
     @Binding var widgetPath: String?
-    @Binding var lidarRequest: UUID?
+    @Binding var authenticatorSetup: AuthenticatorSetupDelivery?
+    var destinationRequestID = UUID()
+    var onDestinationResult: (URL, UUID, URL, Bool) -> Void = { _, _, _, _ in }
+
+    private var destinationRequest: DestinationNavigationFence.Request {
+        .init(url: url, id: destinationRequestID)
+    }
+
+    private func reportDestinationResult(_ coordinator: Coordinator, succeeded: Bool) {
+        let request = destinationRequest
+        guard let activeURL = coordinator.loadedRootURL, coordinator.lastReportedDestinationRequest != request else { return }
+        coordinator.lastReportedDestinationRequest = request
+        // UIViewRepresentable updates must not synchronously mutate SwiftUI state.
+        DispatchQueue.main.async { [weak coordinator] in
+            guard coordinator?.destinationNavigation.latestRequest == request else { return }
+            onDestinationResult(request.url, request.id, activeURL, succeeded)
+        }
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -18,6 +67,8 @@ struct WebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
+        configuration.userContentController.addUserScript(AuthenticatorSetupBridge.script)
+        configuration.userContentController.add(context.coordinator, name: AuthenticatorSetupBridge.handler)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
         configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
@@ -29,7 +80,7 @@ struct WebView: UIViewRepresentable {
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
-        context.coordinator.shareComposer?.webView = webView
+        context.coordinator.authenticatorSetup.configure(webView: webView, origin: url)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
@@ -44,39 +95,47 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.alwaysBounceHorizontal = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
-        context.coordinator.loadedRootURL = url
+        _ = context.coordinator.destinationNavigation.prepare(destinationRequest, clearAuthority: { true })
         webView.load(URLRequest(url: url))
+        reportDestinationResult(context.coordinator, succeeded: true)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let rootChanged = context.coordinator.loadedRootURL != url
+        if rootChanged { context.coordinator.authenticatorSetup.cancel() }
         // Consume a pending widget request even when it cannot resolve, so a stale
         // value cannot suppress the teardown for a later destination change.
-        let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+        var widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
         if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
-        if lidarRequest != nil {
-            DispatchQueue.main.async { lidarRequest = nil }
-            if !rootChanged {
-                context.coordinator.pendingNativeScanOrigin = url
-                context.coordinator.openLiDAR()
-            }
+        let passwordBridge = context.coordinator.passwordBridge
+        let outcome = context.coordinator.destinationNavigation.prepare(
+            destinationRequest, clearAuthority: { passwordBridge.clear() }
+        )
+        if outcome == .failed {
+            reportDestinationResult(context.coordinator, succeeded: false)
+            return
         }
-        guard rootChanged || widgetTarget != nil else { return }
-        context.coordinator.lidar.invalidate()
+        guard outcome != .blocked else { return }
+        if let delivery = authenticatorSetup, let loaded = context.coordinator.loadedRootURL {
+            context.coordinator.authenticatorSetup.configure(webView: webView, origin: loaded)
+            context.coordinator.authenticatorSetup.offer(delivery.url, deliveryID: delivery.id)
+            // A second setup must not reload the current editor and discard its
+            // unsaved draft. Cold/non-editor intake navigates without a seed URL.
+            if webView.url?.path != "/passwords" { widgetTarget = loaded.appendingPathComponent("passwords") }
+            DispatchQueue.main.async { if authenticatorSetup?.id == delivery.id { authenticatorSetup = nil } }
+        }
+
+        guard rootChanged || widgetTarget != nil else {
+            reportDestinationResult(context.coordinator, succeeded: true)
+            return
+        }
 
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
         if rootChanged {
-            context.coordinator.pendingNativeScanOrigin = nil
-            NativeDeferredUpload.shared.disarm()
-            MobileDeviceBackgroundPresence.shared.destinationChanged()
-            context.coordinator.mobileLocation.invalidate()
-            MobileDeviceAlerts.shared.stop()
             WidgetStore.clear(); context.coordinator.resetChatActivity()
-            context.coordinator.configureShareComposer(configuration: webView.configuration, origin: url)
-            context.coordinator.shareComposer?.webView = webView
         }
         context.coordinator.mobileDevice.suspend()
         context.coordinator.mobileFolders.suspend()
@@ -84,24 +143,17 @@ struct WebView: UIViewRepresentable {
         context.coordinator.fileReplicas.suspend()
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
-        context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: widgetTarget ?? url))
+        reportDestinationResult(context.coordinator, succeeded: true)
     }
 
     static let bridgeUserScript = ThingtimeBridgeScript.script
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
-        var loadedRootURL: URL?
-        var shareComposer: ShareComposerBridge?
-        func configureShareComposer(configuration: WKWebViewConfiguration, origin: URL) {
-            configuration.userContentController.removeScriptMessageHandler(forName: ShareComposerBridge.name, contentWorld: .page)
-            let bridge = ShareComposerBridge(origin: origin)
-            shareComposer = bridge
-            configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ShareComposerBridge.name)
-            configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
-        }
-        let lidar = LiDARBridge()
+        var destinationNavigation = DestinationNavigationFence()
+        var lastReportedDestinationRequest: DestinationNavigationFence.Request?
+        var loadedRootURL: URL? { destinationNavigation.loadedRootURL }
         let mobileDevice = MobileDeviceBridge()
         let mobileLocation = MobileDeviceLocationBridge()
         let mobileFolders = MobileFolderBridge()
@@ -109,6 +161,8 @@ struct WebView: UIViewRepresentable {
         let fileReplicas = FileReplicaBridge()
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
+        let passwordBridge = PasswordBridge()
+        let authenticatorSetup = AuthenticatorSetupBridge()
 
         func resetChatActivity() { lopuChats.reset() }
         var pendingNativeScanOrigin: URL?
@@ -155,13 +209,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            lidar.invalidate()
-            // A background refresh may construct the initial web scene. Only a
-            // foreground navigation invalidates its persisted approval here.
-            if UIApplication.shared.applicationState == .active {
-                MobileDeviceBackgroundPresence.shared.destinationChanged()
-                mobileLocation.invalidate()
-            }
+            authenticatorSetup.navigationStarted()
             mobileDevice.suspend()
             mobileFolders.suspend()
             fileExports.suspend()
@@ -209,6 +257,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == AuthenticatorSetupBridge.handler { authenticatorSetup.handle(message); return }
             guard message.name == WebView.nativeMessageHandlerName else { return }
             guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
@@ -222,6 +271,16 @@ struct WebView: UIViewRepresentable {
                 } else if type == "widget-clear" { WidgetStore.clear() }
                 else if type == "widget-snapshot", let payload = body["payload"] as? [String: Any] {
                     WidgetStore.save(payload, origin: root.absoluteString)
+                }
+                return
+            }
+            if type == "password-provider" {
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frameURL = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frameURL, root),
+                      let payload = body["payload"] as? [String: Any], let action = payload["action"] as? String else { return }
+                passwordBridge.handle(action: action, ownerId: payload["ownerId"] as? String, webView: webView, root: root) { [weak self] ok, message in
+                    self?.sendToWeb(type: "password-provider-result", payload: ["ok": ok, "message": message, "requestId": payload["requestId"] as? String ?? ""])
                 }
                 return
             }
