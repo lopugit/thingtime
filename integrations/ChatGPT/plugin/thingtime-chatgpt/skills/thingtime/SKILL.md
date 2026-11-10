@@ -99,9 +99,12 @@ discovery when the exact ID is unknown. When a Thing or comment ID is already
 known and its attached comments are needed, call `list_thingtime_comments` with
 that `targetId`; do not fetch a global Things page and discard unrelated rows.
 
-If a tool says the token lacks a scope, explain the minimum missing Thingtime
-scope and ask the user to reconnect, open Advanced connection settings, and
-regenerate the scoped credential with that access rule. Removing the final
+If a tool lacks an independent OAuth scope, first call `login_thingtime` with
+the exact selected `accountId` and `requiredScopes`, such as `["agents.report"]`.
+Use the invoking host's supported OAuth prompt for explicit permission and
+verify the same owner and origin plus the live scope on the new account ID
+before retrying any write. Use Advanced connection settings only as a supported
+host fallback. Removing the final
 account revokes every bridge and refresh credential in that ChatGPT connection.
 Do not suggest an unrestricted account-session credential.
 
