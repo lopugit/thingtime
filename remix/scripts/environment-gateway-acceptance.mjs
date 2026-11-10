@@ -381,8 +381,8 @@ try {
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
-  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', draftPreviewExactAssets: true, draftPreviewCsp: true, socialCardPngAndHead: true, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
-    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged, catalogue: catalogueEvidence }));
+  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', syntheticConnectionsOAuth: testConnections, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
+    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }

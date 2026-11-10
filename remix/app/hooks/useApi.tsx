@@ -1103,9 +1103,8 @@ export function useApi() {
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
-      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
-        await requireThingtimeCapability('api.things-import', '1.11.0');
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.things-import', requiresUncappedDataStrings(args.manifest) ? '1.12.0' : '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1194,7 +1193,8 @@ export function useApi() {
           await requireMediaSizeWriteCapability(args?.crystal, 'update', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.38.0');
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.43.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1255,7 +1255,8 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
-          await requireMediaSizeWriteCapability(args?.crystal, 'upsert', requireThingtimeCapability);
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.43.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1278,7 +1279,8 @@ export function useApi() {
           await requireMediaSizeWriteCapability(args?.crystal, 'create', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.38.0');
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.43.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1381,18 +1383,27 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      request: useCallback(async (args) => asyncFetcher.submit({ connectionId: args?.connectionId, operation: args?.operation, resourceId: args?.resourceId }, { action: '/api/v1/connections/request' }), [asyncFetcher]),
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
-      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      request: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-request', '2.0.0');
+        return asyncFetcher.submit({ connectionId: args?.connectionId, operation: args?.operation, resourceId: args?.resourceId, pageToken: args?.pageToken }, { action: '/api/v1/connections/request' });
+      }, [asyncFetcher]),
+      providers: useCallback(async () => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers'); }, []),
+      list: useCallback(async () => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections'); }, []),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections' }),
+        async (args) => {
+          await requireThingtimeCapability('api.connections', '2.0.0');
+          return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections', signal: args?.signal });
+        },
         [asyncFetcher]
       ),
       unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => {
+          await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin', signal: args?.signal });
+        },
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list
@@ -1406,8 +1417,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       feed: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          await requireThingtimeCapability('api.connections-feed', '2.0.0');
+          return getJson(
             `/api/v1/connections/feed${toQuery({
               connection: args?.connection,
               cursor: args?.cursor,
@@ -1415,7 +1427,8 @@ export function useApi() {
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ),
+          );
+        },
         []
       ),
       filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
@@ -1672,7 +1685,7 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireThingtimeCapability('api.actions-run', requiresUncappedDataStrings(args) ? '1.38.0' : '1.37.0');
+        await requireThingtimeCapability('api.actions-run', requiresUncappedDataStrings(args) ? '1.39.0' : '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

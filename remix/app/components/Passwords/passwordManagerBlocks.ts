@@ -27,14 +27,17 @@ const propertyBlocks: WebpageBlock[] = [when('password-field-structured', 'item.
 ])])];
 const propertyModeBlock = when('password-field-mode-visible', 'item.canStructure', [button('password-field-mode', '{item.modeLabel}', 'field.mode')]);
 
+const recordIconBlock = el('password-record-icon-frame', 'span', '', { 'aria-hidden': true }, [when('password-record-icon-visible', 'item.hasIcon', [el('password-record-icon', 'img', '', { 'data-tt-private-image': 'entry-icon-{item.id}', alt: '', referrerPolicy: 'no-referrer', width: 32, height: 32 }, undefined, { 'object-fit': 'contain', 'border-radius': '6px' })]), when('password-record-icon-fallback-visible', 'item.iconMissing', [text('password-record-icon-fallback', '🔐', 'span')])], { width: '32px', height: '32px', display: 'grid', 'place-items': 'center', 'flex-shrink': '0' });
+
 /** Add the new editable templates to older customised layouts without
  * replacing their existing controls, styling, order or labels. */
 export function upgradePasswordManagerBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
   const visit = (nodes: WebpageBlock[]): WebpageBlock[] => nodes.map(block => {
     let children = block.children ? visit(block.children) : undefined;
+    if (block.id === 'password-record' && children && !children.some(child => child.id === 'password-record-icon-frame')) children = [structuredClone(recordIconBlock), ...children];
     const upgrade = block.id === 'password-field' && children && !block.props?.['data-tt-password-properties-version'] && !children.some(child => ['password-field-structured', 'password-field-mode-visible'].includes(child.id));
     if (upgrade) children = [...children!, ...structuredClone(propertyBlocks), structuredClone(propertyModeBlock)];
-    return { ...block, ...(upgrade ? { props: { ...block.props, 'data-tt-password-properties-version': 1 } } : {}), ...(children ? { children } : {}), ...(block.else ? { else: visit(block.else) } : {}), ...(block.empty ? { empty: visit(block.empty) } : {}) };
+    return { ...block, ...(upgrade ? { props: { ...block.props, 'data-tt-password-properties-version': 1 } } : {}), ...(children ? { children } : {}) };
   });
   return visit(blocks);
 }
@@ -62,7 +65,7 @@ export const passwordManagerBlocks: WebpageBlock[] = [el('password-manager', 'se
   el('password-workspace', 'div', '', {}, [
     el('password-list', 'section', '', { 'aria-label': 'Saved passwords' }, [
       el('password-filter-row', 'div', '', {}, [input('password-search', 'search', 'password.search', { value: '{passwords.search}', 'aria-label': 'Search passwords', placeholder: 'Search all password titles', disabled: false }), select('password-sort', 'sort', 'password.sort', '{passwords.sort}', [el('password-sort-title', 'option', 'Title', { value: 'title' }), el('password-sort-updated', 'option', 'Recently edited', { value: 'updated' })], { 'aria-label': 'Sort passwords' })], row),
-      repeat('password-records', 'passwords.records', [el('password-record', 'button', '', { type: 'button', disabled: '{passwords.busy}', ...action('password.read') }, [text('password-record-title', '{item.title}', 'strong'), text('password-record-type', '{item.type}')], { ...card, 'text-align': 'left', width: '100%', cursor: 'pointer' })]),
+      repeat('password-records', 'passwords.records', [el('password-record', 'button', '', { type: 'button', disabled: '{passwords.busy}', ...action('password.read') }, [structuredClone(recordIconBlock), text('password-record-title', '{item.title}', 'strong'), text('password-record-type', '{item.type}')], { ...card, 'text-align': 'left', width: '100%', cursor: 'pointer' })]),
       when('password-list-loading', 'passwords.listLoading', [text('password-list-loading-message', '{passwords.loadingMessage}', 'p', { role: 'status' })]),
       when('password-list-empty', 'passwords.empty', [text('password-list-empty-message', '{passwords.emptyMessage}')]),
       when('password-list-more', 'passwords.hasMore', [button('password-load-more', 'Load more', 'password.more', '{passwords.cannotLoadMore}')]),

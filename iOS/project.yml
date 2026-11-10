@@ -14,6 +14,8 @@ options:
 packages:
   ThingtimePasswordCore:
     path: ../apple/Passwords
+  AppleFileSync:
+    path: ../apple/FileSync
 
 settings:
   base:
@@ -34,17 +36,13 @@ configFiles:
   Debug: config/Debug.xcconfig
   Release: config/Release.xcconfig
 
-packages:
-  AppleFileSync:
-    path: ../apple/FileSync
-
 targets:
   Thingtime:
     type: application
     platform: iOS
     sources:
       - path: Thingtime
-      - path: ShareSupport
+      - path: ../apple/Passwords/Host/AuthenticatorSetupBridge.swift
       - path: ../apple/Shared
       - path: ../apple/Widgets
       - path: Shared
@@ -57,6 +55,9 @@ targets:
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
         CFBundleURLTypes:
           - CFBundleURLSchemes: [thingtime]
+          - CFBundleURLName: com.thingtime.authenticator
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [otpauth]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         NSFaceIDUsageDescription: Thingtime verifies you before filling saved passwords or using a passkey.
@@ -103,6 +104,7 @@ targets:
     dependencies:
       - package: ThingtimePasswordCore
       - target: ThingtimePasswordProvider
+      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true
@@ -110,6 +112,42 @@ targets:
       - target: ThingtimeShare
         embed: true
         codeSign: true
+
+  ThingtimePasswordProvider:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../apple/PasswordProvider/CredentialProviderViewController.swift
+    dependencies:
+      - package: ThingtimePasswordCore
+    info:
+      path: PasswordProvider/Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
+        NSFaceIDUsageDescription: Thingtime verifies you before filling saved passwords or using a passkey.
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionShowsConfigurationUI: true
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesPasskeys: true
+              ProvidesOneTimeCodes: true
+    entitlements:
+      path: PasswordProvider/PasswordProvider.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_IOS_BUNDLE_IDENTIFIER).password-provider
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER)
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
 
   ThingtimePasswordProvider:
     type: app-extension
@@ -261,6 +299,7 @@ targets:
       - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
+      - package: AppleFileSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).tests

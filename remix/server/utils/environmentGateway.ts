@@ -3,8 +3,10 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CONNECTION_ICON_PATH } from '../../app/connections/providerIcons';
 import { CREDENTIAL_IMPORT_API_PATH, CREDENTIAL_IMPORT_HEADERS } from '../../app/credentials/importContract';
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
-import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
+import { gatewaySupportsOperation } from '../../app/api/utils/deployment/gatewayOperations';
 import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+
+export { isGatewayDataPath } from '../../app/api/utils/deployment/gatewayOperations';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -24,18 +26,7 @@ export const gatewayFailure = (status = 503, code = 'ENVIRONMENT_GATEWAY_UNAVAIL
   ok: false, code, error: 'The selected environment API gateway is unavailable or incompatible.'
 }, { status, headers: { 'Cache-Control': 'private, no-store' } });
 
-export const isGatewayDataPath = (pathname: string) => pathname !== CONNECTION_ICON_PATH && (
-  pathname === '/api' || pathname.startsWith('/api/') || pathname === '/social-card' || pathname === '/sitemap.xml' ||
-  apiEndpointDocs.some(doc => doc.endpoint === pathname && pathname !== THINGTIME_CAPABILITY_MANIFEST_PATH)
-);
-
-const digestHeaders = (headers: Headers, pathname: string) => {
-  // Keep compatibility with older gateways for all existing route families.
-  const names = pathname.startsWith(`${CREDENTIAL_IMPORT_API_PATH}/`)
-    ? [...BOUND_HEADERS, CREDENTIAL_IMPORT_HEADERS.request, CREDENTIAL_IMPORT_HEADERS.verifier, CREDENTIAL_IMPORT_HEADERS.target]
-    : BOUND_HEADERS;
-  return createHash('sha256').update(JSON.stringify(names.map(name => [name, headers.get(name)]))).digest('hex');
-};
+const digestHeaders = (headers: Headers) => createHash('sha256').update(JSON.stringify(BOUND_HEADERS.map(name => [name, headers.get(name)]))).digest('hex');
 const sign = (payload: string, settings: GatewaySettings) => createHmac('sha256', settings.secret).update(payload).digest('base64url');
 const equal = (a: string, b: string) => {
   const left = Buffer.from(a); const right = Buffer.from(b);
@@ -109,8 +100,7 @@ export const proxyEnvironmentRequest = async (request: Request, authority: NonNu
   if (doc) {
     const required = doc.featureVersion || doc.contractVersion;
     const method = request.method === 'HEAD' ? 'GET' : request.method;
-    if (!capabilitySatisfies(manifest.features[`api.${doc.id}`]?.version, required) ||
-      !manifest.operations.some(operation => operation.feature === `api.${doc.id}` && operation.path === url.pathname && operation.methods.includes(method)))
+    if (!gatewaySupportsOperation(manifest, `api.${doc.id}`, required, url.pathname, method))
       return gatewayFailure(409, 'ENVIRONMENT_GATEWAY_CAPABILITY');
   } else {
     // Unknown branch routes must not be silently executed on an older backend.

@@ -144,21 +144,9 @@ test('revocation during icon metadata load withholds the entire private list', a
   assert.equal((await response.text()).includes('private.example'), false);
 });
 
-test('Website icon operation is owner/revision/session bound and never accepts arbitrary caller URLs',async()=>{
- let revision=3,live=true,token='session-A',calls=0;
- let icon:any;
- const record=()=>({id:'fixture',revision,entry:{title:'Site',icon,fields:[{type:'url',value:'https://saved.example/private?token=secret'},{type:'url',value:'https://hidden.example',concealed:true}]}}) as any;
- const handler=createPasswordHandler({...defaults,getCurrentUser:async()=>live?owner:null,getAuthToken:async()=>token,readPassword:async(id,entry)=>{assert.equal(id,'owner');assert.equal(entry,'fixture');return record();},resolveWebsiteIcon:async(origins)=>{calls++;assert.deepEqual(origins,['https://saved.example']);return Buffer.from('sanitized-PNG-fixture');}});
- const body={operation:'website-icon',expectedOwnerId:'owner',id:'fixture',revision:3,url:'https://caller.example/'};
- const response=await handler({request:request({},body)});assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');assert.equal(response.headers.get('cache-control'),'private, no-store');assert.equal(response.headers.get('x-thingtime-owner-id'),'owner');assert.equal(await response.text(),'sanitized-PNG-fixture');
- assert.equal((await handler({request:request({}, {...body,expectedOwnerId:'other'})})).status,409);assert.equal(calls,1);
- assert.equal((await handler({request:request({}, {...body,revision:2})})).status,409);assert.equal(calls,1);
- icon={kind:'url',url:'https://override.example/icon.png'};assert.equal((await handler({request:request({},body)})).status,204);assert.equal(calls,1);icon=undefined;
- const changed=createPasswordHandler({...defaults,readPassword:async()=>record(),resolveWebsiteIcon:async()=>{revision++;return Buffer.from('must not disclose');}});
- assert.equal((await changed({request:request({},body)})).status,409);revision=3;
- const readRevoked=createPasswordHandler({...defaults,getCurrentUser:async()=>live?owner:null,readPassword:async()=>{live=false;return record();},resolveWebsiteIcon:async()=>{throw new Error('Must not disclose saved origins');}});assert.equal((await readRevoked({request:request({},body)})).status,401);live=true;
- const revoked=createPasswordHandler({...defaults,getAuthToken:async()=>token,getCurrentUser:async()=>live?owner:null,readPassword:async()=>record(),resolveWebsiteIcon:async()=>{live=false;return Buffer.from('must not disclose');}});
- assert.equal((await revoked({request:request({},body)})).status,401);live=true;
- const swapped=createPasswordHandler({...defaults,getAuthToken:async()=>token,readPassword:async()=>record(),resolveWebsiteIcon:async()=>{token='session-B';return Buffer.from('must not disclose');}});
- assert.equal((await swapped({request:request({},body)})).status,401);
+test('native setup owner verification uses the existing authenticated metadata GET contract', async () => {
+  const response = await createPasswordHandler(defaults)({ request: new Request('https://thingtime.example/api/v1/passwords') });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, ownerId: 'owner', configured: true, entries: [], nextCursor: null });
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
 });

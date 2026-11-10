@@ -24,13 +24,31 @@ public enum PasswordSessionStore {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(lookup as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
-        try validateLoadStatus(status)
-        guard let data = item as? Data, let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
+        guard status == errSecSuccess, let data = item as? Data else { throw PasswordProviderError.storageUnavailable }
+        guard let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
         return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
     }
-    static func validateLoadStatus(_ status: OSStatus) throws {
-        if status == errSecItemNotFound { throw PasswordProviderError.invalidSession }
-        guard status == errSecSuccess else { throw PasswordProviderError.sessionUnavailable }
+    /// Configuration metadata only. Never seed a separate web session with
+    /// the provider's stored credential (which may become device-scoped).
+    public static func destination() throws -> (origin: URL, ownerId: String)? {
+        try destination(accessGroup: group) { query in
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            return (status, result as? Data)
+        }
+    }
+    static func destination(accessGroup: String?, read: ([String: Any]) -> (OSStatus, Data?)) throws -> (origin: URL, ownerId: String)? {
+        var lookup = try query(accessGroup: accessGroup)
+        lookup[kSecReturnData as String] = true; lookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        lookup[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+        let (status, data) = read(lookup)
+        if status == errSecItemNotFound { return nil }
+        // A locked/inaccessible linked destination must not silently fall back
+        // to a different origin/account in the normal-sign-in editor.
+        guard status == errSecSuccess, let data else { throw PasswordProviderError.unavailable }
+        let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
+        let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
+        return (session.origin, session.ownerId)
     }
     public static func save(_ session: ProviderSession) throws {
         let query = try query(accessGroup: group)
@@ -39,8 +57,8 @@ public enum PasswordSessionStore {
         let updated = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updated == errSecItemNotFound {
             let status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
-            guard status == errSecSuccess else { throw PasswordProviderError.unavailable }
-        } else if updated != errSecSuccess { throw PasswordProviderError.unavailable }
+            guard status == errSecSuccess else { throw PasswordProviderError.storageUnavailable }
+        } else if updated != errSecSuccess { throw PasswordProviderError.storageUnavailable }
     }
     public static func clear() {
         guard let query = try? query(accessGroup: group) else { return }
