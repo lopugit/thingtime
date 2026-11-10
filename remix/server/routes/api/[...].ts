@@ -1,3 +1,5 @@
+import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
+import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 
 type RouteModule = {
@@ -99,6 +101,85 @@ const normalizeResponse = (value: unknown) => {
 
 export default defineHandler(async (event) => {
   const path = normalizePath(event.context.params?.path, event.req.url);
+  const method = event.req.method.toUpperCase();
+
+  if (path.endsWith('-docs')) {
+    if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
+      return new Response('Method not allowed', {
+        status: 405,
+        headers: { Allow: 'GET, POST' }
+      });
+    }
+
+    // 🔮 the teapot's -docs twin is real but unlisted (claude-todo/10):
+    // it never appears in /docs/api, yet the self-describing convention holds
+    if (path === 'v1/teapot-docs') {
+      return jsonResponse({
+        ok: true,
+        endpoint: '/api/v1/teapot',
+        methods: ['GET', 'POST'],
+        summary: 'Politely declines to brew coffee.',
+        detail:
+          'RFC 2324 lives here. Every documented endpoint serves JSON docs at -docs — including the ones you were never told about. Congratulations on your curiosity. 🫖',
+        responses: [{ status: 418, description: 'Short and stout, with a brew-time haiku.' }]
+      });
+    }
+
+    // lazy: apiDocs is ~150KB of doc-string literals — parsing it belongs to
+    // the rare -docs request, not to every instance's cold start
+    const { createApiDocPayload, getApiDocByPath } = await import('../../../app/docs/apiDocs');
+    const doc = getApiDocByPath(path);
+    if (!doc) {
+      return jsonResponse({ ok: false, error: 'API docs not found' }, { status: 404 });
+    }
+
+    return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
+  }
+
+  if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    if (path === 'v1/integrations/ios-release') return jsonResponse({ ok: false, error: 'Configure iOS release delivery on this origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    // Vault re-verification stays on its configured origin, including when a
+    // browser Action supplies an expected-actor header.
+    if (path === 'v1/vault/reveal') {
+      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
+        status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
+      });
+    }
+    // The installed shell uses the selected account API for browser Actions,
+    // just like its ordinary account requests. Preserve the actor/data-plane
+    // preconditions for the upstream dispatcher to enforce before any handler.
+    if (event.req.headers.has('X-Thingtime-Expected-Actor') || path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync') {
+      // The installed desktop shell deliberately serves its UI on loopback and
+      // pins the account API through its endpoint settings. Ordinary websites
+      // and incomplete dev deployments must never silently forward vault data.
+      const local = new URL(event.req.url);
+      const configured = process.env.THINGTIME_API_FALLBACK_ORIGIN || '';
+      const desktop = process.env.THINGTIME_DESKTOP === '1' && local.hostname === '127.0.0.1';
+      let upstream: URL | null = null;
+      try { upstream = new URL(configured); } catch { /* fail closed */ }
+      if (!desktop || !upstream || upstream.protocol !== 'https:' || upstream.username || upstream.password)
+        return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== local.origin))
+        return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
+      // Nitro's lazy request is not a native Request; preserve its body API.
+      return proxyApiRequestToFallback(event.req, { stripForwardedOrigin: true });
+    }
+    // Root data uses this same fallback. Forward its public database
+    // precondition and selection unchanged for the upstream to enforce.
+    return proxyApiRequestToFallback(event.req);
+  }
+
+	if (path === 'v1/capabilities') {
+		const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
+		const { getDeploymentDataEnvironment } = await import('../../../app/api/utils/deployment/dataEnvironment');
+		return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities'], getDeploymentDataEnvironment()), {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
+    });
+  }
+
+  if (!hasSelfHostedApiEnv()) return unavailableLocalApiResponse();
+
   const loadModule = routeModules[path];
 
   if (!loadModule) {
