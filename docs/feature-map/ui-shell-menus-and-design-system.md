@@ -172,7 +172,9 @@ Mobile native presence is owned by `Devices/MobileDevicePresenceBootstrap` in th
    also needs the `ThingsItemAction` union and both dispatchers in
    `ThingsPage.tsx`.
 4. Feedback through `useLopu()`; mutations reauthorize server-side.
-5. Verify mouse, keyboard (arrow/Enter/Escape), touch, desktop and 375 px, and
+5. For library Archive/Restore, derive the action from the entire owned selection
+   and use the same dispatcher for the right-click and row menu.
+6. Verify mouse, keyboard (arrow/Enter/Escape), touch, desktop and 375 px, and
    that menus stay clickable (no drag start) and reachable under the nav.
 
 ## Shared navigation and Builder controls

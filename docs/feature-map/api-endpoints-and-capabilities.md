@@ -1,5 +1,10 @@
 # API endpoints and capabilities
 
+Owner Things archive uses additive `api.things` 1.58.0,
+`api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
+filters apply before pagination; the bulk route updates only protected private
+library metadata. See [Things and folders](things-and-folders.md).
+
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
 source ownership and per-device identity, atomically fences policy revisions,

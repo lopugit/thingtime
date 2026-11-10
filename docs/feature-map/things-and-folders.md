@@ -1,5 +1,11 @@
 # Things and folders
 
+Archive and Restore in the owner library use the canonical bulk endpoint to
+change protected library placement metadata only. Explicit list and search
+filters apply before pagination. The Archived view finds items across folders;
+restoring keeps the original folder, links and audience. See [the manual
+checklist](../../TESTING.md#things-library-archive).
+
 ## Thing storage choices
 
 `ThingStoragePanel` and the shared Thing context menu expose individually editable
