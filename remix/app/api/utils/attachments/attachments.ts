@@ -42,6 +42,7 @@ import {
 	bindReadyAttachmentsToTarget,
 	syncBoundTargetAttachments,
 	type AttachmentDoc,
+	type AttachmentDeleteClaimScope,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
 	type AttachmentStore
@@ -391,7 +392,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const cleanupClaimedDoc = async (
 		getS3: () => AttachmentS3,
 		doc: AttachmentDoc,
-		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
+		scope: AttachmentDeleteClaimScope
 	): Promise<AttachmentCleanupOutcome> => {
 		// Linked docs never touch S3. For everything else, resolve the client
 		// BEFORE the destructive deleting claim so an unconfigured/broken S3
@@ -484,7 +485,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (dependencies.customMongoActive()) {
 				return { ok: true, scanned: 0, deleted: 0, deferred: 0, skipped: 0, failed: 0, hasMore: false };
 			}
-			const docs = await dependencies.store.listUnboundOwned(ownerId, MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP + 1);
+			const docs = await dependencies.store.listBrowserDrafts(ownerId, MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP + 1);
 			const queue = docs.slice(0, MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP);
 			if (!queue.length) {
 				return { ok: true, scanned: 0, deleted: 0, deferred: 0, skipped: 0, failed: 0, hasMore: false };
@@ -498,7 +499,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			let failed = 0;
 			for (const doc of queue) {
 				try {
-					const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'draft' });
+					// A concurrent file-sync provenance write must also block the claim.
+					const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'draft', browserOnly: true });
 					if (outcome.status === 'deleted') deleted += 1;
 					else if (outcome.status === 'deferred') deferred += 1;
 					else skipped += 1;

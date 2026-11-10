@@ -345,10 +345,11 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
 test('both manifests publish passkey concurrency and Apple association contracts', () => {
   const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
   const apiManifest = createApiCapabilitiesManifest();
-  for (const operation of ['login-options', 'login', 'register-options', 'register']) {
+  for (const operation of ['login-options', 'login', 'register-options', 'register'] as const) {
     const feature = `api.auth-passkeys-${operation}`;
-    assert.equal(originManifest.features[feature]?.version, operation === 'login-options' ? '1.1.0' : '1.2.0');
-    assert.equal(apiManifest.features[feature], operation === 'login-options' ? '1.1.0' : '1.2.0');
+    const expected = operation === 'login-options' ? '1.1.0' : operation === 'login' ? '1.2.1' : '1.2.0';
+    assert.equal(originManifest.features[feature]?.version, expected);
+    assert.equal(apiManifest.features[feature], expected);
   }
   assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
   assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');
@@ -784,4 +785,23 @@ test('Photos automation settings and exact publication are additive origin-scope
   assert.equal(capabilitySatisfies(previous, minimum), false);
   assert.equal(capabilitySatisfies('2.0.0', minimum), false);
  }
+});
+
+test('session replacement reports compatible protection for scoped file-sync reservations', () => {
+  const versions = {
+    'api.auth-accounts-assume': ['1.0.0', '1.0.1'],
+    'api.auth-accounts-remove': ['1.0.0', '1.0.1'],
+    'api.auth-accounts-switch': ['1.0.0', '1.0.1'],
+    'api.auth-logout': ['1.1.0', '1.1.1'],
+    'api.auth-passkeys-login': ['1.2.0', '1.2.1'],
+    'api.auth-register': ['1.3.1', '1.3.2'],
+    'api.login': ['1.2.0', '1.2.1']
+  };
+  const manifest = thingtimeCapabilityManifest('https://sessions.test');
+  const docs = createApiCapabilitiesManifest();
+  for (const [feature, [previous, current]] of Object.entries(versions)) {
+    assert.equal(manifest.features[feature]?.version, current);
+    assert.equal(docs.features[feature], current);
+    assert.equal(capabilitySatisfies(current, previous), true);
+  }
 });

@@ -1,0 +1,9 @@
+# PR 1451 — Resume interrupted iPhone Photos backups and stream newest-first batches
+
+Build 57 stopped the saved automatic policy when iOS ended a continued session. The native journal now retains authorization and the exact checkpoint, and retries through ordinary execution after backoff. Deliberate Pause has its own durable marker. An old system-only hold can resume after fresh authorization for the exact connection. A new continued session requires an explicit gesture.
+
+The native queue discovers and uploads one newest asset group, then bounded groups with their companions. It reports measured discovery and capture time through individually editable blocks. PhotoKit rejected a local identifier sort on installed iOS 26.5, so the native fetch sorts on supported dates. Reopen positions are saved only at complete date groups under an unchanged full-access PhotoKit token. The exact asset/version receipts make replay safe when the cursor needs another check.
+
+A disposable simulator published the newest video before full discovery. Its exact download hash and 5,116 bytes matched while five of 12 assets had been indexed. An independent receipt verifier then removed its separate browser session, whose old owner-wide draft cleanup canceled the still-pending native upload. The verifier now leaves its read session active during backup. Browser draft cleanup excludes protected file-sync provenance at both the query and the atomic deletion claim. Explicit abort, expiry, and the issuing browser, device, configuration and run checks remain in force.
+
+The built API regression removes a separate same-owner browser session between native reservation and part signing, then verifies the same admission can publish and replay. The installed Photos fixture checks all sample originals and stable cloud revisions after reopening. Physical iOS background scheduling and the user's 10 GB of unique saved originals remain separate acceptance gates.

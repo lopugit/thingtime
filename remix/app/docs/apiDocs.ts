@@ -813,10 +813,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
   }),
   endpoint({
-    id: 'agent-reporting', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things',
+    id: 'agent-reporting', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things',
     title: 'Private agent task reporting', endpoint: '/api/v1/agents/reporting',
     summary: 'Delegate a distinct task Character to an existing private saved workspace and report through its saved Actions.',
-    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes; replay uses the same requestId and inputs. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
+    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. As of 1.1.0, repeating the same coordinate requestId and immutable payload can reconcile an existing post after text moderation releases it. Reconciliation verifies the exact post and private audience without repeating the post write. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
     auth: { mode: 'session-or-bearer', description: 'Owning account session or a PAT explicitly granted agents.report; restricted audience/creation-only PATs and app tokens cannot expand their authority.' },
     methods: ['POST'], steps: ['Negotiate api.agent-reporting 1.0.0, api.auth-characters 1.0.0 and api.agent-overview 2.0.0 at the exact selected origin.', 'Prepare once using stable task identity and exact saved workspace references.', 'Report with stable request identities and verify through get.'],
     requestExamples: [{ name: 'Read an existing task binding', description: 'Read only the authorized task at this origin.', method: 'POST', body: { operation: 'get', origin: 'https://thingtime.example', externalTaskId: '<stable-chat-id>' } }],
@@ -2329,6 +2329,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-assume',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Assume an owned account',
     endpoint: '/api/v1/auth/accounts/assume',
@@ -2342,6 +2344,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires a signed-in session holding the ownership link.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'GET /api/v1/auth/accounts/owned to find assumable accounts.',
       'POST { accountId } — the response sets tt_auth + tt_accounts cookies.',
       'The assumed account is now active; switch back via /api/v1/auth/accounts/switch.'
@@ -2759,9 +2762,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.2.0',
+    contractVersion: '1.2.1',
     group: 'auth',
-    featureVersion: '1.2.0',
+    featureVersion: '1.2.1',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
@@ -2776,6 +2779,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'The signed challenge is bound to this origin; a verified ceremony is consumed atomically and cannot be replayed, even with its saved cookie.',
       'Run startAuthentication(options) in the browser.',
       'POST { response } with credentials; include clientId when the login serves an SSO/app flow.',
@@ -3668,6 +3672,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-remove',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Remove account from switcher',
     endpoint: '/api/v1/auth/accounts/remove',
@@ -3680,6 +3686,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of the roster account to remove.',
       'The account session jti is revoked in MongoDB — the removed token is dead everywhere, not just in this browser.',
       'Read user for the account that is active after the removal (null when none remain).',
@@ -3712,6 +3719,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-switch',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'auth',
     title: 'Switch active account',
     endpoint: '/api/v1/auth/accounts/switch',
@@ -3724,6 +3733,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of a roster account (from /api/v1/auth/accounts).',
       'Store the returned Set-Cookie headers — tt_auth now carries the chosen account token.',
       'Refresh user-scoped state client-side; the active user changed for every subsequent request.',
@@ -3853,8 +3863,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
@@ -3867,6 +3877,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST an empty JSON object, or { "all": true } to sign out every switcher account.',
       'If a token is present, Thingtime verifies it and revokes the session jti in MongoDB.',
       'Read user for the account active after logout — null means the browser is fully signed out.',
@@ -4125,8 +4136,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    featureVersion: '1.3.2',
+    contractVersion: '1.3.2',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
@@ -4138,6 +4149,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username, password, and email; displayName is optional. With a valid inviteToken, email is optional and omitted profile fields inherit editable invite suggestions. avatarUrl may replace/clear the suggested thumbnail; PNG/JPEG/WebP input data URLs (max 112,000 characters) normalize to a lossless 128px PNG of at most 80 KiB. JSON requests are bounded to 128 KiB. Invites are consumed with account creation and gift credit transfer in one transaction; no extra starter credits or upload/admin privileges are granted. meta is never accepted from public signup.',
       'Store the returned Set-Cookie header for browser clients.',
       'If verificationLink is present, it is a local/preview helper only; production sends email instead.',
@@ -4731,8 +4743,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
@@ -4744,6 +4756,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username and password.',
       'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',

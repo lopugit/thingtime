@@ -361,10 +361,12 @@ final class PhotoBackupInstalledTests: XCTestCase {
             if automaticProof {
                 let connection = try XCTUnwrap(connection)
                 let device = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
-                try await awaitTrue(web, "window.__photoNativeArms>0")
-                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
-                NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-                let deadline = Date().addingTimeInterval(360)
+                if resumeReceipt == nil {
+                    try await awaitTrue(web, "window.__photoNativeArms>0")
+                    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                    NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                }
+                let deadline = Date().addingTimeInterval(mixedProof ? 600 : 360)
                 while Date() < deadline {
                     let progress = try NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: connection, rootId: grant.id, deviceId: device)
                     if progress?["stage"] as? String == "complete" { break }
@@ -375,7 +377,9 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 let scans = try await web.evaluateJavaScript("window.__photoScans"), stats = try await web.evaluateJavaScript("window.__nativeUploadStats")
                 XCTAssertEqual(scans as? Int, 0)
                 XCTAssertEqual((stats as? [String: Int])?["files"], 0)
-                print("IOS_PHOTO_AUTOMATIC_FOREGROUND_PASS: one native worker, no WebView scan or upload, no manual start after interruption")
+                if resumeReceipt == nil {
+                    print("IOS_PHOTO_AUTOMATIC_FOREGROUND_PASS: one native worker, no WebView scan or upload, no manual start after interruption")
+                }
                 return
             }
             try await awaitTrue(web, "Array.from((" + card + ")?.querySelectorAll('button')||[]).some(b=>['Start backup','Upload now'].includes(b.textContent.trim())&&!b.disabled&&b.getClientRects().length>0)")
@@ -422,6 +426,20 @@ final class PhotoBackupInstalledTests: XCTestCase {
             }
             let before = try await revisions()
             guard before == expected else { throw NSError(domain: "PhotoBackupAcceptance", code: 8, userInfo: [NSLocalizedDescriptionKey: "Existing cloud revisions changed before reopen"]) }
+            if mixedProof {
+                let nodes = try await cloudNodes()
+                XCTAssertEqual(nodes.count, initialLibrary.count)
+                var totalBytes = 0
+                for resource in initialLibrary {
+                    let file = try XCTUnwrap(nodes.first { $0["path"] as? String == resource.path }?["file"] as? [String: Any])
+                    let original = try await readOriginal(resource)
+                    try await verifyBytes(file, expectedHash: SHA256.hash(data: original), expectedSize: original.count)
+                    totalBytes += original.count
+                }
+                let photos = Set(initialLibrary.filter { $0.assetKind == "photo" }.map(\.asset)).count
+                let videos = Set(initialLibrary.filter { $0.assetKind == "video" }.map(\.asset)).count
+                print("IOS_PHOTO_MIXED_ORIGINALS_PASS: photos=\(photos) videos=\(videos) files=\(initialLibrary.count) bytes=\(totalBytes)")
+            }
             try await reloadFresh(); try await startAndAwaitUpload()
             let after = try await revisions()
             XCTAssertEqual(after, expected)

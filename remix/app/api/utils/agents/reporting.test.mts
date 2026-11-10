@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
+import { validateThingtimeCrystal } from '~/schemas/registry';
 let docs: any[] = [], characters: any[] = [], calls = 0, revoked = false, missingScope = false, disabled = false, member = true, customPlane = false, publicSpace = false, wrongAccount = false, badSchema = false, crashAfterWrite = false;
+let postModeration: string | undefined, projectionOverride: Record<string, unknown> | null, createPostCalls: number, updatePostCalls: number;
 const owner = { _id: 'owner', id: 'owner', username: 'owner' };
 const pat = { jti: 'token', scopes: ['agents.report'], visibility: 'private', onlyCreatedThings: false };
 const equal = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
@@ -17,7 +19,7 @@ let lockGate: { requestId: string; reached: () => void; released: Promise<void> 
 const collection = {
   findOne: async (filter: any) => { const doc = docs.find(doc => match(doc, filter)); return doc ? structuredClone(doc) : null; },
   insertOne: async (doc: any) => { if (doc.uniqueKeys?.some((key: any) => docs.some(other => other.uniqueKeys?.some((entry: any) => equal(key, entry))))) throw Object.assign(new Error(), { code: 11000 }); docs.push(doc); },
-  updateOne: async (filter: any, mutation: any) => { if (lockGate && mutation.$set?.['crystal.activeOperation'] === lockGate.requestId) { lockGate.reached(); await lockGate.released; } const doc = docs.find(doc => match(doc, filter)); if (!doc) return { modifiedCount: 0 }; for (const [key, value] of Object.entries(mutation.$set || {})) set(doc, key, value); for (const key of Object.keys(mutation.$unset || {})) { const parts = key.split('.'); const leaf = parts.pop()!; delete parts.reduce((v, k) => v[k], doc)[leaf]; } return { modifiedCount: 1 }; }
+  updateOne: async (filter: any, mutation: any) => { if (lockGate && mutation.$set?.['crystal.activeOperation'] === lockGate.requestId) { lockGate.reached(); await lockGate.released; } const doc = docs.find(doc => match(doc, filter)); if (!doc) return { matchedCount: 0, modifiedCount: 0 }; for (const [key, value] of Object.entries(mutation.$set || {})) set(doc, key, value); for (const key of Object.keys(mutation.$unset || {})) { const parts = key.split('.'); const leaf = parts.pop()!; delete parts.reduce((v, k) => v[k], doc)[leaf]; } return { matchedCount: 1, modifiedCount: 1 }; }
 };
 mock.module('../auth/patTokens', { namedExports: {
   resolveThingsActor: async () => missingScope ? { ok: false, status: 403, error: 'This token was not granted the agents.report scope' } : { ok: true, actor: { user: wrongAccount ? { id: 'foreign', username: 'foreign' } : owner, pat } },
@@ -39,10 +41,40 @@ mock.module('../subspaces/gate', { namedExports: {
 } });
 mock.module('../subspaces/subspaces', { namedExports: { listSubspaces: async () => ({ ok: true, subspaces: [{ id: 'agents', name: 'Thingtime Agents' }], nextCursor: null }), mutateMember: async () => ({ ok: true }) } });
 mock.module('../things/things', { namedExports: {
-  createThing: async (ownerId: string, input: any) => { const doc = { shareId: input.shareId, ownerId, thingtime: input.thingtime, acl: input.acl, crystal: input.crystal, subspacePrivate: true }; docs.push(doc); return { ok: true, doc }; },
-  viewerOf: (user: any) => ({ id: user.id, username: user.username }),
-  getThing: async (viewer: any, id: string) => { const doc = docs.find(doc => doc.shareId === id); return doc && (viewer?.id === doc.ownerId || (doc.subspacePrivate ? viewer?.id === 'owner' : (doc.acl.includes(`tt:user/${viewer?.username}`) || doc.acl.includes(`tt:user/${viewer?.username}/write`)))) ? { ok: true, thing: { id, thingtime: doc.thingtime, crystal: doc.crystal, author: { id: doc.ownerId } } } : { ok: false, status: 404, error: 'Thing not found' }; },
-  updateThing: async (_viewer: any, id: string, patch: any, options: any = {}) => { if (options.expectedUpdatedAt instanceof Date) return { ok: false, status: 400, error: 'expectedUpdatedAt must be an ISO timestamp' }; const doc = docs.find(doc => doc.shareId === id); if (patch.acl) doc.acl = patch.acl; if (patch.crystal) doc.crystal = { ...doc.crystal, ...patch.crystal }; return { ok: true }; }
+  createThing: async (ownerId: string, input: any, _viewer: any, _app: any, hooks: any) => {
+    createPostCalls++;
+    const validated = validateThingtimeCrystal(input.thingtime, input.crystal);
+    if (!validated.ok) return validated;
+    const doc = { shareId: input.shareId, ownerId, thingtime: input.thingtime, acl: input.acl, crystal: validated.crystal, subspacePrivate: true, moderation: { status: postModeration }, createdAt: new Date() };
+    await hooks?.afterInsert?.(doc, {});
+    docs.push(doc); return { ok: true, doc };
+  },
+  viewerOf: (user: any, token: any) => ({ id: user.id, username: user.username, pat: token }),
+  getThing: async (viewer: any, id: string) => {
+    const doc = docs.find(doc => doc.shareId === id);
+    const isPost = doc?.thingtime.includes('post');
+    const author = viewer?.id === doc?.ownerId;
+    if (!doc || (viewer?.pat?.visibility === 'private' && doc.acl.includes('tt:all')) ||
+        doc.moderation?.status === 'blocked' || (doc.moderation?.status === 'pending' && !author) ||
+        !(author || (doc.subspacePrivate ? viewer?.id === 'owner' : (doc.acl.includes(`tt:user/${viewer?.username}`) || doc.acl.includes(`tt:user/${viewer?.username}/write`)))))
+      return { ok: false, status: 404, error: 'Thing not found' };
+    const thing = { id, targetId: doc.targetId ?? null, thingtime: doc.thingtime, crystal: doc.crystal, author: { id: doc.ownerId }, acl: doc.acl, visibility: isPost ? 'public' : 'private' };
+    const post = isPost ? { id, subspace: { id: doc.crystal.subspaceId, access: 'private', viewerRole: author ? 'member' : 'owner', ...projectionOverride } } : null;
+    return { ok: true, thing, post };
+  },
+  updateThing: async (_viewer: any, id: string, patch: any, options: any = {}) => {
+    if (options.expectedUpdatedAt instanceof Date) return { ok: false, status: 400, error: 'expectedUpdatedAt must be an ISO timestamp' };
+    const doc = docs.find(doc => doc.shareId === id);
+    if (patch.acl) doc.acl = patch.acl;
+    if (patch.crystal && doc.thingtime.includes('post')) {
+      updatePostCalls++;
+      const validated = validateThingtimeCrystal(doc.thingtime, { ...doc.crystal, ...patch.crystal });
+      if (!validated.ok) return validated;
+      doc.crystal = validated.crystal;
+      doc.moderation = { status: postModeration };
+    } else if (patch.crystal) doc.crystal = { ...doc.crystal, ...patch.crystal };
+    return { ok: true };
+  }
 } });
 mock.module('../actions/execute', { namedExports: { runAction: async (viewer: any, request: any, _shared: any, context: any) => {
   calls++; await context.assertAuthorized();
@@ -69,6 +101,7 @@ const body = (operation: string, extra: any = {}) => ({ operation, origin: 'http
 const reset = () => {
   docs = Object.entries({ overview: 'webpage', detail: 'webpage', ...Object.fromEntries(Object.values(workspace.schemas).map(id => [id, 'schema'])), ...Object.fromEntries(Object.values(workspace.actions).map(id => [id, 'action'])) }).map(([shareId, kind]) => ({ shareId, ownerId: 'owner', thingtime: [kind], acl: ['tt:user'], crystal: {}, updatedAt: new Date() }));
   lockGate = null; characters = []; calls = 0; revoked = false; missingScope = false; disabled = false; member = true; customPlane = false; publicSpace = false; wrongAccount = false; badSchema = false; crashAfterWrite = false;
+  postModeration = undefined; projectionOverride = null; createPostCalls = 0; updatePostCalls = 0;
 };
 const prepare = () => agentReporting(request(), body('prepare', { displayName: 'Reporter', workspace }));
 const report = (requestId = '12345678-1234-4123-a123-123456789abc', inputs = { title: 'Task' }) => agentReporting(request(), body('report', { requestId, actionName: 'createTask', inputs }));
@@ -141,7 +174,7 @@ test('concurrent prepare cannot extend the winning immutable workspace with lose
   assert.deepEqual(docs.find(doc => doc.shareId === unused).acl, ['tt:user']);
 });
 
-const coordinate = (requestId: string, text = 'Started work') => agentReporting(request(), body('coordinate', { requestId, title: 'Task coordination', text, renderComponent: { name: 'Task status', render: '<p>{{text}}</p>' } }));
+const coordinate = (requestId: string, text = 'Started work') => agentReporting(request(), body('coordinate', { requestId, title: 'Task coordination', text, renderComponent: { render: { tag: 'p', children: ['{text}'] } } }));
 test('coordination creates one Character post and reuses it on update and retry', async () => {
   reset(); await prepare();
   const first = await coordinate('12345678-1234-4123-a123-123456789abc'); assert.equal(first.ok, true);
@@ -151,6 +184,78 @@ test('coordination creates one Character post and reuses it on update and retry'
   const posts = docs.filter(doc => doc.thingtime.includes('post')); assert.equal(posts.length, 1); assert.equal(posts[0].ownerId, characters[0]._id);
   assert.equal(posts[0].subspacePrivate, true); assert.equal(posts[0].crystal.subspaceId, 'agents');
   const inspection = await agentReporting(request(), body('get')); assert.equal(inspection.coordinationPost.crystal.text, 'Completed work');
+  assert.equal(inspection.coordinationPost.visibility, 'public');
+  assert.equal(inspection.coordinationPost.crystal.renderComponent.name, 'Thing presentation');
+});
+test('a saved post pending moderation reconciles a legacy create receipt with the same immutable request only', async () => {
+  reset(); await prepare(); postModeration = 'pending';
+  const id = '12345678-1234-4123-a123-123456789abc';
+  const pending = await coordinate(id);
+  assert.equal(pending.status, 409); assert.match(pending.error, /waiting for text moderation/);
+  const post = docs.find(doc => doc.thingtime.includes('post'));
+  const receipt = docs.find(doc => doc.crystal.requestId === id && doc.crystal.actionName === 'coordinate');
+  delete receipt.crystal.coordinationWritten;
+  post.moderation = { status: 'clear' };
+  assert.match((await coordinate(id)).error, /pending; it will not be replayed/);
+  post.moderation = { status: 'pending' };
+  delete receipt.crystal.coordinationWrite;
+  assert.equal((await coordinate(id)).status, 409);
+  assert.equal((await coordinate(id, 'different payload')).status, 409);
+  assert.equal((await coordinate('22345678-1234-4123-a123-123456789abc')).status, 409);
+  const createdAt = post.createdAt;
+  post.createdAt = new Date(receipt.createdAt.getTime() - 1000);
+  assert.match((await coordinate(id)).error, /predates the pending request/);
+  post.createdAt = createdAt;
+  post.moderation = { status: 'blocked' };
+  assert.match((await coordinate(id)).error, /blocked by text moderation/);
+  post.moderation = { status: 'clear' };
+  const results = await Promise.all([coordinate(id), coordinate(id)]);
+  for (const result of results) {
+    assert.equal(result.ok, true); assert.equal(result.binding.coordinationPostId, post.shareId);
+    assert.deepEqual(result.receipt.result.ids, [post.shareId]);
+  }
+  const readback = await agentReporting(request(), body('get'));
+  assert.equal(readback.activeOperation, null);
+  assert.equal(readback.coordinationPost.id, post.shareId);
+  assert.equal(createPostCalls, 1); assert.equal(updatePostCalls, 0);
+});
+test('coordination will not bind a mismatched audience, author, subspace or saved payload', async () => {
+  for (const alter of [
+    (post: any) => { post.acl = ['tt:hidden']; },
+    (post: any) => { post.ownerId = 'foreign'; },
+    (post: any) => { post.crystal.text = 'not the receipt payload'; },
+    (post: any) => { post.crystal.renderComponent.render.children = ['different']; },
+    () => { projectionOverride = { id: 'other-subspace' }; },
+    () => { projectionOverride = { access: 'public' }; },
+    () => { projectionOverride = { viewerRole: null }; }
+  ]) {
+    reset(); await prepare(); postModeration = 'pending';
+    const id = '12345678-1234-4123-a123-123456789abc';
+    await coordinate(id);
+    const post = docs.find(doc => doc.thingtime.includes('post'));
+    post.moderation = { status: 'clear' }; alter(post);
+    assert.equal((await coordinate(id)).status, 409);
+    const readback = await agentReporting(request(), body('get'));
+    assert.equal(readback.binding.coordinationPostId, null);
+    assert.equal(readback.activeOperation.requestId, id);
+    assert.equal(createPostCalls, 1); assert.equal(updatePostCalls, 0);
+  }
+});
+test('a retry cannot complete an unconfirmed update even when the old post has the same content', async () => {
+  reset(); await prepare();
+  assert.equal((await coordinate('12345678-1234-4123-a123-123456789abc')).ok, true);
+  const id = '22345678-1234-4123-a123-123456789abc';
+  postModeration = 'pending'; assert.equal((await coordinate(id)).status, 409);
+  const pending = await agentReporting(request(), body('get'));
+  assert.equal(pending.coordinationPost, null);
+  assert.equal(pending.activeOperation.requestId, id);
+  const receipt = docs.find(doc => doc.crystal.requestId === id);
+  const post = docs.find(doc => doc.thingtime.includes('post'));
+  post.moderation = { status: 'clear' }; delete receipt.crystal.coordinationWritten;
+  assert.equal((await coordinate(id)).status, 409);
+  receipt.crystal.coordinationWritten = true;
+  assert.equal((await coordinate(id)).ok, true);
+  assert.equal(createPostCalls, 1); assert.equal(updatePostCalls, 1);
 });
 test('coordination and reporting refuse a later owner subspace visibility change', async () => {
   reset(); await prepare(); assert.equal((await coordinate('12345678-1234-4123-a123-123456789abc')).ok, true);
