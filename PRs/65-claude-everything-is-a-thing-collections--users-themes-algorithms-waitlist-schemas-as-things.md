@@ -4,7 +4,7 @@
   `claude/search-page-mongodb-query-154eb4`, PR #63)
 - **PR:** https://github.com/lopugit/thingtime/pull/65
 - **Author:** Claude (AI), 2026-07-12
-- **Design:** claude-todo/12-everything-is-a-thing-collections.md
+- **Design:** TODO/claude-todo/22-everything-is-a-thing-collections.md
 
 ## Shape
 

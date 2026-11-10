@@ -8,6 +8,8 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW } from '~/theme/rainbow';
+import { ProfileMediaField, type ProfileMediaFieldHandle } from './ProfileMediaField';
+import { profileMediaUpdateFields, profileSaveErrorMessage, preservedProfileMediaSnapshot, type ProfileMediaFieldSnapshot } from './profileMediaCore';
 
 // Edit-profile overlay following the UserSettingsModal pattern: rAF two-frame
 // mount, Escape close, body scroll lock. Desktop: centred 560px card.
@@ -39,9 +41,11 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 
   const [displayName, setDisplayName] = React.useState('');
   const [bio, setBio] = React.useState('');
-  const [avatarUrl, setAvatarUrl] = React.useState('');
-  const [bannerUrl, setBannerUrl] = React.useState('');
+	const [avatarMedia, setAvatarMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(null));
+	const [bannerMedia, setBannerMedia] = React.useState<ProfileMediaFieldSnapshot>(() => preservedProfileMediaSnapshot(null));
   const [saving, setSaving] = React.useState(false);
+	const avatarMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
+	const bannerMediaRef = React.useRef<ProfileMediaFieldHandle | null>(null);
 
   // seed fields from the current user each time the modal opens (latest-ref so
   // a mid-edit root-data refresh never clobbers typed values)
@@ -53,8 +57,8 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     const current = userRef.current;
     setDisplayName(current?.displayName || '');
     setBio(current?.bio || '');
-    setAvatarUrl(current?.avatarUrl || '');
-    setBannerUrl(current?.bannerUrl || '');
+		setAvatarMedia(preservedProfileMediaSnapshot(current?.avatarUrl || null));
+		setBannerMedia(preservedProfileMediaSnapshot(current?.bannerUrl || null));
     setSaving(false);
   }, [open]);
 
@@ -80,7 +84,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Escape') {
+			if (event.code === 'Escape' && !saving) {
         onClose();
       }
     };
@@ -90,7 +94,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [open, onClose]);
+	}, [open, onClose, saving]);
 
   // freeze the page behind the modal
   React.useEffect(() => {
@@ -105,22 +109,34 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
   }, [open]);
 
   const handleSave = async () => {
-    if (saving) return;
+		if (saving || avatarMedia.blocking || bannerMedia.blocking) {
+			if (!saving) {
+				lopu({
+					title: 'Profile media is not ready yet',
+					description: 'Finish or remove the avatar and banner drafts before saving.',
+					status: 'info'
+				});
+			}
+			return;
+		}
     setSaving(true);
 
     try {
-      await api.v1.profile.update({
+			const response = await api.v1.profile.update({
         displayName: displayName.trim() || null,
         bio: bio.trim() ? bio.trim() : null,
-        avatarUrl: avatarUrl.trim() || null,
-        bannerUrl: bannerUrl.trim() || null
+				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
+				...profileMediaUpdateFields('banner', bannerMedia.mutation)
       });
+			if (!response?.user) throw new Error('invalid profile response');
+			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
+			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null);
       lopu({ title: 'Profile updated ✨', status: 'success' });
       onClose();
-    } catch (err: any) {
+		} catch (error: unknown) {
       lopu({
         title: 'Could not update profile 😔',
-        description: err?.error || 'Please try again in a moment.',
+				description: profileSaveErrorMessage(error),
         status: 'error'
       });
     } finally {
@@ -156,14 +172,16 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
           as="button"
           type="button"
           marginLeft="auto"
-          width="28px"
-          height="28px"
+					width="44px"
+					height="44px"
           borderRadius="8px"
           opacity={0.6}
           _hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
           cursor="pointer"
           aria-label="Close edit profile"
-          onClick={onClose}
+					onClick={() => {
+						if (!saving) onClose();
+					}}
         >
           <X size={15} strokeWidth={2} />
         </Center>
@@ -171,10 +189,10 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 
       {/* live preview */}
       <Box position="relative" paddingBottom="24px">
-        <ProfileBanner bannerUrl={bannerUrl.trim() || null} height="72px" radius="var(--tt-radius-md, 12px)" />
+				<ProfileBanner bannerUrl={bannerMedia.previewUrl} height="72px" radius="var(--tt-radius-md, 12px)" />
         <Box position="absolute" left="16px" bottom={0}>
           <ProfileAvatarCircle
-            avatarUrl={avatarUrl.trim() || null}
+						avatarUrl={avatarMedia.previewUrl}
             name={displayName || user?.displayName || user?.username || '?'}
             size="48px"
             fontSize="md"
@@ -198,11 +216,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
       <Flex flexDirection="column" rowGap={1}>
         {fieldLabel(
           'Bio ✍️',
-          <Text
-            fontFamily="mono"
-            fontSize="xs"
-            color={bio.length >= BIO_MAX ? 'var(--tt-danger, #e0426b)' : 'var(--tt-muted, #9a9aa6)'}
-          >
+					<Text fontFamily="mono" fontSize="xs" color={bio.length >= BIO_MAX ? 'var(--tt-danger, #e0426b)' : 'var(--tt-muted, #9a9aa6)'}>
             {bio.length}/{BIO_MAX}
           </Text>
         )}
@@ -218,37 +232,44 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
         />
       </Flex>
 
-      <Flex flexDirection="column" rowGap={1}>
-        {fieldLabel('Avatar URL 🖼️')}
-        <Input
-          value={avatarUrl}
-          onChange={(event) => setAvatarUrl(event.target.value)}
-          placeholder="https://…"
-          size="sm"
-          {...INPUT_STYLE}
+			{user ? (
+				<ProfileMediaField
+					ref={avatarMediaRef}
+					slot="avatar"
+					ownerId={user.id}
+					savedUrl={user.avatarUrl}
+					savedLinkedUrl={user.avatarLinkedUrl}
+					privateUploadsEnabled={user.privateUploadsEnabled}
+					disabled={saving}
+					remainingBytes={user.storage.remainingBytes}
+					storageStatus={user.storage.status}
+					onChange={setAvatarMedia}
         />
-      </Flex>
+			) : null}
 
-      <Flex flexDirection="column" rowGap={1}>
-        {fieldLabel('Banner URL 🌅')}
-        <Input
-          value={bannerUrl}
-          onChange={(event) => setBannerUrl(event.target.value)}
-          placeholder="https://…"
-          size="sm"
-          {...INPUT_STYLE}
+			{user ? (
+				<ProfileMediaField
+					ref={bannerMediaRef}
+					slot="banner"
+					ownerId={user.id}
+					savedUrl={user.bannerUrl}
+					savedLinkedUrl={user.bannerLinkedUrl}
+					privateUploadsEnabled={user.privateUploadsEnabled}
+					disabled={saving}
+					remainingBytes={user.storage.remainingBytes}
+					storageStatus={user.storage.status}
+					onChange={setBannerMedia}
         />
-        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-          Paste http(s) image URLs — the preview above updates as you type ✨
-        </Text>
-      </Flex>
+			) : null}
 
       {/* actions */}
-      <Flex columnGap={2} justifyContent="flex-end" pt={1}>
+			<Flex columnGap={2} justifyContent="flex-end" paddingRight={isMobile ? '52px' : 0} pt={1}>
         <Button
           size="sm"
+					minHeight="44px"
           variant="outline"
           onClick={onClose}
+					isDisabled={saving}
           borderColor="var(--tt-border, #ececef)"
           _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
           borderRadius="var(--tt-radius-md, 12px)"
@@ -257,8 +278,10 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
         </Button>
         <Button
           size="sm"
+					minHeight="44px"
           onClick={handleSave}
           isLoading={saving}
+					isDisabled={avatarMedia.blocking || bannerMedia.blocking}
           color="white"
           fontFamily="heading"
           fontWeight="600"
@@ -287,7 +310,9 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
         background="rgba(0,0,0,0.4)"
         opacity={visible ? 1 : 0}
         transition="opacity 0.24s ease-out"
-        onClick={onClose}
+				onClick={() => {
+					if (!saving) onClose();
+				}}
       ></Box>
 
       {isMobile ? (

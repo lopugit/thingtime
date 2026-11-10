@@ -1,5 +1,6 @@
 import { json } from '~/api/http';
 
+import { pickFallbackMusing } from '~/api/utils/lopu/fallbacks';
 import { joinWaitlist } from '~/api/utils/waitlist/waitlist';
 
 const MAX_BODY_BYTES = 2048;
@@ -17,5 +18,8 @@ export const action = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
-  return json({ ok: true });
+  // First contact becomes a gift: a fortune from Lopu's musing library
+  // (time-rotated, RNG-free — the same picker the musing endpoint uses, so
+  // seeded joins and real joins share one voice). claude-todo/10 ✨.
+  return json({ ok: true, fortune: pickFallbackMusing() });
 };

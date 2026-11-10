@@ -1,0 +1,1529 @@
+import { DEFAULT_DICTATION_SILENCE_SECONDS, DictationSilence } from './dictationSilence';
+import { LopuDictationSettings } from './LopuDictationSettings';
+import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
+import { speechRecognitionCtor } from './desktopSpeechRecognition';
+import type { ComposerTranscript } from './composerDictation';
+import { aiTaskFetch } from './aiTasks.client';
+import React from 'react';
+import { Box, Button, Center, Flex, Input, Popover, PopoverAnchor, PopoverBody, PopoverContent, PopoverTrigger, Portal, Select, Switch, Text } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
+import { ArrowUp, AudioLines, Loader2, Mic, Settings2, Square } from 'lucide-react';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
+
+import { useApi } from '~/hooks/useApi';
+import { getNativeBridge, nativeBridgeMessageEvent, nativeBridgeReadyEvent, supportsNativeLopuVoice, supportsNativeVoiceHistory } from '~/utils/nativeBridge';
+import { LopuRingAvatar } from './LopuActivityBadge';
+import { LopuAssistantRow, LopuChatView, LopuUserRow } from './LopuChatView';
+import { LopuProviderSelect, type LopuProviderSelectChange } from './LopuModelPicker';
+import { readNdjson } from './lopuChatStream';
+import { abortLopuTurn, getLopuStoreSnapshot, loadLopuChats, loadLopuMessages, selectLopuChat, subscribeLopuStore } from './lopuChatStore';
+import { directVoiceUnavailableReason, findLopuVaultProvider, resolveDirectVoiceModel, type LopuVaultProvider } from './lopuProviderCore';
+import { LOPU_UI, lopuPopoverSx } from './lopuTheme';
+import { browserSupportsLopuRealtime, LOPU_REALTIME_UNSUPPORTED_MESSAGE, LopuVoiceRealtime } from './lopuVoiceRealtime';
+import { useLopu } from './useLopu';
+import { useLopuChat } from './useLopuChat';
+import { useLopuSettings } from './useLopuSettings';
+import { VoiceCaptureQueue, type PendingVoiceCapture } from './voiceCaptureQueue';
+import { voiceConversationHistory, type VoiceHistoryItem } from './voiceConversation';
+import { newLopuVoiceId as newId } from './voiceIdentity';
+
+// 🎙️ Lopu's voice engine + the compact controls every voice surface shares
+// (the /lopu/voice page and the floating window's voice mode).
+//
+// `useLopuVoice` owns the microphone: web SpeechRecognition (continuous,
+// interim results, auto-restart while a session is on), the iOS native
+// bridge (the app owns audio + recognition and posts its own turns while the
+// WebView is backgrounded), speechSynthesis for spoken replies, and the
+// feedback-loop guard — listening pauses for the whole turn and for Lopu's
+// speech so it never transcribes its own voice, then resumes.
+//
+// Standard device speech updates the shared message draft through
+// `onDraftTranscript`; the user edits and sends with the ordinary composer.
+// Legacy consumers can still route final utterances through `onFinalTranscript`.
+// Transcribe mode keeps the
+// /api/v1/lopu/voice/reply path — each utterance becomes a private
+// transcript page whose quote renders as a Lopu bubble in the transcript
+// strip (no AI turn, nothing spoken).
+//
+// Direct voice (design note §6.1, opt-in): when the chat's own Secure Vault
+// provider offers realtime speech (xAI Grok Voice), the mic streams straight
+// to it over the provider's WebSocket (lopuVoiceRealtime.ts) on a five-minute
+// credential minted by POST /api/v1/lopu/voice/session; the provider's
+// transcripts and reply text land in the same conversation list. Unsupported
+// or unconfigured → one line says why and the standard path runs. On iOS the
+// native controller speaks the same protocol (`inputMode: 'provider-audio'`).
+
+declare global {
+	interface Window {
+		webkitSpeechRecognition?: new () => any;
+		SpeechRecognition?: new () => any;
+	}
+}
+
+export type LopuVoicePhase = 'idle' | 'listening' | 'thinking' | 'speaking';
+
+export type LopuVoiceItem = {
+	id: string;
+	role: 'user' | 'assistant';
+	text: string;
+	at: number;
+	// transcribe mode: the utterance quoted back with its private page
+	quote?: boolean;
+	pageId?: string | null;
+	pageTitle?: string | null;
+	error?: boolean;
+};
+
+type LopuVoiceEvent =
+	| { type: 'meta'; mode?: string; provider?: string; sessionId?: string; chatId?: string }
+	| { type: 'quote'; text: string; page?: { id?: string; title?: string } }
+	| { type: 'delta'; text: string }
+	| { type: 'error'; error?: string; message?: string }
+	| { type: 'done'; messages?: { id: string }[] };
+
+export type UseLopuVoiceOptions = {
+	chatId?: string | null;
+	model?: string | null;
+	effort?: string | null;
+	speed?: string | null;
+	// Standard device dictation writes partial/final revisions into the composer.
+	// Dedicated private-page transcription and direct voice retain their flows.
+	onDraftTranscript?: (transcript: ComposerTranscript) => void;
+	onSubmitDraft?: () => void;
+	dictationSilenceSeconds?: number;
+	hearMeOut?: boolean;
+	// resolve one final utterance to Lopu's reply text (read aloud when
+	// `speak` is on); null/undefined = nothing to speak
+	onFinalTranscript: (text: string) => Promise<string | null | undefined | void> | string | null | undefined | void;
+	speak: boolean;
+	transcribe: boolean;
+	// the Secure Vault provider a native (iOS) session posts its turns with
+	providerId: string | null;
+	// direct voice (§6.1): the preference, the realtime model it should run
+	// (null = the provider's first) and the chat's pinned vault provider (the
+	// catalog row tells whether its kind offers realtime speech)
+	directVoice?: boolean;
+	directVoiceModel?: string | null;
+	provider?: LopuVaultProvider | null;
+};
+
+export type UseLopuVoice = {
+	// a microphone path exists here (web SpeechRecognition or the iOS bridge)
+	supported: boolean;
+	nativeReady: boolean;
+	// the listening session is on
+	active: boolean;
+	sendPrompt: boolean;
+	confirmSend: () => void;
+	keepListening: () => void;
+	// the session streams the microphone straight to the user's provider
+	direct: boolean;
+	phase: LopuVoicePhase;
+	interim: string;
+	// local-only rows: native turns, transcribe quotes, microphone errors
+	items: LopuVoiceItem[];
+	sessionId: string;
+	start: () => void;
+	stop: () => void;
+	toggle: () => void;
+	// the typed path — the same pipeline as a final utterance
+	submit: (text: string) => Promise<void>;
+	// stop Lopu mid-sentence (speech + the streaming turn)
+	interrupt: () => void;
+	speakText: (text: string) => Promise<void>;
+	clearItems: () => void;
+	capturePending: number;
+	captureError: string;
+	retryCapture: () => void;
+};
+
+const VOICE_REPLY_ENDPOINT = '/api/v1/lopu/voice/reply';
+const MAX_LOCAL_ITEMS = 200;
+const RECOGNITION_RESTART_MS = 250;
+
+const speechLang = () => (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
+
+const webRecognitionCtor = speechRecognitionCtor;
+
+// the reply text the surface hands back should never be read aloud when it
+// carries nothing but whitespace
+const speakable = (reply: unknown): string | null => (typeof reply === 'string' && reply.trim() ? reply.trim() : null);
+
+// ——— the engine ————————————————————————————————————————————————————————————
+
+export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
+	const lopu = useLopu();
+	const { settings: voicePreferences } = useLopuSettings();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const optionsRef = React.useRef(options);
+	optionsRef.current = options;
+
+	const [active, setActive] = React.useState(false);
+	const [direct, setDirect] = React.useState(false);
+    const [sendPrompt, setSendPrompt] = React.useState(false);
+    const silenceContext = React.useRef<{ owner: string | null; chat: string | null } | null>(null);
+    const silenceSend = React.useRef<() => void>(() => {});
+    const silence = React.useMemo(() => new DictationSilence({ silenceSeconds: DEFAULT_DICTATION_SILENCE_SECONDS, hearMeOut: false }, {
+        prompt: setSendPrompt,
+        isCurrent: () => !!silenceContext.current &&
+            silenceContext.current.owner === getLopuStoreSnapshot().userId &&
+            silenceContext.current.chat === (optionsRef.current.chatId ?? null) &&
+            silenceContext.current.chat === getLopuStoreSnapshot().activeChatId,
+        send: () => silenceSend.current()
+    }), []);
+    React.useLayoutEffect(() => {
+        silence.update({ silenceSeconds: options.dictationSilenceSeconds ?? DEFAULT_DICTATION_SILENCE_SECONDS, hearMeOut: !!options.hearMeOut });
+    }, [silence, options.dictationSilenceSeconds, options.hearMeOut]);
+	const [busy, setBusy] = React.useState<'thinking' | 'speaking' | null>(null);
+	const [interim, setInterim] = React.useState('');
+	const [items, setItems] = React.useState<LopuVoiceItem[]>([]);
+	// Recognition failures describe the current capture, not conversation history.
+	const [recognitionError, setRecognitionError] = React.useState<LopuVoiceItem | null>(null);
+	const [nativeReady, setNativeReady] = React.useState(false);
+	const [webSupported, setWebSupported] = React.useState(false);
+	const captureOwner = React.useSyncExternalStore(subscribeLopuStore, () => getLopuStoreSnapshot().userId, () => null);
+	const captureQueue = React.useMemo(() => captureOwner ? new VoiceCaptureQueue(captureOwner) : null, [captureOwner]);
+	const [capturePending, setCapturePending] = React.useState(0);
+	const [captureError, setCaptureError] = React.useState('');
+    const [nativeCapturePending, setNativeCapturePending] = React.useState(0);
+    const [nativeCaptureError, setNativeCaptureError] = React.useState('');
+    const nativeStartGeneration = React.useRef(0);
+    const nativeCaptureSession = React.useRef<string | null>(null);
+
+	const sessionIdRef = React.useRef(newId('voice'));
+	const activeRef = React.useRef(false);
+	const nativeSessionRef = React.useRef(false);
+	const nativeOwnerRef = React.useRef<string | null>(null);
+	// the web realtime session (direct voice) — null on the standard path
+	const realtimeRef = React.useRef<LopuVoiceRealtime | null>(null);
+	const voiceStartGenerationRef = React.useRef(0);
+	const directChatRef = React.useRef<{ sessionId: string; chatId: string | null } | null>(null);
+	const directSessionRef = React.useRef(false);
+	// recognition is paused for a turn / Lopu's speech (the feedback-loop guard)
+	const pausedRef = React.useRef(false);
+	const recognitionRef = React.useRef<any>(null);
+	const restartTimerRef = React.useRef<number | null>(null);
+	const queueRef = React.useRef<Promise<void>>(Promise.resolve());
+	const finishSpeechRef = React.useRef<(() => void) | null>(null);
+	const startRecognitionRef = React.useRef<() => boolean>(() => false);
+	const runTurnRef = React.useRef<(text: string) => Promise<void>>(async () => {});
+
+	// capabilities are read after mount so the server and the first client
+	// paint agree
+	React.useEffect(() => {
+		setWebSupported(!!webRecognitionCtor());
+		const ready = () => setNativeReady(supportsNativeLopuVoice());
+		ready();
+		window.addEventListener(nativeBridgeReadyEvent, ready);
+		return () => window.removeEventListener(nativeBridgeReadyEvent, ready);
+	}, []);
+
+	const pushItem = React.useCallback((item: Omit<LopuVoiceItem, 'id' | 'at'> & { id?: string }) => {
+		setItems((current) => item.id && current.some(row => row.id === item.id) ? current : [...current, { ...item, id: item.id ?? newId(item.role), at: Date.now() }].slice(-MAX_LOCAL_ITEMS));
+	}, []);
+
+	const patchItem = React.useCallback((id: string, patch: (item: LopuVoiceItem) => LopuVoiceItem) => {
+		setItems((current) => current.map((item) => (item.id === id ? patch(item) : item)));
+	}, []);
+
+	// a realtime reply row keyed by the provider's response id (created once,
+	// then patched by its deltas)
+	const ensureAssistantItem = React.useCallback((id: string) => {
+		setItems((current) => (current.some((item) => item.id === id) ? current : [...current, { id, role: 'assistant' as const, text: '', at: Date.now() }].slice(-MAX_LOCAL_ITEMS)));
+	}, []);
+	const retryCapture = React.useCallback(() => {
+        const ownerId = getLopuStoreSnapshot().userId;
+        if (ownerId && supportsNativeVoiceHistory()) getNativeBridge()?.postMessage({ type: 'lopu-voice-recordings-sync', payload: { ownerId, autoImportRecordings: voicePreferences.autoImportRecordings } });
+		if (!captureQueue || getLopuStoreSnapshot().userId !== captureQueue.ownerId) return;
+		setCapturePending(captureQueue.list().length);
+		if (!captureQueue.list().length) return;
+		setCaptureError('');
+		void (async () => {
+			const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+			await requireThingtimeCapability('api.lopu-voice-capture', '1.0.0');
+			await captureQueue.flush(() => getLopuStoreSnapshot().userId, async item => {
+				const response = await fetch('/api/v1/lopu/voice/capture', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item), signal: AbortSignal.timeout(30000) });
+				return response.json();
+			}, async (item, result) => {
+				if (directChatRef.current?.sessionId === item.sessionId) directChatRef.current.chatId = result.chatId;
+				await loadLopuChats(); await loadLopuMessages(result.chatId);
+				if (captureQueue.ownerId !== getLopuStoreSnapshot().userId) return;
+				const rows = getLopuStoreSnapshot().messages[result.chatId] ?? [];
+				if (result.messages.every(message => rows.some(row => row.id === message.id))) setItems(previous => previous.filter(row => row.id !== item.localId));
+				if (getLopuStoreSnapshot().activeChatId === item.chatId) selectLopuChat(result.chatId);
+			});
+		})().catch(error => { if (captureQueue.ownerId === getLopuStoreSnapshot().userId) setCaptureError(error instanceof Error ? error.message : 'Voice saving needs a retry.'); })
+			.finally(() => { if (captureQueue.ownerId === getLopuStoreSnapshot().userId) setCapturePending(captureQueue.list().length); });
+	}, [captureQueue, voicePreferences.autoImportRecordings]);
+	React.useEffect(() => {
+		setCaptureError(''); setCapturePending(captureQueue?.list().length ?? 0); retryCapture();
+        setNativeCapturePending(0); setNativeCaptureError('');
+		window.addEventListener('online', retryCapture);
+		return () => window.removeEventListener('online', retryCapture);
+	}, [captureQueue, retryCapture]);
+
+	const savedVoiceChats = React.useRef(new Map<string, { chatId: string; ownerId: string | null }>());
+	const applyVoiceEvent = React.useCallback(
+		(assistantId: string, event: LopuVoiceEvent | null | undefined) => {
+			if (!event || typeof event !== 'object') return;
+			if (event.type === 'meta' && event.chatId) {
+				const ownerId = getLopuStoreSnapshot().userId;
+				savedVoiceChats.current.set(assistantId, { chatId: event.chatId, ownerId });
+				if (!getLopuStoreSnapshot().activeChatId) selectLopuChat(event.chatId);
+			}
+			if (event.type === 'done' && event.messages?.length) {
+				const saved = savedVoiceChats.current.get(assistantId);
+				savedVoiceChats.current.delete(assistantId);
+				if (saved && saved.ownerId === getLopuStoreSnapshot().userId) {
+					void loadLopuChats();
+					void loadLopuMessages(saved.chatId).then(() => {
+						if (saved.ownerId !== getLopuStoreSnapshot().userId) return;
+						const rows = getLopuStoreSnapshot().messages[saved.chatId] ?? [];
+						if (event.messages!.every(message => rows.some(row => row.id === message.id))) {
+							setItems(items => items.filter(item => item.id !== assistantId && item.id !== `${assistantId}-user`));
+						}
+					});
+				}
+			}
+			if (event.type === 'delta' && typeof event.text === 'string') {
+				const delta = event.text;
+				patchItem(assistantId, (item) => ({ ...item, text: item.text + delta }));
+			} else if (event.type === 'quote' && typeof event.text === 'string') {
+				const quote = event;
+				patchItem(assistantId, (item) => ({ ...item, text: quote.text, quote: true, pageId: quote.page?.id ?? null, pageTitle: quote.page?.title ?? null }));
+			} else if (event.type === 'error') {
+				const message = event.error || event.message || 'Lopu could not complete this turn.';
+				patchItem(assistantId, (item) => ({ ...item, text: message, error: true }));
+			}
+		},
+		[patchItem]
+	);
+
+	// ——— speech synthesis ——————————————————————————————————————————————————
+
+	const speakText = React.useCallback(
+		(text: string) =>
+			new Promise<void>((resolve) => {
+				const clean = speakable(text);
+				if (!clean || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+					resolve();
+					return;
+				}
+				finishSpeechRef.current?.();
+				const finish = () => {
+					if (finishSpeechRef.current === finish) finishSpeechRef.current = null;
+					resolve();
+				};
+				finishSpeechRef.current = finish;
+				try {
+					window.speechSynthesis.cancel();
+					const utterance = new SpeechSynthesisUtterance(clean);
+					utterance.lang = speechLang();
+					utterance.onend = finish;
+					utterance.onerror = finish;
+					window.speechSynthesis.speak(utterance);
+				} catch {
+					finish();
+				}
+			}),
+		[]
+	);
+
+	const cancelSpeech = React.useCallback(() => {
+		// cancel() need not deliver an end/error event. Release the turn queue
+		// explicitly so editing during a spoken reply cannot stall the next Send.
+		finishSpeechRef.current?.();
+		if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+			try {
+				window.speechSynthesis.cancel();
+			} catch {
+				// speech synthesis is best-effort
+			}
+		}
+	}, []);
+
+	// ——— web recognition ———————————————————————————————————————————————————
+
+	const stopRecognition = React.useCallback(() => {
+		silence.stop();
+		if (restartTimerRef.current !== null) {
+			window.clearTimeout(restartTimerRef.current);
+			restartTimerRef.current = null;
+		}
+		const recognition = recognitionRef.current;
+		recognitionRef.current = null;
+		if (!recognition) return;
+		recognition.onresult = null;
+		recognition.onend = null;
+		recognition.onerror = null;
+		recognition.onspeechstart = null;
+		recognition.onspeechend = null;
+		try {
+			recognition.abort?.();
+		} catch {
+			// already stopped
+		}
+	}, [silence]);
+
+	const startRecognition = React.useCallback((): boolean => {
+		if (recognitionRef.current) return true;
+		const Recognition = webRecognitionCtor();
+		if (!Recognition) return false;
+		const recognition = new Recognition();
+		recognition.continuous = !!optionsRef.current.onDraftTranscript && !optionsRef.current.transcribe;
+		recognition.interimResults = true;
+		recognition.lang = speechLang();
+		const recognitionOwner = getLopuStoreSnapshot().userId;
+		const recognitionChat = optionsRef.current.chatId ?? null;
+		const captureId = newId('dictation');
+		let lastTranscript = '';
+		const currentCapture = () => recognitionRef.current === recognition && activeRef.current && recognitionOwner === getLopuStoreSnapshot().userId && recognitionChat === (optionsRef.current.chatId ?? null);
+		recognition.onspeechstart = () => { if (currentCapture()) silence.speechStart(); };
+		recognition.onspeechend = () => { if (currentCapture()) silence.speechEnd(); };
+		recognition.onresult = (event: any) => {
+			if (recognitionRef.current !== recognition || !activeRef.current || recognitionOwner !== getLopuStoreSnapshot().userId || recognitionChat !== (optionsRef.current.chatId ?? null)) return;
+			const current = optionsRef.current;
+			if (!current.transcribe && current.onDraftTranscript) {
+				// Browser results are cumulative; desktop emits a single revised
+				// result. Both describe the whole span belonging to this capture.
+				const text = Array.from(event.results as ArrayLike<{ 0?: { transcript?: string } }>)
+					.map(result => result[0]?.transcript?.trim() || '').filter(Boolean).join(' ');
+				current.onDraftTranscript({ captureId, text });
+				if (text && text !== lastTranscript) { lastTranscript = text; silence.transcript(); }
+				return;
+			}
+			let preview = '';
+			for (let index = event.resultIndex; index < event.results.length; index += 1) {
+				const text = event.results[index]?.[0]?.transcript || '';
+				if (event.results[index].isFinal) void runTurnRef.current(text);
+				else preview += text;
+			}
+			setInterim(preview);
+		};
+		recognition.onerror = (event: any) => {
+			if (recognitionRef.current !== recognition) return;
+			const code = typeof event?.error === 'string' ? event.error : '';
+			// silence and transient hiccups: onend restarts the session
+			if (code === 'aborted' || code === 'no-speech') return;
+			stopRecognition();
+			activeRef.current = false;
+			setActive(false);
+			setInterim('');
+			setRecognitionError({ id: newId('voice-error'), at: Date.now(), role: 'assistant', text: typeof event.message === 'string' ? event.message : `Voice input unavailable${code ? ` (${code})` : ''}. Try again or type to Lopu.`, error: true });
+		};
+		recognition.onend = () => {
+			if (recognitionRef.current !== recognition) return;
+			recognitionRef.current = null;
+			// An end can follow speechstart without speechend. Release that hold,
+			// but keep the existing silence deadline across capture restarts.
+			silence.recognitionEnd();
+			// browsers end a continuous session after a pause — keep listening
+			// while the session is on and not paused for a turn
+			if (!activeRef.current || pausedRef.current) return;
+			restartTimerRef.current = window.setTimeout(() => {
+				restartTimerRef.current = null;
+				if (activeRef.current && !pausedRef.current) startRecognitionRef.current();
+			}, RECOGNITION_RESTART_MS);
+		};
+		recognitionRef.current = recognition;
+		try {
+			recognition.start();
+		} catch {
+			recognitionRef.current = null;
+			return false;
+		}
+		return true;
+	}, [stopRecognition, silence]);
+	startRecognitionRef.current = startRecognition;
+
+	// ——— turns ——————————————————————————————————————————————————————————————
+
+	// transcribe mode: the utterance becomes a private page, quoted back
+	const transcribeUtterance = React.useCallback(
+		async (text: string) => {
+			const assistantId = newId('lopu');
+			const requestOwner = getLopuStoreSnapshot().userId;
+			pushItem({ id: `${assistantId}-user`, role: 'user', text });
+			pushItem({ id: assistantId, role: 'assistant', text: '' });
+			try {
+				const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+				await requireThingtimeCapability('api.lopu-voice-reply', '1.3.0');
+				if (requestOwner !== getLopuStoreSnapshot().userId) return;
+				const response = await aiTaskFetch(VOICE_REPLY_ENDPOINT, {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+					body: JSON.stringify({ transcript: text, requestId: assistantId, chatId: getLopuStoreSnapshot().activeChatId, sessionId: sessionIdRef.current, transcribeMode: true })
+				});
+				await readNdjson(response, (event) => { if (requestOwner === getLopuStoreSnapshot().userId) applyVoiceEvent(assistantId, event as unknown as LopuVoiceEvent); });
+			} catch (error) {
+				if (requestOwner !== getLopuStoreSnapshot().userId) return;
+				const message = error instanceof Error && error.message ? error.message : 'Lopu could not save that transcript.';
+				patchItem(assistantId, (item) => ({ ...item, text: message, error: true }));
+			}
+		},
+		[applyVoiceEvent, patchItem, pushItem]
+	);
+
+	const runTurn = React.useCallback(
+		(text: string): Promise<void> => {
+			const clean = text.trim();
+			if (!clean) return Promise.resolve();
+			const run = async () => {
+				const current = optionsRef.current;
+				// the guard: no microphone while Lopu thinks or speaks
+				pausedRef.current = true;
+				stopRecognition();
+				setInterim('');
+				setBusy('thinking');
+				try {
+					if (current.transcribe) {
+						await transcribeUtterance(clean);
+					} else {
+						const reply = speakable(await current.onFinalTranscript(clean));
+						if (optionsRef.current.speak && reply) {
+							setBusy('speaking');
+							await speakText(reply);
+						}
+					}
+				} catch (error) {
+					pushItem({ role: 'assistant', text: error instanceof Error && error.message ? error.message : 'Lopu could not complete this turn.', error: true });
+				} finally {
+					setBusy(null);
+					pausedRef.current = false;
+					if (activeRef.current && !nativeSessionRef.current && !directSessionRef.current) startRecognitionRef.current();
+				}
+			};
+			queueRef.current = queueRef.current.then(run, run);
+			return queueRef.current;
+		},
+		[pushItem, speakText, stopRecognition, transcribeUtterance]
+	);
+	runTurnRef.current = runTurn;
+
+	// ——— the iOS bridge ———————————————————————————————————————————————————
+
+	React.useEffect(() => {
+		let previous: string | null | undefined;
+		const sync = (force = false) => {
+			const bridge = getNativeBridge();
+			const version = /^1\.(\d+)\.\d+$/.exec(bridge?.lopuVoiceVersion || '');
+			if (!bridge || !version || Number(version[1]) < 1) return;
+			const ownerId = getLopuStoreSnapshot().userId;
+			if (!force && ownerId === previous) return;
+			previous = ownerId;
+			bridge.postMessage({ type: 'lopu-voice-recordings-sync', payload: { ownerId, autoImportRecordings: voicePreferences.autoImportRecordings } });
+		};
+		const retry = () => { if (document.visibilityState === 'visible') sync(true); };
+		sync();
+		const unsubscribe = subscribeLopuStore(() => sync());
+		window.addEventListener(nativeBridgeReadyEvent, retry);
+		window.addEventListener('online', retry);
+		document.addEventListener('visibilitychange', retry);
+		return () => {
+			unsubscribe();
+			window.removeEventListener(nativeBridgeReadyEvent, retry);
+			window.removeEventListener('online', retry);
+			document.removeEventListener('visibilitychange', retry);
+		};
+	}, [voicePreferences.autoImportRecordings]);
+
+	React.useEffect(() => {
+		const onMessage = (message: any) => {
+			const type = message?.type;
+            if (message?.payload?.ownerId != null && message.payload.ownerId !== getLopuStoreSnapshot().userId) return;
+            if (typeof message?.payload?.origin === 'string' && message.payload.origin !== window.location.origin) return;
+            if (type === 'lopu-voice-capture-state' || type === 'lopu-voice-capture-saved') {
+                const payload = message.payload;
+                if (!payload?.ownerId || payload.ownerId !== getLopuStoreSnapshot().userId) return;
+                if (type === 'lopu-voice-capture-state') {
+                    setNativeCapturePending(Number.isInteger(payload.pending) && payload.pending >= 0 ? payload.pending : 0);
+                    setNativeCaptureError(typeof payload.error === 'string' ? payload.error : '');
+                } else if (typeof payload.chatId === 'string') {
+                    const { ownerId, chatId, localId, messageIds, originalChatId } = payload;
+                    void loadLopuChats();
+                    void loadLopuMessages(chatId).then(() => {
+                        if (getLopuStoreSnapshot().userId !== ownerId) return;
+                        const rows = getLopuStoreSnapshot().messages[chatId] ?? [];
+                        if (Array.isArray(messageIds) && messageIds.length && messageIds.every((id: string) => rows.some(row => row.id === id))) setItems(current => current.filter(item => item.id !== localId));
+                    });
+                    if (nativeSessionRef.current && nativeCaptureSession.current === payload.sessionId && getLopuStoreSnapshot().activeChatId === (originalChatId ?? null)) selectLopuChat(chatId);
+                }
+                return;
+            }
+			if (type === 'lopu-voice-recording-upload') {
+				const payload = message.payload;
+				if (!payload?.ownerId || payload.ownerId !== getLopuStoreSnapshot().userId) return;
+				lopu({ title: payload.state === 'saved' ? 'Recording saved to Things' : 'Recording upload pending',
+					description: payload.state === 'saved' ? payload.filename : payload.message, status: payload.state === 'saved' ? 'success' : 'info',
+					...(typeof payload.attachmentId === 'string' ? { link: { label: 'Open recording', href: `/thing/${encodeURIComponent(payload.attachmentId)}` } } : {}) });
+				return;
+			}
+			if (typeof type === 'string' && type.startsWith('lopu-voice-') &&
+				(!nativeOwnerRef.current || nativeOwnerRef.current !== getLopuStoreSnapshot().userId)) return;
+			if (type === 'native-ready') {
+				setNativeReady(supportsNativeLopuVoice());
+            } else if (type === 'lopu-voice-session' && message.payload?.ownerId === getLopuStoreSnapshot().userId && typeof message.payload?.captureSessionId === 'string') {
+                nativeCaptureSession.current = message.payload.captureSessionId;
+			} else if (type === 'lopu-voice-transcript' && typeof message.payload?.text === 'string') {
+				const assistantId = typeof message.payload.assistantId === 'string' ? message.payload.assistantId : newId('lopu-native');
+				pushItem({ id: `${assistantId}-user`, role: 'user', text: message.payload.text });
+				pushItem({ id: assistantId, role: 'assistant', text: '' });
+				setInterim('');
+				setBusy('thinking');
+			} else if (type === 'lopu-voice-event') {
+				const assistantId = message.payload?.assistantId;
+				const event = message.payload?.event as LopuVoiceEvent | undefined;
+				if (typeof assistantId === 'string') applyVoiceEvent(assistantId, event);
+				if (event?.type === 'done' || event?.type === 'error') setBusy(null);
+			} else if (type === 'lopu-voice-realtime-user' && typeof message.payload?.text === 'string') {
+				// direct voice on iOS: the provider's transcript of what was said
+				const text = message.payload.text.trim();
+				setInterim('');
+				if (text) pushItem({ id: typeof message.payload.localId === 'string' ? message.payload.localId : undefined, role: 'user', text });
+			} else if (type === 'lopu-voice-realtime-assistant-start' && typeof message.payload?.assistantId === 'string') {
+				// … and the start of its reply (deltas follow as lopu-voice-event)
+				ensureAssistantItem(message.payload.assistantId);
+			} else if (type === 'lopu-voice-interim') {
+				setInterim(typeof message.payload?.text === 'string' ? message.payload.text : '');
+			} else if (type === 'lopu-voice-saved' && typeof message.payload?.chatId === 'string') {
+				const { chatId, assistantId, messageIds } = message.payload;
+                const ownerId = getLopuStoreSnapshot().userId;
+				// Reconcile with the canonical persisted chat after native work,
+				// including turns completed while WKWebView was backgrounded.
+				void loadLopuChats();
+				void loadLopuMessages(chatId).then(() => {
+                    if (getLopuStoreSnapshot().userId !== ownerId) return;
+					const saved = getLopuStoreSnapshot().messages[chatId] ?? [];
+					if (Array.isArray(messageIds) && messageIds.length && messageIds.every((id: string) => saved.some((item) => item.id === id))) {
+						setItems((current) => current.filter((item) => item.id !== assistantId && item.id !== `${assistantId}-user`));
+					}
+				});
+				if (!getLopuStoreSnapshot().activeChatId) selectLopuChat(chatId);
+			} else if (type === 'lopu-voice-warning') {
+				lopu({ title: 'Lopu voice', description: message.payload?.message || 'Check your voice settings.', status: 'info' });
+			} else if (type === 'lopu-voice-recording' && typeof message.payload?.filename === 'string') {
+				pushItem({ role: 'assistant', text: `Recording saved on this iPhone: ${message.payload.filename}\nFiles → On My iPhone → Thingtime → Lopu Recordings` });
+			} else if (type === 'lopu-voice-error') {
+				pushItem({ role: 'assistant', text: typeof message.payload?.error === 'string' ? message.payload.error : 'Lopu voice stopped unexpectedly.', error: true });
+				activeRef.current = false;
+				nativeSessionRef.current = false;
+				setActive(false);
+				setBusy(null);
+			} else if (type === 'lopu-voice-state') {
+				const on = message.payload?.active === true;
+                if (on && typeof message.payload?.captureSessionId === 'string') nativeCaptureSession.current = message.payload.captureSessionId;
+				activeRef.current = on;
+				nativeSessionRef.current = on;
+				if (!on) {
+					directSessionRef.current = false;
+					setDirect(false);
+				}
+				setActive(on);
+				if (!on) setBusy(null);
+			}
+		};
+		const listener = ((event: CustomEvent) => onMessage(event.detail)) as EventListener;
+		window.addEventListener(nativeBridgeMessageEvent, listener);
+		return () => window.removeEventListener(nativeBridgeMessageEvent, listener);
+	}, [applyVoiceEvent, ensureAssistantItem, lopu, pushItem]);
+
+	// ——— direct voice (web) ————————————————————————————————————————————————
+
+	const stopRealtime = React.useCallback(() => {
+		voiceStartGenerationRef.current++;
+		const realtime = realtimeRef.current;
+		realtimeRef.current = null;
+		directSessionRef.current = false;
+		setDirect(false);
+		if (realtime) void realtime.stop();
+	}, []);
+
+	// Mint the session and open the provider's WebSocket. Resolves true when
+	// the direct session owns the microphone (or failed after taking it),
+	// false when the caller should run the standard path instead — a
+	// pre-flight refusal (unsupported provider, browser, or the server's 400)
+	// explains itself in one line first.
+	const startDirectVoice = React.useCallback(async (): Promise<boolean> => {
+		const generation = ++voiceStartGenerationRef.current;
+		const current = optionsRef.current;
+		const ownerId = getLopuStoreSnapshot().userId;
+		if (!ownerId || !captureQueue || captureQueue.ownerId !== ownerId) return false;
+		const captureSession = crypto.randomUUID();
+		const captureChat = current.chatId ?? null;
+		const responseText = new Map<string, string>();
+		const localId = (id: string) => `${captureSession}:${id}`;
+		const capture = (role: 'user' | 'assistant', eventId: string, text: string) => {
+			if (getLopuStoreSnapshot().userId !== ownerId || !text.trim()) return;
+			try {
+				const item: PendingVoiceCapture = { ownerId, sessionId: captureSession, eventId, chatId: captureChat, role, text: text.trim(), localId: localId(eventId), capturedAt: Date.now() };
+				const durable = captureQueue.add(item);
+				setCapturePending(captureQueue.list().length);
+				if (!durable) lopu({ title: 'Keep this tab open', description: 'Local storage is unavailable. Voice transcripts are held in memory until their save succeeds.', status: 'info', duration: 10000 });
+				retryCapture();
+			} catch (error) { setCaptureError((error as Error).message); stopRealtime(); activeRef.current = false; setActive(false); }
+		};
+		const provider = current.provider ?? null;
+		const reason = directVoiceUnavailableReason(provider, current.transcribe);
+		if (reason || !provider) {
+			lopu({ title: 'Direct voice is off', description: `${reason ?? 'No provider selected'} — using device transcription.`, status: 'info', duration: 6000 });
+			return false;
+		}
+		if (!browserSupportsLopuRealtime()) {
+			lopu({ title: 'Direct voice is off', description: LOPU_REALTIME_UNSUPPORTED_MESSAGE, status: 'info', duration: 8000 });
+			return false;
+		}
+		const model = resolveDirectVoiceModel(provider, current.directVoiceModel ?? null);
+		setBusy('thinking');
+		let session: { instructions?: unknown; token?: unknown; webSocketUrl?: unknown; effort?: unknown; textResponse?: unknown } | null = null;
+		let history: VoiceHistoryItem[] = [];
+		try {
+			const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+			await requireThingtimeCapability('api.lopu-voice-capture', '1.0.0');
+			if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId) return true;
+			if (captureChat) {
+				if (!await loadLopuMessages(captureChat)) throw new Error('The selected conversation could not be loaded. Retry when its connection is restored.');
+				if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId || getLopuStoreSnapshot().activeChatId !== captureChat) { setBusy(null); return true; }
+				history = voiceConversationHistory(getLopuStoreSnapshot().messages[captureChat] ?? [], captureChat, ownerId);
+			}
+			const payload = await apiRef.current.v1.lopu.voiceSession({ providerId: provider.id, model: model?.id ?? null, textResponse: !current.speak });
+			session = payload && typeof payload === 'object' ? ((payload as { session?: typeof session }).session ?? null) : null;
+			if (typeof session?.token !== 'string' || !session.token || typeof session.webSocketUrl !== 'string') throw new Error('Lopu could not start direct voice.');
+		} catch (error) {
+			if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId) return true;
+			setBusy(null);
+			const message = error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.';
+			lopu({ title: 'Direct voice is off', description: `${message} — using device transcription.`, status: 'info', duration: 8000 });
+			return false;
+		}
+		if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId || getLopuStoreSnapshot().activeChatId !== captureChat) { setBusy(null); return true; }
+		const realtime = new LopuVoiceRealtime({
+			onActive: (on) => {
+				if (on || realtimeRef.current !== realtime) return;
+				// the socket closed (provider hang-up, the 5-minute credential
+				// expiring, a network drop): the session is over
+				realtimeRef.current = null;
+				directSessionRef.current = false;
+				activeRef.current = false;
+				setDirect(false);
+				setActive(false);
+				setBusy(null);
+				setInterim('');
+			},
+			onUserTranscript: (text, final, providerEventId) => {
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
+				if (!final) {
+					setInterim(text);
+					return;
+				}
+				setInterim('');
+				if (text.trim()) {
+					const id = providerEventId && /^[A-Za-z0-9_.:-]{1,128}$/.test(providerEventId) ? providerEventId : crypto.randomUUID();
+					pushItem({ id: localId(id), role: 'user', text: text.trim() }); capture('user', id, text);
+				}
+			},
+			onAssistantStart: (id) => {
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
+				responseText.set(id, ''); ensureAssistantItem(localId(id));
+				setBusy('speaking');
+			},
+			onAssistantDelta: (id, text) => {
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
+				responseText.set(id, (responseText.get(id) || '') + text);
+				ensureAssistantItem(localId(id));
+				patchItem(localId(id), (item) => ({ ...item, text: item.text + text }));
+			},
+			onAssistantDone: id => { if (getLopuStoreSnapshot().userId !== ownerId) return; setBusy(null); capture('assistant', id, responseText.get(id) || ''); responseText.delete(id); },
+			onError: (message) => { if (realtimeRef.current === realtime && getLopuStoreSnapshot().userId === ownerId) pushItem({ role: 'assistant', text: message, error: true }); }
+		});
+		realtimeRef.current = realtime;
+		directChatRef.current = { sessionId: captureSession, chatId: captureChat };
+		directSessionRef.current = true;
+		activeRef.current = true;
+		setDirect(true);
+		setActive(true);
+		try {
+			if (typeof session.instructions !== 'string' || !session.instructions) throw new Error('Lopu prompt settings are unavailable. Refresh and try again.');
+			await realtime.start({
+        instructions: session.instructions,
+				token: session.token as string,
+				webSocketUrl: session.webSocketUrl as string,
+				effort: typeof session.effort === 'string' ? session.effort : 'none',
+				textResponse: session.textResponse === true,
+				history
+			});
+		} catch (error) {
+			if (realtimeRef.current !== realtime || getLopuStoreSnapshot().userId !== ownerId) return true;
+			stopRealtime();
+			activeRef.current = false;
+			setActive(false);
+			setBusy(null);
+			pushItem({ role: 'assistant', text: error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.', error: true });
+		} finally {
+			if (generation === voiceStartGenerationRef.current) setBusy(null);
+		}
+		return true;
+	}, [captureQueue, ensureAssistantItem, lopu, patchItem, pushItem, retryCapture, stopRealtime]);
+
+	// ——— session ————————————————————————————————————————————————————————————
+
+	// the standard web path: continuous SpeechRecognition
+	const startStandard = React.useCallback(() => {
+		nativeSessionRef.current = false;
+		pausedRef.current = false;
+		if (!startRecognition()) {
+			lopu({
+				title: 'No microphone here 🎙️',
+				description: 'Speech recognition is unavailable here. If you are using Thingtime for Mac, install the latest app update, then try again. You can also type to Lopu.',
+				status: 'info',
+				duration: 8000
+			});
+			return;
+		}
+        silenceContext.current = { owner: getLopuStoreSnapshot().userId, chat: optionsRef.current.chatId ?? null };
+        silence.start();
+		activeRef.current = true;
+		setActive(true);
+	}, [lopu, startRecognition, silence]);
+
+	const start = React.useCallback(() => {
+		if (activeRef.current) return;
+		setRecognitionError(null);
+		const current = optionsRef.current;
+		const wantsDirect = current.directVoice === true && !current.transcribe;
+		const bridge = getNativeBridge();
+        if (bridge?.isNativeWebView && current.hearMeOut) {
+            lopu({ title: 'Hear me out', description: 'Use Thingtime for Mac or a browser for dictation that waits for Send. This iOS voice recorder sends utterances automatically.', status: 'info' });
+            return;
+        }
+		if (bridge?.isNativeWebView) {
+			if (!supportsNativeLopuVoice(bridge)) {
+				lopu({ title: 'Update Thingtime for voice', description: 'This iOS build does not include Lopu recording or Live Activities. Update Thingtime in TestFlight, then try again.', status: 'info' });
+				return;
+			}
+			// the iOS controller runs either path; provider-audio only when the
+			// chat's provider supports it (else it is told, and transcribes)
+			const directReason = wantsDirect ? directVoiceUnavailableReason(current.provider ?? null, current.transcribe) : null;
+			if (wantsDirect && directReason) lopu({ title: 'Direct voice is off', description: `${directReason} — using device transcription.`, status: 'info', duration: 6000 });
+			const nativeDirect = wantsDirect && !directReason;
+            if (nativeDirect && !supportsNativeVoiceHistory(bridge)) {
+                lopu({ title: 'Update Thingtime for shared voice chats', description: 'This iOS build cannot save direct voice into your chat. Update the app or turn off direct audio and use device transcription.', status: 'info' });
+                return;
+            }
+			const model = nativeDirect ? (resolveDirectVoiceModel(current.provider ?? null, current.directVoiceModel ?? null)?.id ?? '') : (current.model ?? '');
+			nativeSessionRef.current = true;
+			nativeOwnerRef.current = getLopuStoreSnapshot().userId;
+            nativeCaptureSession.current = null;
+			directSessionRef.current = nativeDirect;
+			activeRef.current = true;
+			setDirect(nativeDirect);
+			setActive(true);
+            const ownerId = getLopuStoreSnapshot().userId;
+            const chatId = current.chatId ?? null;
+            const startGeneration = ++nativeStartGeneration.current;
+            void (async () => {
+            if (nativeDirect && chatId && !await loadLopuMessages(chatId)) throw new Error('Could not load this conversation. Retry before starting voice.');
+            if (nativeStartGeneration.current !== startGeneration || !activeRef.current) return;
+            if (getLopuStoreSnapshot().userId !== ownerId || getLopuStoreSnapshot().activeChatId !== chatId) throw new Error('The selected conversation changed. Start voice again in this chat.');
+			bridge.postMessage({
+				type: 'lopu-voice-start',
+				payload: {
+					textResponse: !current.speak,
+					transcribeMode: current.transcribe,
+					providerId: current.providerId ?? '',
+					sessionId: sessionIdRef.current,
+					chatId: current.chatId ?? null,
+					ownerId,
+                    history: nativeDirect && chatId && ownerId ? voiceConversationHistory(getLopuStoreSnapshot().messages[chatId] ?? [], chatId, ownerId) : [],
+					inputMode: nativeDirect ? 'provider-audio' : 'native-transcript',
+					model,
+					effort: current.effort ?? '',
+					speed: current.speed ?? 'normal'
+				}
+			});
+            })().catch(error => {
+                if (nativeStartGeneration.current !== startGeneration) return;
+                activeRef.current = false; nativeSessionRef.current = false; directSessionRef.current = false;
+                setActive(false); setDirect(false);
+                lopu({ title: 'Voice could not start', description: error instanceof Error ? error.message : 'Try again.', status: 'info' });
+            });
+			return;
+		}
+		if (wantsDirect) {
+			void startDirectVoice().then((handled) => {
+				if (!handled && !activeRef.current) startStandard();
+			});
+			return;
+		}
+		startStandard();
+	}, [lopu, startDirectVoice, startStandard]);
+
+	const stop = React.useCallback(() => {
+        nativeStartGeneration.current++;
+		activeRef.current = false;
+		setActive(false);
+		if (nativeSessionRef.current) {
+			nativeSessionRef.current = false;
+			getNativeBridge()?.postMessage({ type: 'lopu-voice-stop' });
+		}
+		stopRealtime();
+		stopRecognition();
+		cancelSpeech();
+		setInterim('');
+		setBusy(null);
+	}, [cancelSpeech, stopRealtime, stopRecognition]);
+
+    silenceSend.current = () => {
+        stop();
+        optionsRef.current.onSubmitDraft?.();
+    };
+    // Changing capture modes must retire callbacks from the previous mode.
+    React.useLayoutEffect(() => { stop(); }, [options.transcribe, options.directVoice, stop]);
+    React.useLayoutEffect(() => {
+        if (options.hearMeOut && (nativeSessionRef.current || directSessionRef.current)) stop();
+    }, [options.hearMeOut, stop]);
+
+	const toggle = React.useCallback(() => {
+		if (activeRef.current || busy === 'speaking') stop();
+		else start();
+	}, [busy, start, stop]);
+
+	const interrupt = React.useCallback(() => {
+		cancelSpeech();
+		abortLopuTurn();
+	}, [cancelSpeech]);
+
+	const clearItems = React.useCallback(() => {
+		setItems([]);
+		setRecognitionError(null);
+	}, []);
+	const previousConversation = React.useRef({ ownerId: captureOwner, chatId: options.chatId ?? null });
+	React.useEffect(() => {
+		const previous = previousConversation.current;
+		const chatId = options.chatId ?? null;
+		previousConversation.current = { ownerId: captureOwner, chatId };
+		const ownerChanged = previous.ownerId !== captureOwner;
+		const chatChanged = previous.chatId !== chatId;
+		if (ownerChanged || chatChanged) setRecognitionError(null);
+		// The first successful capture assigns a canonical ID to the current
+		// new chat. That is not a user switching to another conversation.
+		const assignedCurrentVoiceChat = previous.chatId === null && chatId !== null && (!directChatRef.current || directChatRef.current.chatId === chatId);
+		if (ownerChanged || (chatChanged && (!assignedCurrentVoiceChat || (!nativeSessionRef.current && !directSessionRef.current)))) {
+			stop(); clearItems(); directChatRef.current = null;
+		}
+	}, [captureOwner, options.chatId, stop, clearItems]);
+
+	// leaving the surface ends the session: microphone, speech, native audio,
+	// the realtime socket
+	React.useEffect(() => {
+		return () => {
+			activeRef.current = false;
+			if (nativeSessionRef.current) {
+				nativeSessionRef.current = false;
+				getNativeBridge()?.postMessage({ type: 'lopu-voice-stop' });
+			}
+			stopRealtime();
+			stopRecognition();
+			cancelSpeech();
+		};
+	}, [cancelSpeech, stopRealtime, stopRecognition]);
+
+	return {
+		supported: webSupported || nativeReady,
+		nativeReady,
+		active,
+		sendPrompt,
+		confirmSend: () => silence.send(),
+		keepListening: () => silence.keepListening(),
+		direct,
+		phase: busy ?? (active ? 'listening' : 'idle'),
+		interim,
+		items: recognitionError ? [...items, recognitionError] : items,
+		sessionId: sessionIdRef.current,
+		start,
+		stop,
+		toggle,
+		submit: runTurn,
+		interrupt,
+		speakText,
+		clearItems, capturePending: capturePending + nativeCapturePending, captureError: captureError || nativeCaptureError, retryCapture
+	};
+};
+
+// ——— controls ————————————————————————————————————————————————————————————
+
+const ring = keyframes`
+	0% { transform: scale(0.9); opacity: 0.9; }
+	70% { transform: scale(1.45); opacity: 0; }
+	100% { transform: scale(1.45); opacity: 0; }
+`;
+
+const breathe = keyframes`
+	0% { transform: scale(1); }
+	50% { transform: scale(1.06); }
+	100% { transform: scale(1); }
+`;
+
+const spin = keyframes`
+	to { transform: rotate(360deg); }
+`;
+
+export const lopuVoicePhaseLabel = (phase: LopuVoicePhase, supported = true, direct = false): string => {
+	if (phase === 'listening') return direct ? 'Listening · direct' : 'Listening…';
+	if (phase === 'thinking') return direct ? 'Connecting…' : 'Thinking…';
+	if (phase === 'speaking') return 'Speaking…';
+	return supported ? 'Tap to talk' : 'Type to Lopu';
+};
+
+// The big microphone: idle (card), listening (the rainbow with a soft pulse),
+// thinking (spinner on the alt surface), speaking (rainbow, breathing).
+export const LopuMicButton = (props: { phase: LopuVoicePhase; size?: number; onClick: () => void; disabled?: boolean }) => {
+	const { phase, onClick, disabled } = props;
+	const size = props.size ?? 64;
+	const listening = phase === 'listening';
+	const speaking = phase === 'speaking';
+	const thinking = phase === 'thinking';
+	const live = listening || speaking;
+	const iconSize = Math.round(size * 0.36);
+	const label = phase === 'idle' ? 'Start listening' : 'Stop listening';
+
+	return (
+		<Box
+			as="button"
+			type="button"
+			className="lopuMicButton"
+			data-phase={phase}
+			aria-label={label}
+			aria-pressed={phase !== 'idle'}
+			title={label}
+			disabled={disabled}
+			position="relative"
+			width={`${size}px`}
+			height={`${size}px`}
+			flexShrink={0}
+			borderRadius="999px"
+			background={live ? LOPU_UI.rainbow : thinking ? LOPU_UI.surfaceAlt : LOPU_UI.card}
+			border={live ? '1px solid transparent' : LOPU_UI.border}
+			color={live ? LOPU_UI.card : LOPU_UI.ink}
+			boxShadow={LOPU_UI.shadowCard}
+			cursor={disabled ? 'not-allowed' : 'pointer'}
+			opacity={disabled ? 0.5 : 1}
+			transition={`transform ${LOPU_UI.transitionFast}, background ${LOPU_UI.transition}, box-shadow ${LOPU_UI.transitionFast}`}
+			_hover={disabled ? undefined : { transform: 'translateY(-1px)' }}
+			_active={disabled ? undefined : { transform: 'translateY(0)' }}
+			_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '3px' }}
+			_before={
+				listening
+					? {
+							content: '""',
+							position: 'absolute',
+							inset: '-4px',
+							borderRadius: '999px',
+							background: LOPU_UI.rainbowSoft,
+							animation: `${ring} 2.2s ease-out infinite`,
+							pointerEvents: 'none'
+						}
+					: undefined
+			}
+			sx={{
+				isolation: 'isolate',
+				WebkitTapHighlightColor: 'transparent',
+				touchAction: 'manipulation',
+				animation: speaking ? `${breathe} 1.4s ease-in-out infinite` : 'none',
+				'&::before': { zIndex: -1 },
+				'@media (prefers-reduced-motion: reduce)': { animation: 'none', '&::before': { animation: 'none', opacity: 0.6 } }
+			}}
+			onClick={onClick}
+		>
+			<Center width="100%" height="100%">
+				{thinking ? (
+					<Box as="span" display="inline-flex" sx={{ animation: `${spin} 1s linear infinite`, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
+						<Loader2 size={iconSize} strokeWidth={2} />
+					</Box>
+				) : speaking ? (
+					<AudioLines size={iconSize} strokeWidth={2} />
+				) : (
+					<Mic size={iconSize} strokeWidth={2} />
+				)}
+			</Center>
+		</Box>
+	);
+};
+
+const DeckIconButton = (props: { label: string; onClick?: () => void; children: React.ReactNode; active?: boolean; size?: number; disabled?: boolean }) => {
+	const size = props.size ?? 36;
+	return (
+		<Center
+			as="button"
+			type="button"
+			aria-label={props.label}
+			title={props.label}
+			aria-pressed={props.active}
+			disabled={props.disabled}
+			width={`${size}px`}
+			height={`${size}px`}
+			flexShrink={0}
+			borderRadius="999px"
+			border={LOPU_UI.border}
+			background={props.active ? LOPU_UI.surfaceAlt : LOPU_UI.card}
+			color={props.active ? LOPU_UI.ink : LOPU_UI.muted}
+			cursor={props.disabled ? 'not-allowed' : 'pointer'}
+			opacity={props.disabled ? 0.5 : 1}
+			transition={`background ${LOPU_UI.transitionFast}, color ${LOPU_UI.transitionFast}`}
+			_hover={props.disabled ? undefined : { background: LOPU_UI.surfaceHover, color: LOPU_UI.ink }}
+			_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '2px' }}
+			sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+			onClick={props.onClick}
+		>
+			{props.children}
+		</Center>
+	);
+};
+
+const PopoverRow = (props: { label: string; hint: string; children: React.ReactNode }) => (
+	<Flex align="center" gap={3} py={1.5}>
+		<Box minW={0} flex={1}>
+			<Text fontSize="13px" fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
+				{props.label}
+			</Text>
+			<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.4" whiteSpace="normal">
+				{props.hint}
+			</Text>
+		</Box>
+		<Box flexShrink={0}>{props.children}</Box>
+	</Flex>
+);
+
+// The brain choice the session gear edits: the chat's own { model, providerId }
+// (the same value the composer's picker reads and writes).
+export type LopuVoiceProviderValue = { model: string | null; providerId: string | null };
+
+// The session gear: a compact popover (never a full-width card pushing the
+// conversation down) with Spoken replies, Transcribe mode, Direct voice (only
+// enabled when the chat's vault provider offers realtime speech — the hint
+// says why otherwise) and the provider (the same picker the composer
+// exposes, as a single select).
+export const LopuVoiceSettingsPopover = (props: {
+	compact?: boolean;
+	providerValue: LopuVoiceProviderValue;
+	onProviderChange: (choice: LopuProviderSelectChange) => void;
+	// the chat's pinned Secure Vault provider (catalog row), if any
+	provider?: LopuVaultProvider | null;
+}) => {
+	const { settings, setSpokenReplies, setTranscribe, setAutoImportRecordings, setDirectVoice, setDirectVoiceModel } = useLopuSettings();
+	const provider = props.provider ?? null;
+	const directReason = directVoiceUnavailableReason(provider, settings.transcribe);
+	const directOn = settings.directVoice && !directReason;
+	const realtimeModels = provider?.realtimeModels ?? [];
+	const directModel = resolveDirectVoiceModel(provider, settings.directVoiceModel);
+
+	return (
+		<Popover placement="top-start" isLazy gutter={10}>
+			<PopoverTrigger>
+				<Center
+					as="button"
+					type="button"
+					aria-label="Voice settings"
+					title="Voice settings"
+					width={props.compact ? '36px' : '40px'}
+					height={props.compact ? '36px' : '40px'}
+					flexShrink={0}
+					borderRadius="999px"
+					border={LOPU_UI.border}
+					background={LOPU_UI.card}
+					color={LOPU_UI.muted}
+					cursor="pointer"
+					transition={`background ${LOPU_UI.transitionFast}, color ${LOPU_UI.transitionFast}`}
+					_hover={{ background: LOPU_UI.surfaceHover, color: LOPU_UI.ink }}
+					_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '2px' }}
+					sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+				>
+					<Settings2 size={16} strokeWidth={2} />
+				</Center>
+			</PopoverTrigger>
+			<PopoverContent
+				width={props.compact ? '300px' : '320px'}
+                maxH="calc(100dvh - 32px)"
+                overflowY="auto"
+				maxWidth="calc(100vw - 24px)"
+				border={LOPU_UI.border}
+				borderRadius={LOPU_UI.radiusLg}
+				background={LOPU_UI.card}
+				boxShadow={LOPU_UI.shadowFloating}
+				_focusVisible={{ outline: 'none' }}
+				_focus={{ boxShadow: LOPU_UI.shadowFloating }}
+			>
+				<PopoverBody px={4} py={3}>
+					<Text sx={LOPU_UI.eyebrow} mb={1}>
+						Voice session
+					</Text>
+                    <LopuDictationSettings renderRow={(label, control, hint) => <Box py={2}><Flex align="center" justify="space-between" gap={2}><Text fontSize="13px" fontWeight={600}>{label}</Text>{control}</Flex><Text fontSize="11px" color={LOPU_UI.muted} mt={1}>{hint}</Text></Box>} />
+					<PopoverRow label="Spoken replies" hint="Read Lopu's replies aloud">
+						<Switch size="sm" isChecked={settings.spokenReplies} onChange={(event) => setSpokenReplies(event.target.checked)} aria-label="Spoken replies" />
+					</PopoverRow>
+					<PopoverRow label="Import older recordings" hint="Automatically save older recordings on this iPhone to your private Things when Lopu opens">
+						<Switch size="sm" isChecked={settings.autoImportRecordings} onChange={(event) => setAutoImportRecordings(event.target.checked)} aria-label="Import older recordings" />
+					</PopoverRow>
+					<PopoverRow label="Transcribe mode" hint="Save each utterance as a private page instead of asking Lopu">
+						<Switch size="sm" isChecked={settings.transcribe} onChange={(event) => setTranscribe(event.target.checked)} aria-label="Transcribe mode" />
+					</PopoverRow>
+					<PopoverRow label="Direct voice" hint={directReason ? `Off here: ${directReason}` : 'Realtime speech with your own provider'}>
+						<Switch
+							size="sm"
+							isChecked={directOn}
+							isDisabled={!!directReason}
+							onChange={(event) => setDirectVoice(event.target.checked)}
+							aria-label="Direct voice"
+							title={directReason ?? 'Realtime speech with your own provider'}
+						/>
+					</PopoverRow>
+					{directOn && realtimeModels.length > 1 ? (
+						<Box pb={1.5}>
+							<Select
+								size="xs"
+								value={directModel?.id ?? ''}
+								aria-label="Direct voice model"
+								bg={LOPU_UI.card}
+								color={LOPU_UI.ink}
+								borderColor={LOPU_UI.borderColor}
+								borderRadius={LOPU_UI.radiusSm}
+								fontSize={LOPU_UI.fontSmall}
+								_hover={{ borderColor: LOPU_UI.faint }}
+								_focusVisible={{ borderColor: LOPU_UI.ink, boxShadow: 'none' }}
+								onChange={(event) => setDirectVoiceModel(event.target.value || null)}
+							>
+								{realtimeModels.map((model) => (
+									<option key={model.id} value={model.id}>
+										{model.label}
+									</option>
+								))}
+							</Select>
+						</Box>
+					) : null}
+					<Box pt={1.5}>
+						<Text fontSize="13px" fontWeight={600} color={LOPU_UI.ink} mb={1}>
+							Provider
+						</Text>
+						<LopuProviderSelect
+							value={props.providerValue}
+							onChange={props.onProviderChange}
+							compact
+							disabled={settings.transcribe}
+							maxWidth="100%"
+							aria-label="AI provider"
+							defaultLabel="Thingtime default"
+						/>
+						<Text fontSize="11px" color={LOPU_UI.muted} mt={1.5} lineHeight="1.4">
+							<RouterLink to="/settings#secure-vault" style={{ textDecoration: 'underline' }}>
+								Manage providers in Secure Vault
+							</RouterLink>
+						</Text>
+					</Box>
+				</PopoverBody>
+			</PopoverContent>
+		</Popover>
+	);
+};
+
+// Local-only rows (native turns, transcribe quotes, microphone errors) drawn
+// as the conversation's own bubbles (LopuChatView's row primitives) and
+// slotted into its list through `trailing`, so they scroll with the
+// timeline instead of sitting in a strip under it.
+export const LopuVoiceTranscript = (props: { items: LopuVoiceItem[]; compact?: boolean }) => {
+	const { items, compact = false } = props;
+	const anchorRef = React.useRef<HTMLDivElement | null>(null);
+
+	// a new item scrolls the conversation log (the list this sits in) down
+	React.useLayoutEffect(() => {
+		const log = anchorRef.current?.closest('[role="log"]');
+		if (log instanceof HTMLElement) log.scrollTop = log.scrollHeight;
+	}, [items]);
+
+	if (!items.length) return null;
+
+	return (
+		<Flex ref={anchorRef} className="lopuVoiceTranscript" direction="column" mt={compact ? 3 : 4} minW={0}>
+			{items.map((item, index) => {
+				const previous = items[index - 1];
+				const next = items[index + 1];
+				const first = !previous || previous.role !== item.role;
+				const last = !next || next.role !== item.role;
+				const spacing = index === 0 ? 0 : first ? (compact ? 3 : 4) : compact ? 0.5 : 1;
+				if (item.role === 'user') {
+					return (
+						<Box key={item.id} mt={spacing} minW={0}>
+							<LopuUserRow text={item.text} compact={compact} />
+						</Box>
+					);
+				}
+				return (
+					<Box key={item.id} mt={spacing} minW={0}>
+						<LopuAssistantRow first={first} last={last} compact={compact} meta={item.quote ? 'Saved as a private page' : null}>
+							{item.quote ? (
+								<Text as="span" display="block" sx={LOPU_UI.eyebrow}>
+									Transcript
+								</Text>
+							) : null}
+							{item.error ? (
+								<Text role="alert" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.danger} lineHeight="1.5" overflowWrap="anywhere">
+									{item.text}
+								</Text>
+							) : (
+								<Text fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} lineHeight="1.5" color={LOPU_UI.ink} whiteSpace="pre-wrap" overflowWrap="anywhere">
+									{item.text || '…'}
+								</Text>
+							)}
+							{item.pageId ? (
+								<Text fontSize={LOPU_UI.fontSmall}>
+									<RouterLink to={`/thing/${encodeURIComponent(item.pageId)}`} style={{ textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+										{item.pageTitle || 'Open the private transcript page'} ↗
+									</RouterLink>
+								</Text>
+							) : null}
+						</LopuAssistantRow>
+					</Box>
+				);
+			})}
+		</Flex>
+	);
+};
+
+// The bottom deck: interim transcript line, gear · mic · stop, and the typed
+// path (a single rounded field, Enter sends, the send button on the rainbow).
+export const LopuVoiceDeck = (props: {
+	hideTypedInput?: boolean;
+	voice: UseLopuVoice;
+	compact?: boolean;
+	disabled?: boolean;
+	providerValue: LopuVoiceProviderValue;
+	onProviderChange: (choice: LopuProviderSelectChange) => void;
+	provider?: LopuVaultProvider | null;
+}) => {
+	const { voice, compact = false, disabled = false } = props;
+	const [draft, setDraft] = React.useState('');
+	const busy = voice.phase === 'thinking' || voice.phase === 'speaking';
+	const canSend = !disabled && draft.trim().length > 0;
+
+	const submitTyped = React.useCallback(() => {
+		const text = draft.trim();
+		if (!text || disabled) return;
+		setDraft('');
+		void voice.submit(text);
+	}, [disabled, draft, voice]);
+
+	return (
+		<Box className="lopuVoiceDeck" flexShrink={0} pt={compact ? 2 : 3} px={compact ? 2 : 0} pb={compact ? 2 : 0}>
+			{voice.interim ? <Text fontSize="13px" color={LOPU_UI.muted} fontStyle="italic" textAlign="center" minH="20px" noOfLines={2} px={2} aria-live="polite">
+				{voice.interim}
+			</Text> : null}
+			<Flex align="center" justify="center" gap={compact ? 3 : 5} py={compact ? 1 : 2}>
+				<LopuVoiceSettingsPopover compact={compact} providerValue={props.providerValue} onProviderChange={props.onProviderChange} provider={props.provider} />
+				<Flex direction="column" align="center" gap={compact ? 0 : 1.5}>
+					<LopuMicButton phase={voice.phase} size={compact ? 48 : 64} onClick={voice.toggle} disabled={disabled} />
+					{compact ? null : (
+						<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} lineHeight="1">
+							{lopuVoicePhaseLabel(voice.phase, voice.supported, voice.direct)}
+						</Text>
+					)}
+				</Flex>
+				{busy ? (
+					<DeckIconButton label="Stop Lopu" onClick={voice.interrupt} size={compact ? 36 : 40}>
+						<Square size={14} strokeWidth={2} />
+					</DeckIconButton>
+				) : (
+					<Box width={compact ? '36px' : '40px'} height={compact ? '36px' : '40px'} flexShrink={0} aria-hidden />
+				)}
+			</Flex>
+			<Flex
+				display={props.hideTypedInput ? 'none' : 'flex'}
+				align="center"
+				gap={2}
+				border={LOPU_UI.border}
+				borderRadius="999px"
+				background={LOPU_UI.card}
+				pl={4}
+				pr={1}
+				py={1}
+				maxW={LOPU_UI.composerMaxWidth}
+				mx="auto"
+				transition={`border-color ${LOPU_UI.transitionFast}`}
+				_focusWithin={{ borderColor: LOPU_UI.faint }}
+			>
+				<Input
+					variant="unstyled"
+					value={draft}
+					placeholder={busy ? 'Lopu is replying…' : 'Or type to Lopu…'}
+					aria-label="Type to Lopu"
+					fontSize={LOPU_UI.fontBody}
+					height="32px"
+					isDisabled={disabled}
+					onChange={(event) => setDraft(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+						event.preventDefault();
+						submitTyped();
+					}}
+				/>
+				<Center
+					as="button"
+					type="button"
+					aria-label="Send"
+					title="Send (Enter)"
+					disabled={!canSend}
+					width="32px"
+					height="32px"
+					flexShrink={0}
+					borderRadius="999px"
+					background={canSend ? LOPU_UI.rainbow : LOPU_UI.surfaceAlt}
+					color={canSend ? LOPU_UI.card : LOPU_UI.faint}
+					cursor={canSend ? 'pointer' : 'not-allowed'}
+					transition={`background ${LOPU_UI.transition}, transform ${LOPU_UI.transitionFast}`}
+					_hover={canSend ? { transform: 'translateY(-1px)' } : undefined}
+					_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '2px' }}
+					onClick={submitTyped}
+				>
+					<ArrowUp size={16} strokeWidth={2.2} />
+				</Center>
+			</Flex>
+		</Box>
+	);
+};
+
+// ——— the surface ————————————————————————————————————————————————————————————
+
+export type LopuVoiceSurfaceProps = {
+	voiceMode?: boolean;
+	chatId?: string | null;
+	onChatChange?: (chatId: string | null) => void;
+	compact?: boolean;
+	onOpenFull?: () => void;
+	onPhaseChange?: (phase: LopuVoicePhase) => void;
+};
+
+// The conversation column in voice mode: the shared LopuChatView with its
+// ordinary text composer, local transcript rows in its list, and the deck.
+// Standard device
+// Speech fills the shared editable composer; the silence policy sends or asks.
+export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange, voiceMode = true }: LopuVoiceSurfaceProps) => {
+    const widgetLocation = useLocation();
+    const widgetNavigate = useNavigate();
+    const widgetRequest = new URLSearchParams(widgetLocation.search).get('widget');
+    const widgetStarted = React.useRef<string | null>(null);
+
+	const chat = useLopuChat({ chatId, surface: 'voice' });
+	const { settings, setProviderId, setTranscribe } = useLopuSettings();
+	const sendRef = React.useRef<((text: string) => Promise<import('./lopuChatStore').SendLopuResult | undefined>) | null>(null);
+	const submitDraftRef = React.useRef<(() => void) | null>(null);
+	const onSubmitDraft = React.useCallback(() => { void submitDraftRef.current?.(); }, []);
+	const dictationRef = React.useRef<((transcript: ComposerTranscript) => void) | null>(null);
+	const onDraftTranscript = React.useCallback((transcript: ComposerTranscript) => dictationRef.current?.(transcript), []);
+	const setChatSettingsRef = React.useRef(chat.setSettings);
+	setChatSettingsRef.current = chat.setSettings;
+
+	const onFinalTranscript = React.useCallback(async (text: string) => {
+		const result = await sendRef.current?.(text);
+		// a turn that never left (sign-in, still replying) already toasted
+		if (!result?.ok) return null;
+		const turn = getLopuStoreSnapshot().turns[result.requestId];
+		// an aborted or failed turn is never read aloud
+		return turn && turn.status === 'done' ? turn.text : null;
+	}, []);
+
+	// the gear edits the chat's own brain (the composer picker's value) and
+	// mirrors a vault choice into the voice preference the native bridge reads
+	const providerValue = React.useMemo<LopuVoiceProviderValue>(() => ({ model: chat.settings.model, providerId: chat.settings.providerId }), [chat.settings.model, chat.settings.providerId]);
+	const onProviderChange = React.useCallback(
+		(choice: LopuProviderSelectChange) => {
+			setChatSettingsRef.current({ model: choice.model, providerId: choice.providerId });
+			setProviderId(choice.providerId);
+		},
+		[setProviderId]
+	);
+
+	// the chat's pinned vault provider as the catalog lists it (kind, realtime
+	// models) — what direct voice needs to know
+	const provider = React.useMemo(() => findLopuVaultProvider(chat.vaultProviders, chat.settings.providerId), [chat.vaultProviders, chat.settings.providerId]);
+
+	const voice = useLopuVoice({
+		chatId: chat.chatId,
+		model: chat.settings.model,
+		effort: chat.settings.effort,
+		speed: chat.settings.speed,
+		onFinalTranscript,
+		onDraftTranscript,
+		onSubmitDraft,
+		dictationSilenceSeconds: settings.dictationSilenceSeconds,
+		hearMeOut: settings.hearMeOut,
+		speak: settings.spokenReplies,
+		transcribe: settings.transcribe && !settings.hearMeOut,
+		providerId: chat.settings.providerId ?? settings.providerId,
+		directVoice: settings.directVoice && !settings.hearMeOut,
+		directVoiceModel: settings.directVoiceModel,
+		provider
+	});
+
+	React.useEffect(() => {
+		onPhaseChange?.(voice.phase);
+	}, [onPhaseChange, voice.phase]);
+
+	// the access gate (verified-credits design note §4): a locked account sees
+	// LopuLockedState in the conversation column (LopuChatView draws it) and
+	// the mic / typed path stay disabled; a session that was running when the
+	// lock landed ends
+	const locked = !!chat.viewer.id && chat.account.access.locked;
+
+    const startWidgetVoice = voice.start;
+    React.useEffect(() => {
+        if (compact || !chat.viewer.id || locked || !['transcribe', 'voice'].includes(widgetRequest ?? '')) return;
+        if (settings.transcribe !== (widgetRequest === 'transcribe')) { setTranscribe(widgetRequest === 'transcribe'); return; }
+        if (widgetStarted.current === widgetLocation.key) return;
+        widgetStarted.current = widgetLocation.key;
+        const params = new URLSearchParams(widgetLocation.search);
+        params.delete('widget');
+        widgetNavigate({ pathname: widgetLocation.pathname, search: params.toString() }, { replace: true });
+        startWidgetVoice();
+    }, [compact, chat.viewer.id, locked, widgetRequest, settings.transcribe, setTranscribe, widgetLocation, widgetNavigate, startWidgetVoice]);
+	const stopRef = React.useRef(voice.stop);
+	stopRef.current = voice.stop;
+	React.useLayoutEffect(() => {
+		if (locked || !voiceMode) stopRef.current();
+	}, [locked, voiceMode]);
+	const composerDictation = (!settings.transcribe || settings.hearMeOut) && !voice.nativeReady && !voice.direct;
+
+	return (
+		<Flex className="lopuVoiceSurface" data-locked={locked ? 'true' : 'false'} direction="column" flex={1} minH={0} minW={0} width="100%">
+			<LopuChatView
+				externalSendRef={sendRef}
+				externalDictationRef={dictationRef}
+				externalSubmitDraftRef={submitDraftRef}
+				onDraftInteraction={composerDictation ? voice.stop : undefined}
+				onSendDraft={voiceMode && composerDictation ? voice.submit : undefined}
+				chatId={chatId}
+				onChatChange={onChatChange}
+				compact={compact}
+				showConversations={false}
+				onOpenFull={onOpenFull}
+				autoFocus={false}
+				trailing={<>
+					{voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
+					{voice.capturePending > 0 || voice.captureError ? <Box p={3} role="status"><Text fontSize="sm">{voice.captureError || `Saving ${voice.capturePending} voice transcript(s)…`}</Text><Button size="sm" mt={2} onClick={voice.retryCapture}>Retry saving voice</Button></Box> : null}
+				</>}
+			/>
+            {voiceMode ? <Popover isOpen={voice.sendPrompt} onClose={voice.keepListening} autoFocus={false} returnFocusOnClose={false} closeOnBlur={false} placement="top" gutter={8}>
+                <PopoverAnchor><Box><LopuVoiceDeck hideTypedInput voice={voice} compact={compact} disabled={!chat.viewer.id || locked} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} /></Box></PopoverAnchor>
+                <Portal><PopoverContent aria-label="Send now?" width="280px" maxW="calc(100vw - 24px)" zIndex={DRAWER_POPUP_Z} sx={lopuPopoverSx}>
+                    <PopoverBody p={3}>
+                        <Text fontWeight={600}>Send now?</Text>
+                        <Text fontSize="sm" color={LOPU_UI.muted} mt={1}>Still listening. Take your time.</Text>
+                        <Flex gap={2} mt={3} justify="flex-end">
+                            <Button size="sm" variant="ghost" onClick={voice.keepListening}>Keep listening</Button>
+                            <Button size="sm" onClick={voice.confirmSend}>Send now</Button>
+                        </Flex>
+                    </PopoverBody>
+                </PopoverContent></Portal>
+            </Popover> : null}
+		</Flex>
+	);
+};

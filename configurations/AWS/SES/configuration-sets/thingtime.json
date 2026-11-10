@@ -1,0 +1,13 @@
+{
+  "ConfigurationSetName": "thingtime",
+  "SendingOptions": {
+    "SendingEnabled": true
+  },
+  "ReputationOptions": {
+    "ReputationMetricsEnabled": true
+  },
+  "DeliveryOptions": {
+    "SendingPoolName": "thingtime",
+    "TlsPolicy": "OPTIONAL"
+  }
+}

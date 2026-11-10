@@ -118,7 +118,7 @@ const start = (remixDir) => {
   }
 
   process.stdout.write(`[web-pms] starting ${config.name} (cwd ${remixDir})\n`);
-  execFileSync(PM2_BIN, ['start', NPM_BIN, '--name', config.name, '--namespace', config.namespace, '--', 'run', 'dev'], {
+  execFileSync(PM2_BIN, ['start', NPM_BIN, '--name', config.name, '--namespace', config.namespace, ...(config.autorestart === false ? ['--no-autorestart'] : []), '--', 'run', 'dev'], {
     cwd: remixDir,
     env: { ...process.env, ...config.env },
     stdio: 'inherit'

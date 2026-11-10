@@ -8,7 +8,14 @@ import { renderApiDocsMarkdown } from '../../../app/docs/apiDocsMarkdown';
 // Anonymous — documentation data. The catalog is static per build, so the
 // render is memoised per origin.
 
+// LRU-bounded because the key is the REQUEST's origin, which follows the Host
+// header — so it is caller-controlled, not a fixed set. Unbounded, any client
+// sending varying Host values mints a fresh ~300 KB render per distinct value
+// and grows the instance's heap without limit. Real deployments only ever need
+// a handful (prod domain, preview aliases, localhost); the cap keeps the
+// common case a permanent hit while making unbounded growth impossible.
 const cache = new Map<string, string>();
+const MAX_CACHED_ORIGINS = 8;
 
 export default defineHandler((event) => {
   const method = event.req.method.toUpperCase();
@@ -19,8 +26,14 @@ export default defineHandler((event) => {
 
   const origin = new URL(event.req.url).origin;
   let markdown = cache.get(origin);
-  if (!markdown) {
+  if (markdown === undefined) {
     markdown = renderApiDocsMarkdown(origin);
+    cache.set(origin, markdown);
+    // Map iteration order is insertion order — evict the oldest past the cap.
+    for (const stale of [...cache.keys()].slice(0, Math.max(0, cache.size - MAX_CACHED_ORIGINS))) cache.delete(stale);
+  } else {
+    // LRU touch: re-inserting moves this origin to the newest position.
+    cache.delete(origin);
     cache.set(origin, markdown);
   }
 

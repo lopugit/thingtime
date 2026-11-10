@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box } from '@chakra-ui/react';
+import { Box, type BoxProps } from '@chakra-ui/react';
 
 import { uuid as uuidV4 } from '~/smarts';
 
@@ -13,16 +13,16 @@ export interface MagicInputProps {
 	onFocus?: (event: React.FocusEvent<HTMLDivElement>) => void;
 	onEnter?: (args: { value: string | undefined }) => void;
 	readonly?: boolean;
-	transition?: string;
-	chakras?: Record<string, unknown>;
-	whiteSpace?: string;
+	transition?: BoxProps['transition'];
+	chakras?: BoxProps;
+	whiteSpace?: BoxProps['whiteSpace'];
 	fullPath?: string;
 	path?: string;
 }
 
-export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Record<string, unknown>>((props, ref) => {
+export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Omit<BoxProps, keyof MagicInputProps>>((props, ref) => {
 	const { onValueChange: onValueChangeProp, onChange: onChangeProp, onFocus: onFocusProp, onEnter: onEnterProp } = props;
-	const [inputValue, setInputValue] = React.useState();
+	const [inputValue, setInputValue] = React.useState<string | undefined>(props.value ?? props.placeholder);
 
 	const [isClientSide, setIsClientSide] = React.useState(false);
 
@@ -32,8 +32,8 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 		setIsClientSide(true);
 	}, []);
 
-	const contentEditableRef = React.useRef(null);
-	const editValueRef = React.useRef({});
+	const contentEditableRef = React.useRef<HTMLDivElement>(null);
+	const editValueRef = React.useRef<Record<string, string>>({});
 
 	// values are plain text: escape them before the newline -> <br/> pass so
 	// dangerouslySetInnerHTML can never execute markup smuggled into a value
@@ -42,13 +42,13 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 		return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 	}, []);
 
-	const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder);
+	const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder || '');
 
 	const updateContentEditableValue = React.useCallback(
-		(rawValue) => {
+		(rawValue: string | undefined) => {
 			// replace all new line occurences in value with <div><br></div>
 
-			const value = typeof rawValue === 'string' ? escapeHtml(rawValue) : rawValue;
+			const value = typeof rawValue === 'string' ? escapeHtml(rawValue) : '';
 
 			// extract all series of new lines
 			const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== '');
@@ -94,7 +94,7 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 	}, [props?.value, props?.placeholder, updateContentEditableValue]);
 
 	const onValueChange = React.useCallback(
-		(args) => {
+		(args: { value: string }) => {
 			const { value } = args;
 			onValueChangeProp?.({ value });
 			onChangeProp?.({ value });
@@ -104,7 +104,7 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 	);
 
 	const updateValue = React.useCallback(
-		(args) => {
+		(args: { value: string }) => {
 			const { value } = args;
 
 			onValueChange({ value });
@@ -114,14 +114,14 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Rec
 	);
 
 	const onFocus = React.useCallback(
-		(e) => {
+		(e: React.FocusEvent<HTMLDivElement>) => {
 			onFocusProp?.(e);
 		},
 		[onFocusProp]
 	);
 
 	const maybeUpdateValue = React.useCallback(
-		(e) => {
+		(e: React.KeyboardEvent<HTMLDivElement>) => {
 			const { key } = e;
 			if (key === 'Enter') {
 				if (onEnterProp) {

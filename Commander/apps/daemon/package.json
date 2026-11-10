@@ -1,0 +1,26 @@
+{
+  "name": "@commander/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "commander-daemon": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/commander-daemon.mjs && esbuild ../../packages/raycast-compat/src/worker.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/worker.js",
+    "dev": "tsx watch src/index.ts -- --ui ../desktop-ui/dist",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@commander/filesystem-indexer": "workspace:*",
+    "@commander/protocol": "workspace:*",
+    "@commander/raycast-compat": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5",
+    "tsx": "^4.20.3"
+  }
+}

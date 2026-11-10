@@ -1,0 +1,35 @@
+{
+  "claim": {
+    "pairingId": "fixture-session",
+    "pairingSecret": "ttpair_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "credential": "ttnode_AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    "publicKey": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+    "nonce": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "serverNonce": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "device": {
+      "name": "Test iPhone 📱",
+      "platform": "ios",
+      "model": "iPhone",
+      "osVersion": "17.0",
+      "appVersion": "1.0"
+    },
+    "capabilities": []
+  },
+  "fields": [
+    "thingtime-device-pairing-claim-v1",
+    "fixture-session",
+    "ttpair_AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "ttnode_AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
+    "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw",
+    "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+    "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ",
+    "Test iPhone 📱",
+    "ios",
+    "iPhone",
+    "17.0",
+    "1.0",
+    "0"
+  ],
+  "canonicalBase64": "MzM6dGhpbmd0aW1lLWRldmljZS1wYWlyaW5nLWNsYWltLXYxMTU6Zml4dHVyZS1zZXNzaW9uNTA6dHRwYWlyX0FRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUU1MDp0dG5vZGVfQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnSTQzOjZrcHNZLUtjVWdxLTlWQjdFeTdGLVpWSGRxNi12bnVTUWg3cWFSUkcwaXc0MzpBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNREF3TURBd01EQXdNNDM6QkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUUVCQVFFQkFRRUJBUTE2OlRlc3QgaVBob25lIPCfk7EzOmlvczY6aVBob25lNDoxNy4wMzoxLjAxOjA=",
+  "signature": "3Fwhfm5t4Tyi749usYJMbFg10aEeN88ugWhy42hQf1SbemYFJDtk5sXKqSkyLKqY4eLNuIfoU1+1u0hZhkKtBw=="
+}

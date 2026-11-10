@@ -36,8 +36,9 @@ when it has cached state.
 - **Native emoji rendering:** the ~1900-emoji dataset (`unicode-emoji-json`) is
   dynamic-imported into its own lazy chunk; we render the unicode characters
   directly (no image sprites/CDN), so each platform draws its own emoji.
-- **Optimistic rendering is a house rule** (canonical in `CLAUDE.md`, pointer in
-  `AGENTS.md`): never flash a loading state when cached state exists. Sync
+- **Optimistic rendering is a house rule** (canonical in `AI_ALL.md`, available
+  through the `AGENTS.md` and `CLAUDE.md` symlinks): never flash a loading state
+  when cached state exists. Sync
   first-paint tier is `~/hooks/localCache.ts` (localStorage, `tt-<domain>`
   keys). Reaction toggles paint before the API returns and reconcile per-token
   (functional `onChanged` updater) so concurrent toggles never clobber; the

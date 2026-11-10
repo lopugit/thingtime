@@ -25,7 +25,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBodyWithCors(request, 8 * 1024, cors);
-  const result = await deleteAppData(ctx.user.id, ctx.clientId, body?.key);
+  const result = await deleteAppData(ctx.user.id, ctx.clientId, body?.key, {
+    enabled: ctx.sandbox === true,
+    space: ctx.sandboxSpace ?? null
+  });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
