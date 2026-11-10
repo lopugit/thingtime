@@ -1097,6 +1097,14 @@ admission and queues a bounded set of already planned originals in
 See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
 iOS deferred Photos checklist for installed and physical acceptance.
 
+Native Photos automation 1.3.0 reports the measured activity of the single
+worker through the owner/device/revision-bound status reply. The editable
+connection card exposes the current stage, known counts and recent events.
+On iOS 26+ continuation 1.1.0 can attach an explicit Back up now request to
+that same worker while it prepares the first newest asset group. Subsequent
+selections retain their normal batching. Verify stage reporting, alias-safe
+reopen and signed physical behavior with the Photos launch checklist.
+
 Explicit iOS Start/Retry recovers changed Photos backup settings for the same
 authorized grant and device with cloud copies retained. It verifies the current
 saved revision, native grant and destination, disarms the prior native queue

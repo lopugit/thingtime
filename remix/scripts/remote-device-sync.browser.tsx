@@ -29,6 +29,7 @@ const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, fea
 // Synthetic account, native bridge and HTTP fixtures. Unknown requests fail closed.
 const params = new URLSearchParams(location.search);
 const nativeOnly = params.has('nativeOnly');
+const nativeActivity = nativeOnly && params.has('nativeActivity');
 const autoPhotos = params.has('autoPhotos') || nativeOnly, oldPhotoApp = params.has('oldPhotoApp');
 const photoRecovery = params.has('photoRecovery') || autoPhotos, editPhotos = params.has('editPhotos'), mobilePanel = params.has('mobilePanel');
 const photoTransfer = !nativeOnly && (editPhotos || autoPhotos);
@@ -73,7 +74,9 @@ type NativeFixtureRun = {
  leaseExpired?: boolean;
 };
 let nativeRun: NativeFixtureRun | null = nativeOnly ? JSON.parse(localStorage.getItem(nativeRunKey) ?? 'null') : null;
-const nativeCalls: Array<{ action: string; execution?: string; revision?: string }> = [];
+if (nativeActivity && !nativeRun) nativeRun = { revision: rows.find(row => row.id === photoScope.rootId).updatedAt, queueId: crypto.randomUUID(),
+ retryAt: 0, confirmedPayload: null, progress: { stage: 'complete', confirmed: { photos: 2, videos: 1, other: 0, wifiBytes: 3, mobileBytes: 0, unknownBytes: 0 } } };
+const nativeCalls: Array<{ action: string; execution?: string; revision?: string; continueInBackground?: true }> = [];
 const webTransfers: string[] = [];
 let folderSlot: string | undefined, nativeFolderContentions = 0;
 let nativeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -148,7 +151,7 @@ if (photoRecovery || mobilePanel) {
   devicePairingVersion: '1.0.0', fileAccessVersion: '1.8.0', fileUploadVersion: '1.5.0',
   fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0',
   ...(autoPhotos && !oldPhotoApp ? { filePhotoAutomationVersion: nativeOnly ? '1.2.0' : '1.0.0' } : {}),
-  ...(nativeOnly ? { filePhotoContinuationVersion: '1.0.0' } : {}),
+  ...(nativeOnly ? { filePhotoContinuationVersion: nativeActivity ? '1.1.0' : '1.0.0' } : {}),
   postMessage: async message => {
    const request = message.payload as any;
    const { requestId, ownerId: owner, origin, action, rootId, configurationId, deviceId: device } = request;
@@ -188,14 +191,22 @@ if (photoRecovery || mobilePanel) {
     const row = rows.find(candidate => candidate.id === id);
     if (rootId !== photosRoot || !row || (request.authorization?.scope.deviceId ?? device) !== deviceId)
      throw Error('Unexpected native Photos scope');
-    nativeCalls.push({ action, execution: request.execution, revision: request.authorization?.updatedAt ?? request.configurationRevision });
+    nativeCalls.push({ action, execution: request.execution, revision: request.authorization?.updatedAt ?? request.configurationRevision,
+     continueInBackground: request.continueInBackground });
     // Build 53 includes the owner's scoped grant list on every successful
     // gated folder reply. The immediate cancellation denial returns none.
     const result = { roots: action === 'cancel-deferred-upload' ? [] : photoRoots, rootId, configurationId: id, deviceId };
     if (action === 'arm-photo-run') {
      if (request.execution !== 'native' || request.authorization.updatedAt !== row.updatedAt || row.crystal.paused)
       throw Error('Native runner was armed without exact reviewed settings');
-     if (!nativeRun || nativeRun.progress.stage === 'paused') {
+     if (nativeActivity && nativeRun && request.resume === true) {
+      nativeRun.progress = { stage: 'preparing', confirmed: nativeRun.progress.confirmed, activity: {
+       phase: 'downloading', indexed: { photos: 3, videos: 0, files: 4 }, prepared: { completed: 0, total: 2 }, downloadFraction: 0,
+       backgroundRequest: request.continueInBackground ? 'declined' : undefined,
+       events: [{ phase: 'verifying', at: '2026-11-08T00:00:00Z' }, { phase: 'downloading', at: '2026-11-08T00:00:02Z' }]
+      } };
+      persistNativeRun();
+     } else if (!nativeRun || nativeRun.progress.stage === 'paused') {
       const retryAt = Date.now() + 300_000;
       nativeRun = { revision: row.updatedAt, queueId: nativeRun?.queueId ?? crypto.randomUUID(), retryAt,
        confirmedPayload: nativeRun?.confirmedPayload ?? null, progress: {
@@ -218,7 +229,8 @@ if (photoRecovery || mobilePanel) {
      reply('mobile-files-result', run ? { ...result, configurationRevision: run.revision,
       photoRunProgress: { ...run.progress, configurationRevision: run.revision } } : { ...result, photoRunProgress: null });
     } else if (action === 'run-photo-in-background') {
-     if (!nativeRun || nativeRun.revision !== request.configurationRevision || row.crystal.paused || !nativeRun.progress.pendingOriginals)
+     if (!nativeRun || nativeRun.revision !== request.configurationRevision || row.crystal.paused ||
+      (!nativeRun.progress.pendingOriginals && !(nativeActivity && nativeRun.progress.stage === 'preparing')))
       throw Error('Background request did not target current native work');
      if (declineNextContinuation) {
       declineNextContinuation = false;
@@ -369,7 +381,15 @@ window.fetch = async (input, init) => {
  }
  if (url.origin !== location.origin) throw Error('Fixture rejected external network');
  if (url.pathname === '/.well-known/thingtime-capabilities.json') return json(fixtureCapabilities(url.origin));
- if (url.pathname === '/api/v1/webpages/resolve') return json({ ok: false }, 404);
+ if (url.pathname === '/api/v1/webpages/resolve') {
+  if (!nativeActivity) return json({ ok: false }, 404);
+  const headers = new Headers(init?.headers);
+  if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
+   return json({ ok: false, error: 'Layout scope headers missing' }, 409);
+  const page = rows.find(row => row.author.id === ownerId && row.thingtime.includes('webpage') &&
+   row.crystal.pageKey === url.searchParams.get('id'));
+  return page ? json({ ok: true, source: 'user', page }) : json({ ok: false }, 404);
+ }
  if (url.pathname === '/api/v1/devices') return json({ ok: true, devices: [{ id: deviceId, name: mobile ? 'My iPhone' : 'My Mac', platform: mobile ? 'ios' : 'macos', pairingStatus: 'paired' }] });
  const headers = new Headers(init?.headers);
  if (nativeOnly && ['/api/v1/files', '/api/v1/attachments/uploads'].some(path => url.pathname.startsWith(path)) &&
