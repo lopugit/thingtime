@@ -24,15 +24,20 @@ export const CONFIGURATION_DRAFT_PREFIX = 'tt:sync-editor:v1:';
 export const SYNC_ENROLLMENT_RECOVERED_EVENT = 'tt:sync-enrollment-recovered';
 export const SYNC_ENROLLMENT_WAKE_EVENT = 'tt:sync-enrollment-wake';
 export const configurationDraftKey = (scope: ConfigurationEditorScope) => CONFIGURATION_DRAFT_PREFIX + JSON.stringify(scope);
-const enrollmentClaims = new Map<string, (() => void) | undefined>();
+const enrollmentClaims = new Map<string, { cancellation?: AbortController }>();
 /** UI and background discovery share the same draft storage fence. */
-export function claimSyncEnrollment(scope: ConfigurationEditorScope, cancel?: () => void) {
+export function claimSyncEnrollment(scope: ConfigurationEditorScope, cancellation?: AbortController) {
 	const key = configurationDraftKey(scope);
 	if (enrollmentClaims.has(key)) return null;
-	enrollmentClaims.set(key, cancel);
-	return () => { enrollmentClaims.delete(key); };
+	const claim = { cancellation };
+	enrollmentClaims.set(key, claim);
+	return () => {
+		if (enrollmentClaims.get(key) === claim) enrollmentClaims.delete(key);
+	};
 }
-export function cancelSyncEnrollmentRecovery(scope: ConfigurationEditorScope) { enrollmentClaims.get(configurationDraftKey(scope))?.(); }
+export function cancelSyncEnrollmentRecovery(scope: ConfigurationEditorScope) {
+	enrollmentClaims.get(configurationDraftKey(scope))?.cancellation?.abort();
+}
 const validId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 export function readConfigurationDraft(raw: string | null, deviceId: string): ConfigurationDraft | null {
 	if (raw === null) return null;

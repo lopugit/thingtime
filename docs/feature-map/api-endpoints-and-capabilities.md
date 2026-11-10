@@ -9,6 +9,13 @@ its activation/consolidation migrations use the canonical attachment lifecycle;
 see [device sync configs](../device-sync-configs.md) for rollout and deletion
 invariants, and the `TESTING.md` checklist for real API acceptance.
 
+`api.agent-overview` 2.1.0 adds optional multi-select task level, status and
+project filters to `GET /api/v1/agent-overview`. The read adapter applies them
+to the authorized hierarchy before pagination. The response includes effective
+selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
+the new filters. See [the overview adapter](../agent-overview.md) and run
+`test:agent-overview` and `test:api-capabilities`.
+
 Owner Things archive uses additive `api.things` 1.59.0,
 `api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
 filters apply before pagination; the bulk route updates only protected private

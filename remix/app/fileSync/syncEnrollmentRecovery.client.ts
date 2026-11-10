@@ -58,7 +58,7 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 			const attemptKey = JSON.stringify([key, draft.id, intent.savedRevision]);
 			if (retryAfter.has(attemptKey) || (local && nativeSyncTasks.isPaused(binding))) continue;
 			const cancellation = new AbortController();
-			const release = claimSyncEnrollment(scope, () => cancellation.abort());
+			const release = claimSyncEnrollment(scope, cancellation);
 			if (!release) break;
 			attempted++;
 			const deadline = AbortSignal.any([signal, cancellation.signal, AbortSignal.timeout(12_000)]);

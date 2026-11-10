@@ -5,6 +5,7 @@ import {
   MAX_WEBPAGE_SOURCE_INTERVAL_MS,
   MIN_WEBPAGE_SOURCE_INTERVAL_MS
 } from '~/schemas/registry';
+import { parseSourceInputArgument, type SourceInputValue } from '~/schemas/sourceInputs';
 
 import type { ThingSourceBinding } from '../Builder/liveComponent';
 import type { ComponentArgSpec } from './componentTemplate';
@@ -250,7 +251,7 @@ export const catalogEntryFrom = (shareId: string, crystal: Record<string, unknow
 // &refresh=manual|interval&interval=<ms>&inputs=<json>) so a bound page is
 // shareable and NEVER written to the thing. The values are exactly what a
 // webpage block's `source` carries (ThingSourceBinding) and the same gates
-// apply: an actionKey slug, a bounded interval, scalar inputs.
+// apply: an actionKey slug, a bounded interval and scalar input bindings.
 
 export const SOURCE_PARAM_KEYS = ['source', 'refresh', 'interval', 'inputs'] as const;
 export type SourceRefreshMode = NonNullable<ThingSourceBinding['refresh']>;
@@ -268,7 +269,7 @@ export const clampSourceInterval = (raw: unknown): number => {
   return Math.max(MIN_WEBPAGE_SOURCE_INTERVAL_MS, Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Math.round(value)));
 };
 
-export type SourceInputs = Record<string, string | number | boolean>;
+export type SourceInputs = Record<string, SourceInputValue>;
 
 export const parseSourceInputsJson = (raw: string): { ok: true; inputs: SourceInputs | undefined } | { ok: false; error: string } => {
   const text = (raw || '').trim();
@@ -283,14 +284,16 @@ export const parseSourceInputsJson = (raw: string): { ok: true; inputs: SourceIn
   const inputs: SourceInputs = {};
   let count = 0;
   for (const [name, value] of Object.entries(parsed as Record<string, unknown>)) {
-    if (!SOURCE_INPUT_KEY_PATTERN.test(name)) return { ok: false, error: `Input name “${name}” must be a simple identifier` };
+    if (!SOURCE_INPUT_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name)) return { ok: false, error: `Input name “${name}” must be a simple identifier` };
     if (typeof value === 'string') {
       if (value.length > MAX_SOURCE_INPUT_CHARS) return { ok: false, error: `Input “${name}” is too long` };
       inputs[name] = value;
     } else if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean') {
       inputs[name] = value;
     } else {
-      return { ok: false, error: `Input “${name}” must be a string, number, or boolean` };
+      const binding = parseSourceInputArgument(value);
+      if (!binding) return { ok: false, error: `Input “${name}” must be a scalar or a ttArg path binding` };
+      inputs[name] = binding;
     }
     count += 1;
     if (count > MAX_SOURCE_INPUT_KEYS) return { ok: false, error: `At most ${MAX_SOURCE_INPUT_KEYS} inputs` };

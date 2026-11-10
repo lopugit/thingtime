@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { newFileSyncConfiguration } from './configuration';
 import {
 	ConfigurationConflict,
+	cancelSyncEnrollmentRecovery,
 	canonicalDraftConfiguration,
+	claimSyncEnrollment,
 	configurationDraftKey,
 	persistConfigurationDraft,
 	persistConfigurationDrafts,
@@ -17,6 +19,28 @@ import {
 	type ConfigurationEditorTransport
 } from './configurationEditor';
 const scope = { origin: 'https://thingtime.com', ownerId: 'owner', dataPlane: 'home', deviceId: 'device' };
+test('enrollment cancellation targets only the current background claim for the exact scope', () => {
+	const otherScope = { ...scope, origin: 'https://other.test' };
+	const background = new AbortController();
+	const other = new AbortController();
+	const releaseBackground = claimSyncEnrollment(scope, background);
+	const releaseOther = claimSyncEnrollment(otherScope, other);
+	assert.ok(releaseBackground && releaseOther);
+	try {
+		cancelSyncEnrollmentRecovery(scope);
+		assert.equal(background.signal.aborted, true);
+		assert.equal(other.signal.aborted, false);
+		assert.equal(claimSyncEnrollment(scope), null, 'the aborting claim still holds its scope');
+		releaseBackground();
+		const releaseForeground = claimSyncEnrollment(scope);
+		assert.ok(releaseForeground);
+		try {
+			releaseBackground();
+			cancelSyncEnrollmentRecovery(scope);
+			assert.equal(claimSyncEnrollment(scope), null, 'a stale release or recovery cancel cannot clear a foreground claim');
+		} finally { releaseForeground(); }
+	} finally { releaseBackground(); releaseOther(); }
+});
 const config = newFileSyncConfiguration({ name: 'Documents', deviceId: 'device', localRootId: 'root', remoteFolderId: 'cloud' });
 const fresh = (): ConfigurationDraft => ({ version: 1, id: 'connection', baseUpdatedAt: null, pending: true, configuration: config, exclusions: '' });
 const row = (configuration = config, updatedAt = '2026-10-17T00:00:01Z') => ({
