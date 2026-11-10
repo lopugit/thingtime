@@ -67,6 +67,40 @@ artifacts and should stay untracked.
     plutil -p -
   ```
 
+## Registered iPhone Release export
+
+Use the **iOS TestFlight** workflow's manual `release-testing` operation from
+`main` to export a production-signed build for one already-enabled iPhone.
+Set `source_sha` to the exact current main commit that was accepted for testing
+and use `https://thingtime.com`. The job verifies the source and uses the existing
+Apple Distribution identity, App IDs and App Groups. It can create four dedicated
+Ad Hoc profiles for the phone and reuses matching active profiles on later runs.
+An invalid dedicated profile or missing registered device stops the export.
+
+Hash the lowercased hardware UDID locally with SHA-256 and pass the hex digest
+as `iphone_udid_sha256`. Use the provisioning UDID reported by Xcode or the
+CoreDevice `hardwareProperties.udid` field. Keep the raw value out of workflow
+inputs and logs.
+
+Create a short-lived RSA recipient certificate and private key in a private
+task directory. Only pass the certificate's base64 DER as
+`recipient_certificate`. The public repository's workflow publishes only the
+recipient-encrypted CMS artifact with one-day retention. Download the artifact
+named for the requested commit and build number, then decrypt locally:
+
+```sh
+umask 077
+openssl cms -decrypt -binary -inform DER -in Thingtime.ipa.cms \
+  -recip recipient.pem -inkey recipient-key.pem -out Thingtime.ipa
+```
+
+Reverify the decrypted app with `scripts/verify-release.py` using the exact
+release build number, expected team, expected bundle ID and the same device
+digest. Install over the existing authorized bundle only after verifying its
+identity and profiles. Use the native update path and preserve existing app
+data. Record the installed build and physical acceptance separately. Remove the
+task key and decrypted artifacts once delivery and verification are complete.
+
 ## Liquid Glass App Icon (`AppIcon.icon`)
 
 - The iOS 26+ home-screen icon is the Icon Composer package at
