@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Publish, inspect, export for a registered iPhone, or migrate existing Apple secrets
+        description: Publish, inspect, export for a registered iPhone and Watch, or migrate existing Apple secrets
         required: true
         type: choice
         options: [upload, status, release-testing, migrate-secrets]
@@ -43,6 +43,9 @@ on:
         required: false
       iphone_udid_sha256:
         description: SHA-256 of the lowercased hardware UDID (release-testing only)
+        required: false
+      watch_udid_sha256:
+        description: SHA-256 of the lowercased paired Apple Watch hardware UDID (release-testing only)
         required: false
       recipient_certificate:
         description: Base64 DER of the recipient's RSA encryption certificate (release-testing only)
@@ -106,6 +109,7 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: '1'
       EXPECTED_BUILD_NUMBER: ${{ github.event.inputs.expected_build_number }}
       IOS_RELEASE_TESTING_DEVICE_SHA256: ${{ github.event.inputs.operation == 'release-testing' && inputs.iphone_udid_sha256 || '' }}
+      WATCH_RELEASE_TESTING_DEVICE_SHA256: ${{ github.event.inputs.operation == 'release-testing' && inputs.watch_udid_sha256 || '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +129,8 @@ jobs:
           test "$GITHUB_SHA" = "$EXPECTED_SOURCE_SHA"
           test "$THINGTIME_WEB_URL" = 'https://thingtime.com'
           [[ "$IOS_RELEASE_TESTING_DEVICE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$WATCH_RELEASE_TESTING_DEVICE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$IOS_RELEASE_TESTING_DEVICE_SHA256" != "$WATCH_RELEASE_TESTING_DEVICE_SHA256"
           umask 077
           ruby -rbase64 -ropenssl -e '
             certificate = OpenSSL::X509::Certificate.new(Base64.strict_decode64(ENV.fetch("RECIPIENT_CERTIFICATE")))

@@ -164,21 +164,28 @@ def verify_release_ipa(ipa_path)
   end
 end
 
-# Look up the existing phone and signing identity. Only the four dedicated
-# profiles may be created; existing portal assets are never changed.
-def install_release_testing_profiles(keychain_path)
-  app_store_api_key
-  api = Spaceship::ConnectAPI
-  device_digest = ENV.fetch("IOS_RELEASE_TESTING_DEVICE_SHA256")
-  devices = api::Device.all(filter: { status: "ENABLED", platform: "IOS" })
+def release_testing_device(devices, device_class, digest)
   device = devices.find do |candidate|
-    candidate.enabled? && candidate.device_class == "IPHONE" &&
-      Digest::SHA256.hexdigest(candidate.udid.downcase) == device_digest
+    candidate.enabled? && candidate.device_class == device_class &&
+      Digest::SHA256.hexdigest(candidate.udid.downcase) == digest
   end
-  UI.user_error!("The requested iPhone is not registered and enabled for this Apple team") unless device
+  UI.user_error!("The requested #{device_class} is not registered and enabled for this Apple team") unless device
   puts "::add-mask::#{device.udid}"
   puts "::add-mask::#{device.udid.downcase}"
   puts "::add-mask::#{device.id}"
+  device
+end
+
+# Only the four dedicated profiles may be created. Existing Apple assets are
+# never changed. The Watch app is scoped to its own registered hardware.
+def install_release_testing_profiles(keychain_path)
+  app_store_api_key
+  api = Spaceship::ConnectAPI
+  devices = api::Device.all(filter: { status: "ENABLED", platform: "IOS" })
+  phone_digest = ENV.fetch("IOS_RELEASE_TESTING_DEVICE_SHA256")
+  watch_digest = ENV.fetch("WATCH_RELEASE_TESTING_DEVICE_SHA256")
+  phone = release_testing_device(devices, "IPHONE", phone_digest)
+  watch = release_testing_device(devices, "APPLE_WATCH", watch_digest)
 
   cert_id = ENV.fetch("IOS_DISTRIBUTION_CERTIFICATE_ID")
   cert = api::Certificate.get(certificate_id: cert_id)
@@ -205,7 +212,12 @@ def install_release_testing_profiles(keychain_path)
   profile_type = api::Profile::ProfileType::IOS_APP_ADHOC
   Dir.mktmpdir("thingtime-release-testing-profiles") do |directory|
     targets.each do |setting, identifier|
-      name = "Thingtime Release Testing #{identifier} #{device_digest[0, 16]} #{cert_id}"
+      device, digest = if setting == "WATCH_PROVISIONING_PROFILE_SPECIFIER"
+                         [watch, watch_digest]
+                       else
+                         [phone, phone_digest]
+                       end
+      name = "Thingtime Release Testing #{identifier} #{digest[0, 16]} #{cert_id}"
       profiles = api::Profile.all(filter: { name: name, profileType: profile_type }, includes: "bundleId")
       UI.user_error!("Multiple dedicated profiles exist for #{identifier}") if profiles.length > 1
       profile = profiles.first
@@ -402,10 +414,11 @@ platform :ios do
     UI.user_error!("Xcode did not export #{OUTPUT_NAME}") unless File.exist?(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
-  desc "Export a production Release IPA for one registered iPhone"
+  desc "Export a production Release IPA for a registered iPhone and its paired Watch"
   lane :release_testing do
-    UI.user_error!("Release testing requires a valid iPhone digest") unless
-      ENV.fetch("IOS_RELEASE_TESTING_DEVICE_SHA256", "").match?(/\A[0-9a-f]{64}\z/)
+    digests = ENV.values_at("IOS_RELEASE_TESTING_DEVICE_SHA256", "WATCH_RELEASE_TESTING_DEVICE_SHA256")
+    UI.user_error!("Release testing requires distinct iPhone and Watch digests") unless
+      digests.all? { |digest| digest.to_s.match?(/\A[0-9a-f]{64}\z/) } && digests.uniq.length == 2
     build(release_testing: true)
     verify_release_ipa(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end

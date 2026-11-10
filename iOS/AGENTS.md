@@ -70,17 +70,21 @@ artifacts and should stay untracked.
 ## Registered iPhone Release export
 
 Use the **iOS TestFlight** workflow's manual `release-testing` operation from
-`main` to export a production-signed build for one already-enabled iPhone.
+`main` to export a production-signed build for one already-enabled iPhone and
+its already-enabled paired Apple Watch.
 Set `source_sha` to the exact current main commit that was accepted for testing
 and use `https://thingtime.com`. The job verifies the source and uses the existing
 Apple Distribution identity, App IDs and App Groups. It can create four dedicated
-Ad Hoc profiles for the phone and reuses matching active profiles on later runs.
+Ad Hoc profiles and reuses matching active profiles on later runs. The Watch
+profile authorizes only the paired Watch. The other profiles authorize only
+the iPhone.
 An invalid dedicated profile or missing registered device stops the export.
 
-Hash the lowercased hardware UDID locally with SHA-256 and pass the hex digest
-as `iphone_udid_sha256`. Use the provisioning UDID reported by Xcode or the
-CoreDevice `hardwareProperties.udid` field. Keep the raw value out of workflow
-inputs and logs.
+Verify the pairing in Xcode and hash each lowercased hardware UDID locally
+with SHA-256. Pass the hex digests as `iphone_udid_sha256` and
+`watch_udid_sha256`. Use the provisioning UDIDs reported by Xcode or
+CoreDevice's `hardwareProperties.udid` field. Keep the raw values out of
+workflow inputs and logs.
 
 Create a short-lived RSA recipient certificate and private key in a private
 task directory. Only pass the certificate's base64 DER as
@@ -95,8 +99,8 @@ openssl cms -decrypt -binary -inform DER -in Thingtime.ipa.cms \
 ```
 
 Reverify the decrypted app with `scripts/verify-release.py` using the exact
-release build number, expected team, expected bundle ID and the same device
-digest. Install over the existing authorized bundle only after verifying its
+release build number, expected team, expected bundle ID and both device
+digests. Install over the existing authorized bundle only after verifying its
 identity and profiles. Use the native update path and preserve existing app
 data. Record the installed build and physical acceptance separately. Remove the
 task key and decrypted artifacts once delivery and verification are complete.

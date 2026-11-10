@@ -23,7 +23,8 @@ def verify_release_testing_profile(profile, identifier, team_id, device_digest, 
         assert entitlements.get('aps-environment') == 'production', 'Profile lacks production APNs'
 
 
-def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True, device_digest=None):
+def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True, device_digest=None, watch_device_digest=None):
+    assert bool(device_digest) == bool(watch_device_digest), "Both device digests are required for Release testing"
     def read(path):
         with open(path, 'rb') as stream:
             return plistlib.load(stream)
@@ -61,7 +62,8 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
             assert entitlements.get('application-identifier') == team_id + '.' + identifier, 'Wrong signed application identity'
             assert not entitlements.get('get-task-allow', False), 'Development signing is not a release'
             if device_digest:
-                production_push = target == app or identifier.endswith('.watchkitapp')
+                watch_target = identifier.endswith('.watchkitapp')
+                production_push = target == app or watch_target
                 if production_push:
                     assert entitlements.get('aps-environment') == 'production', 'Signed bundle lacks production APNs'
                     assert entitlements.get('com.apple.developer.usernotifications.time-sensitive') is True, 'Missing signed time-sensitive notifications'
@@ -77,7 +79,8 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
                     subprocess.run(['codesign', '-d', f'--extract-certificates={prefix}', str(target)], check=True, capture_output=True)
                     certificate = Path(str(prefix) + '0').read_bytes()
                 profile = plistlib.loads(decoded.stdout)
-                verify_release_testing_profile(profile, identifier, team_id, device_digest, certificate, production_push)
+                target_digest = watch_device_digest if watch_target else device_digest
+                verify_release_testing_profile(profile, identifier, team_id, target_digest, certificate, production_push)
             if target == app or target.suffix == '.appex':
                 assert group in entitlements.get('com.apple.security.application-groups', []), 'Missing signed App Group'
                 if device_digest:
@@ -88,7 +91,8 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
 if __name__ == '__main__':
     import sys
     try:
-        verify_bundle(Path(sys.argv[1]), os.environ['EXPECTED_BUILD_NUMBER'], os.environ['PRODUCT_BUNDLE_IDENTIFIER'], os.environ['DEVELOPMENT_TEAM'], device_digest=os.environ.get('IOS_RELEASE_TESTING_DEVICE_SHA256'))
+        verify_bundle(Path(sys.argv[1]), os.environ['EXPECTED_BUILD_NUMBER'], os.environ['PRODUCT_BUNDLE_IDENTIFIER'], os.environ['DEVELOPMENT_TEAM'], device_digest=os.environ.get('IOS_RELEASE_TESTING_DEVICE_SHA256'),
+                      watch_device_digest=os.environ.get('WATCH_RELEASE_TESTING_DEVICE_SHA256'))
         print('Verified phone, Watch, widget and share release bundles and signed App Groups.')
         if os.environ.get('IOS_RELEASE_TESTING_DEVICE_SHA256'):
             print('Verified exact device profile, signing certificate, production APNs and origin.')
