@@ -1,14 +1,13 @@
 import React from 'react';
 import { Box, Button, Flex, Stack, Text } from '@chakra-ui/react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { ActionBuilder } from './ActionBuilder';
 import { ActionChip, type ChipSize, type ChipTone } from './ActionChip';
 
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
 import {
 	ACTION_OP_TONES,
@@ -86,7 +85,6 @@ export const ActionCard = ({
 			) : null}
 			{size !== 'sm' ? (
 				<Flex gap={1.5} mt={3} wrap="wrap">
-					{effects.lookups.map((provider) => <ActionChip key={provider} tone="read" wrap>sends query to {provider} · uses your Vault key</ActionChip>)}
 					{effects.creates.map((schema) => (
 						<ActionChip key={`c-${schema}`} size={size} tone="create">
 							creates {displayRef(schema, schemaNames)}
@@ -97,24 +95,9 @@ export const ActionCard = ({
 							reads {schema === '*' ? 'things' : displayRef(schema, schemaNames)}
 						</ActionChip>
 					))}
-					{effects.publicReads.map((schema) => (
-						<ActionChip key={`pr-${schema}`} size={size} tone="read">
-							reads everyone’s public {displayRef(schema, schemaNames)}
-						</ActionChip>
-					))}
-					{effects.systemReads.map((schema) => (
-						<ActionChip key={`sr-${schema}`} size={size} tone="read">
-							reads the platform’s {displayRef(schema, schemaNames)}
-						</ActionChip>
-					))}
 					{effects.updates ? (
 						<ActionChip size={size} tone="write">
 							updates things
-						</ActionChip>
-					) : null}
-					{effects.deletes ? (
-						<ActionChip size={size} tone="danger">
-							deletes things
 						</ActionChip>
 					) : null}
 					{effects.invokes.map((key) => (
@@ -132,16 +115,12 @@ export const ActionCard = ({
 };
 
 export const ActionsPage = () => {
- const scope = useWorkspaceScope();
- return <WorkspaceActionsPage key={scope} scope={scope} />;
-};
-const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const workspaceUser = useWorkspaceUser();
- const user = scope === 'pending' ? null : workspaceUser;
-	const cacheKey = cacheKeyFor(scope);
+	const navigate = useNavigate();
+	const user = useCurrentUser();
+	const cacheKey = cacheKeyFor(user?.id);
 	const cached = React.useMemo(() => readLocalCache<ActionsCache>(cacheKey), [cacheKey]);
 	const [actions, setActions] = React.useState<ActionThing[]>(cached?.actions || []);
 	const [loaded, setLoaded] = React.useState(false);
@@ -151,7 +130,7 @@ const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 	// resolve schema refs (ids) to display names — one fetch per unique ref
 	React.useEffect(() => {
 		const refs = [...new Set(actions.flatMap((action) => collectSchemaRefs(action.crystal)))].filter(
-			(ref) => !(ref in schemaNames) && (!user?.localOnly || ref.startsWith('local-'))
+			(ref) => !(ref in schemaNames)
 		);
 		if (!refs.length) return;
 		let cancelled = false;
@@ -171,7 +150,7 @@ const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 		return () => {
 			cancelled = true;
 		};
-	}, [actions, schemaNames, user?.localOnly]);
+	}, [actions, schemaNames]);
 
 	React.useEffect(() => {
 		if (!user?.id) return;
@@ -214,7 +193,7 @@ const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 						</Text>
 					</Box>
 					{user && !building ? (
-						<Button bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" onClick={() => setBuilding(true)} size="sm" _hover={{ opacity: 0.9 }}>
+						<Button colorScheme="pink" onClick={() => setBuilding(true)} size="sm">
 							⚡ New action
 						</Button>
 					) : null}
@@ -239,22 +218,8 @@ const WorkspaceActionsPage = ({ scope }: { scope: string }) => {
 					</Box>
 				) : (
 					<Stack spacing={3}>
-						{/* each card is a REAL link to the action's inspector — middle-click,
-						    ⌘-click and the keyboard all work; the card itself stays inert (no
-						    armed control ever lives on a browse surface). Any button that
-						    lands inside ActionCard must stopPropagation so it never follows
-						    the link. */}
 						{actions.map((action) => (
-							<Box
-								as={Link}
-								_focusVisible={{ outline: '2px solid var(--tt-accent, #7c6cff)', outlineOffset: '2px', borderRadius: 'var(--tt-radius-lg, 16px)' }}
-								color="inherit"
-								data-testid="action-card-link"
-								display="block"
-								key={action.id}
-								textDecoration="none"
-								to={`/actions/${encodeURIComponent(action.id)}`}
-							>
+							<Box cursor="pointer" key={action.id} onClick={() => navigate(`/actions/${encodeURIComponent(action.id)}`)}>
 								<ActionCard action={action} schemaNames={schemaNames} />
 							</Box>
 						))}
