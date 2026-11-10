@@ -150,6 +150,29 @@ async function mcp(token, name, args) {
   return { error: result.isError || !!value.error, value, challenge: result._meta?.['mcp/www_authenticate']?.[0] };
 }
 async function tool(token, name, args) { const result = await mcp(token, name, args); assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`); return result.value.result || result.value; }
+async function verifyCoordination(bridge, identity, subspaceId, owner, stranger) {
+  const args = { ...identity, requestId: randomUUID(), title: 'Synthetic task coordination', text: 'Private acceptance started', renderComponent: { render: { tag: 'p', children: ['{text}'] } } };
+  const coordinated = await tool(bridge, 'coordinate_thingtime_agent_task', args);
+  const postId = coordinated.binding.coordinationPostId; assert(postId, 'Coordination returns a saved post ID');
+  assert.deepEqual((await tool(bridge, 'coordinate_thingtime_agent_task', args)).receipt, coordinated.receipt);
+  const updated = await tool(bridge, 'coordinate_thingtime_agent_task', { ...args, requestId: randomUUID(), text: 'Private acceptance updated' });
+  assert.equal(updated.binding.coordinationPostId, postId, 'Coordination updates the existing post');
+  const read = await tool(bridge, 'get_thingtime_agent_task', identity);
+  assert.equal(read.coordinationPost?.id, postId); assert.equal(read.coordinationPost?.crystal?.text, 'Private acceptance updated');
+  assert.equal(read.coordinationPost?.author?.id, coordinated.binding.characterId);
+  assert.equal(read.activeOperation, null);
+  const path = '/api/v1/things?id=' + encodeURIComponent(postId);
+  const { data: exact } = await request(path, { cookie: owner.cookie });
+  assert.equal(exact.post?.subspace?.id, subspaceId);
+  assert.equal(exact.post?.subspace?.access, 'private');
+  assert.equal(exact.post?.subspace?.viewerRole, 'owner');
+  assert.deepEqual(exact.thing?.crystal?.renderComponent?.render, args.renderComponent.render);
+  for (const cookie of [undefined, stranger.cookie]) {
+    const denied = await request(path, { cookie, status: null });
+    assert.equal(denied.response.status, 404); assert(!denied.data?.thing && !denied.data?.post);
+  }
+  checks.push('one Character-authored rendered coordination post retains the exact private subspace and is hidden from anonymous and outsider callers');
+}
 
 async function scopedReconnect(owner, stranger, plain) {
   const old = await tool(plain.bridge, 'list_thingtime_accounts', {});
@@ -245,7 +268,7 @@ try {
   const server = start(process.execPath, ['.output/server/index.mjs']);
   await waitFor(async () => { assert(server.exitCode === null, 'Disposable Nitro server exited'); try { return (await fetch(origin + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(800) })).ok; } catch { return false; } }, 'built Nitro HTTP server');
   const manifest = (await request('/.well-known/thingtime-capabilities.json')).data;
-  for (const [feature, minimum] of Object.entries({ 'api.agent-reporting': '1.0.0', 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0', 'api.chatgpt-mcp': '2.2.0', 'api.chatgpt-oauth-authorize': '1.3.0', 'api.chatgpt-oauth-token': '1.1.0' })) {
+  for (const [feature, minimum] of Object.entries({ 'api.agent-reporting': '1.1.0', 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0', 'api.chatgpt-mcp': '2.2.0', 'api.chatgpt-oauth-authorize': '1.3.0', 'api.chatgpt-oauth-token': '1.1.0' })) {
     const version = manifest.features?.[feature]?.version;
     const [major, minor, patch] = (version || '').split('.').map(Number);
     const [expectedMajor, minMinor, minPatch] = minimum.split('.').map(Number);
@@ -276,6 +299,22 @@ try {
     const read = await tool(upgraded.bridge, 'get_thingtime_agent_task', { ...identity, recordIds: [id] });
     assert.equal(read.records[0]?.crystal?.title, 'Created after scoped OAuth');
     assert.equal(read.records[0]?.author?.id, prepared.binding.characterId);
+    await verifyCoordination(upgraded.bridge, identity, syntheticWorkspace.subspaceId, owner, stranger);
+    const privateGrant = (await request('/api/v1/tokens', { cookie: owner.cookie, status: 201, body: {
+      name: 'Synthetic private reporting acceptance', scopes: ['agents.report'], visibility: 'private'
+    } })).data;
+    assert.deepEqual(privateGrant.tokenInfo.scopes, ['agents.report']); assert.equal(privateGrant.tokenInfo.visibility, 'private');
+    const reportWithPrivateGrant = async (operation, extra = {}) => (await request('/api/v1/agents/reporting', { token: privateGrant.token,
+      body: { origin, externalTaskId: identity.externalTaskId, operation, ...extra } })).data;
+    const privateRead = await reportWithPrivateGrant('get');
+    assert.equal(privateRead.coordinationPost.id, privateRead.binding.coordinationPostId);
+    const privateWrite = await reportWithPrivateGrant('coordinate', { requestId: randomUUID(), title: 'Private token coordination',
+      text: 'Reporting scope only', renderComponent: { render: { tag: 'p', children: ['{text}'] } } });
+    assert.equal(privateWrite.binding.coordinationPostId, privateRead.coordinationPost.id);
+    assert.equal((await reportWithPrivateGrant('get')).coordinationPost.crystal.text, 'Reporting scope only');
+    const generalThing = await request('/api/v1/things?id=' + encodeURIComponent(privateRead.coordinationPost.id), { token: privateGrant.token, status: null });
+    assert.equal(generalThing.response.status, 403); assert(!generalThing.data?.thing);
+    checks.push('a private-only reporting token can read and update only its bound coordination post without general Things access');
     assert((await mcp(upgraded.bridge, 'get_thingtime_thing', { accountId: upgraded.accountId, id })).error);
     const legacy = await oauth(owner.cookie, ['agents.report']);
     assert.equal((await tool(legacy.bridge, 'get_thingtime_agent_task', { externalTaskId: identity.externalTaskId })).binding.id, prepared.binding.id);
@@ -305,17 +344,7 @@ try {
   const wrongOrigin = await request('/api/v1/agents/reporting', { token: grant.pat, body: { operation: 'get', origin: 'https://example.invalid', externalTaskId: args.externalTaskId }, status: null }); assert.equal(wrongOrigin.response.status, 400);
   assert.deepEqual(prepared.binding.workspace.pages, workspace.pages); assert.deepEqual(prepared.binding.workspace.schemas, workspace.schemas);
   checks.push('stable external identity reuses distinct Character and exact private saved workspace');
-  const coordinateArgs = { externalTaskId: args.externalTaskId, requestId: randomUUID(), title: 'Synthetic task coordination', text: 'Private acceptance started', renderComponent: { render: { tag: 'p', children: ['{text}'] } } };
-  const coordinated = await tool(grant.bridge, 'coordinate_thingtime_agent_task', coordinateArgs);
-  const postId = coordinated.binding.coordinationPostId; assert(postId, 'Coordination returns a saved post ID');
-  assert.deepEqual((await tool(grant.bridge, 'coordinate_thingtime_agent_task', coordinateArgs)).receipt, coordinated.receipt);
-  const updatedCoordination = await tool(grant.bridge, 'coordinate_thingtime_agent_task', { ...coordinateArgs, requestId: randomUUID(), text: 'Private acceptance updated' });
-  assert.equal(updatedCoordination.binding.coordinationPostId, postId, 'Coordination updates the existing post');
-  const coordinationRead = await tool(grant.bridge, 'get_thingtime_agent_task', { externalTaskId: args.externalTaskId });
-  assert.equal(coordinationRead.coordinationPost?.id, postId); assert.equal(coordinationRead.coordinationPost?.crystal?.text, 'Private acceptance updated');
-  assert.equal(coordinationRead.coordinationPost?.author?.id, coordinated.binding.characterId);
-  for (const cookie of [undefined, stranger.cookie]) { const deniedPost = await request('/api/v1/things?id=' + encodeURIComponent(postId), { cookie, status: null }); assert([401, 403, 404].includes(deniedPost.response.status)); }
-  checks.push('one Character-authored rendered private coordination post is reused, read back, and hidden from anonymous and outsider callers');
+  await verifyCoordination(grant.bridge, { externalTaskId: args.externalTaskId }, workspace.subspaceId, owner, stranger);
   const report = async (actionName, inputs, requestId = randomUUID()) => tool(grant.bridge, 'report_thingtime_agent_task', { externalTaskId: args.externalTaskId, requestId, actionName, inputs });
   for (const [action, title] of [['createProject', 'Synthetic reporting project'], ['createTask', 'Synthetic reporting task'], ['createAgent', 'Synthetic reporting agent']]) prepared = await report(action, { title, status: 'active' });
   const taskId = prepared.binding.records.taskId; assert(taskId);
