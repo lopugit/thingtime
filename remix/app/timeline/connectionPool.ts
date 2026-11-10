@@ -1,3 +1,4 @@
+import type { TimelineNameQueue } from './nameQueue';
 import { timelineScopeKey, type TimelineScope } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
@@ -5,13 +6,13 @@ import type { TimelineNoteStore } from './noteStore.ts';
 import type { TimelineNameStore } from './nameStore.ts';
 import type { TimelineSync } from './sync.ts';
 
-/** `names` is the in-memory 📌 version-name cache (no queue, no IndexedDB). */
-export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; notes: TimelineNoteStore; names: TimelineNameStore; sync: TimelineSync };
+/** Accepted names share the existing cache; account name commands also persist in their scoped queue. */
+export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; notes: TimelineNoteStore; names: TimelineNameStore; nameQueue?: TimelineNameQueue; sync: TimelineSync };
 
 /** A signed-out render has neither a viewer nor a connection. Check both
  * before comparing identities: undefined === undefined is not an account. */
-export function timelineConnectionForViewer<T extends Pick<TimelineConnection, 'scope'>>(connection: T | null, ownerId: string | null | undefined, dataPlane: string | null | undefined): T | null {
-	if (!connection || !ownerId || connection.scope.ownerId !== ownerId || (dataPlane && connection.scope.dataPlane !== dataPlane)) return null;
+export function timelineConnectionForViewer<T extends Pick<TimelineConnection, 'scope'>>(connection: T | null, ownerId: string | null | undefined, dataPlane: string | null | undefined, delegatedBy?: string): T | null {
+	if (!connection || !ownerId || connection.scope.ownerId !== ownerId || connection.scope.delegatedBy !== delegatedBy || (dataPlane && connection.scope.dataPlane !== dataPlane)) return null;
 	return connection;
 }
 
@@ -24,7 +25,8 @@ export class TimelineConnectionPool {
 	acquire(scope: TimelineScope, folderId: string) {
 		const key = timelineScopeKey(scope);
 		let entry = this.entries.get(key);
-		if (entry && entry.connection.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
+		if (entry && entry.connection.folderId && folderId && entry.connection.folderId !== folderId) throw new Error('Timeline folder changed. Reconnect your history.');
+		if (entry && !entry.connection.folderId && folderId) entry.connection.folderId = folderId;
 		if (!entry) { entry = { connection: this.create(scope, folderId), users: 0 }; this.entries.set(key, entry); }
 		entry.users++;
 		let released = false;

@@ -1,0 +1,46 @@
+{
+  "homeHistoryUnderCustomPlane": true,
+  "selectedPlaneExcludesHomeHistory": true,
+  "importedHistoryOperations": [
+    "update",
+    "update",
+    "delete",
+    "create"
+  ],
+  "staleDetailDetached": true,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "scrollHeight": 2116,
+      "clientHeight": 1000
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "scrollHeight": 2571,
+      "clientHeight": 844
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "scrollHeight": 2766,
+      "clientHeight": 844
+    }
+  ],
+  "offlineWrites": [],
+  "errors": [],
+  "offlineVersionExportCount": 2,
+  "realCustomPlaneSelected": true,
+  "source": {
+    "buildProof": "build-proof.json",
+    "test": "remix/app/local-workspace/accountThemeHistoryCustom.browser.test.mjs",
+    "testSha256": "79dd6534998f7d69ffddbb87036b9c8fc17e7b21292aaf449cfe2af4c13da48d"
+  },
+  "isolation": {
+    "disposableApiAndMongoReplica": true,
+    "taskOwnedSandboxedChromium": true,
+    "ownedFixtureStopped": true,
+    "productionDataChanged": false
+  }
+}

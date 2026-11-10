@@ -1,0 +1,22 @@
+✖ global and site nested blocks remain individually editable after offline save and reload (901.580696ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 939.247896
+
+✖ failing tests:
+
+test at ../../tmp/qa-site.test.mjs:11:1
+✖ global and site nested blocks remain individually editable after offline save and reload (901.580696ms)
+  page.goto: Download is starting
+  Call log:
+    - navigating to "http://127.0.0.1:18724/builder?page=__global__", waiting until "load"
+  
+      at TestContext.<anonymous> (/tmp/qa-site.test.mjs:82:14) {
+    name: 'Error',
+    log: [ '  - navigating to "http://127.0.0.1:18724/builder?page=__global__", waiting until "load"' ]
+  }

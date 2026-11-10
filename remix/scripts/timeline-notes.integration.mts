@@ -10,8 +10,10 @@ const base = process.env.TIMELINE_TEST_BASE;
 if (!base) throw new Error('Set TIMELINE_TEST_BASE to the isolated local test server');
 if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Timeline integration only runs on a disposable local server');
 const status = await fetch(`${base}/api/v1/mongodb/status`).then(response => response.json());
-assert.equal(status.host, '127.0.0.1:20337');
-assert.equal(status.replicaSet, 'timeline-rs');
+const expectedHost = process.env.TIMELINE_TEST_MONGO_HOST ?? '127.0.0.1:20337';
+assert.match(expectedHost, /^(127\.0\.0\.1|localhost):[0-9]+$/);
+assert.equal(status.host, expectedHost);
+assert.equal(status.replicaSet, process.env.TIMELINE_TEST_REPLICA_SET ?? 'timeline-rs');
 assert.equal(status.custom, false);
 assert.equal(status.connected, true);
 
@@ -108,8 +110,21 @@ assert.deepEqual((await post(remove)).data, removed.data, 'Removing again is ide
 assert.deepEqual((await post({ ...remove, operationId: randomUUID() })).data, removed.data);
 assert.equal((await history()).data.notes.length, TIMELINE_NOTES_PER_EVENT - 1);
 assert.ok(!(await history()).data.notes.some((note: any) => note.id === remove.noteId));
-assert.equal((await post(add)).response.status, 200, 'A removed operation id may store the identical note again');
+assert.equal((await post(add)).response.status, 409, 'A delayed add cannot recreate a removed identity');
+assert.ok(!(await history()).data.notes.some((note:any)=>note.id===remove.noteId));
 assert.deepEqual((await post({ command: 'remove-note', operationId: randomUUID(), noteId: added.data.note.id })).data, removed.data);
+
+// A concurrent add/remove uses the same protected identity; deletion must win
+// regardless of which transaction commits first, including a later lost reply.
+for (let index = 0; index < 3; index++) {
+	const racingAdd = { ...add, operationId: randomUUID(), text: 'Concurrent disposable note' };
+	const racingRemove = { command: 'remove-note' as const, operationId: randomUUID(), noteId: timelineNoteId(racingAdd.operationId) };
+	const [addResult, removeResult] = await Promise.all([post(racingAdd), post(racingRemove)]);
+	assert.ok([200, 409].includes(addResult.response.status), JSON.stringify(addResult.data));
+	assert.equal(removeResult.response.status, 200, JSON.stringify(removeResult.data));
+	assert.equal((await post(racingAdd)).response.status, 409);
+	assert.ok(!(await history()).data.notes.some((note: any) => note.id === racingRemove.noteId));
+}
 
 // Lopu explanation: shape and idempotency only; the model may be unconfigured locally.
 const explain = { command: 'explain-change' as const, operationId: randomUUID(), eventId: root.id, thingId: thing.id };

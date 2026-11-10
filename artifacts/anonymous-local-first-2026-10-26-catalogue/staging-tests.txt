@@ -1,0 +1,19 @@
+✔ themes: native stream stages beyond old catalogue limits without getAll, then admits and cleans atomically (6733.7725ms)
+✔ themes: failed or malformed stream preserves prior catalogue and leaves no staging bytes (130.339709ms)
+✔ themes: a newer read and a local edit during receiving cannot be overwritten by late admission (189.949125ms)
+✔ themes: missing rows with device dependents are retained for review; clean missing rows are removed (54.356291ms)
+✔ algorithms: native stream stages beyond old catalogue limits without getAll, then admits and cleans atomically (13646.708208ms)
+✔ algorithms: failed or malformed stream preserves prior catalogue and leaves no staging bytes (341.0735ms)
+✔ algorithms: a newer read and a local edit during receiving cannot be overwritten by late admission (120.7465ms)
+✔ algorithms: missing rows with device dependents are retained for review; clean missing rows are removed (92.53975ms)
+✔ platform quota exhaustion during final admission rolls back all catalogue changes and clears staging (32.106625ms)
+✔ cancellation inside the final native storage transaction rolls back earlier writes (33.988208ms)
+✔ a new authorized refresh cleans a retired stream staging area without reading another scope (58.69475ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24823.0925

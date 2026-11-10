@@ -1529,3 +1529,15 @@ test('a checkpointed Action result reaches the resumed provider without rerunnin
  assert.deepEqual(JSON.parse(prompt.split('\n').at(-1))[0].data.result.days, [{ today: true, records: [] }]);
  assert.equal(runs, 1);
 });
+
+test('unverified instruction capacity is an explicit nonretryable chat outcome before any provider request', async () => {
+  const { InstructionInferenceCapacityError } = await import('./instructionInference');
+  const { events, outcome } = await collect(turn('hi', 'claude-opus-5', { deps: { getPromptSettings: async (_ownerId: string, options: any) => {
+    assert.equal(options.modelId, 'claude-opus-5');
+    throw new InstructionInferenceCapacityError(options.modelId, null);
+  } } }));
+  assert.equal(outcome.stopReason, 'error');
+  assert.match(outcome.error!, /No instructions were truncated or sent/);
+  assert.deepEqual(events.filter(event => event.type === 'error').map(event => event.retryable), [false]);
+  assert.equal(anthropicRequests.length + openAiRequests.length + responsesRequests.length, 0);
+});

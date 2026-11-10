@@ -1,0 +1,32 @@
+{
+  "account": false,
+  "runId": "c78d7b5a-317a-4307-a6be-88326660f5e9",
+  "draftId": "48f6d454-1d80-4c80-b19f-ed1a81d1a96c",
+  "sourceId": "local-post-9cc41f70-4bf5-4d8e-a4bb-b48242450817",
+  "templateId": "6fded7a8-7157-4482-979a-f037fde4eaf2",
+  "postId": "local-post-e5c85d11-0ddc-4973-9069-c0b430305b07",
+  "nativeUrlComposer": true,
+  "coldOfflineDraftReload": true,
+  "independentTemplateLinks": true,
+  "sourceDeleted": true,
+  "privatePostBinding": true,
+  "noExternalUrlFetch": true,
+  "noLinkedBytes": true,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "writes": [],
+  "draftRequests": [],
+  "errors": []
+}

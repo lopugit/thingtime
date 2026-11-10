@@ -1,25 +1,36 @@
 # API endpoints and capabilities
 
-Device sync control 1.5.0 adds config-scoped activity and paged receipt history
-to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
-same native receipt journal used locally; `api/utils/devices/` enforces pairing,
-owning account and private-config authorization. Closed result validation and
-client requirement maps must stay aligned. Attachment upload deduplication and
-its activation/consolidation migrations use the canonical attachment lifecycle;
-see [device sync configs](../device-sync-configs.md) for rollout and deletion
-invariants, and the `TESTING.md` checklist for real API acceptance.
+## Hosted anonymous draft render and export
 
-`api.agent-overview` 2.1.0 adds optional multi-select task level, status and
-project filters to `GET /api/v1/agent-overview`. The read adapter applies them
-to the authorized hierarchy before pagination. The response includes effective
-selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
-the new filters. See [the overview adapter](../agent-overview.md) and run
-`test:agent-overview` and `test:api-capabilities`.
+The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
+2.2.0. Exact-origin ChatGPT discovery advertises `chatgpt.render-export`
+1.0.0 and `thingtime_render_and_export` only with the verified snapshot
+configuration. `plugin.ts` dispatches only this exact tool without account
+resolution; `hostedRender.server.ts` enforces the canonical in-bundle validator,
+distributed admission and nonpersistent deny-all worker lifecycle. The
+adapter checks the fixed non-root identity, drops and verifies all five Linux
+capability sets, and checks the work directory and runner hash before writing
+the private input. Probe, command
+and file transfer stay on the same verified Session.
+Keep the HTTP resource and local stdio formats on the shared renderer contract in
+`MCP/src/renderContract.ts`. Run `test:chatgpt`, `test:api-capabilities`, the
+built MCP manifest smoke and the [operator preflight and deployed
+acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
 
-Owner Things archive uses additive `api.things` 1.59.0,
-`api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
-filters apply before pagination; the bulk route updates only protected private
-library metadata. See [Things and folders](things-and-folders.md).
+## Anonymous/local-first contracts after main reconciliation
+
+Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.
+
+The combined contract distinguishes main’s existing features from the local-first
+receipt additions: `api.things` 1.58.0, `api.attachment-content` 1.19.0,
+`api.attachment-link` 1.3.0, `api.attachment-upload-abort` 1.3.0 and
+`api.attachment-annotate` 1.4.0. Clients that require retained-byte reads,
+request-ID replay or conditional metadata writes reject the older colliding
+versions. Account-derived caches retain protected execution holds; Actions
+must not run a restored held definition through a local adapter. Keep both
+manifest generators and the direct account transport’s requirement map aligned.
+Run `test:api-capabilities`, the affected local-workspace transport/cache tests,
+and built-origin negotiation before acceptance.
 
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
@@ -218,6 +229,44 @@ explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
 and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
 private-Thing creation. See README and TESTING for limits and acceptance.
 
+Attachment content 1.19.0 includes private `cache=retain-bytes&download=1` for owned
+originals, reusing descriptor authorization and the existing route/import entry.
+`apiDocs.ts` versions both manifests; account retention negotiates 1.19.0 before
+fetching. The byte body streams with exact descriptor ETag/length and private
+no-store headers; generic media-cache policy is unchanged. Run `test:attachments`,
+`test:api-capabilities`, `test:local-workspace` and the isolated built-manifest smoke.
+See the [streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
+Attachment content 1.19.0 includes `cache=original-bytes&download=1` for existing
+shared/public read authority. A fresh `cache=validate&download=1` receipt supplies
+the required exact `If-Match`; no owner retention exemption is granted. The
+stream stays on the selected origin, rejects redirects, counts exact original
+bytes and withholds its last chunk until EOF plus current ACL/version checks.
+Server and negotiated client allow ten minutes per file and thirty seconds
+waiting for upstream progress; consumer backpressure does not spend that idle
+budget. Metadata reads retain their separate thirty-second budget. Cancellation,
+revocation, replacement, short/extra bytes and stalled cleanup/authentication
+are regressions in the existing route and transfer suites. Anonymous Shared
+Copy negotiates 1.18.0 for larger files, rechecks receipts and the full export,
+then imports privately and atomically. Portable JSON includes no access receipts.
+
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
+reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
@@ -275,7 +324,7 @@ requests preserve their header and selection through the same fallback as root
 data; the upstream enforces the precondition. `app/api/utils/mongodb/dataPlane.ts` owns the identity and guard;
 `app/utils/dataPlane.ts` owns the shared public validation/header/link helpers.
 
-Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
+Saved theme history uses `api.themes` / `api.themes-delete` 1.1.1 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
@@ -450,7 +499,8 @@ revision and validated local wall time from an exact private Data Thing.
 The Action route verifies the settings, page and Action revisions before
 automatic writes. Ordered ensure batches use the same existing Action
 authorization, operation budget and protected intent keys. Saved definitions
-require `api.things` 1.57.0 or `api.things-update` 1.23.0. See the
+require `api.things` 1.58.0 or `api.things-update` 1.23.0 in this combined build.
+The older main and feature builds both advertised 1.57.0 for different behavior. See the
 [cutoff and batch contracts](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
 
 JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
@@ -585,7 +635,7 @@ Native traversal and editable synchronous callback objects/functions require `ap
 
 ## Lopu schemas, files and prompt settings
 
-`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. The new `api.settings-lopu-prompt` 1.0.0 route supports authenticated personal checklists and admin base edits with revision conflicts. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
+`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. `api.settings-lopu-prompt` 2.0.0 supports resumable private instruction transfer, immutable references and admin base edits with revision conflicts. Public `GET ?scope=base` reads no personal data; legacy full reads of referenced content return explicit 413. Multipart operations preserve same-origin, current account/data-plane fences, the 96 KiB body boundary, normal request limits and quota accounting. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
 
 
 Named-branch comparison uses `preview-branch-merge` on that same endpoint;
@@ -649,6 +699,14 @@ Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 
 
+Standalone recording retention extends attachment content to 1.14.0 (the owned
+retention descriptor includes immutable `purpose`). Deletion 1.5.0 extends both
+durable receipt modes to recordings with exact-purpose claim fences. Routes keep
+full-user, same-origin, private/no-store and owner-only restrictions. Both
+manifests derive from `apiDocs.ts`; coverage includes `attachmentsRoutes.test.ts`,
+attachment service tests, both capability suites and the local recording browser
+fixture. No new route or public publishing endpoint is added.
+
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
@@ -662,6 +720,68 @@ single-use GitHub OIDC credential delivery or explicitly enabled create-only
 migration. No origin fallback is allowed. Run `test:ios-release`, capability and
 API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
 
+
+`api.themes-sync` 1.0.0 is the private full-session prerequisite for conditional
+account theme synchronization. `api/utils/themes/themeSync.ts` extends the
+canonical writer with in-transaction hooks and protected Timeline receipts;
+`things/storedSnapshot.ts` supplies the shared complete BSON comparison used by
+both themes and Vault. The route, import map, rate rule and docs registration are
+kept together. `test:theme-sync`, the opt-in `themeSync.api.test.ts` and
+`themeQuota.api.test.ts` cover admission, immutable retries, cross-writer conflicts,
+transactional quota and active-pointer cleanup. Client account theme sync remains
+pending in the [local workspace matrix](../local-workspaces.md).
+
+`api.themes` and `api.themes-delete` 1.1.1 preserve the request shape while fixing concurrent quota admission and transactional active-pointer cleanup.
+
+Account theme selection uses `themes/sync` operations `selection`/`select` under
+`api.themes-sync` 1.1.0. `themes/themeSelection.ts` reuses the secure account CAS
+writer and transactional Timeline receipts. `themeSelectionContract.ts` is shared
+with the device queue. Run selection contract/API and themes/sync route tests;
+verify normal-writer conflicts, replay after deletion and all identity boundaries.
+
+The local `accountApi.client.ts` online handler forces theme catalogue and
+selection reads past their normal refresh throttle. Each refresh still verifies
+the active account/source lease; home-view access does not authorize generic
+home queues under a selected custom plane. `accountReconnect.test.ts` verifies
+fast reconnect after failed reads, cleared errors and retired-worker silence.
+
+Catalogue reads require `api.themes-sync` 1.2.0 for explicit home `folderId`/null.
+This additive projection supports complete offline theme export without exposing
+ownership or sharing metadata. Both manifests derive the version from `apiDocs.ts`;
+write and selection minima remain 1.0.1 and 1.1.0. Test incompatible cached
+contracts, missing placement, managed folder moves and pending-edit preservation
+with theme transport, sync API and account export tests.
+
+api.themes-sync 1.3.0 adds optional command.folderId to conditional saves. The
+canonical theme writer reuses lockFolderDestination and prepareManagedPlacement
+inside its accounted home transaction. Normal token writes omit the property;
+imported placement negotiates 1.3.0. Retained catalogue reads still require 1.2.0.
+Both manifests derive from apiDocs.ts. Run theme contract/receipt/transport and
+capability suites plus guarded themeImport.api.test.ts for the new write boundary.
+
+## Locally executable account Actions
+
+`local-workspace/accountApi.client.ts` selects the existing `LocalActions`
+interpreter for retained owned programs with a supported local dependency
+closure. `AccountThingSync.withLease` carries content queue and Timeline hooks
+into both data and browser requests, including deletion. Remote-only Actions
+retain the original authenticated/capability-negotiated adapter. Device run
+details are distinct from server receipts and never enter content sync.
+`accountActions.test.ts`, `accountApi.test.ts` and the opt-in
+`accountActions.browser.test.ts` cover this boundary; see
+[local workspaces](../local-workspaces.md#account-local-action-execution--2026-10-18).
+
+
+`api.algorithms-sync` 1.3.0 preserves optional library display titles in private
+catalogues and canonical content. The existing shared parser bounds the title;
+omission preserves stored metadata and null clears it. Catalogue retention and
+title-bearing writes negotiate 1.3.0; placement and selection keep their existing
+minima. Both generated manifests derive from the same endpoint documentation.
+
+Normal remote algorithm title transfers also require `api.things-export` 1.17.0
+and `api.things-import` 1.13.0. The shared client negotiates these before normal
+remote transfer, and both live manifests are checked by the API fixture.
+
 Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
 `transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
@@ -674,6 +794,15 @@ produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
 Public docs and capability discovery remain local and available.
 
 
+### Combined password contract after main integration
+
+`api.passwords` 1.3.0 combines main's title search with PR #1000's durable encrypted
+file deletion/abort receipts. The registry, both manifests, search client and file
+worker negotiate the combined contract; tests reject older/breaking versions.
+`installSuiteForWorkspace` keeps local anonymous installation while negotiating
+media-tools 1.4.0 for remote installation. The built-server fixture and isolated
+Nitro/Vite failure checks are recorded in the PR #1000 integration note.
+
 `api.ai-chatgpt-plan` 1.2.0 adds OS-protected device storage and redacted text
 availability to the signed desktop's existing loopback flow. The desktop
 verifies the current session against its selected account API and leaves remote
@@ -685,9 +814,32 @@ The transcript route cannot invoke models, tools, actions, or billing. Both
 manifests use the canonical docs registry. Verify the plan, API capabilities,
 API fallback and Lopu stream suites, then run installed-app acceptance in TESTING.
 
-General compressor storage adds `api.things` 1.41.0, `api.things-update`
-1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
-with separately editable children. `api.webpages-suites-install` 1.7.0 installs
+
+`api.things-search` 1.4.0 adds optional `scope: "mine"` to GET/POST search. `searchOwnerScope` supplies an authenticated owner predicate in conjunction with existing access fences; anonymous mine-search refuses. Both manifests and Agent Tasks Actions use the same version. `local-workspace/actionRequests.ts` adapts only explicit structural mine-search to the leased device snapshot, with partial account metadata. Run capability/workspace tests and the isolated `actionSearch.browser.test.ts`; see the [offline Agent Tasks checkpoint](../local-workspaces.md#offline-agent-tasks-search--2026-10-19).
+
+
+### Character profile sync
+
+`themes/sync/_sync.tsx` (1.7.0) and `algorithms/sync/_sync.tsx` (1.5.0)
+resolve the requested/session-selected actor through `resolveTokenUser` on every
+admission. Delegated `themeTransport.client.ts` and `algorithmTransport.client.ts`
+negotiate those contracts and `api.auth-characters` 1.0.0. Both manifests derive
+versions from `apiEndpointDocs`. The additive `catalogue` operation returns a
+backpressured NDJSON stream from one home Mongo snapshot. The shared
+`catalogue/catalogueStream.ts` reader validates identity, ordered chunks, digest,
+counts and clean EOF. Scoped IndexedDB staging and one atomic admission in
+`local-workspace/catalogueStaging.ts` preserve device edits on any incomplete read.
+Legacy JSON snapshots and per-profile write contracts remain supported. Run the route `sync.test.ts` suites,
+`characterProfileSync.test.ts`, capability coverage, and the opt-in native
+`characterProfileSync.browser.test.ts`; see [Characters](../characters.md).
+
+The combined storage contract publishes `api.things` 1.42.0 and
+`api.things-update` 1.13.0, retaining durable local-first deletion receipts, Vault
+membership safety and transactional attachment binding alongside intrinsic media
+containers. General compressor storage also uses `api.webpages-resolve` 1.8.0
+for separately editable children. The account transport requires the combined
+versions for retained deletion receipts and atomic attachment edits; tests reject
+the uncombined 1.41.0/1.12.0 contracts before mutation. `api.webpages-suites-install` 1.6.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
@@ -744,14 +896,225 @@ the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
 
-Connections gateway clients retain all six major2 requirements. The synthetic
-`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
-OAuth/request handlers to check frontend callback, actual data-environment vault
-selection, live-session/one-use state and refresh ownership. A Connections1
-canonical backend is intentionally refused; upgrade/promote the backend before
-dependent follower actions. See the gateway runbook's Connections rollout.
 
-`test:environment-gateway:connections` additionally verifies the compiled Nitro
-OAuth/request path with a synthetic generated adapter preload and real temporary
-replica API data. It preserves the OS network boundary and normal authentication.
-Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.
+Owned theme/algorithm pagination uses the existing GET routes, shared
+`api/utils/ownedListPage.ts`, and `hooks/ownedListClient.ts`. Negotiate themes
+1.3.0 / algorithms 1.2.0; follow non-null cursors even after empty pages. Live
+pages do not authorize deletion. Canonical creation removes the old count
+ceilings while retaining byte quotas; sync 1.8.0 / 1.6.0 and things-import
+1.14.0 publish that change. Theme focus-token History uses optional v2 snapshots
+under timeline 1.23.0, preserving the frozen v1 reader. Run
+`test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
+`test:api-capabilities`, then built `test:environment-gateway:acceptance` in
+its disposable replica-set sandbox. See the local-workspace capacity checkpoint.
+
+## Public social metadata
+
+`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.2.0.
+`api.social-card` 1.4.0 and `utils/socialPreviewDesign.ts` share five template
+IDs and four layout choices. Only `previewTheme`/`previewLayout` survive into
+share metadata and matching canonical URLs so each chosen card stays identifiable. The anonymous JSON
+projection adds resolved design and choice catalogues.
+`meta/socialMetadata.ts` reuses the anonymous `resolveSocialPreview` projection
+and `socialMetaFromPreview`; the route resets custom data-plane selection and
+never resolves caller identity. Same-origin inputs lose query/fragment before
+lookup, remote URLs are refused, and private/missing content uses generic
+metadata. The JSON response is an explicit title/description/URL/type/image
+allowlist. `social-previews.read` applies fail-closed anonymous rate limiting.
+`meta/socialCardImages.ts` embeds canonical public attachment thumbnails in
+cards, with bounded decoding and a fresh anonymous authorization/version check.
+`api.social-card` 1.3.0 shares automatic route defaults from the actual browser
+router (`scripts/generate-route-previews.mjs` →
+`app/utils/automaticRoutePreviews.generated.json`), with optional literal
+`socialPreview` exports in route modules. New app pages need no parallel backend
+metadata registry. Saved `/p/:id` and `/t/:id` pages use
+`meta/publicWebpageContent.ts` over the anonymous `resolveWebpage` projection:
+visible supported copy/managed images are inferred; saved `name`/`description`
+remain optional overrides. Runtime sources, Actions, private bindings and system
+`siteRoute` layouts are never executed or inferred. Endpoint capability manifests
+and semantic version negotiation still apply. See
+[the automatic metadata contract](../seo-social-metadata.md).
+Run `test:social-previews` and `test:api-capabilities`.
+
+Named Connections management is opt-in at `api.connections`,
+`api.connections-oauth-begin`, `api.connections-oauth-callback` and
+`api.connections-unlink` 2.1. `POST /api/v1/connections/named`
+(`api.connections-named` 1.0) verifies exact actor, origin, connection ID and
+a fixed operation. Token envelopes never cross the response boundary.
+Generic Things 1.46.3 also keeps private account and named grant metadata
+behind the origin-scoped Connections API. See
+`test:connections:oauth` and `test:api-capabilities`.
+
+Connection provider artwork negotiates `api.connections-provider-icon` 1.0.0.
+`GET /api/v1/connections/provider-icon?provider=<built-in-id>` serves cached
+PNG bytes, 204 when unavailable, or 404 for an unknown provider. This public
+asset stays on the document origin without opening a data-plane connection or
+forwarding user headers to the provider. Verify both manifests and route
+registration with `test:api-capabilities` and `test:connections:built`.
+
+## Write-only credential handoff
+
+The shared `api.credentials-import` 1.1.0 contract accompanies seven registered
+`/api/v1/credentials/import/{start,status,inspect,approve,revoke,upload,direct}`
+operations, each explicitly versioned in the canonical docs registry and present
+in both generated manifests. Browser clients and `scripts/credential-import.ts`
+negotiate the selected origin. The signed home gateway binds the exact import
+headers; generic origin fallback and background dispatch are refused. Responses
+are private/no-store and project only destination metadata/status/receipts.
+See [the runbook](../agent-credential-workflows.md); run the credential, gateway
+and API-capability checks and smoke the built Nitro discovery/route family.
+## Dynamic map workspaces
+
+`api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
+`api.webpages-resolve` 1.9.0 identifies the updated page contract.
+`PageActionSurface` and `webpageRuntime` support `$ui` query `scope: page`;
+`Builder/Maps/` renders custom marker text, labels, icon lists and authorized
+attachment avatars. `useWebpage` negotiates the upload save minimums.
+`GET /things` numeric summaries reuse canonical ACL-checked `listThings` pages
+through `api/utils/things/numericSummary.ts`, with exact schema/parent filters,
+no item-count cap and no partial success. Run the summary, map overlay/data,
+local UI, Webpage and capability tests plus live saved-page acceptance.
+
+
+`api.things` 1.49.0 advertises exact authenticated counts (`count=true`), shared
+literal archive filtering, and visible ordinal list windows (`offset`) on the
+existing Things endpoint. Both manifests derive this additive contract from
+`apiDocs.ts`; count and list reuse the same canonical scope and exact ACL gates.
+See [Things and folders](things-and-folders.md#exact-authorized-counts-and-visible-offset-windows)
+for query and response semantics, performance limits, and real replica coverage.
+
+
+`api.maps` 1.1.0 adds exact-address `autocomplete:false`, allowlisted geocoding
+confidence/accuracy metadata, and correlated `queries` batches on the existing
+owner/Vault-scoped suggest operation. Batch inputs are validated before key
+access, duplicate addresses share provider calls, processing chunks are not a
+product cap, and failures never return partial results. Permanent results retain
+the exact expected-selection and storage-policy contract. See [Maps](../maps.md).
+
+`api.things` 1.49.0 also adds ordered authenticated `ids` JSON-array exact reads
+on the existing GET endpoint. Missing/denied/protected positions are null;
+canonical ACLs and projections are shared with single reads. This remains a
+registered read-only Action request. URL/response transport limits require
+chunkable clients, never truncation or a maximum dataset size.
+
+
+`api.actions-run` 1.40.0 adds unary `ttExpr:["encodeURIComponent",value]`
+for authored URL components. It accepts string/nullish inputs, refuses other
+types and malformed UTF-16 without leaking the value, and retains the existing
+expression output budget. Programs using it negotiate execution protocol 1.40;
+encoding performs no HTTP operation. Both capability manifests derive this
+version from the canonical registry. Run expression, browser Action protocol
+and capability tests.
+
+Large/deep editable Webpage capture is corrected by `api.things` 1.49.2,
+`api.things-update` 1.18.1 and `api.timeline` 1.19.1. The shared iterative
+Timeline block traversal removes the hidden 1,200-block/24-level write and
+comparison limits; existing Component authorization and capture contracts remain.
+Both manifests derive these PATCH versions from the canonical endpoint registry.
+
+The bounded Mac byte transport negotiates independent native
+`fileSingleUploadVersion` 1.0.0; it does not add HTTP endpoints or alter existing
+API feature versions. The host/client continue to negotiate the selected origin's
+attachment start/part/complete/content contracts and use those canonical routes.
+The native proof includes attachment identity/version/size/fingerprint only;
+publication remains the existing guarded Files contract. See the
+[compound transport contract](../mobile-file-sync.md#bounded-compound-mac-upload-transport--2026-11-06).
+
+
+## Shared-content request transport
+
+Incoming sharing negotiates `api.things` 1.51.0, `api.things-update` 1.20.0,
+`api.things-comment` 1.11.0, `api.chats-messages` 1.4.0,
+`api.chats-messages-edit` 1.2.0, `api.attachment-uploads` 1.10.0,
+`api.attachment-annotate` 1.3.0, `api.attachment-link` 1.2.0 and `api.files`
+1.12.0. Both manifest generators derive these independent minors from apiDocs.
+The scoped shared-content JSON reader admits authorization/rate limits before
+streaming fatal UTF-8 decoding with no application body ceiling. Other control
+requests retain numeric budgets. Completion accepts only uploadId and enumerates
+parts server-side; presigning pages every part. See [incoming sharing](../incoming-sharing.md);
+run `test:shared-content`, `test:api-capabilities` and the isolated real-API
+`remix/scripts/shared-body-acceptance.mjs` harness.
+
+The merged shared-value Action contract is `api.actions-run` 1.42.0. The
+authored-controls branch independently used 1.41.0, so that origin alone must
+not satisfy clients requiring complete shared Data values. Both generators
+read the canonical version; shared-content Action clients require 1.42.0, while
+older authored-control-only minima remain valid for their narrower contract.
+
+Optional saved map `pointsSource` descriptors use `api.things` 1.56.0,
+`api.things-update` 1.22.0, `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0. Existing source authorization and cursor paths
+apply. `mapboxSource.ts` publishes the completed points layer, and a failed
+refresh clears only that layer. The shared composition visitor and copy
+rewriter follow its literal Action ID. See [map source authoring](../builder-browser-actions.md#load-an-independent-map-points-layer).
+
+`api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
+broad content. Existing snapshot parts handle breadth beyond inline processing
+windows; no total-content node cap remains. Full-content checkout, merge,
+export and restore clients require this patch. Metadata reads retain their
+older minima. Run `test:timeline`; the wire/parts formats are unchanged.
+
+## Reviewed creation projections and execution admission
+
+Things 1.52.0 adds derived `executionHeld` and owner-only scalar
+`creationProgress`. Component browse 1.1.0 and Webpage resolve 1.13.0 retain the
+hold; Actions run 1.43.0 refuses held server/browser/shared/child admission.
+Both manifests derive from `apiDocs.ts`; clients negotiate the small maps in
+`backups/contentCreation.ts` and `utils/sharedContentCapabilities.ts`.
+There is no new restore route/import-map entry. Run capability coverage plus
+`backups/creationContract.test.ts`, the real ordinary-restore replica proof and
+the isolated execution-hold browser check. After the canonical Remix build,
+`test:content-execution:built` imports the compiled Vercel fetch handler in a
+clean synthetic runtime and checks both manifests and all four docs routes.
+
+
+## Client discovery failure classification
+
+`requireCapability.client.ts` uses the canonical `ThingtimeApiError` for network,
+deadline and HTTP discovery errors, including an interrupted response body.
+Parsing and compatibility checks remain separate: malformed/missing/breaking or
+wrong-origin manifests and 401/403/404 cannot retain protected projections.
+Temporary failures may retain a same-scope readable template only while execution
+remains unverified and inert. This is a client lifecycle correction, with no
+endpoint/manifest feature change. Run its focused tests and the full real-route
+Schema refresh/revocation fixture documented in `TESTING.md`.
+
+### Account-file restore writer epoch corrections
+
+`api.files` 1.12.1, `api.things-bulk` 1.7.1 and `api.things-delete` 1.1.1 fence
+writes/moves/drains of held restored content through the root content epoch.
+`ACCOUNT_FILE_RESTORE_REQUIREMENTS` negotiates them with existing Things,
+Timeline and exact attachment content contracts. Both manifest generators derive
+versions from `apiDocs.ts`. Trusted transaction composition and audit labels are
+internal options, never new accepted HTTP fields; public retained-version input
+and upload approval remain unchanged. Run `test:api-capabilities`, the backup
+contract test, canonical build/output smoke and `test:backups:file-restore`.
+
+
+Backup dispatch recovery is `/api/v1/backups/run` (`api.backup-dispatch` 1.0.0),
+registered in the docs registry, Nitro import map and existing Vercel cron config.
+GET uses the existing scheduler secret; POST uses full same-origin administrator
+permission and no selectors/payload. `backupDispatch.server.ts` reserves opaque
+attempt IDs before SDK start; `backupJobs.ts` keeps original-session and
+transaction/lease fences. No browser call can supply a Workflow run ID, store
+address, original session or runnable intent. Source configuration and compiled
+routing are not deployed scheduler/provider evidence; see TESTING and README.
+
+The first-party `/api/v1/backups/workspace` contract (`api.backup-workspace`
+1.0.0) provides catalog, sealed snapshot pages, durable job progress and completed
+review reads, plus fixed snapshot/review/restore/control commands. Its route,
+Nitro map, `useApi` wrappers and explicit requirements share the DTO in
+`app/backups/workspace.ts`. Saved source paths come from a bounded worker catalog
+stage over retained exact-timestamp descriptors. Browser reads never obtain
+provider configuration, session references, execution leases or writable intents.
+See the first-party backup workspace checklist in TESTING for real HTTP/Builder
+acceptance and the separate deployed scheduler/provider gates.
+
+Saved private page activation uses `schemas/webpageActivation.ts`,
+`components/Builder/WebpageActivation.tsx` and the existing Actions run
+route. The route verifies the exact private owner/page/revision/action/date
+and uses the literal saved inputs; the viewer protects manual page query
+selection and keeps preview/edit/shared execution inert. The account-local
+viewer accepts activation only for a freshly verified, synced page revision,
+and always dispatches automatic runs through the saved-account server route. See
+[Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).

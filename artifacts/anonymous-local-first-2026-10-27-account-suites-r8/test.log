@@ -1,0 +1,89 @@
+Current package ready; running suites-ui
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+[suite-ui] authenticated root workspace verified
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+[suite-ui] reconnecting
+[suite-ui] online: navigator and authenticated transport verified
+[suite-ui] offline/online signal and authenticated transport preflight passed
+[suite-ui] existing canonical suite seeded and customized
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+[suite-ui] concurrent offline Install buttons committed one held local graph
+[suite-ui] capture offline-installed-suite 1440: 1 visible roots, 3 checkpoints
+[suite-ui] capture offline-installed-suite 1440: all scroll endpoints observed
+[suite-ui] capture offline-installed-suite 390: 1 visible roots, 7 checkpoints
+[suite-ui] capture offline-installed-suite 390: all scroll endpoints observed
+[suite-ui] capture offline-installed-suite 320: 1 visible roots, 7 checkpoints
+[suite-ui] capture offline-installed-suite 320: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 1440: 1 visible roots, 3 checkpoints
+[suite-ui] capture offline-saved-example 1440: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 390: 1 visible roots, 4 checkpoints
+[suite-ui] capture offline-saved-example 390: all scroll endpoints observed
+[suite-ui] capture offline-saved-example 320: 1 visible roots, 5 checkpoints
+[suite-ui] capture offline-saved-example 320: all scroll endpoints observed
+[suite-ui] offline Run example, saved component and cold reload verified
+[suite-ui] offline rename, reload and zero account mutation requests verified
+[suite-ui] reconnecting
+[suite-ui] online: navigator and authenticated transport verified
+[suite-ui] waiting for durable queue convergence
+[suite-ui] durable queue state converged
+[suite-ui] canonical receipt adopted; overlapping edit awaits explicit review
+[suite-ui] capture reconnected-suite-conflict 1440: 5 visible roots, 17 checkpoints
+[suite-ui] capture reconnected-suite-conflict 1440: all scroll endpoints observed
+[suite-ui] capture reconnected-suite-conflict 390: 5 visible roots, 20 checkpoints
+[suite-ui] capture reconnected-suite-conflict 390: all scroll endpoints observed
+[suite-ui] capture reconnected-suite-conflict 320: 5 visible roots, 21 checkpoints
+[suite-ui] capture reconnected-suite-conflict 320: all scroll endpoints observed
+[suite-ui] waiting for durable queue convergence
+[suite-ui] durable queue state converged
+[suite-ui] old local component URL remained editable after canonical adoption and cold reload
+[suite-ui] independent control context authenticated as the exact account and selected plane
+[suite-ui] disconnecting
+[suite-ui] offline: navigator and authenticated transport verified
+✖ signed-in bundled suite installs and edits offline, then adopts the uncached canonical graph without duplicate definitions (73005.181133ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 73167.470545
+
+✖ failing tests:
+
+test at ../account-suites.test.mjs:35:1
+✖ signed-in bundled suite installs and edits offline, then adopts the uncached canonical graph without duplicate definitions (73005.181133ms)
+  locator.click: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('menuitem', { name: 'Rename…', exact: true })
+      - locator resolved to <button disabled type="button" tabindex="-1" data-index="3" role="menuitem" id="menu-list-_r_e_-menuitem-_r_m_" class="chakra-menu__menuitem cha-5ck06g">Rename…</button>
+    - attempting click action
+      - waiting for element to be visible, enabled and stable
+      - element is not stable
+    - retrying click action
+      - waiting for element to be visible, enabled and stable
+    - element was detached from the DOM, retrying
+
+      at TestContext.<anonymous> (/tmp/check/account-suites.test.mjs:504:77) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('menuitem', { name: 'Rename…', exact: true })", '    - locator resolved to <button disabled type="button" tabindex="-1" data-index="3" role="menuitem" id="menu-list-_r_e_-menuitem-_r_m_" class="chakra-menu__menuitem cha-5ck06g">Rename…</button>', '  - attempting click action', '    - waiting for element to be visible, enabled and stable', '    - element is not stable', '  - retrying click action', '    - waiting for element to be visible, enabled and stable', '  - element was detached from the DOM, retrying' ]
+  }
+Container operation failed: 1

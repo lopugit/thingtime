@@ -1,3 +1,5 @@
+import { MAX_RENDER_RPC_BYTES, RENDER_EXPORT_TOOL, RENDER_INPUT_SCHEMA, hostedRenderFailure } from '../../../../../MCP/src/renderContract';
+import { hostedRenderGateway } from './hostedRender.server';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
 import {
   CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION,
@@ -159,12 +161,17 @@ const decryptBundle = (ciphertext: unknown): Result<ChatGptCredentialBundle> => 
   }
 };
 
-const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES, admitLarger?: () => Promise<boolean>): Promise<Result<string>> => {
+const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES, admitLarger?: (currentMaxBytes: number) => Promise<number | false>): Promise<Result<string>> => {
   const length = Number(request.headers.get('content-length') || 0);
-  if (Number.isFinite(length) && length > maxBytes) {
-    if (!admitLarger || !await admitLarger()) return { ok: false, status: 413, error: 'Request body too large' };
-    maxBytes = Infinity;
-  }
+  const admit = async (bytes: number) => {
+    while (bytes > maxBytes) {
+      const next = await admitLarger?.(maxBytes);
+      if (!next || next <= maxBytes) return false;
+      maxBytes = next;
+    }
+    return true;
+  };
+  if (Number.isFinite(length) && length > maxBytes && !await admit(length)) return { ok: false, status: 413, error: 'Request body too large' };
   const reader = request.body?.getReader();
   if (!reader) return { ok: true, value: '' };
   const chunks: Uint8Array[] = [];
@@ -174,12 +181,9 @@ const limitRequestBody = async (request: Request, maxBytes = MAX_REQUEST_BYTES, 
     if (done) break;
     if (!value) continue;
     received += value.byteLength;
-    if (received > maxBytes) {
-      if (!admitLarger || !await admitLarger()) {
-        await reader.cancel().catch(() => {});
-        return { ok: false, status: 413, error: 'Request body too large' };
-      }
-      maxBytes = Infinity;
+    if (received > maxBytes && !await admit(received)) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, status: 413, error: 'Request body too large' };
     }
     chunks.push(value);
   }
@@ -2540,13 +2544,29 @@ const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: {
   return json(jsonRpcResponse(id, denied), { headers: noStoreHeaders });
 };
 
-export const handleChatGptMcp = async ({ request }: { request: Request }, resolveSession = resolveMcpSession) => {
+const renderToolSecuritySchemes = [{ type: 'noauth' }] as const;
+const hostedRenderToolDefinition = {
+  name: RENDER_EXPORT_TOOL,
+  title: 'Render and export a no-login Thingtime draft',
+  description: 'Render caller-supplied portable Thingtime content through the native renderer and return canonical JSON and PNG files. Include every dependency in the input. No account, saved Things, Actions, external assets, or publishing.',
+  inputSchema: RENDER_INPUT_SCHEMA,
+  securitySchemes: renderToolSecuritySchemes,
+  _meta: { securitySchemes: renderToolSecuritySchemes },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true }
+} as const;
+
+export const handleChatGptMcp = async ({ request }: { request: Request }, resolveSession = resolveMcpSession, renderGateway = hostedRenderGateway) => {
   if (request.method.toUpperCase() !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
   }
   let contextPromise: Promise<Result<McpSession>> | undefined;
   const getContext = () => contextPromise ??= resolveSession(request);
-  const body = await limitRequestBody(request, MAX_REQUEST_BYTES, async () => (await getContext()).ok);
+  let renderConfig: ReturnType<typeof renderGateway.ready> | undefined;
+  const getRenderConfig = () => renderConfig ??= renderGateway.ready(requestOrigin(request));
+  const body = await limitRequestBody(request, MAX_REQUEST_BYTES, async currentMax => {
+    if (currentMax === MAX_REQUEST_BYTES && await getRenderConfig()) return MAX_RENDER_RPC_BYTES;
+    return (await getContext()).ok ? Infinity : false;
+  });
   if (body.ok === false) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: body.error } }, { status: body.status });
   let message: any;
   try {
@@ -2558,6 +2578,25 @@ export const handleChatGptMcp = async ({ request }: { request: Request }, resolv
     return json(jsonRpcResponse(message?.id, undefined, { code: -32600, message: 'Invalid Request' }), { status: 400 });
   }
   const id = message.id;
+  const bodyBytes = Buffer.byteLength(body.value);
+  const requestTooLarge = () => json(jsonRpcResponse(null, undefined, { code: -32600, message: 'Request body too large' }), { status: 413 });
+  if (message.method === 'tools/call' && message.params?.name === RENDER_EXPORT_TOOL) {
+    if (id === undefined || id === null) return new Response(null, { status: 202 });
+    if ((typeof id !== 'string' || Buffer.byteLength(id) > 128) && !Number.isSafeInteger(id)) {
+      return json(jsonRpcResponse(null, undefined, { code: -32600, message: 'Invalid render request id' }), { status: 400, headers: noStoreHeaders });
+    }
+    if (bodyBytes > MAX_RENDER_RPC_BYTES) return requestTooLarge();
+    if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
+      return json(jsonRpcResponse(null, undefined, { code: -32600, message: 'Content-Type must be application/json' }), { status: 415, headers: noStoreHeaders });
+    }
+    const config = await getRenderConfig();
+    const response = config ? await renderGateway.call(request, config, id, message.params?.arguments)
+      : hostedRenderFailure(id, 'RENDER_UNAVAILABLE', 'No verified isolated renderer is available on this Thingtime origin.');
+    return new Response(response, { headers: { ...noStoreHeaders, 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff' } });
+  }
+  // The render envelope is public only for the exact tool above. Other large
+  // MCP methods still require the same verified bridge session as before.
+  if (bodyBytes > MAX_REQUEST_BYTES && !(await getContext()).ok) return requestTooLarge();
   const notification = id === undefined || id === null;
   if (message.method === 'notifications/initialized') return new Response(null, { status: 202 });
   if (message.method === 'initialize') {
@@ -2579,7 +2618,9 @@ export const handleChatGptMcp = async ({ request }: { request: Request }, resolv
   }
 
   if (message.method === 'tools/list') {
-    return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, { tools: thingtimeToolDefinitions }));
+    if (notification) return new Response(null, { status: 202 });
+    const tools = await getRenderConfig() ? [...thingtimeToolDefinitions, hostedRenderToolDefinition] : thingtimeToolDefinitions;
+    return json(jsonRpcResponse(id, { tools }), { headers: noStoreHeaders });
   }
   if (message.method === 'prompts/list') {
     return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, { prompts: thingtimePromptDefinitions }));
@@ -2642,4 +2683,7 @@ export const handleChatGptMcp = async ({ request }: { request: Request }, resolv
   return json(jsonRpcResponse(id, mcpToolResult(result, isError)));
 };
 
-export const chatGptPluginDiscoveryResponse = ({ request }: { request: Request }) => pluginDiscovery(requestOrigin(request));
+export const chatGptPluginDiscoveryResponse = async ({ request, includeRuntimeFeatures = false }: { request: Request; includeRuntimeFeatures?: boolean }) => {
+  const origin = requestOrigin(request);
+  return pluginDiscovery(origin, includeRuntimeFeatures && Boolean(await hostedRenderGateway.ready(origin)));
+};

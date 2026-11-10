@@ -1,0 +1,50 @@
+{
+  "label": "offline-installed-suite",
+  "width": 1440,
+  "attempt": 0,
+  "ready": {
+    "stable": true,
+    "observations": [
+      {
+        "height": 1539,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      },
+      {
+        "height": 2037,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      }
+    ]
+  },
+  "skippedHidden": 2,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "reviewPane": false,
+      "kind": "page",
+      "clientHeight": 1000,
+      "scrollHeight": 2037,
+      "maxScroll": 1037,
+      "rect": {
+        "width": 1440,
+        "height": 2036.5625
+      },
+      "points": [
+        0,
+        518.5,
+        1037
+      ],
+      "observed": [
+        0,
+        519,
+        1037
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}

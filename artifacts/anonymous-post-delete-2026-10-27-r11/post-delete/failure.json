@@ -1,0 +1,203 @@
+{
+  "phase": "account",
+  "error": "Error: page.goto: Page crashed\nCall log:\n  - navigating to \"http://127.0.0.1:18724/post/c694f60e-babd-4a06-8a46-a9e5f457ff1d\", waiting until \"load\"\n",
+  "body": "",
+  "checks": [
+    "anonymous: offline delete and cold reload",
+    "anonymous: exact post/comment/media/bytes removed",
+    "anonymous: no HTTP mutation"
+  ],
+  "bounds": [
+    {
+      "phase": "anonymous",
+      "width": 1440,
+      "documentWidth": 1440,
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      }
+    },
+    {
+      "phase": "anonymous",
+      "width": 390,
+      "documentWidth": 390,
+      "main": {
+        "left": 0,
+        "right": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      }
+    },
+    {
+      "phase": "anonymous",
+      "width": 320,
+      "documentWidth": 320,
+      "main": {
+        "left": 0,
+        "right": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      }
+    }
+  ],
+  "mutations": [
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Synthetic owner post deleted offline."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-3eef1010",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Unrelated retained post proves live Feed rendering."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "type": "text",
+        "text": "Account child removed with parent.",
+        "images": [],
+        "listing": null,
+        "thing": null,
+        "id": "c694f60e-babd-4a06-8a46-a9e5f457ff1d",
+        "shareId": "9a831d33-5824-4135-9a0e-7567a68208a4",
+        "tags": [],
+        "attachmentIds": []
+      }
+    }
+  ],
+  "errors": []
+}

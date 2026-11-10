@@ -35,6 +35,7 @@ export type BrowseSchemaEntry = {
 export type BrowseSchemasResponse = {
   ok: boolean;
   error?: string;
+  localCacheError?: string;
   schemas: BrowseSchemaEntry[];
   nextCursor: string | null;
   total: number | null;

@@ -24,6 +24,7 @@ export function useCapturedComponents(event: TimelineEvent | null, blocks: unkno
 	const [tick, retry] = React.useReducer((n) => n + 1, 0);
 	React.useEffect(() => {
 		if (!identity || !event || !connection) return;
+		const connectionApi = refs.current.api;
 		const controller = new AbortController();
 		const update = (events: TimelineEvent[], error = '', loading = false) => {
 			if (!controller.signal.aborted) setState({ identity, events, error, loading });
@@ -37,7 +38,8 @@ export function useCapturedComponents(event: TimelineEvent | null, blocks: unkno
 				capturedComponentBindings(event, found, blocks);
 				update(found, '', found.length !== dependencies.length);
 				if (found.length === dependencies.length || pendingLocal) return;
-				const response = await refs.current.api.v1.timeline.componentBindings(connection.scope, event.id, { signal: controller.signal });
+				if (controller.signal.aborted) return;
+				const response = await connectionApi.v1.timeline.componentBindings(connection.scope, event.id, { signal: controller.signal });
 				if (controller.signal.aborted) return;
 				if (
 					response?.ok !== true ||

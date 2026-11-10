@@ -1,0 +1,115 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "thing": {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "thingtime": [
+        "webpage"
+      ],
+      "author": {
+        "id": "6adf9ddc4cd8f29c41f27dcd",
+        "username": "queue-8c63ca34",
+        "displayName": null,
+        "temporary": false,
+        "avatarUrl": null
+      },
+      "audience": {
+        "sourceId": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+        "acl": [
+          "tt:user"
+        ]
+      },
+      "visibility": "private",
+      "acl": [
+        "tt:user"
+      ],
+      "targetId": null,
+      "folderId": null,
+      "crystal": {
+        "name": "Dependency queue page",
+        "version": 1,
+        "blocks": [
+          {
+            "id": "outer",
+            "type": "container",
+            "direction": "column",
+            "children": [
+              {
+                "id": "inner",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "control",
+                    "type": "component",
+                    "component": "9de5b878-6305-4fe7-aac8-07d0c5debe21"
+                  },
+                  {
+                    "id": "text",
+                    "type": "element",
+                    "tag": "p",
+                    "text": "Original frozen content"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "extended": null,
+      "geo": null,
+      "tags": [],
+      "createdAt": "2026-10-26T18:37:41.490Z",
+      "updatedAt": "2026-10-26T18:37:41.490Z",
+      "timelineHeadId": "ec34c7e4-a82d-4244-9821-970d5c42b284",
+      "attachments": []
+    },
+    "post": null,
+    "discussion": {
+      "id": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+      "thingtime": [
+        "webpage"
+      ],
+      "type": "text",
+      "author": {
+        "id": "6adf9ddc4cd8f29c41f27dcd",
+        "username": "queue-8c63ca34",
+        "displayName": null,
+        "temporary": false,
+        "avatarUrl": null
+      },
+      "audience": {
+        "sourceId": "2b45083a-99d4-4c95-8022-e96e5cf571ec",
+        "acl": [
+          "tt:user"
+        ]
+      },
+      "visibility": "private",
+      "acl": [
+        "tt:user"
+      ],
+      "text": "",
+      "richText": null,
+      "images": [],
+      "attachments": [],
+      "mediaLayout": null,
+      "listing": null,
+      "thing": null,
+      "tags": [],
+      "title": null,
+      "subspaceMod": null,
+      "comments": [],
+      "repliesLoaded": false,
+      "isShare": false,
+      "shareOf": null,
+      "extended": null,
+      "geo": null,
+      "createdAt": "2026-10-26T18:37:41.490Z",
+      "sourceThingId": "2b45083a-99d4-4c95-8022-e96e5cf571ec"
+    },
+    "parent": null,
+    "root": null,
+    "commentSort": null
+  }
+}

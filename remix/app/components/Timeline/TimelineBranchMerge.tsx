@@ -30,6 +30,7 @@ function BranchMergeReview({
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
+	const localOnly = connection.scope.dataPlane === 'local-workspace';
 	const [preview, setPreview] = React.useState<BranchMergePreview | null>(null);
 	const [choices, setChoices] = React.useState<VersionChoices>({});
 	const [componentChoices, setComponentChoices] = React.useState<VersionChoices>({});
@@ -110,13 +111,13 @@ function BranchMergeReview({
 			commandSaved.current = true;
 			if (!alive.current) return;
 			setQueued(true);
-			setNotice('Merge saved on this device. Waiting to sync to your account.');
+			setNotice(localOnly ? 'Merge prepared on this device. Saving to this branch…' : 'Merge saved on this device. Waiting to sync to your account.');
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			await connection.sync.pushPending();
 			const pending = (await connection.branches.queued()).find((row) => row.command.operationId === command.operationId);
 			if (alive.current) {
 				setNotice(
-					pending ? 'Merge saved on this device. Its branch push is waiting to sync.' : `Merge saved to ${target.branch.name} in your account.`
+					pending ? (localOnly ? 'Merge is on this device. Retry saving to complete its branch update.' : 'Merge saved on this device. Its branch push is waiting to sync.') : `Merge saved to ${target.branch.name} ${localOnly ? 'on this device' : 'in your account'}.`
 				);
 				window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			}

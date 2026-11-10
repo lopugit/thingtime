@@ -197,7 +197,7 @@ paths. Returned scalar values fill the mapped keys that the reader has not
 selected manually or set in a deep link. A result with no mapped values
 leaves selection unchanged. A page switch invalidates a late result.
 
-Authoring a cutoff or batch requires `api.things` 1.57.0 or
+Authoring a cutoff or batch requires `api.things` 1.58.0 or
 `api.things-update` 1.23.0. The live viewer negotiates `api.webpages-resolve`
 1.15.0 and `api.actions-run` 1.45.0 before activation. The canonical Actions endpoint
 accepts `source: "activation"`, `action`, `activationPageId`,
@@ -241,7 +241,7 @@ uses the existing Action access checks, inputs, effects and refresh behavior.
 The block and its children receive the bound `result` in their data scope.
 Their existing DOM, click, form and event boundaries handle interaction.
 
-The setting requires `api.things` 1.57.0 or `api.things-update` 1.23.0 for
+The setting requires `api.things` 1.58.0 or `api.things-update` 1.23.0 for
 saving and `api.webpages-resolve` 1.15.0 for loading. Component sources use
 their existing control surface.
 

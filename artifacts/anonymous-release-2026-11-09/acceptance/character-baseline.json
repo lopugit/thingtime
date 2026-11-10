@@ -1,0 +1,81 @@
+{
+  "sourceCommit": "7164914063d477f4817ecd84ce12a1bde2ce86fa",
+  "chrome": "Google Chrome for Testing 156.0.8078.4",
+  "compiledHashes": {
+    "serverEntrySha256": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+    "staticIndexSha256": "d0ee80cb75a42e2edf63c30eb45fd0fabac6236a6bdda93f0b27810a675d4467",
+    "offlineManifestSha256": "27c73ac91a11ff57a8da87735e831a83e42fcfcaa5295a7a62bed1b968d6633f",
+    "vercelConfigSha256": "723f83bdbe7b80c09fb806a99bb6026275f9c90a902f452ccfa4f355f4ff336d"
+  },
+  "browserBoundary": {
+    "network": "none",
+    "hostMounts": false,
+    "hostPorts": false,
+    "privileged": false,
+    "image": "sha256:7c4558ce472ede98daa3d6352a8538b96855234056c9577d68283de2bcc1ee0d",
+    "uid": "1001:1001",
+    "rootReadOnly": true,
+    "capsDropped": [
+      "ALL"
+    ]
+  },
+  "views": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "mainChecks": {
+    "anonymousQuickReply": true,
+    "offlinePost": true,
+    "offlineFile": true,
+    "offlineImage": true,
+    "retiredImageUrl": true,
+    "characterLibrary": true,
+    "characterReplies": true,
+    "characterHistoryNavigation": true,
+    "coldReload": true,
+    "principalHistory": true,
+    "independentDraftSync": true
+  },
+  "runs": {
+    "nativePassed": 2,
+    "offlineRequestsWithWrites": 0,
+    "pageErrors": 0,
+    "forcedDraftWriteFailuresPerRun": [
+      3,
+      3
+    ],
+    "harnessSha256": [
+      "5089fc8a83921cb9d92731fb53c9c12fb7666f877f863d5f379097f0257c0d5e",
+      "1b0ee3ea11138882b50116ce407c13f477c2232b44b33c675c78ab99a13bd6be"
+    ]
+  },
+  "siblingAudit": {
+    "siblingLibrarySeparate": true,
+    "siblingRemotePostDenied": true,
+    "siblingRemoteReplyDenied": true,
+    "replyServerAuthorMatches": true,
+    "replyServerTextMatches": true,
+    "replyServerParentMatches": true
+  },
+  "focusedChecks": {
+    "passed": 9,
+    "skipped": 0
+  },
+  "cleanup": {
+    "ownedContainersRemaining": 0,
+    "temporaryDerivativeImageRemoved": true,
+    "disposableDatabaseAndObjectStorageDestroyedWithContainer": true,
+    "disposableAdminFixtureDestroyedWithContainer": true,
+    "hostCredentialsOrProfilesUsed": false
+  }
+}

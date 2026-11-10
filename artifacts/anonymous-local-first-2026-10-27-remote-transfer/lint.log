@@ -1,0 +1,16 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/utils/thingTransfer/browser.ts app/utils/thingTransfer/remoteCapabilities.ts app/api/utils/things/importTransfer.ts app/api/utils/things/exportTransfer.ts app/api/utils/things/chatArchiveTransfer.ts app/hooks/useApi.tsx app/hooks/ownedListClient.ts app/local-workspace/accountTransport.client.ts app/local-workspace/publicCopy.client.ts app/components/Things/ThingImportDialog.tsx app/components/Things/ThingExportDialog.tsx app/components/Things/ThingTransferControls.tsx app/components/Things/ThingsPage.tsx app/components/Things/FilesystemThingsBrowser.tsx app/docs/apiDocs.ts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Things/ThingsPage.tsx
+  477:6  warning  React Hook useEffect has a missing dependency: 'user'. Either include it or remove the dependency array                                                                                                react-hooks/exhaustive-deps
+  629:9  warning  The 'displayItems' conditional could make the dependencies of useCallback Hook (at line 821) change on every render. To fix this, wrap the initialization of 'displayItems' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  629:9  warning  The 'displayItems' conditional could make the dependencies of useCallback Hook (at line 826) change on every render. To fix this, wrap the initialization of 'displayItems' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/hooks/useApi.tsx
+  172:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 4 problems (0 errors, 4 warnings)
+

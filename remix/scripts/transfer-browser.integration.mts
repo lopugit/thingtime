@@ -175,7 +175,7 @@ try {
       const bundle = await decodeTransferArchive(await readFile(path));
       assert.equal(bundle.manifest.files.length, 2); assert.equal(bundle.files.size, 2);
       for (const file of bundle.manifest.files) {
-        assert.deepEqual(Buffer.from(bundle.files.get(file.id)!), png);
+        assert.deepEqual(Buffer.from(await bundle.files.get(file.id)!.arrayBuffer()), png);
         assert.equal(file.description, 'Exact\nimage annotation');
       }
       assert.deepEqual(bundle.manifest.files.map(file => file.title).sort(), ['Historical image 0', 'Historical image 1']);

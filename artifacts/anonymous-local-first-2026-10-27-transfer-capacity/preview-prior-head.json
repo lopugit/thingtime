@@ -1,0 +1,90 @@
+{
+  "observedAt": "2026-10-26T12:58:04.918Z",
+  "head": "07a4db71a6f9864e03fe330c47e0d095deda484b",
+  "checks": [
+    {
+      "url": "https://thingtime-opn63fpm7-lopugits-projects.vercel.app/.well-known/thingtime-capabilities.json",
+      "status": 200,
+      "origin": "https://thingtime-opn63fpm7-lopugits-projects.vercel.app",
+      "gateway": {
+        "environment": "preview",
+        "origin": "https://master.previews.thingtime.com",
+        "deploymentId": "dpl_HK2UbZk2G8KkfcQ9bGat6X1ePjk1"
+      },
+      "features": {
+        "api.algorithms-sync": {
+          "version": "1.6.0"
+        },
+        "api.themes-sync": {
+          "version": "1.8.0"
+        },
+        "api.themes": {
+          "version": "1.3.0"
+        },
+        "api.algorithms": {
+          "version": "1.2.0"
+        },
+        "api.timeline": {
+          "version": "1.23.0"
+        },
+        "api.things-import": {
+          "version": "1.14.0"
+        }
+      }
+    },
+    {
+      "url": "https://pr-1000.previews.dev.thingtime.com/.well-known/thingtime-capabilities.json",
+      "status": 200,
+      "origin": "https://pr-1000.previews.dev.thingtime.com",
+      "gateway": {
+        "environment": "preview",
+        "origin": "https://master.previews.thingtime.com",
+        "deploymentId": "dpl_HK2UbZk2G8KkfcQ9bGat6X1ePjk1"
+      },
+      "features": {
+        "api.algorithms-sync": {
+          "version": "1.6.0"
+        },
+        "api.themes-sync": {
+          "version": "1.8.0"
+        },
+        "api.themes": {
+          "version": "1.3.0"
+        },
+        "api.algorithms": {
+          "version": "1.2.0"
+        },
+        "api.timeline": {
+          "version": "1.23.0"
+        },
+        "api.things-import": {
+          "version": "1.14.0"
+        }
+      }
+    },
+    {
+      "url": "https://master.previews.thingtime.com/.well-known/thingtime-capabilities.json",
+      "status": 200,
+      "origin": "https://master.previews.thingtime.com",
+      "gateway": {
+        "environment": "preview",
+        "origin": "https://master.previews.thingtime.com",
+        "deploymentId": "dpl_2wNYn4EqLKzeoUSTx1wCcWVtT2N5"
+      },
+      "features": {
+        "api.themes": {
+          "version": "1.2.0"
+        },
+        "api.algorithms": {
+          "version": "1.1.0"
+        },
+        "api.timeline": {
+          "version": "1.19.0"
+        },
+        "api.things-import": {
+          "version": "1.11.0"
+        }
+      }
+    }
+  ]
+}

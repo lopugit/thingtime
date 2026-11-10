@@ -1,0 +1,56 @@
+
+> test:owned-profiles
+> node --import tsx --experimental-test-module-mocks --test app/api/utils/ownedListPage.test.ts app/api/utils/themes/ownedCapacity.test.mts app/api/utils/themes/ownedListRoutes.test.mts app/hooks/ownedListClient.test.ts app/theme/tokens.test.ts
+
+✔ themes: exhaustive bounded pages, ties, stale twins and owner scope (211.255166ms)
+✔ algorithms: exhaustive bounded pages, ties, stale twins and owner scope (43.22175ms)
+✔ owned paging rejects cancellation before queries, after reads and after projection (1.65725ms)
+(node:82086) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:82086) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ themes: concurrent creation exceeds former count gate with canonical byte admission (34.214416ms)
+✔ algorithms: concurrent creation exceeds former count gate with canonical byte admission (6.171917ms)
+(node:82087) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:82087) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ themes: paging opt-in, authentication, validation and legacy response (294.211625ms)
+✔ algorithms: paging opt-in, authentication, validation and legacy response (2.134625ms)
+✔ themes drains 192 profiles, deduplicates and pins actor without selected database (2.907667ms)
+✔ algorithms drains 192 profiles, deduplicates and pins actor without selected database (0.376625ms)
+✔ listPage preserves metadata and scoped options (0.304834ms)
+✔ invalid or failed later page rejects complete listing (0.287917ms)
+✔ invalid or failed later page rejects complete listing (0.15175ms)
+✔ invalid or failed later page rejects complete listing (0.12875ms)
+✔ invalid or failed later page rejects complete listing (2.558416ms)
+✔ repeated cursor rejects without looping (0.927958ms)
+✔ themes continues through empty and duplicate-only windows with advancing cursors (0.546167ms)
+✔ algorithms continues through empty and duplicate-only windows with advancing cursors (0.24775ms)
+✔ themes rejects oversized transport pages (0.175875ms)
+✔ algorithms rejects oversized transport pages (0.100625ms)
+✔ cancellation rejects after transport and prevents next page (0.194791ms)
+✔ scope change during transport rejects {"actor":"other"} (0.135875ms)
+✔ scope change during transport rejects {"dataPlane":"other"} (0.086291ms)
+✔ scope change during transport rejects {"generation":2} (0.068958ms)
+✔ scope change during transport rejects {"pending":true} (0.057708ms)
+✔ old callbacks cannot begin after account switches (0.084833ms)
+✔ changed active selection refuses mixed snapshots (0.084125ms)
+✔ empty catalogues and null selection complete (0.074084ms)
+✔ only protected profile imports require the new capacity contract (0.128167ms)
+✔ Things badges use the smaller padding preset by default (6.171125ms)
+✔ Things badge padding presets resolve to stable CSS tokens (0.679875ms)
+✔ custom Things badge padding accepts one to four CSS lengths (0.519083ms)
+✔ unsafe or invalid custom padding falls back without leaking declarations (0.367625ms)
+✔ an empty custom padding intentionally uses the Small fallback (0.135125ms)
+✔ focus preferences round-trip through shared-theme normalization and CSS tokens (1.089458ms)
+✔ old saved themes gain focus defaults while preserving existing preferences (0.18375ms)
+✔ unsafe focus colors and non-finite effect settings cannot enter CSS (0.143375ms)
+✔ default pink focus border contrasts with both light and dark canonical cards (3.163792ms)
+✔ focus glow blur supports nonnegative finite sizes without an arbitrary maximum (3.843208ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2556.999792

@@ -3,7 +3,7 @@ import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, effectiveCon
 import test from 'node:test';
 
 import { beginChatGptAuthorization, callThingtimeTool, consumedSessionPipeline, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
-import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
+import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, pluginDiscovery, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
 import { signPurposeToken } from '~/api/utils/auth/jwt';
 import { THINGTIME_MUTATION_RECEIPT_PURPOSE } from './pluginLimitlessCore';
 import { mutationDigest, type MutationStore } from './mutationStore';
@@ -871,4 +871,53 @@ test('an expired signed mutation receipt does not load or apply stored data', as
   const result: any = await callThingtimeTool('apply_thingtime_mutation', { receipt, confirmed: true }, context);
   assert.equal(result.status, 400);
   assert.match(result.error, /invalid or expired/);
+});
+
+
+test('hosted render discovery and large anonymous dispatch are confined to the exact optional tool', async () => {
+  const origin = 'https://thingtime.example';
+  const path = '/api/v1/integrations/chatgpt/mcp';
+  const config = { origin, snapshotId: 'snap_immutable', rendererHash: 'a'.repeat(64), protocol: '1.0.0' as const };
+  let sessions = 0;
+  let calls = 0;
+  const session = async () => { sessions++; return { ok: false as const, status: 401, error: 'A Thingtime connection is required' }; };
+  const render = {
+    ready: async (selected: string) => selected === origin ? config : null,
+    call: async (request: Request, received: typeof config, id: string | number, raw: unknown) => {
+      assert.equal(new URL(request.url).origin, origin);
+      assert.equal(received, config);
+      assert.equal((raw as { content: string }).content.length, 80_000);
+      calls++;
+      return JSON.stringify({ jsonrpc: '2.0', id, result: { content: [] } });
+    }
+  };
+  const invoke = (method: string, params: unknown, id: unknown = 1, url = origin, contentType = 'application/json') =>
+    handleChatGptMcp({ request: new Request(url + path, {
+      method: 'POST', headers: { 'Content-Type': contentType },
+      body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
+    }) }, session, render);
+  const tool = 'thingtime_render_and_export';
+  const tools = (await (await invoke('tools/list', {})).json()).result.tools;
+  assert.deepEqual(tools.at(-1).securitySchemes, [{ type: 'noauth' }]);
+  assert.equal(tools.at(-1).name, tool);
+  assert.deepEqual(tools.slice(0, -1).map(item => item.name), Object.keys(CHATGPT_MCP_TOOL_FEATURES));
+  const manifest = pluginDiscovery(origin, true).capabilityManifest;
+  assert.equal(manifest.features['chatgpt.render-export'], '1.0.0');
+  assert.deepEqual(manifest.operations.find(operation => operation.name === tool), { transport: 'mcp-tool', name: tool, feature: 'chatgpt.render-export' });
+  assert.equal(pluginDiscovery(origin).capabilityManifest.features['chatgpt.render-export'], undefined);
+  const args = { content: 'x'.repeat(80_000) };
+  const success = await invoke('tools/call', { name: tool, arguments: args });
+  assert.equal(success.headers.get('Cache-Control'), 'no-store');
+  assert.equal(success.status, 200);
+  assert.equal((await invoke('tools/call', { name: tool, arguments: args }, null)).status, 202);
+  assert.equal((await invoke('tools/call', { name: tool, arguments: { content: 'test' } }, { id: 'invalid' })).status, 400);
+  assert.equal((await invoke('tools/call', { name: tool, arguments: { content: 'test' } }, 1, origin, 'text/plain')).status, 415);
+  assert.equal(calls, 1);
+  assert.equal(sessions, 0);
+  const wrongOrigin = await invoke('tools/call', { name: tool, arguments: { content: 'test' } }, 1, 'https://different.example');
+  assert.equal((await wrongOrigin.json()).result.structuredContent.code, 'RENDER_UNAVAILABLE');
+  const accountTool = 'get_thingtime_thing';
+  assert.equal((await invoke('tools/call', { name: accountTool, arguments: {} })).status, 401);
+  assert.equal((await invoke('tools/call', { name: accountTool, arguments: args })).status, 413);
+  assert.equal(sessions, 2);
 });

@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "scope": "Copied static progress plan in isolated namespace; external and artifact links are not followed",
+  "sourceSha256": "d5f9a8912c526ccfe6cac899d600b441ab3d89538c7adff1b4b7ec562dc2f488",
+  "errors": [],
+  "requests": [
+    "file:///tmp/plan/anonymous-local-first.html"
+  ],
+  "viewports": []
+}

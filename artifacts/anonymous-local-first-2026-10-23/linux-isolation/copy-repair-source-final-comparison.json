@@ -1,0 +1,8 @@
+{
+  "format": "thingtime.final-source-comparison.v1",
+  "builtSourceSha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476",
+  "finalSourceSha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476",
+  "fileCount": 2975,
+  "sourceUnchangedSinceBuild": true,
+  "changedFiles": []
+}

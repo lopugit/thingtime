@@ -7,7 +7,7 @@ export const WEBPAGE_ACTIVATION_REQUIREMENTS = {
 } as const;
 
 const activationWriteVersions = {
-	'api.things': { basic: '1.56.0', scheduled: '1.57.0' },
+	'api.things': { basic: '1.56.0', scheduled: '1.58.0' },
 	'api.things-update': { basic: '1.22.0', scheduled: '1.23.0' }
 } as const;
 

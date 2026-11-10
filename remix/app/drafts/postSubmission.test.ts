@@ -17,7 +17,7 @@ assert.ok(handler);
 const js = ts.transpileModule(`(${handler})`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const never = () => new Promise<void>(() => {});
 function fixture(flush: () => Promise<void>, retire: () => Promise<void>) {
-	const requests: any[] = [], notifications: any[] = [], posted: any[] = [], captures: any[] = [];
+	const requests: any[] = [], requestScopes: any[] = [], notifications: any[] = [], posted: any[] = [], captures: any[] = [];
 	const pending = { current: null as any };
 	const doc = { kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Exact latest text' } }] };
 	let failPost = false;
@@ -30,10 +30,11 @@ function fixture(flush: () => Promise<void>, retire: () => Promise<void>) {
 		draftAttachments: [], crypto: { randomUUID }, type: 'text', blocksToText: () => 'Exact latest text', showListing: false,
 		composerAttachments: [], layoutSpans: {}, layoutMode: 'auto', parsedTags: [], isComment: false, isEdit: false,
 		user: { id: 'fixture-owner' }, visibility: 'private', postTitle: '', subspaceId: null, showPhotos: false,
+		window: { location: { origin: 'https://fixture.invalid' } }, dataPlane: 'default', character: null,
 		clonePostJson: (value: unknown) => structuredClone(value), lopu: (value: any) => notifications.push(value),
 		reset: () => { pending.current = null; }, onPosted: (value: any) => posted.push(value),
 		api: { v1: { things: {
-			create: async (payload: any) => { requests.push(payload); if (failPost) throw { unknown: true }; return { post: { id: payload.shareId } }; },
+			create: async (payload: any, scope: any) => { requests.push(payload); requestScopes.push(scope); if (failPost) throw { unknown: true }; return { post: { id: payload.shareId } }; },
 			get: async () => { throw new Error('unavailable'); }
 		} } },
 		withPostRequestDeadline: (fn: any) => fn(), matchesCommittedPostCreate: () => false,
@@ -41,7 +42,7 @@ function fixture(flush: () => Promise<void>, retire: () => Promise<void>) {
 		shouldFreezeAmbiguousPostSubmission: (unknown: boolean, _status: number, prior: boolean) => unknown || prior,
 		setSubmissionUncertain: () => {}, apiErrorMessage: () => 'uncertain', setTimeout: (fn: () => void) => { fn(); }
 	};
-	return { context, run: runInNewContext(js, context), requests, posted, captures, notifications, pending, fail: (value: boolean) => { failPost = value; } };
+	return { context, run: runInNewContext(js, context), requests, requestScopes, posted, captures, notifications, pending, fail: (value: boolean) => { failPost = value; } };
 }
 for (const failure of ['rejected', 'stalled'] as const) test(`posting completes with ${failure} draft saving and cleanup`, async () => {
 	const fail = failure === 'stalled' ? never : async () => { throw new Error('Draft unavailable'); };
@@ -66,7 +67,12 @@ test('incoming share claims the frozen identity before publication', async () =>
 	assert.equal(claims.length, 1);
 	assert.equal(claims[0].shareId, id);
 	assert.deepEqual(claims[0].payload, f.requests[0]);
+	assert.deepEqual(structuredClone(f.requestScopes[0]), {
+		expectedActor: 'fixture-owner', expectedApiOrigin: 'https://fixture.invalid',
+		expectedDataPlane: 'default', storageMode: 'cloud'
+	});
 	assert.equal(f.posted[0].id, id);
+	assert.ok(!f.notifications.some(value => value.status === 'error'));
 });
 
 test('refused incoming share claim cannot publish', async () => {

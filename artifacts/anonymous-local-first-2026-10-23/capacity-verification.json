@@ -1,0 +1,204 @@
+{
+  "scope": "Local capacity, reconnect, algorithm lookup, scoped feed revocation, Browser Action bulk adapters and independent account file copies",
+  "baseCommit": "fd49b8d1e63d106ad20d67a77271aaa2a2e4bf4d",
+  "verification": "Local Node tests with fake IndexedDB and synthetic transport; native 20-file import passed on immutable integrated Linux snapshot 2f0710ac20e67675e56271dd5607a7a32c2e038853e40ebd62dbf40c9e310e59 after reviewed copy/link/draft changes; no CI, deployed or installed-Mac-app acceptance claimed",
+  "changes": [
+    "Removed obsolete 16 MiB native editor-tree character and UTF-8 byte limits; canonical codec, digest, identity fence and transactional browser quota remain",
+    "Removed 500-entry device provider-vault admission, list, adoption and reviewed-copy limits; encrypted records and scoped immutable account intents remain",
+    "Removed independent 12-file selection cap and aggregate multi-transfer budget; each selected transfer independently passes canonical format, integrity and cancellation checks",
+    "Reconnect forces failed theme catalogue and selection reads past the normal 30-second throttle while preserving the current account/plane fence",
+    "Anonymous local algorithm preview resolves from its scoped device profile and never calls the public API",
+    "Browser Actions support local bulk move/copy/delete through existing editable-kind writers, with per-item outcomes and durable account intents",
+    "Local browser bulk requests process selected IDs sequentially without a separate 200-ID outer ceiling; existing interpreter and response budgets remain",
+    "AccountPostCache.fenceRead removes newly refused cached post/comment/share/link projections after asynchronous feed filtering/ranking; live pending authored root projections remain local work",
+    "Browser Action bulk copy reuses complete editable export/import closures and refuses protected children or incomplete account content before effects; no network adapter",
+    "Account file-bearing copy/fork uses scoped immutable Blob plans, remaps identities and bindings, and commits file/content queue intents atomically with source access rechecked inside the import transaction",
+    "Native local operation selection no longer has a 200-ID ceiling; folder cycle detection replaces the independent 200-ancestor cutoff",
+    "Folder deletion drains surviving standalone file children through the existing file metadata writer"
+  ],
+  "checks": [
+    {
+      "command": "node --import tsx --test app/local-workspace/editorTree.test.ts app/local-workspace/storageCapacity.test.ts app/local-workspace/syncPump.test.ts",
+      "cwd": "remix",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/providerVault.test.ts app/local-workspace/providerSync.test.ts app/local-workspace/providerReview.test.ts",
+      "cwd": "remix",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "node --import tsx --test --test-name-pattern='complete account metadata coexists' app/local-workspace/providerVault.test.ts",
+      "cwd": "remix",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Expanded reviewed-copy regression rerun after the full suite; overlaps the 42 tests"
+    },
+    {
+      "command": "node --import tsx --test app/utils/thingTransfer/readFile.test.ts app/utils/thingTransfer/archive.test.ts app/local-workspace/transferBlobs.test.ts",
+      "cwd": "remix",
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "check": "Changed-file ESLint",
+      "errors": 0,
+      "warnings": 1,
+      "note": "Existing no-useless-constructor warning in storage.ts"
+    },
+    {
+      "check": "git diff --check for eight owned files",
+      "passed": true
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/accountReconnect.test.ts app/local-workspace/accountHomeApi.test.ts app/local-workspace/accountAlgorithmFacade.test.ts",
+      "cwd": "remix",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/api.client.test.ts app/local-workspace/algorithms.test.ts app/local-workspace/actionRequests.test.ts",
+      "cwd": "remix",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Before the additional bulk Action regression; overlaps later Action checks"
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/actionRequests.test.ts app/local-workspace/accountActions.test.ts app/local-workspace/structuredSearch.test.ts",
+      "cwd": "remix",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "check": "Changed-file ESLint for reconnect, API lookup and Action bulk changes",
+      "errors": 0,
+      "warnings": 0
+    },
+    {
+      "command": "TT_DRAFT_WEB_BASE=http://127.0.0.1:18721 TT_DRAFT_ARTIFACT_DIR=/tmp/thingtime-linux-runtime/acceptance/artifacts/capacity TT_SHARED_CHROME_PATH=/usr/lib/chromium/chromium TT_SHARED_PLAYWRIGHT_PATH=/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs node remix/scripts/isolated-linux-browser.mjs run /tmp/thingtime-linux-runtime/acceptance -- node --import tsx --test app/local-workspace/transferBatch.browser.test.ts",
+      "cwd": "repository",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "artifact": "capacity-native/verification.json",
+      "buildBoundary": "Provisional isolated packaged app runtime, superseded for this fixture by the final immutable build result below"
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/actionRequests.test.ts app/local-workspace/accountActions.test.ts app/local-workspace/structuredSearch.test.ts",
+      "cwd": "remix",
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Final rerun adds 205-ID local bulk selection regression after removing unnecessary outer cap; overlaps earlier 12-test run"
+    },
+    {
+      "command": "node --import tsx --test app/local-workspace/accountPosts.test.ts app/local-workspace/accountReadRefusal.test.ts",
+      "cwd": "remix",
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "note": "Independent feed review regression: final refusal fence after captured read, protected authored recovery, nested pruning"
+    },
+    {
+      "check": "Independent feed reviewer red/green regression on final source",
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "artifact": "feed-review/README.md",
+      "note": "Algorithm agent run; both pending and synced owned-only deletion races reproduce on old fence, pass fixed source. Overlaps prior cache/refusal checks; no native claim."
+    },
+    {
+      "check": "First final-build native 20-file import attempt",
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "artifact": "capacity-final-first-attempt/failure.txt",
+      "note": "Default 25-second dialog wait expired while import was progressing (11 of 20 completed). No quota failure was observed; timing evidence is retained. This attempt used the same immutable product build as the successful bounded rerun."
+    },
+    {
+      "command": "TT_DRAFT_WEB_BASE=http://127.0.0.1:18721 TT_DRAFT_ARTIFACT_DIR=/tmp/thingtime-linux-runtime/final-core/artifacts/capacity-final TT_SHARED_CHROME_PATH=/usr/lib/chromium/chromium TT_SHARED_PLAYWRIGHT_PATH=/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs node remix/scripts/isolated-linux-browser.mjs run /tmp/thingtime-linux-runtime/final-core -- node --import tsx --test app/local-workspace/transferBatch.browser.test.ts",
+      "cwd": "repository",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 46930.554612,
+      "artifact": "capacity-final-native/verification.json",
+      "buildArtifact": "capacity-final-native/build.json",
+      "isolationArtifact": "capacity-final-native/isolation-verification.json",
+      "snapshotSha256": "c41befc0600c979d80f4912e1cdb01cb22218c834531d80088922e9d7f1d319e",
+      "buildBoundary": "Immutable packaged Linux app after feed deletion fence, before the later copy/link follow-up; fixture wait increased to bounded 90 seconds without changing that package",
+      "note": "20 JSON files through normal offline import, independent local IDs, exact Unicode, cold reload, 1440/390/320 px dialog bounds, zero page errors, zero account records and zero observed network writes. The 320 px screenshot was visually inspected."
+    },
+    {
+      "check": "Reviewed copy/Action/export/file-import/refusal/facade/deletion follow-up",
+      "passed": 79,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 59791.880546,
+      "artifact": "copy-review/focused-tests.log",
+      "note": "Nine focused Node suites; overlaps earlier Action/export checks. Includes strict six-fault copy commit fence, canonical alias mapping, 205 selected items and 205 folder ancestors. Native copy acceptance awaits rebuilt package."
+    },
+    {
+      "check": "Account Action protected-child closure review follow-up",
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0,
+      "artifact": "copy-review/closure-tests.log",
+      "note": "After shared export guard rejects dedicated children when the caller lacks their adapter; covers theme/file child refusals and ordinary full-adapter export/import. Overlaps earlier 79-test run."
+    },
+    {
+      "check": "Integrated immutable-package native20file import acceptance",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "durationMs": 67300.764761,
+      "artifact": "capacity-integrated-native/verification.json",
+      "buildArtifact": "capacity-integrated-native/build.json",
+      "isolationArtifact": "capacity-integrated-native/isolation-verification.json",
+      "snapshotSha256": "2f0710ac20e67675e56271dd5607a7a32c2e038853e40ebd62dbf40c9e310e59",
+      "note": "Normal offline20JSON import, fresh local IDs, exact Unicode cold reload,1440/390/320 bounds,0pageerrors/requests/accountrecords;320screenshot visually reviewed. This supersedes earlier package evidence for this fixture only."
+    },
+    {
+      "check": "Final remote/bearer URL copy alias-fence regression",
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0,
+      "artifact": "copy-review/url-fence-tests.log",
+      "note": "Actual prior-callback red reproduction retained in url-fence-before.log. Final focused copy/linked/export suites overlap earlier runs; no aggregate count."
+    },
+    {
+      "check": "Mixed URL/byte draft lifecycle",
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "artifact": "linked-drafts-review/focused-tests.log",
+      "note": "Drafts/accountDrafts/linkedDrafts tests; overlaps algorithm direct suite."
+    }
+  ],
+  "regressionEvidence": [
+    "New large-tree test failed before the fix with EDITOR_TREE_SIZE; passes for 17 MiB ASCII, 20 MiB UTF-8 emoji, dates/cycles, cold reopen and large legacy adoption",
+    "New provider tests failed before the fix with VAULT_LIMIT; anonymous 502-entry cold reopen has no account intents; 500 remote groups coexist with authored device entries and reviewed conflict copies",
+    "Twenty independently parsed transfer files preserve overlapping portable IDs without joining their contents; existing malformed-input, ZIP integrity, 64 MiB-plus Blob, quota rollback and cancellation checks pass",
+    "Fast offline/online reconnect test failed before fix with one catalogue read instead of two; current result retries catalogue and selection, clears errors, grants no generic home-sync authority, and ignores retired workers",
+    "Anonymous local algorithm lookup failed before fix with Unexpected public request; current lookup/missing ID/retired facade all retain zero fetch calls",
+    "Browser bulk adapter placement returned false before fix; current native interpreter moves locally, reports unknown/protected targets as per-item errors, and account sync sends each ordinary effect once without replaying the interpreter",
+    "Native normal Import dialog accepts 20 JSON files with identical portable root IDs; isolated browser creates 20 independent local IDs, retains exact Unicode after cold offline reload, fits 1440/390/320px, and records zero account records, writes and page errors",
+    "Final feed fence also rechecks live content and thing-sync for every authored root, independent of read-refusal watermarks; reviewer red/green tests cover deletion of both pending-owned and previously synced owned content with no retained read projection",
+    "A test-only preload dropping the import pre-commit callback fails Missing expected rejection after source deletion; unchanged product source passes the strict commit-fence checks. This is a missing-fence simulation, not an old-commit test. See copy-review/README.md."
+  ],
+  "remaining": [
+    "Real browser storage-capacity exhaustion and native editor-tree/provider-vault acceptance beyond prior caps remain; normal20-file transfer acceptance passes on the integrated2f0710ac package",
+    "Existing account provider metadata snapshot still has 500-entry and 32 MiB server bounds; requires a negotiated paged transport, not relaxing the local response validator",
+    "Canonical transfer still has 1000-Thing, 2000-file, 16 MiB-manifest and 512 MiB-file bounds; clipboard and paired-device capacity work remains",
+    "Broader local-feature matrix, identity/custom-plane/cross-tab browser coverage and native microphone/audio/video acceptance remain separate gates"
+  ]
+}

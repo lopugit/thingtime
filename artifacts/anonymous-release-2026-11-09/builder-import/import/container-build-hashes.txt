@@ -1,0 +1,2 @@
+3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722  /home/pwuser/qa/server/index.mjs
+f7f86930ecddadac0565d8e5c5b34f63905a25f0672e0c5002657d21988e9b60  /tmp/qa-public/index.html

@@ -1,0 +1,9 @@
+{
+  "stage": "navigation",
+  "error": "page.goto: Download is starting\nCall log:\n  - navigating to \"http://127.0.0.1:18724/things\", waiting until \"load\"\n",
+  "body": "",
+  "requests": [],
+  "errors": [],
+  "widths": [],
+  "peerEvidence": {}
+}

@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 const MAX_CAUSE_DEPTH = 3;
 const MAX_DIAGNOSTIC_STRING_CHARS = 16 * 1024;
 const MAX_ERROR_LABELS = 12;
@@ -142,7 +140,7 @@ const createCaptureState = (context: AdminDiagnosticRevealContext = {}, allowPub
 		truncated,
 		revealDisabled: false,
 		allowPublicRevealPlaceholders,
-		markerNonce: randomUUID().replace(/-/g, ''),
+		markerNonce: globalThis.crypto.randomUUID().replace(/-/g, ''),
 		approvedObjectIds,
 		deniedObjectIds: new Set(),
 		revealableObjectIds: new Map()

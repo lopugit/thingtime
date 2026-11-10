@@ -5,6 +5,7 @@ import { createThing, isFail } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
 import {
 	boundedVaultText,
+	defaultVaultProviderModel,
 	LOPU_TRANSCRIPT_SYSTEM_TYPE,
 	providerModelFor,
 	realtimeVaultProviderModels,
@@ -22,7 +23,7 @@ import {
 	type LopuVaultProviderRecord,
 	type VaultProviderRealtimeSession
 } from './vaultProviderClient';
-import { LOPU_VAULT_REALTIME_MODEL_REASON, LOPU_VAULT_REALTIME_UNSUPPORTED_REASON, vaultGuardError } from './vaultProviders';
+import { LOPU_VAULT_REALTIME_MODEL_REASON, LOPU_VAULT_REALTIME_UNSUPPORTED_REASON, resolveVaultTurnModel, vaultGuardError } from './vaultProviders';
 
 // Lopu voice turns (POST /api/v1/lopu/voice/reply, also the iOS bridge) and
 // the direct-voice session (POST /api/v1/lopu/voice/session, design note
@@ -64,7 +65,7 @@ export type LopuVoiceEvent =
 	| { type: 'done'; usage?: LopuChatUsage; billing?: LopuBilling; costMicros?: number; messages?: unknown[] };
 
 export type LopuVoiceReplyDependencies = {
-  getPromptSettings?: (ownerId: string) => Promise<LopuPromptSettings>;
+  getPromptSettings?: (ownerId: string, options?: { modelId?: string }) => Promise<LopuPromptSettings>;
 	// the accounting writer (never throws); injectable for tests
 	signal?: AbortSignal;
 	recordUsage?: (ownerId: string, input: LopuUsageInput) => Promise<LopuDebitResult>;
@@ -188,7 +189,7 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 	const speed = normalizeLopuVoiceSpeed(input.speed);
 	assertTuningFits(provider, provider.model || model, effort, speed);
 	const completion = await callVaultProviderCompletion(provider, {
-		system: composeLopuSurfacePrompt(await (deps.getPromptSettings ?? (await import('../settings/lopuPromptSettings')).getLopuPromptSettings)(ownerId), SYSTEM_PROMPT),
+		system: composeLopuSurfacePrompt(await (deps.getPromptSettings ?? (await import('../settings/lopuPromptSettings')).getLopuPromptSettings)(ownerId, { modelId: resolveVaultTurnModel(provider.model, model, defaultVaultProviderModel(provider.provider)) || undefined }), SYSTEM_PROMPT),
 		history: normalizeHistory(input.history),
 		prompt: transcript,
 		maxTokens: VOICE_MAX_OUTPUT_TOKENS,
@@ -229,7 +230,7 @@ export type LopuVoiceRealtimeSession = VaultProviderRealtimeSession & {
 };
 
 export type LopuVoiceRealtimeDependencies = {
-  getPromptSettings: (ownerId: string) => Promise<LopuPromptSettings>;
+  getPromptSettings: (ownerId: string, options?: { modelId?: string }) => Promise<LopuPromptSettings>;
 	getProvider: (ownerId: string, providerId: unknown) => Promise<LopuVaultProviderRecord>;
 	mint: typeof mintVaultProviderRealtimeSession;
 };
@@ -265,7 +266,7 @@ export const createLopuVoiceRealtimeSession = async (
 	const effort = normalizeLopuVoiceEffort(input.effort);
 	const catalogModel = providerModelFor(provider.provider, model.id);
 	if (effort && catalogModel && !catalogModel.efforts.includes(effort)) throw vaultGuardError('That reasoning level is not available for the selected voice model.');
+	const settings = await (deps.getPromptSettings ?? (await import('../settings/lopuPromptSettings')).getLopuPromptSettings)(ownerId, { modelId: model.id });
 	const session = await (deps.mint ?? mintVaultProviderRealtimeSession)(provider, { model: model.id });
-	const settings = await (deps.getPromptSettings ?? (await import('../settings/lopuPromptSettings')).getLopuPromptSettings)(ownerId);
 	return { ...session, instructions: composeLopuSurfacePrompt(settings, SYSTEM_PROMPT), effort: effort ?? 'none', textResponse: input.textResponse === true };
 };

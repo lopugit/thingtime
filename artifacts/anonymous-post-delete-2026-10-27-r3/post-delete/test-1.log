@@ -1,0 +1,24 @@
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (10180.374774ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10237.070597
+
+✖ failing tests:
+
+test at ../post-delete.test.mjs:7:1
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (10180.374774ms)
+  locator.waitFor: Error: strict mode violation: getByText('Anonymous child removed with parent.', { exact: true }) resolved to 2 elements:
+      1) <p class="chakra-text cha-zu3qe3">Anonymous child removed with parent.</p> aka getByRole('paragraph').filter({ hasText: 'Anonymous child removed with' })
+      2) <textarea rows="1" placeholder="Write a comment… 💬" class="chakra-textarea cha-1k32xja">Anonymous child removed with parent.</textarea> aka getByRole('textbox', { name: 'Write a comment… 💬' })
+  
+  Call log:
+    - waiting for getByText('Anonymous child removed with parent.', { exact: true }) to be visible
+  
+      at TestContext.<anonymous> (/tmp/check/post-delete.test.mjs:50:281) {
+    log: [ "  - waiting for getByText('Anonymous child removed with parent.', { exact: true }) to be visible" ]
+  }

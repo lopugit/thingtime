@@ -1,0 +1,184 @@
+{
+  "ok": true,
+  "scope": "Copied static progress plan in isolated namespace; external and artifact links are not followed",
+  "sourceSha256": "d575bf51ed9f3c21bdfe1cb60d36ce312c1b79df540872a2dd5e636e231b841d",
+  "errors": [],
+  "requests": [
+    "file:///tmp/plan/anonymous-local-first.html",
+    "file:///tmp/plan/anonymous-local-first.html",
+    "file:///tmp/plan/anonymous-local-first.html"
+  ],
+  "viewports": [
+    {
+      "width": 1440,
+      "traversal": 31,
+      "counts": {
+        "total": 89,
+        "done": 65,
+        "local": 20,
+        "todo": 4,
+        "displayed": [
+          65,
+          20,
+          4
+        ]
+      },
+      "filters": [
+        {
+          "filter": "all",
+          "count": 89
+        },
+        {
+          "filter": "todo",
+          "count": 24
+        },
+        {
+          "filter": "done",
+          "count": 65
+        },
+        {
+          "filter": "local",
+          "count": 20
+        },
+        {
+          "filter": "p0",
+          "count": 79
+        }
+      ],
+      "caseInsensitiveSearch": {
+        "expected": 8,
+        "visible": 8
+      },
+      "emptySearch": true,
+      "noDocumentOverflow": true,
+      "sectionScrollReached": [
+        "testing",
+        "artifacts"
+      ],
+      "footerBounds": {
+        "top": 868,
+        "bottom": 999.5625,
+        "viewportHeight": 1000
+      },
+      "table": {
+        "width": 926,
+        "content": 926,
+        "scrollable": true
+      }
+    },
+    {
+      "width": 390,
+      "traversal": 74,
+      "counts": {
+        "total": 89,
+        "done": 65,
+        "local": 20,
+        "todo": 4,
+        "displayed": [
+          65,
+          20,
+          4
+        ]
+      },
+      "filters": [
+        {
+          "filter": "all",
+          "count": 89
+        },
+        {
+          "filter": "todo",
+          "count": 24
+        },
+        {
+          "filter": "done",
+          "count": 65
+        },
+        {
+          "filter": "local",
+          "count": 20
+        },
+        {
+          "filter": "p0",
+          "count": 79
+        }
+      ],
+      "caseInsensitiveSearch": {
+        "expected": 8,
+        "visible": 8
+      },
+      "emptySearch": true,
+      "noDocumentOverflow": true,
+      "sectionScrollReached": [
+        "testing",
+        "artifacts"
+      ],
+      "footerBounds": {
+        "top": 664.3125,
+        "bottom": 844.25,
+        "viewportHeight": 844
+      },
+      "table": {
+        "width": 332,
+        "content": 332,
+        "scrollable": true
+      }
+    },
+    {
+      "width": 320,
+      "traversal": 91,
+      "counts": {
+        "total": 89,
+        "done": 65,
+        "local": 20,
+        "todo": 4,
+        "displayed": [
+          65,
+          20,
+          4
+        ]
+      },
+      "filters": [
+        {
+          "filter": "all",
+          "count": 89
+        },
+        {
+          "filter": "todo",
+          "count": 24
+        },
+        {
+          "filter": "done",
+          "count": 65
+        },
+        {
+          "filter": "local",
+          "count": 20
+        },
+        {
+          "filter": "p0",
+          "count": 79
+        }
+      ],
+      "caseInsensitiveSearch": {
+        "expected": 8,
+        "visible": 8
+      },
+      "emptySearch": true,
+      "noDocumentOverflow": true,
+      "sectionScrollReached": [
+        "testing",
+        "artifacts"
+      ],
+      "footerBounds": {
+        "top": 586,
+        "bottom": 843.5,
+        "viewportHeight": 844
+      },
+      "table": {
+        "width": 262,
+        "content": 262,
+        "scrollable": true
+      }
+    }
+  ]
+}

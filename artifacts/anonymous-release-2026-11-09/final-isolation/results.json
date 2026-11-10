@@ -1,0 +1,150 @@
+{
+  "evidenceType": "disposable real API and browser acceptance",
+  "sourceAtBuild": "af8c52540cb3dd81d962feb7897168d6da81ae7c",
+  "publishedCheckpointAtFixtureCorrection": "4492bc7eaf8fdf577c88af513c03a98ccca984ae",
+  "compiledSha256": {
+    "staticIndex": "cf273daaf8e3b06264646a02f1fa4f1a5e7c5f10bc92859d1753e7e96977e402",
+    "draftRunner": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4",
+    "serverHandler": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722"
+  },
+  "originalTestSourceSha256BeforeFixtureCorrection": {
+    "characterWorkspace": "9e96630b1e50cbf97f76c622edeeda194f3dd37bdb2f9685d75308cf21b6873f",
+    "providerIdentity": "274bd60b288880f72025d024261aff303b209b1be69cff8083c12cc64ac1a6ee",
+    "accountPosts": "b1ccb7c70434f0f161e6701702380417dec2729e5694f2b63471680e387ce5fe",
+    "characterProfileSync": "c1aaaaf276226667c94b7a807631b2c9617aa8e235115430f6800e34cbc1292b"
+  },
+  "finalTestSourceSha256": {
+    "characterWorkspace": "9e96630b1e50cbf97f76c622edeeda194f3dd37bdb2f9685d75308cf21b6873f",
+    "providerIdentity": "1abfa8911fc6a5c5e0a7ca666425c3815e2a15fc6f534d5fbfaa0c29edebeab6",
+    "accountPosts": "364e11537f4ea40c78e0f1ec12194b1ec16fba46ae559683661e14af54ebf1c6",
+    "characterProfileSync": "797cdbcac1d109a684ce2f611529fea2e1bdb9db158a25faf5fb151b198184eb"
+  },
+  "executedCopySha256": {
+    "characterWorkspace": "b8a23004929c022e9d9a1a9a4cdd86db8e4779cdc01c0565b9dff42ab16eb600",
+    "providerIdentity": "c9d20058a5f588ca38e2fb98fdaeb17d31a0e49c6205b70e924190d524d01d18",
+    "accountPosts": "db229e6127058ab2a74f6a6d135388405d9075f6e3907f3711b0c424a77e291a",
+    "characterProfileSync": "400d1bc2e15df2b3c983d1ea85870392cd19a13e02454b0e3a4badd8eaf8f204",
+    "providerIdentitySandbox": "6075e2b28f51b1dad9c82bf8118d156bda502df2c140b0ec498edd38c095cca1"
+  },
+  "adapterSha256": {
+    "Dockerfile": "317b9f5539a5c65d7e9ee4e9aeee2ce7e9d44dcdf50bd40bae8f29a3aba99f82",
+    "runtime.mjs": "0034d781d14bb5128cb9b580a6d3b3319acd9d461259380f6b1ef75399dfed41",
+    "start.cjs": "77abf858e284448ce9457f340d1b9e2f3c051c6faa2740ac22b0e46840b93ec3"
+  },
+  "canonicalSeccompSha256": "769e7e98ede73c91410534707f54f187d0d9c95952e61f32a183042929f43711",
+  "transpiledTokenComparison": {
+    "characterWorkspace": "identical",
+    "providerIdentity": "sandboxed final source transpile identical to sandboxed executed copy; historical default copy superseded",
+    "accountPosts": "identical after ignoring optional parentheses around one arrow parameter",
+    "characterProfileSync": "identical"
+  },
+  "checks": {
+    "characterWorkspace": {
+      "passed": true,
+      "skipped": 0,
+      "offlinePost": true,
+      "offlineFile": true,
+      "offlineImage": true,
+      "coldReload": true,
+      "exactRemoteReadback": true,
+      "guestPrivateReadStatus": 404,
+      "principalPrivateReadStatus": 404,
+      "anonymousMutationAttempts": 0,
+      "browserPageErrors": 0
+    },
+    "providerIdentity": {
+      "passed": true,
+      "skipped": 0,
+      "heldSuccessfulProofRetiredOnAccountSwitch": true,
+      "displayedValueClearedOnAccountSwitch": true,
+      "delayedEncryptionCancelledOnAccountSwitch": true,
+      "crossAccountRetention": false,
+      "browserPageErrors": 0
+    },
+    "accountPosts": {
+      "passed": true,
+      "skipped": 0,
+      "offlineReload": true,
+      "crossTab": true,
+      "logoutOfflineIsolation": true,
+      "revocationEvictsSnapshot": true,
+      "browserPageErrors": 0
+    },
+    "characterProfileSync": {
+      "passed": true,
+      "skipped": 0,
+      "privateActorIsolation": true,
+      "anonymousRefused": true,
+      "immutableRetries": true,
+      "selectedSession": true,
+      "disabledCharacterRefused": true,
+      "wrongSelectedPlaneRefused": true,
+      "manifestVersions": {
+        "api.themes-sync": "1.8.0",
+        "api.algorithms-sync": "1.6.0"
+      }
+    }
+  },
+  "container": {
+    "network": "none",
+    "root": "read-only",
+    "capabilities": "ALL dropped",
+    "noNewPrivileges": true,
+    "hostMounts": false,
+    "publishedPorts": false,
+    "taskOwnedContainerRemoved": true,
+    "derivativeImageRemoved": true,
+    "baseImagePreserved": true
+  },
+  "browserSandboxInExecutedFixture": {
+    "characterWorkspace": true,
+    "providerIdentity": true,
+    "accountPosts": true,
+    "characterProfileSync": true
+  },
+  "fixturePrerequisites": [
+    "exact compiled static/client and Nitro server assets",
+    "disposable loopback replica with isolated-agent-test mode",
+    "task-owned isolated Chrome profile",
+    "module service worker files served as application/javascript",
+    "synthetic 32-byte user Vault key generated in bootstrap process memory",
+    "explicit CDP online signal with loopback-only Docker network"
+  ],
+  "scope": [
+    "one disposable loopback origin and home data plane",
+    "explicit wrong selected-plane refusal"
+  ],
+  "notCovered": [
+    "actual origin migration",
+    "production account or provider OAuth",
+    "all possible account and Character combinations"
+  ],
+  "secretHandling": "No generated credentials, Vault key values, session identifiers, raw server logs, or real account data retained.",
+  "historicalProviderRun": {
+    "executedCopySha256": "c9d20058a5f588ca38e2fb98fdaeb17d31a0e49c6205b70e924190d524d01d18",
+    "playwrightChromiumSandboxOption": "default false",
+    "passed": true,
+    "supersededForSandboxAcceptance": true
+  },
+  "sandboxedProviderRerun": {
+    "passed": true,
+    "skipped": 0,
+    "durationMs": 27127.971714,
+    "sourceSha256": "1abfa8911fc6a5c5e0a7ca666425c3815e2a15fc6f534d5fbfaa0c29edebeab6",
+    "executedCopySha256": "6075e2b28f51b1dad9c82bf8118d156bda502df2c140b0ec498edd38c095cca1",
+    "verificationSha256": "a3cfbf056cdcfc8bdf87d3ad9d26986cc4d232fddbdb13898da4da403aafe6f3",
+    "explicitChromiumSandbox": true,
+    "canonicalContainerPolicy": true,
+    "sameCompiledAssets": true,
+    "testsRunInRerun": [
+      "providerIdentity.sandbox.browser.test.mjs"
+    ],
+    "heldSuccessfulProofRetiredOnAccountSwitch": true,
+    "displayedValueClearedOnAccountSwitch": true,
+    "delayedEncryptionCancelledOnAccountSwitch": true,
+    "crossAccountRetention": false,
+    "browserPageErrors": 0,
+    "derivativeImageSha256": "707f6388ff2a2a3b3660a8d5a05f4178d658f37467c8891b455115fabb83dff1",
+    "browserProcessesAfterRun": 0
+  }
+}

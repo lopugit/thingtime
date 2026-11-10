@@ -1,0 +1,20 @@
+{
+  "testSource": "remix/app/mail/accountScope.browser.test.mjs",
+  "fixtureSource": "remix/app/mail/accountScope.browser.fixture.ts",
+  "executedTestSha256": "b15b9ca8989c2d0568233acbed42fa5115fc23dcd4893018f56131d304b9a6da",
+  "retainedTestSha256": "09cdb7442542896c0be592dcc567db138e5e49469fbaaf99f4ad5b6daf9b2e12",
+  "normalizedTestExactEquality": true,
+  "fixtureExactEqualityAfterImportRelocation": true,
+  "normalizations": [
+    "global declaration comment",
+    "opt-in skip gate; all four variables provided during executed run",
+    "artifact/fixture env paths resolve to identical defaults used during executed run"
+  ],
+  "assertionOrFlowChanges": false,
+  "fixtureExecutableExactEqualityAfterRelocationNormalization": true,
+  "retainedFixtureExecutableSha256": "833e355281d147c7326f7810c121b97858d3f5eab2f33b3261b3c260a5baa917",
+  "fixtureExecutableNormalizations": [
+    "esbuild source-path comments",
+    "esbuild generated entry export variable alpha-renaming from relocated basename"
+  ]
+}

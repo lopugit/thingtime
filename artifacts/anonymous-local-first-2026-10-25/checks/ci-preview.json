@@ -1,0 +1,54 @@
+{
+  "observedAt": "2026-10-25T10:59:06.280770+00:00",
+  "repository": "lopugit/thingtime",
+  "pr": 1000,
+  "branch": "codex/anonymous-local-first",
+  "head": "7621d62114789ea6cd171fc7e11a287aac7d7787",
+  "state": "OPEN",
+  "mergeable": "MERGEABLE",
+  "mergeHold": "no-ai-merge",
+  "autoMerge": null,
+  "webCi": {
+    "run": 40185577113,
+    "conclusion": "failure",
+    "feed": {
+      "pass": 85,
+      "fail": 7,
+      "skip": 1
+    },
+    "cause": "Stale PostCard harness supplied principal api instead of selected-Character commentApi/replyApi"
+  },
+  "codeql": {
+    "run": 40185577112,
+    "conclusion": "success"
+  },
+  "preview": {
+    "alias": "https://pr-1000.previews.dev.thingtime.com",
+    "immutable": "https://thingtime-ku8z0hvgo-lopugits-projects.vercel.app",
+    "deploymentId": 7311941102,
+    "deploymentState": "success",
+    "rootHttpStatus": 200,
+    "rootDataHttpStatus": 200,
+    "identifiedHead": "7621d62114789ea6cd171fc7e11a287aac7d7787",
+    "identifiedBranch": "codex/anonymous-local-first",
+    "scope": "Reachability and identity, not full functional acceptance"
+  },
+  "localRepair": {
+    "productionChanged": false,
+    "feed": {
+      "pass": 96,
+      "fail": 0,
+      "skip": 1
+    },
+    "drafts": {
+      "pass": 50,
+      "fail": 0,
+      "skip": 9
+    },
+    "characterCallbacks": {
+      "pass": 3,
+      "fail": 0
+    },
+    "subsequentCi": "Must be verified at its own head"
+  }
+}

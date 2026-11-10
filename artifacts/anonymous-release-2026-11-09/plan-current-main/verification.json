@@ -1,0 +1,23 @@
+{
+  "planSha256": "880aba6c5de48ed08ae1c1bec636408cee27a83fbf125a14c95afc5dbb152dbc",
+  "browser": "149.0.7827.55",
+  "views": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "height": 29431
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "height": 59998
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "height": 75179
+    }
+  ],
+  "fullScroll": true,
+  "overflow": false
+}

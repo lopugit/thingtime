@@ -1,0 +1,22 @@
+{
+  "checkoutHead": "e67c4e475fa0aff7b838310dfdcd864063a9f05c",
+  "mergeHead": "f36da5c032251270c0b24a754c61a4e510633c59",
+  "buildCommandEvidence": "/tmp/anonymous-release-build-f36-hosted.log",
+  "appAndFixtureSourceSha256": {
+    "remix/app/root.tsx": "1c28314052ff343af224916cd638776f8a1d1cf58a6bd11859df4dee0d62af38",
+    "remix/app/components/Builder/CurrentPageBuilder.tsx": "3b9f3374fadb2cff34d237107747e898db1a365adbb21096a7c97ec76ea6268a",
+    "remix/app/components/Builder/SiteBlocksHost.tsx": "4ed0205569cea82465787c17a22b4b0f5c52108bb1200f27cd28a23ab64cd7bb",
+    "remix/app/local-workspace/siteEditableBlocks.browser.test.ts": "d2e9d8cdf553c91e8fe338248d02d3ec7a1b3c1859139ee9e9606e0cb2950b96",
+    "electron/lib/agent-browsers/runtime/package.json": "1e9d9144cd3dc3b389640adbe852161edafc55e8028ef161e3a5a70edd25979b",
+    "electron/lib/agent-browsers/runtime/package-lock.json": "8a3334b1c24d0dbd8cda6fda41177120c2ae66bed71d45d74af56e225cd5ce9b"
+  },
+  "selectedBuildSha256": {
+    "static/index.html": "6c48bd3f2e9e5b8620a40ef3076e38cd38c682c83593257a1dbf3607ef4d9ab6",
+    "config.json": "723f83bdbe7b80c09fb806a99bb6026275f9c90a902f452ccfa4f355f4ff336d",
+    "functions/__server.func/index.mjs": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722",
+    "static/offline-shell-manifest.mjs": "b58506ad2c68d48dc26bb98358f786591f0e197fefea4eff0c61e8d00b198ed0"
+  },
+  "fullBuildFileCount": 1765,
+  "fullBuildManifestSha256": "80757f2781a1ddd1ca15cfc9db108c5fed57cdcc6485fc820f38eab49d87b6be",
+  "executedFixtureSha256": "6956ee1a8b99e342ebb3433c86fc9eecd6cc7dcf72639e6b888ba9a1b43d562c"
+}

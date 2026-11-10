@@ -1,0 +1,50 @@
+{
+  "ok": true,
+  "transport": "built-nitro",
+  "draftPreviewExactAssets": true,
+  "draftPreviewCsp": true,
+  "socialCardPngAndHead": true,
+  "viteRootDocs": true,
+  "registration": true,
+  "authCookies": true,
+  "crossSiteRefused": true,
+  "writes": true,
+  "dedicatedOwnHandler": true,
+  "dedicatedShellMetadata": true,
+  "independentDedicatedDatabase": true,
+  "dedicatedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "promotion": true,
+  "rollback": true,
+  "followerMongoDials": 0,
+  "initializedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "unchangedColdIndexCommands": {
+    "creates": 0,
+    "drops": 0,
+    "peak": 0
+  },
+  "command": "node remix/scripts/environment-gateway-acceptance.mjs",
+  "exitCode": 0,
+  "cleanup": {
+    "fixturePortsWithRemainingListeners": [],
+    "checkedPorts": [
+      19771,
+      19772,
+      19773,
+      19774,
+      19775,
+      19776,
+      19777,
+      19778,
+      19779,
+      19780
+    ]
+  }
+}

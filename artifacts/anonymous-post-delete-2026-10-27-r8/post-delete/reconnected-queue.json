@@ -1,0 +1,32 @@
+[
+  {
+    "id": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adfec935c6e097323cbb20e\",\"home\"]",
+    "state": "pending",
+    "deleted": {
+      "id": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+      "revision": 2,
+      "updatedAt": "2026-10-27T00:13:14.853Z"
+    },
+    "phase": null,
+    "retryAt": 0,
+    "error": null,
+    "baseId": "e55beed7-7b99-48ba-bae2-1498e4da2bb1",
+    "inFlightMethod": null
+  },
+  {
+    "id": "edaf9c3c-2597-4414-90ad-555cd4794836",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adfec935c6e097323cbb20e\",\"home\"]",
+    "state": "syncing",
+    "deleted": {
+      "id": "edaf9c3c-2597-4414-90ad-555cd4794836",
+      "revision": 1,
+      "updatedAt": "2026-10-27T00:13:14.628Z"
+    },
+    "phase": null,
+    "retryAt": 0,
+    "error": null,
+    "baseId": null,
+    "inFlightMethod": null
+  }
+]

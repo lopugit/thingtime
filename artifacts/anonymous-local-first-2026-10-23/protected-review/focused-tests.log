@@ -1,0 +1,47 @@
+✔ reconnect retries failed theme reads inside the refresh throttle without granting home content authority (264.486777ms)
+✔ Home History restores and exports device theme and algorithm edits while a custom plane is selected, with the current account lease (1222.711704ms)
+✔ Home theme views read shared themes under selected authority and retire in-flight reads on identity change (461.475364ms)
+✔ account restore is an atomic device edit with immutable retry identity and no invented receipt (656.073292ms)
+✔ account undo retains independent edits, requires overlap choices and fences retired workspaces (863.339014ms)
+✔ cached server versions restore offline from an exact retained current basis, including component copies (820.587119ms)
+✔ failed account History capture rolls back content and sync intent, and concurrent retries commit once (365.590529ms)
+✔ a never-sent account deletion can recover offline without a remote receipt (151.804834ms)
+✔ accepted deleted history recovers its original identity privately, but a newer accepted head refuses stale recovery (336.93929ms)
+✔ recovery quota failure rolls back deletion intent and component copies as one transaction (456.84334ms)
+✔ algorithm History captures validated profiles, training, library edits and deletions without observation or authority data (602.22902ms)
+✔ algorithm restore preserves current library metadata and selection, with exact retry after later edits (460.78377ms)
+✔ algorithm undo and three-way merge preserve independent edits and require fresh conflict choices (800.14986ms)
+✔ algorithm History refuses deleted recovery, forged protected kinds and retired identity (86.347318ms)
+✔ algorithm content, selection and History roll back together when History cannot persist (163.62678ms)
+✔ account algorithm restore stays device-authored and independent of content synchronization and account selection (553.326197ms)
+✔ anonymous theme restore preserves current organization/sharing and replays one exact operation (889.207706ms)
+✔ account theme restore preserves current organization/sharing and replays one exact operation (870.286785ms)
+✔ anonymous theme undo reviews overlapping edits and retains independent tokens (409.755266ms)
+✔ account theme undo reviews overlapping edits and retains independent tokens (613.9282ms)
+✔ theme merge shares the common-ancestor planner and retains both parents (368.680481ms)
+✔ theme previews fence concurrent changes, deletion and identity retirement (312.828193ms)
+✔ failed account theme History commit rolls back design, queue and Timeline (394.37423ms)
+✔ theme History cannot authorize generic protected writes or malformed snapshots (30.159787ms)
+✔ theme preview refuses unseen content refresh even when its recorded head is unchanged (163.607031ms)
+✔ a concurrent committed theme retry wins over an intermediate stale planning read (242.405965ms)
+✔ local restore uses the normal writer, canonical hashed request identity and exact retry receipt after later edits (708.08877ms)
+✔ local undo keeps later independent edits, requires overlapping choices and refuses an already reverted change (511.302503ms)
+✔ local current-content merge shares canonical three-way rules and preserves both saved parents (262.034298ms)
+✔ recorded page restore creates independently validated components, remaps refs, captures dependencies and survives cold reload (480.32283ms)
+✔ changed components are refused even with an unchanged page head, and choosing current definitions makes no copies (509.492333ms)
+✔ deleted local Things recover their original identity privately and fall back from a removed folder (240.653688ms)
+✔ failed component-copy receipts roll back every new copy and page update (437.998588ms)
+✔ unsupported histories, invalid choices, aborted and retired editors do not mutate content (57.420649ms)
+✔ two concurrent restore submissions replay one receipt and a later stale operation cannot overwrite it (200.623696ms)
+✔ component changes between planning and commit are fenced before any copy is created (252.947754ms)
+✔ missing recorded definitions require current mode and unsupported dependency kinds remain refused (413.64605ms)
+✔ abort during receipt capture rolls back page, copied components and history together (399.822242ms)
+✔ a retained draft cannot bypass normal page validation when restored (217.294464ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19822.956648

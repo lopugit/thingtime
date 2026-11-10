@@ -15,7 +15,7 @@ import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
-import { thingBrowseHref } from './thingsLocation';
+import { thingBrowseHref, thingInspectHref } from './thingsLocation';
 import { thingStorageHref } from './thingStorageNavigation';
 
 import {
@@ -44,11 +44,10 @@ export type ThingsItemMenuArgs = {
   locationSearch?: string;
   builderMode?: boolean;
   dataPlane?: string | null;
-  libraryAction?: 'archive' | 'restore';
-  allowCreation?: boolean;
+  canUseAccountLinks?: boolean;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, libraryAction, allowCreation = true }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, canUseAccountLinks = true }: ThingsItemMenuArgs): ThingContextMenuModel => {
   if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
@@ -58,9 +57,9 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
-    'storage-placement': actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
+    'storage-placement': canUseAccountLinks && actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
-    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: thingInspectHref(thing.id, locationSearch) }, 'copy-link': true, 'share-preview': canUseAccountLinks && actCount === 1,
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },

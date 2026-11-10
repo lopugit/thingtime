@@ -1,0 +1,21 @@
+{
+  "direct": {
+    "status": 200,
+    "hasPersonal": true,
+    "rowCount": 0
+  },
+  "scoped": {
+    "status": 413,
+    "code": "USE_INSTRUCTION_TRANSFER",
+    "hasPersonal": false
+  },
+  "guest": {
+    "status": 200,
+    "personal": {
+      "revision": null,
+      "instructions": []
+    }
+  },
+  "transferredParts": 18,
+  "committed": true
+}

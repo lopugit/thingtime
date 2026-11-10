@@ -25,7 +25,7 @@ export interface TtThemeSettings {
  * tweaks stay out of the ctrl+z timeline (namespace 'theme').
  */
 export const useTtTheme = () => {
-	const { thingtime, setThingtime } = useThingtime();
+	const { thingtime, setThingtime, flushPersistence } = useThingtime();
 
 	const settings: TtThemeSettings = thingtime?.settings?.theme || {};
 	const preset = typeof settings.preset === 'string' ? settings.preset : 'Thingtime';
@@ -144,6 +144,7 @@ export const useTtTheme = () => {
 	);
 
 	return {
+        flushTheme: flushPersistence,
 		theme,
 		preset,
 		overrides,

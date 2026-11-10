@@ -1,0 +1,9 @@
+✔ global and site nested blocks remain individually editable after offline save and reload (59402.37222ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59611.482312

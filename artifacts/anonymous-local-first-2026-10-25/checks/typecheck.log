@@ -1,0 +1,103 @@
+app/api/utils/attachments/localAttachmentStorage.test.ts(39,172): error TS2322: Type 'Uint8Array<ArrayBufferLike>' is not assignable to type 'BodyInit'.
+  Type 'Uint8Array<ArrayBufferLike>' is missing the following properties from type 'URLSearchParams': size, append, delete, get, and 2 more.
+app/api/utils/migrations/ciControlRelocationCore.test.ts(283,75): error TS2322: Type '{ [x: string]: number; }' is not assignable to type '{ _id: number; shareId?: undefined; } | { shareId: number; _id?: undefined; }'.
+  Property 'shareId' is missing in type '{ [x: string]: number; }' but required in type '{ shareId: number; _id?: undefined; }'.
+app/components/Account/ssoNavigation.test.ts(5,75): error TS2352: Conversion of type '{ getItem: (k: string) => string; setItem: (k: string, v: string) => Map<string, string>; removeItem: (k: string) => boolean; }' to type 'Storage' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ getItem: (k: string) => string; setItem: (k: string, v: string) => Map<string, string>; removeItem: (k: string) => boolean; }' is missing the following properties from type 'Storage': length, clear, key
+app/components/Nav/ReactiveNav.tsx(6,10): error TS2305: Module '"./ReactiveRightNav"' has no exported member 'RightNav'.
+app/components/Thingtime/Thingtime.tsx(195,29): error TS2554: Expected 1 arguments, but got 0.
+app/components/Thingtime/Thingtime.tsx(1684,11): error TS2322: Type 'RefObject<unknown>' is not assignable to type 'RefObject<HTMLElement>'.
+  Type '{}' is missing the following properties from type 'HTMLElement': accessKey, accessKeyLabel, autocapitalize, autocorrect, and 314 more.
+app/hooks/useUuid.tsx(7,13): error TS2345: Argument of type 'string' is not assignable to parameter of type '(prevState: undefined) => undefined'.
+app/routes/api/v1/admin/ci/automations/_automations.tsx(25,47): error TS2339: Property 'error' does not exist on type '{ ok: true; } | { ok: false; error: string; missing: string[]; }'.
+  Property 'error' does not exist on type '{ ok: true; }'.
+app/routes/api/v1/admin/ci/automations/_automations.tsx(25,81): error TS2339: Property 'missing' does not exist on type '{ ok: true; } | { ok: false; error: string; missing: string[]; }'.
+  Property 'missing' does not exist on type '{ ok: true; }'.
+app/routes/api/v1/health/mongodb/_mongodb.tsx(7,3): error TS2739: Type '{ connected: false; host: null; dbName: null; pingMs: null; collections: null; checkedAt: string; error: string; }' is missing the following properties from type 'MongoConnectionStatus': custom, replicaSet
+app/routes/api/v1/mongodb/endpoint/_endpoint.tsx(122,43): error TS2339: Property 'error' does not exist on type 'MongoProbeResult'.
+  Property 'error' does not exist on type '{ ok: true; host: string; dbName: string; pingMs: number; }'.
+app/routes/api/v1/mongodb/endpoints/_endpoints.tsx(118,43): error TS2339: Property 'error' does not exist on type 'MongoProbeResult'.
+  Property 'error' does not exist on type '{ ok: true; host: string; dbName: string; pingMs: number; }'.
+app/routes/api/v1/mongodb/endpoints/_endpoints.tsx(123,44): error TS2339: Property 'error' does not exist on type '{ ok: true; endpoint: SavedMongoEndpoint; } | { ok: false; error: string; }'.
+  Property 'error' does not exist on type '{ ok: true; endpoint: SavedMongoEndpoint; }'.
+app/routes/api/v1/oauth/sandbox/_sandbox.tsx(72,68): error TS2322: Type 'string | { error: string; }' is not assignable to type 'string'.
+  Type '{ error: string; }' is not assignable to type 'string'.
+app/routes/docs/DocsLayout.tsx(499,33): error TS2554: Expected 1 arguments, but got 0.
+app/routes/docs/DocsLayout.tsx(508,7): error TS2322: Type 'number' is not assignable to type 'Timeout'.
+app/smarts/index.tsx(253,16): error TS2448: Block-scoped variable 'opts' used before its declaration.
+app/smarts/index.tsx(326,29): error TS2339: Property 'uuid' does not exist on type 'any[]'.
+app/smarts/index.tsx(449,25): error TS2538: Type 'String' cannot be used as an index type.
+app/smarts/index.tsx(1255,24): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(1273,42): error TS2367: This comparison appears to be unintentional because the types '"string" | "number" | "bigint" | "boolean" | "symbol" | "undefined" | "function"' and '"array"' have no overlap.
+app/smarts/index.tsx(1400,3): error TS2339: Property 'options' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1404,3): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1405,3): error TS2339: Property 'push' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1406,3): error TS2339: Property 'async' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1489,3): error TS2339: Property 'option' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1493,3): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1494,3): error TS2339: Property 'retIndex' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1582,14): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1593,28): error TS2339: Property 'options' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1593,77): error TS2339: Property 'obj' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1593,112): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1603,14): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1624,13): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1633,31): error TS2339: Property 'options' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1633,80): error TS2339: Property 'obj' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1633,115): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1643,13): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1659,11): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1676,7): error TS2353: Object literal may only specify known properties, and 'option' does not exist in type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1692,35): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1719,29): error TS2339: Property 'option' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1719,77): error TS2339: Property 'obj' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1719,112): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1720,45): error TS2353: Object literal may only specify known properties, and 'option' does not exist in type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1734,5): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1737,30): error TS2339: Property 'options' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1737,79): error TS2339: Property 'obj' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1737,114): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1740,17): error TS2353: Object literal may only specify known properties, and 'option' does not exist in type '{ list?: any; keys?: string[]; }'.
+app/smarts/index.tsx(1744,34): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1753,28): error TS2339: Property 'option' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1753,118): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1757,7): error TS2353: Object literal may only specify known properties, and 'option' does not exist in type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1787,29): error TS2339: Property 'options' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1787,120): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1794,7): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1797,5): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1800,31): error TS2339: Property 'option' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1800,121): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1801,7): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1804,5): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1813,32): error TS2339: Property 'options' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1813,123): error TS2339: Property 'keymatchtype' does not exist on type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/smarts/index.tsx(1816,9): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1819,7): error TS2554: Expected 6 arguments, but got 5.
+app/smarts/index.tsx(1942,17): error TS2407: The right-hand side of a 'for...in' statement must be of type 'any', an object type or a type parameter, but here has type 'string'.
+app/smarts/index.tsx(1943,5): error TS2322: Type 'number' is not assignable to type 'string'.
+app/smarts/index.tsx(1945,9): error TS2365: Operator '>' cannot be applied to types 'string' and 'number'.
+app/smarts/index.tsx(1945,18): error TS2365: Operator '<' cannot be applied to types 'string' and 'number'.
+app/smarts/index.tsx(1946,29): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+app/smarts/index.tsx(2025,10): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2041,10): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2053,5): error TS2322: Type 'string' is not assignable to type 'any[]'.
+app/smarts/index.tsx(2112,21): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2222,5): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2335,11): error TS2794: Expected 1 arguments, but got 0. Did you forget to include 'void' in your type argument to 'Promise'?
+app/smarts/index.tsx(2345,28): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2359,30): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2371,15): error TS2794: Expected 1 arguments, but got 0. Did you forget to include 'void' in your type argument to 'Promise'?
+app/smarts/index.tsx(2404,13): error TS2794: Expected 1 arguments, but got 0. Did you forget to include 'void' in your type argument to 'Promise'?
+app/smarts/index.tsx(2419,51): error TS2339: Property 'match' does not exist on type 'never'.
+app/smarts/index.tsx(2421,17): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2422,12): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2425,17): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2427,10): error TS2532: Object is possibly 'undefined'.
+app/smarts/index.tsx(2430,11): error TS2339: Property 'list' does not exist on type '{}'.
+app/smarts/index.tsx(2430,48): error TS2339: Property 'defaultValue' does not exist on type '{}'.
+app/smarts/index.tsx(2434,5): error TS2353: Object literal may only specify known properties, and 'retIndex' does not exist in type '{ list?: any; obj?: boolean; keys?: string[]; }'.
+app/webPlatform/svgFilterFixtures.ts(134,9): error TS2339: Property 'type' does not exist on type '{ filterUnits: string; primitiveUnits: string; x: number; y: number; width: number; height: number; } | { result?: string; x?: number; y?: number; width?: number; height?: number; }'.
+  Property 'type' does not exist on type '{ filterUnits: string; primitiveUnits: string; x: number; y: number; width: number; height: number; }'.
+app/webPlatform/svgFilterFixtures.ts(135,31): error TS2339: Property 'amplitude' does not exist on type '{ filterUnits: string; primitiveUnits: string; x: number; y: number; width: number; height: number; } | { result?: string; x?: number; y?: number; width?: number; height?: number; }'.
+  Property 'amplitude' does not exist on type '{ filterUnits: string; primitiveUnits: string; x: number; y: number; width: number; height: number; }'.

@@ -1,0 +1,10 @@
+{
+  "evidence": [
+    "real successful proof response delayed across native cross-tab account switch: no display or retention",
+    "already displayed value and retention consent clear on native account switch",
+    "actual encryption completion delayed across account switch: atomic local retention cancelled"
+  ],
+  "encryptedRowsUnchanged": true,
+  "noCrossAccountRetention": true,
+  "errors": []
+}

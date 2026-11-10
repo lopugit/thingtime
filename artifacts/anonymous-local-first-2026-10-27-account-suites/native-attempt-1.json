@@ -1,0 +1,15 @@
+{
+  "api": {
+    "passed": true,
+    "receipt": "suites/suite-install-result.json"
+  },
+  "browser": {
+    "passed": false,
+    "stage": "canonical suite seeding before UI navigation",
+    "status": 409,
+    "request": "POST /api/v1/webpages/suites/install",
+    "diagnosis": "Fixture hardcoded data plane; actual response detail not captured. Investigate verified plane before bounded retry."
+  },
+  "cleanup": "suites/cleanup.json",
+  "oom": false
+}

@@ -80,7 +80,7 @@ test('activation negotiates both additive capabilities and rejects prior or brea
 test('scheduled writes negotiate additive support and automatic batches bind only verified days', () => {
 	const each = { ttExpr: ['civilDateRange', '$input.day', '$step.1.crystal.count'] };
 	const steps = [{ op: 'things.ensure', key: '$item', each }];
-	assert.equal(actionActivationWriteMinimum({ steps }, 'api.things'), '1.57.0');
+	assert.equal(actionActivationWriteMinimum({ steps }, 'api.things'), '1.58.0');
 	assert.equal(actionActivationWriteMinimum({ activationAction: authored }, 'api.things'), '1.56.0');
 	assert.equal(actionActivationWriteMinimum({ activationAction: { ...authored, cutoffTime: '14:30' } }, 'api.things-update'), '1.23.0');
 	assert.equal(stableActivationEnsureBatch('$item', each, 'day'), true);

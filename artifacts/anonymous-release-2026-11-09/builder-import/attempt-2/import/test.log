@@ -1,0 +1,22 @@
+✖ normal Things importer retains the complete exact anonymous draft after reload (850.267613ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 887.081692
+
+✖ failing tests:
+
+test at ../../tmp/qa-import.test.mjs:13:1
+✖ normal Things importer retains the complete exact anonymous draft after reload (850.267613ms)
+  page.goto: Download is starting
+  Call log:
+    - navigating to "http://127.0.0.1:18724/things", waiting until "load"
+  
+      at TestContext.<anonymous> (/tmp/qa-import.test.mjs:61:14) {
+    name: 'Error',
+    log: [ '  - navigating to "http://127.0.0.1:18724/things", waiting until "load"' ]
+  }

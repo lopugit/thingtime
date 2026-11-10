@@ -133,11 +133,11 @@ export const transcribeRecordingAudio = async (
 
 export const analyzeRecording = async (transcript: string, beforeSend?: () => Promise<void>, ownerId?: string) => {
 	const preferences = await getAiPreferredModelWaterfall();
-  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(ownerId), RECORDING_INSIGHTS_PROMPT);
 	const attempt = async (connection: LopuVaultProviderRecord | undefined, signal?: AbortSignal) => {
 		if (connection?.provider === 'anthropic') {
 			const choice = resolveAiPreferredAnthropicChoice(preferences, process.env.LOPU_CLAUDE_MODEL || 'claude-sonnet-4-6');
 			const api = createClaudeOAuthClient({ token: connection.token });
+			const system = composeLopuSurfacePrompt(await getLopuPromptSettings(ownerId, { modelId: connection.model || choice.model }), RECORDING_INSIGHTS_PROMPT);
 			const result = await api.messages.create(
 				{
 					model: connection.model || choice.model,
@@ -157,11 +157,13 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 		}
 		const api = client(connection);
 		const choice = resolveAiPreferredOpenAiChoice(preferences);
+		const modelId = connection?.model || choice?.model || process.env.LOPU_OPENAI_MODEL?.trim() || 'gpt-4o-mini';
+		const system = composeLopuSurfacePrompt(await getLopuPromptSettings(ownerId, { modelId }), RECORDING_INSIGHTS_PROMPT);
 		const usePreferredTuning = !connection?.model || connection.model === choice?.model;
 		const effort = toOpenAiReasoningEffort(usePreferredTuning ? choice?.effort ?? null : null);
 		const result = await api.chat.completions.create(
 			{
-				model: connection?.model || choice?.model || process.env.LOPU_OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+				model: modelId,
 				...(effort ? { reasoning_effort: effort } : {}),
 				...(usePreferredTuning && choice?.speed === 'fast' ? { service_tier: 'priority' as const } : {}),
 				max_completion_tokens: 6000,

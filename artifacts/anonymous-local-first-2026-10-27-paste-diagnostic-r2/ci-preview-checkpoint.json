@@ -1,0 +1,174 @@
+{
+  "source": "99448760f5b49638a9979a81eda55805e994b709",
+  "scope": "Previously pushed product checkpoint; not a claim about later fixture/document commits. Preview checks are HTTP only, not deployed functional acceptance.",
+  "ci": {
+    "jobId": "pr1000-ci-99448760f5b4",
+    "sha": "99448760f5b49638a9979a81eda55805e994b709",
+    "pid": 69272,
+    "required": [
+      "Web CI",
+      "Lopu CodeQL all branches"
+    ],
+    "startedAt": "2026-10-26T21:27:06.144043+00:00",
+    "deadlineSeconds": 1200,
+    "cancellation": "SIGTERM or SIGINT to this PID",
+    "status": "success",
+    "observedAt": "2026-10-26T21:39:28.556578+00:00",
+    "runs": {
+      "Web CI": {
+        "conclusion": "success",
+        "createdAt": "2026-10-26T21:26:39Z",
+        "databaseId": 40404392986,
+        "headSha": "99448760f5b49638a9979a81eda55805e994b709",
+        "status": "completed",
+        "url": "https://github.com/lopugit/thingtime/actions/runs/40404392986",
+        "workflowName": "Web CI"
+      },
+      "Lopu CodeQL all branches": {
+        "conclusion": "success",
+        "createdAt": "2026-10-26T21:32:14Z",
+        "databaseId": 40405182238,
+        "headSha": "99448760f5b49638a9979a81eda55805e994b709",
+        "status": "completed",
+        "url": "https://github.com/lopugit/thingtime/actions/runs/40405182238",
+        "workflowName": "Lopu CodeQL all branches"
+      }
+    },
+    "endedAt": "2026-10-26T21:39:28.557422+00:00"
+  },
+  "deployments": [
+    {
+      "created_at": "2026-10-26T21:30:12Z",
+      "environment": "develop-pr-1000",
+      "id": 7344066565,
+      "sha": "99448760f5b49638a9979a81eda55805e994b709",
+      "statuses_url": "https://api.github.com/repos/lopugit/thingtime/deployments/7344066565/statuses"
+    }
+  ],
+  "statuses": [
+    {
+      "created_at": "2026-10-26T21:32:09Z",
+      "description": "PR preview is ready at the exact current SHA",
+      "environment_url": "https://pr-1000.previews.dev.thingtime.com",
+      "state": "success",
+      "target_url": "https://vercel.com/lopugits-projects/thingtime/dpl_8iWDbN2rX4nTrd5wBFZHgx5AvAT2"
+    },
+    {
+      "created_at": "2026-10-26T21:31:53Z",
+      "description": "Deploying exact SHA with custom-develop credentials and Preview gateway",
+      "environment_url": "https://thingtime-fnqsklgrp-lopugits-projects.vercel.app",
+      "state": "in_progress",
+      "target_url": "https://vercel.com/lopugits-projects/thingtime/dpl_8iWDbN2rX4nTrd5wBFZHgx5AvAT2"
+    }
+  ],
+  "immutable": {
+    "source": "99448760f5b49638a9979a81eda55805e994b709",
+    "origin": "https://thingtime-fnqsklgrp-lopugits-projects.vercel.app",
+    "observedAt": "2026-10-26T21:37:50.223358+00:00",
+    "scope": "Public HTTP only; source association comes from current GitHub PR deployment metadata, not an in-page source marker",
+    "index": {
+      "status": 200,
+      "bytes": 16687,
+      "sha256": "c6a006f6826565e9a22669f54a11d2c198bfea885114887d920d6cbfe75d1948",
+      "cacheControl": "private, no-store",
+      "appShell": true,
+      "commitMarkerPresent": false
+    },
+    "capabilities": {
+      "status": 200,
+      "bytes": 74268,
+      "sha256": "822319e3442ea1a84833c0c2b1b3901811c4b2c1cc309ebf6bb39dbee0a747a2",
+      "cacheControl": "private, no-store",
+      "origin": "https://thingtime-fnqsklgrp-lopugits-projects.vercel.app",
+      "features": {
+        "api.webpages-suites-install": {
+          "version": "1.7.0"
+        },
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    "scripts": [
+      {
+        "path": "/tt-boot.js",
+        "status": 200,
+        "bytes": 3822,
+        "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+        "cacheControl": "public, max-age=0, must-revalidate",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      },
+      {
+        "path": "/assets/index-Bzdj5Zvu.js",
+        "status": 200,
+        "bytes": 974423,
+        "sha256": "e4456e11cb3e9ca0824e6088aa4e50f759a53e1a4c1dd510da8302b92d30a15f",
+        "cacheControl": "public, max-age=31536000, immutable",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      }
+    ]
+  },
+  "alias": {
+    "source": "99448760f5b49638a9979a81eda55805e994b709",
+    "origin": "https://pr-1000.previews.dev.thingtime.com",
+    "observedAt": "2026-10-26T21:37:50.247192+00:00",
+    "scope": "Public HTTP only; source association comes from current GitHub PR deployment metadata, not an in-page source marker",
+    "index": {
+      "status": 200,
+      "bytes": 16258,
+      "sha256": "9d1d80ae6bca25436179f546559107a9f1dca29297a5be4f9a2a9afcc48aa79e",
+      "cacheControl": "private, no-store",
+      "appShell": true,
+      "commitMarkerPresent": false
+    },
+    "capabilities": {
+      "status": 200,
+      "bytes": 74254,
+      "sha256": "2717c5ae0d67c338c4401a70dc33808e4340d213e19233a4132bb40213c5d7f0",
+      "cacheControl": "private, no-store",
+      "origin": "https://pr-1000.previews.dev.thingtime.com",
+      "features": {
+        "api.webpages-suites-install": {
+          "version": "1.7.0"
+        },
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    "scripts": [
+      {
+        "path": "/tt-boot.js",
+        "status": 200,
+        "bytes": 3822,
+        "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+        "cacheControl": "public, max-age=0, must-revalidate",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      },
+      {
+        "path": "/assets/index-Bzdj5Zvu.js",
+        "status": 200,
+        "bytes": 974423,
+        "sha256": "e4456e11cb3e9ca0824e6088aa4e50f759a53e1a4c1dd510da8302b92d30a15f",
+        "cacheControl": "public, max-age=31536000, immutable",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      }
+    ]
+  }
+}

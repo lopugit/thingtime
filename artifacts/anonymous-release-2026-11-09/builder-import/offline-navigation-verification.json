@@ -1,0 +1,134 @@
+{
+  "browser": "156.0.8078.4",
+  "playwrightCore": "1.61.1",
+  "compiledStatic": {
+    "indexSha256": "d0ee80cb75a42e2edf63c30eb45fd0fabac6236a6bdda93f0b27810a675d4467",
+    "manifestSha256": "27c73ac91a11ff57a8da87735e831a83e42fcfcaa5295a7a62bed1b968d6633f",
+    "manifestAssetHash": "200fe41e0e621321e8ff85c53ea1f96ee96096e00681a9e7e2b49b43bd4a06fc",
+    "manifestAssetCount": 282,
+    "baselineOfflineShellModuleSha256": "3db9db7f91d4581a7abb28be1495d2a99487c66819ca88399248e884acb55992",
+    "fixedOfflineShellModuleSha256": "f8f4af9216266efd22fbdc9d04ebd116b7f8d4806dd1abf9297620f4f27f612e"
+  },
+  "boundary": {
+    "chromiumSandbox": true,
+    "isolatedFreshContexts": true,
+    "containerNetwork": "none",
+    "mounts": [],
+    "publishedPorts": {},
+    "readOnlyRootfs": true,
+    "runtimeUser": "1001:1001",
+    "remainingOwnedContainersByRun": {
+      "ordinary": [],
+      "baseline": [],
+      "firstFix": [],
+      "final": []
+    },
+    "runtime": "Retained compiled static application with a task-owned loopback server. The importer ran with a synthetic anonymous root DTO. The update comparison used a minimal bootstrap page to isolate service-worker document handling."
+  },
+  "ordinaryCompleteShell": {
+    "cdpOfflineQueryReload": {
+      "path": "/things?view=grid&display=name&sort=newest&group=none&kind=all",
+      "fromServiceWorker": true,
+      "serviceWorkerResponseSource": "cache-storage",
+      "status": 200,
+      "mimeType": "text/html"
+    },
+    "tcpResetAfterImport": {
+      "path": "/things",
+      "fromServiceWorker": true,
+      "serviceWorkerResponseSource": "cache-storage",
+      "status": 200,
+      "mimeType": "text/html"
+    },
+    "tcpResetInFreshPageAfterWorkerStop": {
+      "path": "/things",
+      "fromServiceWorker": true,
+      "serviceWorkerResponseSource": "cache-storage",
+      "status": 200,
+      "mimeType": "text/html"
+    }
+  },
+  "prematureOfflineReadiness": {
+    "legacyWaitResult": false,
+    "controllerAndCacheAtReturn": {
+      "controller": null,
+      "online": false,
+      "href": "/things?view=grid&display=name&sort=newest&group=none&kind=all",
+      "cache": [
+        {
+          "key": "thingtime:offline-shell:v1:200fe41e0e621321e8ff85c53ea1f96ee96096e00681a9e7e2b49b43bd4a06fc",
+          "ready": false,
+          "shell": false,
+          "assets": 10
+        }
+      ]
+    },
+    "installationResult": "Fixture held the shell download and answered HTTP 503.",
+    "tcpResetNavigation": {
+      "error": "net::ERR_FAILED",
+      "canceled": false
+    },
+    "navigationAfterCompleteInstall": {
+      "fromServiceWorker": true,
+      "status": 200,
+      "compiledShell": true
+    }
+  },
+  "replacementWorkerWithIncompleteShell": {
+    "installationResult": "Fixture changed the worker and manifest and answered HTTP 503 for the new shell.",
+    "baselineWorkerAndCaches": {
+      "controller": "activated",
+      "online": false,
+      "href": "/things?view=grid&display=name&sort=newest&group=none&kind=all",
+      "cache": [
+        {
+          "key": "thingtime:offline-shell:v1:200fe41e0e621321e8ff85c53ea1f96ee96096e00681a9e7e2b49b43bd4a06fc",
+          "ready": true,
+          "shell": true,
+          "assets": 283
+        },
+        {
+          "key": "thingtime:offline-shell:v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ready": false,
+          "shell": false,
+          "assets": 0
+        }
+      ]
+    },
+    "baselineDocumentFailure": {
+      "error": "net::ERR_FAILED",
+      "canceled": false
+    },
+    "baselineWorkerError": {
+      "message": "Uncaught (in promise) TypeError: Failed to fetch",
+      "path": "/offline-shell.mjs",
+      "line": 88,
+      "versionId": "1"
+    },
+    "fixedDocument": {
+      "path": "/things",
+      "fromServiceWorker": true,
+      "serviceWorkerResponseSource": "cache-storage",
+      "status": 200,
+      "mimeType": "text/html"
+    },
+    "fixedDocumentExactCompiledBytes": true
+  },
+  "correctedOfflineImporter": {
+    "fixture": "Normal Import… and Import private copies controls, retained exported fixture, real socket resets, no reconnection fallback.",
+    "coldDocument": {
+      "path": "/things",
+      "fromServiceWorker": true,
+      "serviceWorkerResponseSource": "cache-storage",
+      "status": 200,
+      "mimeType": "text/html"
+    },
+    "readback": {
+      "records": 2,
+      "anonymousOnly": true,
+      "renderedExactText": true
+    },
+    "earlierDiagnostic": "An earlier run got the expected CacheStorage document but timed out waiting for the UI after waiting only for navigation commit. The final run waited for the load event and verified exact local records and rendered text."
+  },
+  "historicalAttribution": "The earlier attempts lack a direct cache readback and post-failure worker trace. The two controlled reproductions do not identify which mechanism caused either historical failure."
+}

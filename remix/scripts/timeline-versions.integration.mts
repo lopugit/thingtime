@@ -15,15 +15,17 @@ const base = process.env.TIMELINE_TEST_BASE;
 if (!base) throw new Error('Set TIMELINE_TEST_BASE to the isolated local test server');
 if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Timeline integration only runs on a disposable local server');
 const status = await fetch(`${base}/api/v1/mongodb/status`).then(response => response.json());
-assert.equal(status.host, '127.0.0.1:20337');
-assert.equal(status.replicaSet, 'timeline-rs');
+assert.equal(status.host, process.env.TIMELINE_TEST_MONGO_HOST || '127.0.0.1:20337');
+assert.equal(status.replicaSet, process.env.TIMELINE_TEST_REPLICA_SET || 'timeline-rs');
 assert.equal(status.custom, false);
 assert.equal(status.connected, true);
 
 let cookie = '';
+const fixtureThings = new Set<string>();
 async function call(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', authenticated = true) {
 	const response = await fetch(`${base}${path}`, { method, headers: { ...(authenticated && cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 	const data = await response.json();
+	if (path === '/api/v1/things' && method === 'POST' && data.ok && data.thing?.id) fixtureThings.add(data.thing.id);
 	return { response, data };
 }
 const username = `timeline-${randomUUID().slice(0, 8)}`;
@@ -36,6 +38,8 @@ assert.ok(ownerId);
 const query = `ownerId=${encodeURIComponent(ownerId)}&dataPlane=home`;
 assert.equal((await call(`/api/v1/timeline?ownerId=${encodeURIComponent(ownerId)}`)).data.dataPlane, 'home');
 
+const fixtureCookie = cookie;
+try {
 const created = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Versions acceptance', a: 1, b: 1 }, visibility: 'private' });
 assert.equal(created.data.ok, true);
 let thing = created.data.thing;
@@ -97,7 +101,8 @@ assert.equal(cleared.name, null); assert.equal(cleared.entry!.event.after, null)
 assert.deepEqual((await post(clear)).data.name, null, 'a clear replays'); assert.deepEqual((await entry(later.id)).data.names, []);
 const noopClear: TimelineVersionNameCommand = { ...clear, operationId: randomUUID(), expectedRevision: 0 };
 assert.deepEqual(parseTimelineVersionNameResult((await post(noopClear)).data, ownerId, noopClear), { ok: true, name: null, entry: null }, 'clearing an absent name is a no-op');
-const again = parseTimelineVersionNameResult((await post({ ...noopClear, operationId: randomUUID(), name: 'Again' })).data, ownerId, { ...noopClear, name: 'Again' });
+const againCommand: TimelineVersionNameCommand = { ...noopClear, operationId: randomUUID(), name: 'Again' };
+const again = parseTimelineVersionNameResult((await post(againCommand)).data, ownerId, againCommand);
 assert.equal(again.name!.revision, 3, 'revisions stay monotonic across a clear');
 assert.equal((await post({ command: 'name-version', operationId: randomUUID(), eventId: later.id, thingId: thing.id, name: 'Stale life', expectedRevision: 1 })).response.status, 409, 'a rename from the earlier life cannot land');
 console.log('Named versions: name, replay, CAS, eligibility, rename, concurrent create, clear and reads');
@@ -188,3 +193,18 @@ if (limited) {
 } else console.log('Export allowance not exhausted within 32 requests (an admin override may raise it); skipping the 429 check');
 assert.deepEqual((await history()).data.entries.find((item: any) => item.event.id === middle.id).event, middle, 'exports never change history');
 console.log('PASS: named versions, undo this change, compare with now and version export over the real API');
+
+} finally {
+ // Only Things created by this test are eligible for cleanup, even on failure.
+ cookie = fixtureCookie;
+ for (const id of fixtureThings) {
+  try {
+   const found = await call(`/api/v1/things?id=${encodeURIComponent(id)}`);
+   if (found.response.status === 404) continue;
+   assert.equal((await call('/api/v1/things', { id }, 'DELETE')).data.ok, true);
+  } catch (error) {
+   console.error('Disposable Timeline fixture cleanup failed:', id, error instanceof Error ? error.message : 'unknown error');
+   process.exitCode = 1;
+  }
+ }
+}

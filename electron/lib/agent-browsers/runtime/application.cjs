@@ -71,6 +71,12 @@ async function serveApplication({ profilePath = '/home/pwuser', port = Number(pr
 }
 
 async function startApplication(sessionId, requestedOrigin, fixtureUsername) {
+  let prepareAdministrator = false, configureVault = false;
+  if (requestedOrigin && typeof requestedOrigin === 'object') {
+    ({ prepareAdministrator = false, configureVault = false } = requestedOrigin);
+    requestedOrigin = undefined;
+  }
+  if (typeof prepareAdministrator !== 'boolean' || typeof configureVault !== 'boolean') throw new Error('Fixture switches must be explicit.');
   if (fixtureUsername !== undefined && (!requestedOrigin || !/^[a-z0-9][a-z0-9._-]{2,31}$/.test(fixtureUsername))) throw new Error('Use an exact isolated fixture username.');
   const options = applicationOptions(sessionId, requestedOrigin);
   const { MongoClient } = require('mongodb');
@@ -108,6 +114,7 @@ async function startApplication(sessionId, requestedOrigin, fixtureUsername) {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:27017/thingtime?replicaSet=${replicaSet}`,
     ...options.environment
   };
+  if (configureVault) applicationEnv.THINGTIME_USER_VAULT_KEY = randomBytes(32).toString('base64url');
   const launchApi = () => child(process.execPath, ['-e', "require('/opt/thingtime-browser/application.cjs').serveApplication().catch(()=>process.exit(1))"], applicationEnv);
   let api = launchApi();
   const ready = async () => { await until(async () => {
@@ -119,6 +126,33 @@ async function startApplication(sessionId, requestedOrigin, fixtureUsername) {
   }, 'The private app failed its configuration preflight.', 90000);
   await verifyApplicationAssets(fetch, options.origin); };
   await ready();
+  let administrator;
+  if (prepareAdministrator) {
+    // Register through the normal route BEFORE adding this generated username
+    // to the allowlist. Reserved admin usernames cannot register, and fixture
+    // setup must not bypass that policy or manufacture database roles.
+    const username = `tt-fixture-admin-${randomBytes(6).toString('hex')}`;
+    const password = `Task-${randomBytes(32).toString('base64url')}-9a!`;
+    const request = (pathname, body) => fetch(options.origin + pathname, { method: 'POST', redirect: 'error',
+      headers: { Origin: options.origin, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const registration = await request('/api/v1/auth/register', { username, password, email: `${username}@example.test` });
+    const registered = await registration.json();
+    if (!registration.ok || !registered.user?.id || registered.user.isAdmin !== false) {
+      throw new Error('The disposable administrator must start as an ordinary API-created account.');
+    }
+    await fs.mkdir('/home/pwuser/objects', { mode: 0o700 });
+    applicationEnv.ADMIN_USERNAMES = username;
+    applicationEnv.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = '/home/pwuser/objects';
+    applicationEnv.THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN = options.origin;
+    api = await restartApplicationChild(api, launchApi);
+    await ready();
+    const login = await request('/api/v1/login', { username, password });
+    const authenticated = await login.json();
+    if (!login.ok || authenticated.user?.id !== registered.user.id || authenticated.user.isAdmin !== true) {
+      throw new Error('The API-created disposable administrator did not retain its identity.');
+    }
+    administrator = { base: options.origin, username, password, ownerId: registered.user.id };
+  }
   if (fixtureUsername !== undefined) {
     const approve = await bootstrapPrivateUploadFixture({ origin: options.origin, sessionId, restart: async username => {
       api = await restartApplicationChild(api, () => {
@@ -141,7 +175,7 @@ async function startApplication(sessionId, requestedOrigin, fixtureUsername) {
       if (!stopping) throw new Error('Fixture approval timed out.');
     })().catch(() => { if (!stopping) global.process.exit(1); });
   }
-  return { origin: options.origin, sessionId, database: 'private-ephemeral', credentials: 'generated-in-task' };
+  return { origin: options.origin, sessionId, database: 'private-ephemeral', credentials: 'generated-in-task', ...(administrator ? { administrator } : {}) };
 }
 
 function applicationHealthIsReady(responseOk, health, sessionId) {
@@ -160,6 +194,15 @@ async function verifyApplicationAssets(request = fetch, origin = ORIGIN) {
   if (!shells[0]?.startsWith('/assets/') || shells[0] !== shells[1]) throw new Error('The private app shell and client assets do not match. Rebuild with sync:nitro-template.');
   const script = await request(origin + shells[0], { method: 'HEAD', redirect: 'error', signal: AbortSignal.timeout(10000) });
   if (!script.ok || !/javascript/.test(script.headers.get('content-type') || '')) throw new Error('The private app entry module is missing.');
+  // A main Vite build clears dist before the independent renderer bundles are
+  // rebuilt. The SPA fallback can return HTML 200 for these missing scripts.
+  // Require the complete canonical client build before accepting a runtime.
+  for (const pathname of ['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js']) {
+    const response = await request(origin + pathname, { method: 'HEAD', redirect: 'error', signal: AbortSignal.timeout(10000) });
+    if (!response.ok || !/javascript/.test(response.headers.get('content-type') || '')) {
+      throw new Error(`The private app ${pathname} bundle is missing. Rebuild with build:client, sync:nitro-template and build:server.`);
+    }
+  }
 }
 
 // Test-only bootstrap through ordinary HTTP APIs. Session/signing material stays

@@ -1,0 +1,16 @@
+{
+  "body": "🦄\naudio-28774d85-7f2\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nA\naudio-author-d57b1ffc-0\n@audio-author-d57b1ffc-0 · \njust now\n🌐\nanyone can see this post\n\nTwo synthetic ordinary audio tracks.\n\nfixture-track-1.wav\n\n15.7 KiB · WAV audio · Track 1 of 2\n\nLoading...\nSave full file offline\n\nStreaming from Thingtime\n\nDownload original\n\nQUEUE · PLAYS NEXT AUTOMATICALLY\n\n1. fixture-track-1.wav\n2. fixture-track-2.wav\nDownload all · 2 files · 31.3 KiB\n0\nPost as\naudio-28774d85-7f2\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 95ms\n\nMongoDB: connected (5ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nAUDIO-28774D85-7F2\n\nProfile\n\nLog out\n\n✉️ email unverified",
+  "mountedAudioCount": 1,
+  "sourceCount": 1,
+  "old": {
+    "connected": true,
+    "paused": true,
+    "currentSrc": "http://127.0.0.1:18724/api/v1/attachments/content?id=att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+    "srcAttribute": null,
+    "sources": [
+      "/api/v1/attachments/content?id=att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d"
+    ],
+    "readyState": 4,
+    "networkState": 1
+  }
+}

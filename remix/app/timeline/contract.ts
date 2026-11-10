@@ -33,12 +33,19 @@ export type TimelineEvent = {
 	dependencies: TimelineDependency[];
 };
 
-/** Server-issued order; client timestamps are descriptive, never conflict rules.
+/** Client-authored versions retain draft provenance even after authority admission. */
+export const isClientDraftVersion = (event: TimelineEvent) => event.mode === 'draft' && event.source === 'client' && event.actorId === event.ownerId && event.clientId !== null;
+
+/** Authority-issued order; client timestamps are descriptive, never conflict rules.
+ * Browser-only workspaces issue receipts in their isolated local data plane.
+ * Those receipts never authorize account writes or enter account sync.
  * The server serializes acceptance per account/data-plane, so a pull cursor
  * cannot skip an earlier transaction which happened to commit late. */
 export type TimelineReceipt = { formatVersion: 1; eventId: string; ownerId: string; position: number; acceptedAt: string };
 export type TimelineEntry = { event: TimelineEvent; receipt: TimelineReceipt };
-export type TimelineScope = { ownerId: string; apiOrigin: string; dataPlane: string };
+/** Device/cache identity only. Delegation never enters a portable event or
+ * receipt and never grants remote authority. Direct sign-in keeps its old key. */
+export type TimelineScope = { ownerId: string; apiOrigin: string; dataPlane: string; delegatedBy?: string };
 
 const budget = { maxBytes: TIMELINE_EVENT_MAX_BYTES, maxDepth: 96, maxNodes: 200_000, sortKeys: true };
 const object = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -118,5 +125,6 @@ export function timelineScopeKey(scope: TimelineScope): string {
 	if (!id(scope.ownerId) || !id(scope.dataPlane)) throw new Error('Invalid Timeline scope');
 	const url = new URL(scope.apiOrigin);
 	if (!['https:', 'http:'].includes(url.protocol) || url.origin !== scope.apiOrigin) throw new Error('Invalid Timeline origin');
-	return JSON.stringify([scope.apiOrigin, scope.dataPlane, scope.ownerId]);
+	if (scope.delegatedBy !== undefined && (!id(scope.delegatedBy) || scope.delegatedBy === scope.ownerId)) throw new Error('Invalid Timeline principal');
+	return JSON.stringify([scope.apiOrigin, scope.dataPlane, scope.ownerId, ...(scope.delegatedBy === undefined ? [] : ['delegated', scope.delegatedBy])]);
 }

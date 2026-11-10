@@ -4,6 +4,7 @@ import { deleteAttachment } from '~/api/utils/attachments/attachments';
 // POST /api/v1/attachments/delete — delete an owned ready attachment.
 export const action = createAttachmentMutationAction({
 	rateKey: 'attachments.delete',
+	requestIdRequiresFullUser: true,
 	service: deleteAttachment
 });
 

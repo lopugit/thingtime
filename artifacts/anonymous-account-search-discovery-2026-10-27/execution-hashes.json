@@ -1,0 +1,11 @@
+{
+  "remix/app/components/Search/SearchPage.tsx": "868de7e8708e34639e373d5787c17f28981da78efa463cdc2f05aa13265b8517",
+  "remix/app/components/Search/searchResultSnapshot.ts": "681a65c38c81c1db378e9a69f1a4faa42f637dbddc121facbf9d8f5e862af50b",
+  "remix/app/components/Search/searchResultSnapshot.test.ts": "ca0a4ab554e7c5461c6c9ced52924e80bd3e8274ae226786817654286a265b8a",
+  "remix/app/local-workspace/accountSearchDiscovery.browser.test.ts": "54b477a234a3e831ec3c628e0e422cc2d038e53bb1216701c9b548f0a670c18f",
+  "remix/app/local-workspace/accountSearchDiscovery.browser.fixture.ts": "bb4a62f79ba63e652eb83f029934768cbaf06da7f33bbbefc58f84088b59eba0",
+  "artifacts/anonymous-account-search-discovery-2026-10-27/executed-test.mjs": "2e8cd36ce72a059ee5c4949f830cd908e09a9bb391bf25c0c72191579c6d9f2e",
+  "artifacts/anonymous-account-search-discovery-2026-10-27/run.cjs": "3293dc33492b3baa8e49db4ae68c93e3dc86df8de4bcaa05674f464558d080a5",
+  "artifacts/anonymous-account-search-discovery-2026-10-27/prepare.cjs": "db3a5ba412234b9abdfe8ddcac48767f7617f20d18b1981801ba9b46f6401d0f",
+  "tmp/continuation/audio-search-pre-review-app.tar.gz": "bd61db37b2765d68b817dfdc649dd30b62f39a67fd015441bceaac2519e4e425"
+}

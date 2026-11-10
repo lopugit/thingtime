@@ -1,0 +1,26 @@
+[
+  {
+    "id": "110c065f-2ff5-4d88-b21c-d4115f6cac4b",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adffb758b3e57bdbc14efd0\",\"home\"]",
+    "state": "synced",
+    "deleted": {
+      "id": "110c065f-2ff5-4d88-b21c-d4115f6cac4b",
+      "revision": 2,
+      "updatedAt": "2026-10-27T01:16:43.494Z"
+    },
+    "retryAt": 0,
+    "inFlight": null
+  },
+  {
+    "id": "52f4aa2b-592b-4370-830d-ce2e33217085",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adffb758b3e57bdbc14efd0\",\"home\"]",
+    "state": "synced",
+    "deleted": {
+      "id": "52f4aa2b-592b-4370-830d-ce2e33217085",
+      "revision": 1,
+      "updatedAt": "2026-10-27T01:16:43.325Z"
+    },
+    "retryAt": 0,
+    "inFlight": null
+  }
+]

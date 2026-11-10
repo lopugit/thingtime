@@ -4,6 +4,7 @@ import { cancelAttachmentUpload } from '~/api/utils/attachments/attachments';
 // POST /api/v1/attachments/uploads/abort — make bytes inaccessible, then refund.
 export const action = createAttachmentMutationAction({
 	rateKey: 'attachments.delete',
+	requestIdRequiresFullUser: true,
 	service: cancelAttachmentUpload
 });
 

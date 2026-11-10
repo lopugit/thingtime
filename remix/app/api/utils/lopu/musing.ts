@@ -406,11 +406,14 @@ export async function* streamLopuMusing(
   // One durable read serves every provider attempt in this musing;
   // getWaterfall catches internally and never throws.
   const choices = await getLopuModelChoices();
-  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(opts.ownerId), SYSTEM_PROMPT);
+  let promptSettings: Awaited<ReturnType<typeof getLopuPromptSettings>> | undefined;
 
   for (const provider of providerOrder()) {
     const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
     if (!key) continue;
+    const modelId = provider === 'claude' ? choices.claude.model : choices.openai?.model || process.env.LOPU_OPENAI_MODEL || 'gpt-4o-mini';
+    promptSettings ??= await getLopuPromptSettings(opts.ownerId, { modelId });
+    const system = composeLopuSurfacePrompt(promptSettings, SYSTEM_PROMPT);
     try {
       const gen =
         provider === 'claude'

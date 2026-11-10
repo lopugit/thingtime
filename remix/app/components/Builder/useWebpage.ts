@@ -1,3 +1,10 @@
+import { sitePageSeed } from '~/schemas/sitePages';
+import { useWorkspaceUser } from '../../hooks/useWorkspaceUser';
+import { useDataPlane } from '../../hooks/useDataPlane';
+import { rootIdentity } from '../../utils/rootIdentity';
+import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
+import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
+import { resolveLocalWebpage } from '../../local-workspace/api.client';
 import { isCivilTime } from '~/schemas/civilDates';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
@@ -41,6 +48,7 @@ export type ResolvedWebpage = {
 	page: { id: string; executionHeld?: boolean; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
+	activationReady?: boolean;
 	activationSchedule?: { cutoffTime: string; revision: string };
 };
 
@@ -67,6 +75,18 @@ export const loadWebpageClient = async (target: WebpageTarget, signal?: AbortSig
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
+		if (isAnonymousWorkspace()) {
+			const data = await resolveLocalWebpage(target);
+			return { status: 'ready', data: { page: data.page as unknown as ResolvedWebpage['page'], source: data.source, componentsByRef: buildComponentsByRef(data) } };
+		}
+		const account = currentAccountWorkspace();
+		if (account) {
+			const data = await resolveAccountWebpage(account, target);
+			return { status: 'ready', data: { page: data.page, source: data.source, componentsByRef: buildComponentsByRef(data),
+				activationReady: data.activationReady === true,
+				...(isCivilTime(data.activationSchedule?.cutoffTime) && typeof data.activationSchedule?.revision === 'string'
+					? { activationSchedule: data.activationSchedule } : {}) } };
+		}
 		await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include', signal });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
@@ -79,6 +99,7 @@ export const loadWebpageClient = async (target: WebpageTarget, signal?: AbortSig
 			data: {
 				page: data.page || null,
 				source: data.source || null,
+				activationReady: data.source === 'user',
 				componentsByRef: buildComponentsByRef(data),
 				...(isCivilTime(data.activationSchedule?.cutoffTime) && typeof data.activationSchedule?.revision === 'string'
 					? { activationSchedule: data.activationSchedule } : {})
@@ -198,12 +219,14 @@ export type UseWebpageDraft = {
 
 export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpageDraftOptions): UseWebpageDraft => {
 	const api = useApi();
-	const user = useCurrentUser();
+	const authenticatedUser = useCurrentUser();
+	const user = useWorkspaceUser();
+	const dataPlane = useDataPlane();
 	const timelineSession = useTimelineSession();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const editableOption = options?.editable;
-	const historyEditable = editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname));
+	const historyEditable = !!authenticatedUser?.id && (editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname)));
 
 	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(null);
 	const [loading, setLoading] = React.useState(!!target);
@@ -219,7 +242,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	const draftSnapshot = (value: WebpageBlock[]) => ({ crystal: { ...(resolvedRef.current?.page?.crystal ?? {}), blocks: value }, baseUpdatedAt: resolvedRef.current?.page?.updatedAt ?? null });
 
 	const targetKey = target ? JSON.stringify(target) : null;
-	const scopeKey = JSON.stringify([targetKey, user?.id || null, timelineSession.identity]);
+	const scopeKey = JSON.stringify([targetKey, user?.id || null, dataPlane, timelineSession.storage, rootIdentity.read().generation]);
 	const scopeRef = React.useRef(scopeKey);
 	scopeRef.current = scopeKey;
 	const [stateScope, setStateScope] = React.useState(scopeKey);
@@ -383,7 +406,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			// site/global targets must stamp their binding even when no seed doc
 			// existed to inherit it from (fresh deployments before the admin seed)
 			const siteRoute = crystalBase.siteRoute || (target.kind === 'path' ? target.path : undefined);
-			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : undefined);
+			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : target.kind === 'path' && sitePageSeed(target.path) ? `route-${sitePageSeed(target.path)!.key}` : undefined);
 			const crystal: WebpageCrystal = {
 				name: options?.name || crystalBase.name || 'Untitled page',
 				...(crystalBase.description ? { description: crystalBase.description } : {}),
@@ -402,25 +425,25 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (usesSourceInputReferences(blocks)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
-				else if (usesPageCollections(blocks)) await requireThingtimeCapability('api.webpages-resolve', PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve']);
-				else if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
-				if (usesAuthoredControls(blocks)) {
-					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
-					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
-					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
-				} else if (requiresCollectionPagingContract(blocks)) {
-					await requireThingtimeCapability('api.things', '1.49.0');
-					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
-				} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
-					await requireThingtimeCapability('api.things', '1.47.0');
-					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
-				} else if (requiresEditableIntrinsicContract(blocks)) {
-					await requireThingtimeCapability('api.things', '1.44.0');
-					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
+				// Device saves validate locally; only remote transport negotiates.
+				if (!isAnonymousWorkspace() && !currentAccountWorkspace()) {
+					if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+					if (usesAuthoredControls(blocks)) {
+						await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
+						await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update']);
+					} else if (requiresCollectionPagingContract(blocks)) {
+						await requireThingtimeCapability('api.things', '1.49.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.18.0');
+					} else if (requiresEditableIntrinsicContract(blocks, ['tt-upload'])) {
+						await requireThingtimeCapability('api.things', '1.47.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.16.0');
+					} else if (requiresEditableIntrinsicContract(blocks)) {
+						await requireThingtimeCapability('api.things', '1.44.0');
+						if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
+					} else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
+					else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				}
-				else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
-				else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {
@@ -443,6 +466,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 						prev
 							? {
 								...prev,
+								activationReady: false,
+								activationSchedule: undefined,
 								page: {
 									...prev.page!,
 									crystal,

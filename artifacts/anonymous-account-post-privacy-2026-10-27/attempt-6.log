@@ -1,0 +1,41 @@
+Current package ready; running account-privacy
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+✖ owner changes a public account post to private and edits it offline before reconnect (50354.762223ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50469.52755
+
+✖ failing tests:
+
+test at ../account-privacy.test.mjs:10:1
+✖ owner changes a public account post to private and edits it offline before reconnect (50354.762223ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('[data-thing-id="df84c72b-0624-4ece-a6e9-5e3558d4571c"]').getByText('Private body edited offline and retained after a cold reload.', { exact: true }) to be visible
+
+      at TestContext.<anonymous> (/tmp/check/account-privacy.test.mjs:88:86) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('[data-thing-id="df84c72b-0624-4ece-a6e9-5e3558d4571c"]').getByText('Private body edited offline and retained after a cold reload.', { exact: true }) to be visible` ]
+  }
+Container operation failed: 1

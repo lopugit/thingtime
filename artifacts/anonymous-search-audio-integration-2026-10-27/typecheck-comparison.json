@@ -1,0 +1,12 @@
+{
+  "baseline": "tmp/continuation/feed-membership-typecheck.log",
+  "current": "tmp/continuation/search-audio-typecheck-final-fixture.log",
+  "baselineCount": 91,
+  "currentCount": 91,
+  "added": [],
+  "removed": [],
+  "sameNormalizedDiagnostics": true,
+  "clean": false,
+  "exitCode": 2,
+  "scope": "Product and Search source unchanged. Later audio fixture-only changes retain separate lint/native execution evidence."
+}

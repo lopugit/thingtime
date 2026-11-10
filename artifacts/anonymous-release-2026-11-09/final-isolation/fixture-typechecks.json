@@ -1,0 +1,34 @@
+{
+  "source": {
+    "accountPosts.browser.test.ts": "364e11537f4ea40c78e0f1ec12194b1ec16fba46ae559683661e14af54ebf1c6",
+    "characterProfileSync.browser.test.ts": "797cdbcac1d109a684ce2f611529fea2e1bdb9db158a25faf5fb151b198184eb",
+    "providerIdentity.browser.test.ts": "1abfa8911fc6a5c5e0a7ca666425c3815e2a15fc6f534d5fbfaa0c29edebeab6"
+  },
+  "commands": [
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9"
+    }
+  ],
+  "scope": "Final fixture-source corrections only; compiled runtime unchanged from published recovery checkpoint 4492bc7e."
+}

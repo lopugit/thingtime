@@ -1,5 +1,9 @@
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { subscribeWorkspaceStorage, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
 import { CharacterComposer } from '~/components/Characters/CharacterComposer';
-import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useCharacterScope } from '~/components/Characters/CharacterScope';
+import { characterContentPath } from '~/components/Characters/CharacterContentScope';
+import { useNavigate } from 'react-router';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
 import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
@@ -9,7 +13,8 @@ import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { withPostRequestDeadline } from '~/hooks/postRequest';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import {
 	MediaLayoutCanvas,
@@ -168,9 +173,10 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const user = useCurrentUser();
-  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || props.initialDraft?.id || 'new'}:${props.subspace?.id || ''}`} {...props} />;
-  return props.editPost || props.initialDraft ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
+  const user = useWorkspaceUser();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  const composer = <AccountPostComposer key={`${identity}:${user?.id || 'guest'}:${props.editPost?.id || props.parentId || props.initialDraft?.id || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost || props.initialDraft ? composer : <CharacterComposer key={`${identity}:${user?.id || 'guest'}`}>{composer}</CharacterComposer>;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;
@@ -183,7 +189,10 @@ const AccountPostComposer = (props: PostComposerProps) => {
 	const attachmentPurpose = isComment || (isEdit && (editPost?.thingtime || []).includes('comment')) ? 'comment' : 'post';
 
   const api = useApi();
-	const user = useCurrentUser();
+  const dataPlane = useDataPlane();
+	const user = useWorkspaceUser();
+  const character = useCharacterScope();
+  const navigate = useNavigate();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
@@ -218,7 +227,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const [condition, setCondition] = React.useState<string>(editPost?.listing?.condition || '');
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
-  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
   // subspace vocabulary: headline + destination + flair. Locked to the page's
   // subspace when one is passed; otherwise the feed composer offers the
   // viewer's joined subspaces (lazy-loaded on first expand).
@@ -238,7 +247,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   // …and the circle to come back to when the picker is abandoned. Seeded like
   // `visibility` above so a brand-new post still falls back to 🌐 Public,
   // while an edit falls back to whatever the post actually was.
-  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
+  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -505,7 +514,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   // the viewer's joined subspaces for the destination picker — loaded once,
   // only for a top-level composer with no page-provided subspace
   React.useEffect(() => {
-    if (!expanded || isComment || subspace || mySubspaces || !user) return;
+    if (!expanded || isComment || subspace || mySubspaces || !user || user.localOnly || user.offline || navigator.onLine === false) return;
     let cancelled = false;
     api.v1.subspaces
       .list({ mine: true, limit: 50 })
@@ -521,7 +530,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     };
     // api.v1.subspaces.list is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, isComment, subspace, mySubspaces, user?.id]);
+  }, [expanded, isComment, subspace, mySubspaces, user?.id, user?.offline]);
   const activeSubspace: SubspaceComposerContext | null =
     subspace || (subspaceId ? mySubspaces?.find((entry) => entry.id === subspaceId) || null : null);
   const flairOptions = (activeSubspace?.flairs || []).filter((flair) => !flair.modOnly || activeSubspace?.canModerate);
@@ -536,7 +545,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     editAttachments, legacyImages, pendingSubmission: pendingPostSubmissionRef.current
   });
   const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : props.initialDraft ? `post:incoming:${props.initialDraft.id}` : `post:new:${subspace?.id || ''}`;
-  const accountDraft = useAccountDraft({ actor: user?.id, context: draftContext, surface: isComment ? 'comment' : 'post',
+  const accountDraft = useWorkspaceDraft({ context: draftContext, surface: isComment ? 'comment' : 'post',
     onRestore: (saved) => {
       const value = JSON.parse(saved.snapshot);
       pendingPostSubmissionRef.current = props.initialSubmission || value.pendingSubmission || null;
@@ -550,7 +559,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
       else setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks(value.text || '') });
       setTitle(value.title || ''); setPrice(value.price || ''); setCurrency(value.currency || 'AUD');
       setCategory(value.category || 'other'); setCondition(value.condition || ''); setListingLocation(value.listingLocation || '');
-      setTagsInput(value.tagsInput || ''); setVisibility(value.visibility || 'public'); setCustomAcl(value.customAcl || null);
+      setTagsInput(value.tagsInput || ''); setVisibility(user?.localOnly ? 'private' : value.visibility || 'public'); setCustomAcl(value.customAcl || null);
       audienceAppliedRef.current = !!value.customAcl;
       setPostTitle(value.postTitle || ''); setSubspaceId(subspace?.id || value.subspaceId || null); setFlairId(value.flairId || null);
       setLayoutMode(value.layoutMode || 'auto'); setLayoutPattern(value.layoutPattern || [1, 2]); setLayoutColumns(value.layoutColumns || 3); setLayoutSpans(value.layoutSpans || {});
@@ -563,15 +572,17 @@ const AccountPostComposer = (props: PostComposerProps) => {
     }
   });
   const draftContent = {
-    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: draftContext,
+    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: accountDraft.context,
     name: (postTitle || title || text || (thingOn ? 'Thing draft' : 'Post draft')).slice(0, 160), snapshot: draftSnapshot,
     attachmentIds: [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds].filter(id => !isLegacyLinkedSeedId(id))
   };
   React.useEffect(() => {
-    if (!posting && !submissionUncertain) accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    if (accountDraft.context && !posting && !submissionUncertain) {
+      accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    }
     // Snapshot is the complete editing state; method identities are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftSnapshot, posting, submissionUncertain]);
+  }, [draftSnapshot, posting, submissionUncertain, accountDraft.context, accountDraft.capture]);
 
   const preserveComposerDraft = async () => {
     const value = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
@@ -603,7 +614,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     setCondition('');
     setListingLocation('');
     setTagsInput('');
-    setVisibility('public');
+    setVisibility(user?.localOnly ? 'private' : 'public');
     setPostTitle('');
     setFlairId(null);
     if (!subspace) setSubspaceId(null);
@@ -626,7 +637,9 @@ const AccountPostComposer = (props: PostComposerProps) => {
 			}
 		}
 		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
-		const currentPostShareId = props.initialDraft?.id || crypto.randomUUID();
+		const incomingScope = props.initialDraft && user?.id && !user.localOnly
+			? { expectedActor: user.id, expectedApiOrigin: window.location.origin, expectedDataPlane: dataPlane, storageMode: 'cloud' as const } : undefined;
+		const currentPostShareId = `${user?.localOnly ? 'local-post-' : ''}${props.initialDraft?.id || crypto.randomUUID()}`;
 		// polls publish as thingtime posts; the question lives on the thing (the
 		// poll card renders it), so the post text stays empty — no double render
 		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
@@ -757,7 +770,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				attachmentComposerRef.current?.markCommitted(attachmentIds);
 			}
       lopu({
-        title: isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        title: user?.localOnly ? 'Saved on this device' : (created as any).syncState && (created as any).syncState !== 'synced' ? 'Saved on this device; account sync pending' : isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
         status: 'success',
         duration: 6000
       });
@@ -778,6 +791,10 @@ const AccountPostComposer = (props: PostComposerProps) => {
       // an edit keeps its pre-filled draft — the parent closes the composer
       if (!isEdit) reset();
 			onPosted(created);
+      // Keep the actor in a reloadable content link after this composer unmounts.
+      // The destination resolves only this principal's retained Character roster.
+      if (character && !isComment && !isEdit && (created as any).syncState)
+        navigate(characterContentPath(`/post/${encodeURIComponent(created.id)}`, character.id));
 		};
 
 		try {
@@ -795,7 +812,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
       }
 			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
 				try {
-					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
+					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { ...incomingScope, signal }), 5_000);
 					if (matchesCommittedPostCreate(saved, committedExpectation)) { await finishPost(saved.post); return; }
 				} catch { /* Retry only the already-frozen identity and payload. */ }
 			}
@@ -845,7 +862,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				});
 				await finishPost(updated.post);
 			} else {
-				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
+				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload, incomingScope);
 				await finishPost(isComment ? resp.comment : resp.post);
 			}
 		} catch (error) {
@@ -860,7 +877,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				for (const delay of [0, 150, 400]) {
 					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
 					try {
-						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
+						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { ...incomingScope, signal }), 5_000);
 						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
 							reconciled = readBack.post as PublicPost;
 						}
@@ -902,6 +919,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   if (!expanded) {
     return (
       <Flex
+        data-lopu-launcher-clearance
         onDragOverCapture={handleComposerDragOver}
         onDropCapture={handleComposerDrop}
         background="var(--tt-card, #ffffff)"
@@ -936,6 +954,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   return (
     <Flex
       data-editor-scope="post-composer"
+      data-lopu-launcher-clearance
 			position="relative"
       flexDirection="column"
       rowGap={3}
@@ -972,9 +991,12 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				</Flex>
 			)}
 			<Box display="contents" inert={posting || submissionUncertain ? true : undefined}>
-      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} targetId={isComment ? parentId : undefined} disabled={posting || submissionUncertain} beforeOpen={preserveComposerDraft}
+      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} context={accountDraft.context} includeTemplates={!isComment} disabled={!accountDraft.context || posting || submissionUncertain} beforeOpen={preserveComposerDraft}
       onDeleted={async id => { if (accountDraft.current()?.id === id) { await accountDraft.forget(id); reset(); } }}
-      onLoad={accountDraft.load} />}</Flex>}
+      onLoad={async saved => {
+        if (saved.context !== accountDraft.context || saved.surface !== (isComment ? 'comment' : 'post')) throw new Error('This draft belongs to another editor workspace. Its original has been kept.');
+        await accountDraft.load(saved);
+      }} />}</Flex>}
       {/* type badges — additive toggles that wrap on narrow screens. Text is
       the always-on base; Photos/Marketplace/Things each switch their field
       group on without deselecting the others, and clicking Text switches
@@ -1254,6 +1276,8 @@ const AccountPostComposer = (props: PostComposerProps) => {
         </Flex>
       )}
 
+      {user?.localOnly && <Text fontSize="sm" role="status">Saved on this device only. This post is not published or synced to an account.</Text>}
+
       {/* photos + media — the whole media suite lives under the Photos
       toggle: the post's existing bound media (edit mode, reorderable), the
       secure uploader (live in edit mode too — new uploads bind through the
@@ -1452,7 +1476,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
             </Text>
           </Flex>
         )}
-        {!isComment && !subspace && user && (
+        {!isComment && !subspace && user && !user.localOnly && (
           <Select
             size="sm"
             width="170px"
@@ -1496,7 +1520,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
             ))}
           </Select>
         )}
-        {!isComment && (
+        {!isComment && !user?.localOnly && (
           <>
             <Select
               size="sm"
@@ -1545,7 +1569,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
+          {user?.localOnly ? 'Save on this device' : isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex></ContextActionDock>
 			</Box>

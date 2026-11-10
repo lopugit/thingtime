@@ -1,0 +1,29 @@
+{
+  "label": "offline-installed-suite",
+  "width": 1440,
+  "skippedHidden": 2,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "kind": "page",
+      "clientHeight": 1000,
+      "scrollHeight": 1539,
+      "maxScroll": 539,
+      "rect": {
+        "width": 1440,
+        "height": 1539
+      },
+      "points": [
+        0,
+        539
+      ],
+      "observed": [
+        0,
+        539
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}

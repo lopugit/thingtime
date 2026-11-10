@@ -1,0 +1,4 @@
+{
+  "head": "2366c08860dbe3a7a77a7234d34aed6b9dbbff69",
+  "previewSummary": "### \u2705 PR preview ready\n\n- Commit: `2366c088`\n- Vercel credential target: custom `develop`\n- Gateway: shared `preview`\n- Preview: [https://pr-1000.previews.dev.thingtime.com](https://pr-1000.previews.dev.thingtime.com)\n- Last successfully built: 27/10 06:57 AEDT (Australia/Melbourne)\n- Immutable deployment: [https://thingtime-8ry23fcvp-lopugits-projects.vercel.app](https://thingtime-8ry23fcvp-lopugits-projects.vercel.app)\n- Vercel status: [open deployment](https://vercel.com/lopugits-projects/thingtime/dpl_GJ1ew4Pid9QyGTRhbmJLcSkF2PHn)\n\nThe alias passed the develop bucket CORS preflight and a final live PR/SHA fence.\n\nThis PR deployment uses master.previews.thingtime.com and development data. The URL namespace is retained for compatibility; cleanup owns only current-policy PR deployments."
+}

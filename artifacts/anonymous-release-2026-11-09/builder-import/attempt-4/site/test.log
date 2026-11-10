@@ -1,0 +1,23 @@
+✖ global and site nested blocks remain individually editable after offline save and reload (27136.185027ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27205.195486
+
+✖ failing tests:
+
+test at ../../tmp/qa-site.test.mjs:11:1
+✖ global and site nested blocks remain individually editable after offline save and reload (27136.185027ms)
+  locator.click: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByTestId('add-child-box-1')
+  
+      at add (/tmp/qa-site.test.mjs:49:50)
+      at async TestContext.<anonymous> (/tmp/qa-site.test.mjs:106:19) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByTestId('add-child-box-1')" ]
+  }

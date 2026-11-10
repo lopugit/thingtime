@@ -1,0 +1,1095 @@
+{
+  "finding": "Document scroll changes before both Quote pointerdowns; second change occurs after Menu focus/readiness and during locator click processing or async positioning",
+  "unproven": "Existing events do not identify the programmatic scroll caller",
+  "firstScrollYChange": [
+    0,
+    487
+  ],
+  "secondScrollYChange": [
+    487,
+    0
+  ],
+  "events": [
+    {
+      "at": 1410.9000000059605,
+      "type": "pointerdown",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 537,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 17,
+            "top": 8.39999771118164,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1411.7000000178814,
+      "type": "focusin",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 537,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 17,
+            "top": 8.39999771118164,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1412.300000011921,
+      "type": "click",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 537,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 17,
+            "top": 8.39999771118164,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1421,
+      "type": "focusin",
+      "target": {
+        "tag": "DIV",
+        "role": "menu",
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "Repost \ud83d\udd01Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 463.98486328125,
+          "top": 461.7850341796875,
+          "width": 136.0302734375,
+          "height": 67.2149658203125
+        }
+      },
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 463.98486328125,
+            "top": 461.7850341796875,
+            "width": 136.0302734375,
+            "height": 67.2149658203125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1813.1000000238419,
+      "type": "pointerdown",
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 132,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 90,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 1813.4000000059605,
+      "type": "focusin",
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 132,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 90,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 1815.6000000238419,
+      "type": "click",
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 132,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 90,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 1827.2000000178814,
+      "type": "focusin",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 50,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": true,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447.56805419921875,
+            "top": 90,
+            "width": 168.8638916015625,
+            "height": 83.43862915039062
+          }
+        }
+      ]
+    },
+    {
+      "at": 1827.5,
+      "type": "focusin",
+      "target": {
+        "tag": "SECTION",
+        "role": "dialog",
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "Quote this post \u270f\ufe0f\ud83c\udf10 Public\ud83e\udd1d Friends\ud83c\udfe1 Family\ud83d\udd12 Private\ud83d\udd75\ufe0f ",
+        "rect": {
+          "left": 391.1424255371094,
+          "top": 58,
+          "width": 247.71511840820312,
+          "height": 176.73521423339844
+        }
+      },
+      "active": {
+        "tag": "SECTION",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": true,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447.56805419921875,
+            "top": 90,
+            "width": 168.8638916015625,
+            "height": 83.43862915039062
+          }
+        }
+      ]
+    },
+    {
+      "at": 1840.300000011921,
+      "type": "focusin",
+      "target": {
+        "tag": "TEXTAREA",
+        "role": null,
+        "label": null,
+        "placeholder": "Add your thoughts\u2026",
+        "menuText": null,
+        "rect": {
+          "left": 402.454345703125,
+          "top": 92.62942504882812,
+          "width": 225.09130859375,
+          "height": 54.348968505859375
+        }
+      },
+      "active": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts\u2026"
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": true,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 449.9855041503906,
+            "top": 90,
+            "width": 164.02902221679688,
+            "height": 81.04962158203125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1954.5,
+      "type": "keydown",
+      "target": {
+        "tag": "TEXTAREA",
+        "role": null,
+        "label": null,
+        "placeholder": "Add your thoughts\u2026",
+        "menuText": null,
+        "rect": {
+          "left": 398.0692443847656,
+          "top": 93.97869110107422,
+          "width": 233.86148071289062,
+          "height": 56.46656036376953
+        }
+      },
+      "active": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts\u2026"
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": true,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 464,
+            "top": 90,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 1999.300000011921,
+      "type": "focusin",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 50,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 464,
+            "top": 90,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 2094.2000000178814,
+      "type": "pointerdown",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 50,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 464,
+            "top": 90,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 2096.800000011921,
+      "type": "click",
+      "target": {
+        "tag": "BUTTON",
+        "role": null,
+        "label": "Repost",
+        "placeholder": null,
+        "menuText": null,
+        "text": "",
+        "rect": {
+          "left": 514.796875,
+          "top": 50,
+          "width": 34,
+          "height": 32
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "false",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 464,
+            "top": 90,
+            "width": 136,
+            "height": 67.20001220703125
+          }
+        }
+      ]
+    },
+    {
+      "at": 2103.100000023842,
+      "type": "focusin",
+      "target": {
+        "tag": "DIV",
+        "role": "menu",
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "Repost \ud83d\udd01Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 463.99151611328125,
+          "top": 90,
+          "width": 136.0169677734375,
+          "height": 67.2083740234375
+        }
+      },
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 487
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": -486,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 463.99151611328125,
+            "top": 90,
+            "width": 136.0169677734375,
+            "height": 67.2083740234375
+          }
+        }
+      ]
+    },
+    {
+      "at": 3042.600000023842,
+      "type": "pointerdown",
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 619,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 577,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 3043.100000023842,
+      "type": "focusin",
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 619,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 577,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 3045.600000023842,
+      "type": "click",
+      "target": {
+        "tag": "BODY",
+        "role": null,
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "#lopuPageViewport { width: 100%; }\n        #lopuPageViewport",
+        "rect": {
+          "left": 0,
+          "top": 0,
+          "width": 1440,
+          "height": 1669
+        }
+      },
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    },
+    {
+      "at": 3074.5,
+      "type": "focusin",
+      "target": {
+        "tag": "DIV",
+        "role": "menu",
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "Repost \ud83d\udd01Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 447,
+          "top": 445,
+          "width": 170,
+          "height": 84
+        }
+      },
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ]
+    }
+  ]
+}

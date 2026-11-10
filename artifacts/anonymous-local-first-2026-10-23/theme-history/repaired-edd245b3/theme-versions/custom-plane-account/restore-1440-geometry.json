@@ -1,0 +1,24 @@
+{
+  "button": {
+    "x": 731.953125,
+    "y": 804.1875,
+    "width": 158.609375,
+    "height": 32
+  },
+  "scrollport": {
+    "height": 628,
+    "top": 0,
+    "scrollHeight": 628,
+    "bounds": {
+      "x": 714.953125,
+      "y": 225,
+      "width": 531.046875,
+      "height": 628.1875,
+      "top": 225,
+      "right": 1246,
+      "bottom": 853.1875,
+      "left": 714.953125
+    }
+  },
+  "hit": true
+}

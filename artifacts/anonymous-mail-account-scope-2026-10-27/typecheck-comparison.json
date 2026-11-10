@@ -1,0 +1,9 @@
+{
+  "baseline": "tmp/continuation/component-native-typecheck.log",
+  "current": "tmp/continuation/mail-protected-typecheck.log",
+  "baselineErrors": 91,
+  "currentErrors": 91,
+  "sameNormalizedDiagnostics": true,
+  "added": [],
+  "removed": []
+}

@@ -1,0 +1,49 @@
+{
+  "sourceRevision": "7847607fe0a02887d8d0b87b8536f2f0ebb2f799",
+  "runtime": {
+    "platform": "darwin",
+    "versions": {
+      "chrome": "150.0.7871.47",
+      "electron": "43.1.0"
+    },
+    "appVersion": "0.1.2",
+    "packaged": false,
+    "nativeFileExport": "1.1.0",
+    "architecture": "arm64",
+    "bundledManagedMongoReplica": true,
+    "profileEncryptionAvailable": true
+  },
+  "anonymousStatus": 200,
+  "checks": [
+    "Exact revision active in isolated Electron with bundled Nitro and managed Mongo replica",
+    "Bundled bcrypt hashed a synthetic registration, refused the wrong password, accepted the correct one, and returned the matching session",
+    "Installed Node bridge refused in parallel development lane",
+    "Anonymous theme created with an edited accent while offline; saved value survived offline reload",
+    "A second offline save updated the same theme; the new accent survived another offline reload.",
+    "The macOS Save sheet wrote the private edited History version; export ID matched the creation export and the new accent matched exactly."
+  ],
+  "themeAccent": {
+    "creation": "#885544",
+    "edited": "#448866"
+  },
+  "export": {
+    "format": "theme-content",
+    "visibility": "private",
+    "bytes": 8157,
+    "sha256": "1ddb1a1685807988210d2d22528e195147d00915579e348c626eb82177ec75b5",
+    "sameRecord": true,
+    "platformSaveDialog": true
+  },
+  "httpMutations": [],
+  "pageErrors": [],
+  "cleanup": {
+    "devProcessesStopped": true,
+    "syntheticProfileMovedToTrash": true,
+    "cleanEncryptedProfilePrepared": true,
+    "retainedResourceHashesMatch": true,
+    "bundleAndRuntimeCodesignVerified": true,
+    "stableAppAndNodeProcessInventoryUnchanged": true,
+    "ownedPortsReleased": 3,
+    "retainedDevBundleName": "Thingtime Dev anonymous-release-pr1000.app"
+  }
+}

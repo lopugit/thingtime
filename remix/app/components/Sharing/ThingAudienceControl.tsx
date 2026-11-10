@@ -8,14 +8,17 @@ export const ThingAudienceControl = ({
 	acl,
 	onChange,
 	label = 'Audience',
-	testId = 'thing-audience'
+	testId = 'thing-audience',
+	localOnly = false
 }: {
 	acl: readonly string[];
 	onChange: (acl: string[]) => void;
 	label?: string;
 	testId?: string;
+	localOnly?: boolean;
 }) => {
 	const [customOpen, setCustomOpen] = React.useState(false);
+	if (localOnly) return <Text fontSize="sm" role="status">Saved on this device. Cloud sync and sharing are off.</Text>;
 	const audience = audienceOfAcl(acl);
 	const meta = THING_AUDIENCE_META[audience];
 

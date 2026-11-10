@@ -267,4 +267,3 @@ enum NativeSymbolicLinks {
         try register(fd, link: link, bytes: envelope)
     }
 }
-

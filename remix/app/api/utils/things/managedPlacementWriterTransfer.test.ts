@@ -89,3 +89,11 @@ test('history failure rolls back a managed move instead of reporting success', a
   await assert.rejects(moveManagedContent('owner', 'recording', 'folder', undefined, h.deps), /History unavailable/);
   assert.equal(h.state.commits, 0); assert.equal(h.state.rollbacks, 1);
 });
+
+
+test('managed placement version refusals carry a conflict status for offline reconciliation', async () => {
+  const h = harness();
+  await assert.rejects(moveManagedContent('owner', 'recording', null, new Date(time.getTime() - 1).toISOString(), h.deps), (error: any) => error.status === 409);
+  h.state.sourceMatches = 0;
+  await assert.rejects(moveManagedContent('owner', 'recording', null, time.toISOString(), h.deps), (error: any) => error.status === 409);
+});

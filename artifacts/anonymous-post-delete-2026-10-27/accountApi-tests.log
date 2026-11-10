@@ -1,0 +1,19 @@
+✔ account local facade and native page resolution work offline without uploading anonymous content (222.11275ms)
+✔ account library search paints local content first, refreshes only its owner, and retires late responses (46.1005ms)
+✔ account folder lists overlay pending placement on fresh and cached pages without remote bulk writes (36.931708ms)
+✔ cached account page membership survives deletion and explicit conflict restoration (13.93175ms)
+✔ a mixed dedicated-adapter delete never removes a cached device copy remotely (3.846541ms)
+✔ online catalogue discovery retains owned definitions for device paging without adopting shared entries (36.880834ms)
+✔ a wake arriving during a drain is coalesced into a follow-up pass instead of lost (10.048209ms)
+✔ native bulk deletion queues retained recordings and cancels device files offline with explicit partial results (26.944166ms)
+✔ normal account History facade restores offline without sync, and retires before another account can apply (29.240584ms)
+✔ component catalogue resolves retired suite IDs locally and remotely within the exact workspace (9.229625ms)
+✔ stale online projections hide deleted parents and comments and reject retired account replies (39.628583ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 999.973958

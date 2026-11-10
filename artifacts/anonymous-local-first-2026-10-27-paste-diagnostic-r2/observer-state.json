@@ -1,0 +1,29 @@
+{
+  "status": "complete",
+  "execSessionId": null,
+  "waitCellId": null,
+  "containerId": null,
+  "runner": "tmp/continuation/paste-current-run.cjs",
+  "log": "tmp/continuation/paste-current-r2.log",
+  "scenario": "instructions",
+  "archive": "tmp/continuation/paste-current-app.tar.gz",
+  "archiveSha256": "37f331ba8abbed90da857d1a770e8a2a0d084b7e540e9965c11a4c4ad98219c8",
+  "controlRunner": "tmp/continuation/paste-current-compare-run.cjs",
+  "controlFixture": "tmp/continuation/paste-current-compare.test.mjs",
+  "cleanup": "verified: no owned runtime remaining",
+  "acceptance": "native Control+V exact 12002 lines <5000ms, undo/redo and normal typing unchanged",
+  "sharedProxy": "untouched",
+  "exitCode": 0,
+  "result": {
+    "tests": 2,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "pasteMs": 2194,
+    "exactHardLines": 12002
+  },
+  "controlRun": "not run: failure did not reproduce; no cause/fix claimed",
+  "sourceTestSha256": "288243209560726e6270c6461a75c07a4d9cf755a87762b5e62fec0dfa569e67",
+  "bundledTestSha256": "185b77f2918518b2523ff8766d755627ab05b91a9c8b09a4ac486ff1a3afc6af",
+  "runtimePackageSha256": "37f331ba8abbed90da857d1a770e8a2a0d084b7e540e9965c11a4c4ad98219c8"
+}

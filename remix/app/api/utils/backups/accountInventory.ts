@@ -1,4 +1,5 @@
-import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
+import { instructionBackupProjection, isInstructionRecordKind, retainBackupInstructionRecord, verifyInstructionBackupReference } from './instructionRecords';
+import { exportInstructionRecord } from '../settings/lopuInstructionStore';
 import {
 	backupDraftProjection,
 	backupDraftFromDoc,
@@ -65,7 +66,7 @@ export const fileProjection = {
  'crystal.symbolicLink': 1
 };
 export type Census = { shareId: string; ownerId: string; thingtime: string[] };
-export type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account' | 'notification' | 'excluded-authority';
+export type Family = 'content' | 'file' | 'timeline' | 'attachment' | 'draft' | 'theme' | 'account' | 'instruction' | 'notification' | 'excluded-authority';
 type AttachmentReference = { fileId: string; content: CloudFileContent } | BackupDraftAttachmentReference | BackupProfileAttachmentReference;
 export function family(doc: Census, supportedContentOnly = false): Family {
 	if (
@@ -82,6 +83,7 @@ export function family(doc: Census, supportedContentOnly = false): Family {
 	if (doc.thingtime.length === 1 && ['backup-job', 'backup-job-event'].includes(doc.thingtime[0])) return 'excluded-authority';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment') return 'attachment';
+	if (doc.thingtime.length === 1 && isInstructionRecordKind(doc.thingtime[0])) return 'instruction';
 	if (doc.thingtime.length === 1 && isAccountTimelineKind(doc.thingtime[0])) return 'timeline';
 	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind))) {
 		if (supportedContentOnly) return 'excluded-authority';
@@ -199,6 +201,7 @@ export function createAccountInventoryProducer(
 						if (timeline) timelineBackupRecordFromDoc(row);
 						else if (projection === backupDraftProjection) backupDraftFromDoc(row);
 						else if (projection === backupThemeProjection) backupThemeSnapshotFromDoc(row);
+						else if (projection === instructionBackupProjection) exportInstructionRecord(row);
 						else if (projection === backupNotificationProjection) backupNotificationSnapshotFromDoc(row);
 						else if (projection !== contentProjection) {
 							const bounded = projection === backupAttachmentProjection ? { ...row } : row;
@@ -325,7 +328,7 @@ export function createAccountInventoryProducer(
 					// Bounded family batches, never a payload query per Thing. Large
 					// Timeline/draft envelopes use eight rows (at most ~32 MiB of content).
 					for (const [kind, group] of groups) {
-						const batchSize = kind === 'timeline' || kind === 'draft' || kind === 'notification' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
+						const batchSize = kind === 'timeline' || kind === 'draft' || kind === 'instruction' || kind === 'notification' ? 8 : ACCOUNT_INVENTORY_PAGE_SIZE;
 						for (let offset = 0; offset < group.length; offset += batchSize) {
 							const expected = group.slice(offset, offset + batchSize);
 							if (kind === 'excluded-authority') {
@@ -345,6 +348,9 @@ export function createAccountInventoryProducer(
 								const snapshot = await readBackupAccountContent(guardedAccess, session, async () => collection);
 								boundary();
 								await verifyReferences(backupProfileAttachmentReferences(snapshot));
+								const personal = accountContentValue(snapshot).preferences.lopuInstructions as any;
+								if (personal?.reference) await verifyInstructionBackupReference(scope.ownerId, personal.reference,
+									ids => query({ shareId: { $in: ids } }, instructionBackupProjection, 128), async () => { await check(); boundary(); }, personal.revision);
 								const account = accountContentValue(snapshot);
 								referenceIndex.addSelection(scope.ownerId, 'theme', account.preferences.activeThemeId);
 								referenceIndex.addSelection(scope.ownerId, 'feed-algorithm', account.preferences.activeFeedAlgorithmId);
@@ -381,7 +387,9 @@ export function createAccountInventoryProducer(
 
 							const found = await query(
 								{ shareId: { $in: expected.map((row) => row.shareId) } },
-								kind === 'draft'
+								kind === 'instruction'
+									? instructionBackupProjection
+									: kind === 'draft'
 									? backupDraftProjection
 									: kind === 'timeline'
 									? timelineBackupProjection
@@ -403,7 +411,9 @@ export function createAccountInventoryProducer(
 									head = expected[index];
 								sameRow(doc, head, kind);
 								const entry =
-									kind === 'draft'
+									kind === 'instruction'
+										? await retainBackupInstructionRecord(store, snapshotId, ordinals.get(doc.shareId)!, doc, { ...access, scope, authorize: check })
+										: kind === 'draft'
 										? await retainBackupDraft(store, snapshotId, ordinals.get(doc.shareId)!, drafts![index], { ...access, scope, authorize: check })
 										: kind === 'timeline'
 										? await retainTimelineBackupRecord(store, snapshotId, ordinals.get(doc.shareId)!, doc, { ...access, scope, authorize: check })

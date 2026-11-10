@@ -1,0 +1,2 @@
+{"ok":false,"phase":"source upload and import","error":"AssertionError","code":"ERR_ASSERTION","sourceFrames":["95:10","106:26","129:62","184:53"]}
+{"cleanup":true,"ok":true,"childrenStopped":true,"portsClosed":true,"directoryGone":true,"stopFailures":0}

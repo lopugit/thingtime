@@ -1,0 +1,51 @@
+{
+  "recoveredAt": "2026-10-26T04:36:58.779260+00:00",
+  "captureKind": "Recovered transcription of observed tool stdout, not a rerun or independently persisted original stream",
+  "sourceTool": "functions.exec -> tools.write_stdin",
+  "sourceExecSessionId": 25172,
+  "sourceChunkIds": [
+    "584c44",
+    "f1d119",
+    "d193b5",
+    "c69b6e"
+  ],
+  "originalCaptureFailure": "DockerEngine.run streamed stdout through progress callback; its returned result was empty, and the helper wrote that empty return to result.txt.",
+  "stdoutPath": "result.txt",
+  "stdoutSha256": "f223c3d3723e9bcf2759cba4057bfa686a6e396b12978ddc4b82e359f3b548fb",
+  "diagnosticSourcePath": "diagnostic.mjs",
+  "diagnosticSourceSha256": "5405c4261eeaa7e6b987ef3c288c10e5c5f429ad2413a8754c703db7ed5fc9cc",
+  "helperPath": "tmp/continuation/instruction-capacity.cjs",
+  "helperSha256": "63daf4f9b8f16cf80dda459a72b8fa12fa093ba6d0e11dc7e513d693c06a7fdc",
+  "boundaryPath": "boundary.json",
+  "cleanupPath": "cleanup.json",
+  "measurements": [
+    {
+      "mode": "value",
+      "bytes": 120048,
+      "hardLines": 12002,
+      "milliseconds": 165,
+      "exact": true,
+      "frameMs": 79
+    },
+    {
+      "mode": "fill-spellcheck-off",
+      "bytes": 120048,
+      "hardLines": 12002,
+      "error": "TimeoutError: locator.fill: Timeout 30000ms exceeded."
+    },
+    {
+      "mode": "fill-spellcheck-on",
+      "bytes": 120048,
+      "hardLines": 12002,
+      "error": "TimeoutError: locator.fill: Timeout 30000ms exceeded."
+    },
+    {
+      "mode": "fill-latin",
+      "bytes": 120048,
+      "hardLines": 12002,
+      "error": "TimeoutError: locator.fill: Timeout 30000ms exceeded."
+    }
+  ],
+  "scope": "Disposable static native textarea diagnostic only. This does not establish normal Settings application acceptance.",
+  "measurementCaveat": "The helper reports bytes and hardLines from its main payload for every case; fill-latin actually inserts line\\n repeated 12000 times. Do not attribute120048bytes to the Latin control."
+}

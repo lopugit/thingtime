@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
 import { BlockInsertMenu, type InsertPick } from './BlockInsertMenu';
@@ -67,7 +67,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 		setInsertAt(null); setContextMenu(null); setRichEditorBlockId(null); setStructure(null);
 	}, [options?.enabled]);
 
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const lopu = useLopu();
 
 	// OS file drops / pastes / inspector uploads → attachment uploads → media
@@ -96,7 +96,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: b
 				pendingDropsRef.current.push({ name: file.name, size: file.size, queuedAt: Date.now(), target: targetOf(offset) });
 			});
 			addFiles(unique);
-			lopu({ title: `Uploading ${unique.length === 1 ? unique[0].name : `${unique.length} files`}… ⬆️`, status: 'info' });
+			lopu({ title: `Adding ${unique.length === 1 ? unique[0].name : `${unique.length} files`}… ⬆️`, status: 'info' });
 		},
 		[addFiles, lopu]
 	);

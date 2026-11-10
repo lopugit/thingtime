@@ -26,6 +26,7 @@ test('entity schemas inherit canonical verbs while extending their own sections'
     history: true,
     'copy-link': true,
     'share-preview': true,
+    download: true,
     rename: true,
     edit: true,
     share: true,

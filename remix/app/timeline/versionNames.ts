@@ -1,5 +1,5 @@
 import { copyBoundedJson } from '../utils/boundedJson.ts';
-import { parseTimelineEntry, type TimelineEntry } from './contract.ts';
+import { isClientDraftVersion, parseTimelineEntry, type TimelineEvent, type TimelineEntry } from './contract.ts';
 
 /** A pinned display name for one saved version.
  *
@@ -9,6 +9,9 @@ import { parseTimelineEntry, type TimelineEntry } from './contract.ts';
  * event record, never accumulate on the event, the Thing or the Timeline folder,
  * and never invent version numbers. Every name, rename and clear appends an
  * immutable `timeline-version-name` effect event beside the named version. */
+/** Naming is metadata about retained content; it never promotes a client draft to a server revision. */
+export const canNameTimelineVersion = (event: TimelineEvent): boolean => event.after !== null && (event.mode === 'revision' || isClientDraftVersion(event));
+
 export const TIMELINE_VERSION_NAME_KIND = 'timeline-version-name';
 export const TIMELINE_VERSION_NAME_MAX_CHARS = 80;
 export const TIMELINE_VERSION_NAME_LABELS = { named: 'Named version', renamed: 'Renamed version', cleared: 'Removed version name' } as const;

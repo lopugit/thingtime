@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { importedThingCrystal } from './importContent';
 import { parseTransfer, serializeTransfer, validateTransfer, TRANSFER_FORMAT, TRANSFER_LIMITS, type ThingTransfer } from './format';
 
 const fixture = (): ThingTransfer => ({
@@ -77,7 +78,8 @@ test('files use numbered paths and bounded checksummed manifests, never display 
     assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], path }] }), /archive file path/);
   }
   value.files[0].bytes = TRANSFER_LIMITS.fileBytes + 1;
-  assert.throws(() => validateTransfer(value), /too large/);
+  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  assert.throws(() => validateTransfer(value, { maxFileBytes: TRANSFER_LIMITS.fileBytes }), /too large/);
 });
 
 test('malformed JSON and excessive record counts fail without a partial result', () => {
@@ -85,6 +87,23 @@ test('malformed JSON and excessive record counts fail without a partial result',
   const value = fixture();
   value.things = Array(TRANSFER_LIMITS.things + 1).fill(value.things[0]);
   assert.throws(() => validateTransfer(value), /number of Things/);
+});
+
+
+test('file metadata preserves large exact sizes but rejects unsafe sizes and aggregate overflow', () => {
+  const value = fixture();
+  const file = { id: 'file', targetId: 'data', path: 'files/000000', name: 'large.bin', mime: 'application/octet-stream', bytes: Number.MAX_SAFE_INTEGER, sha256: 'a'.repeat(64) };
+  value.files = [file];
+  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  for (const bytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => validateTransfer({ ...value, files: [{ ...file, bytes }] }), /file size/);
+  }
+  assert.throws(() => validateTransfer({ ...value, files: [file, { ...file, id: 'other', path: 'files/000001', bytes: 1 }] }), /safe integer precision/);
+  for (const maxFileBytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => validateTransfer(fixture(), { maxFileBytes }), /byte budget/);
+  }
+  assert.throws(() => parseTransfer(serializeTransfer(value), { maxFileBytes: 12 }), /too large/);
+  assert.throws(() => serializeTransfer(value, { maxFileBytes: 12 }), /too large/);
 });
 
 test('portable metadata roundtrips long shared names, annotations, URLs and tags within archive framing', () => {
@@ -96,4 +115,20 @@ test('portable metadata roundtrips long shared names, annotations, URLs and tags
  value.links = [{ id: 'long-link', targetId: 'data', url: `https://example.test/${'path'.repeat(1000)}.png`, mediaKind: 'image', title: metadata.title }];
  value.attachmentOrder = ['file', 'long-link'];
  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+});
+
+test('an editable private webpage copy does not inherit its source route or automatic activation', () => {
+  const value = fixture();
+  const webpage = {
+    id: 'page', thingtime: ['webpage'],
+    crystal: { name: 'Editable page', pageKey: 'source', siteRoute: '/original', activationAction: { action: 'run-on-open' }, blocks: [{ type: 'text', text: 'Preserve this editable block' }] }
+  };
+  value.things.push(webpage);
+  const saved = parseTransfer(serializeTransfer(value)).things.at(-1)!;
+  assert.deepEqual(saved.crystal, webpage.crystal, 'the portable export retains exact source data');
+  const copy = importedThingCrystal(saved, saved.crystal, new Map([['page', 'new-page']]), 'new');
+  assert.equal(copy.siteRoute, undefined);
+  assert.equal(copy.activationAction, undefined);
+  assert.equal(copy.pageKey, 'source-new');
+  assert.deepEqual(copy.blocks, webpage.crystal.blocks);
 });

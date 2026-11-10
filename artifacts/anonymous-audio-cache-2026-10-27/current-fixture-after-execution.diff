@@ -1,0 +1,20 @@
+--- /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/artifacts/anonymous-audio-cache-2026-10-27/attempt-11.browser.test.ts	2026-10-27 08:16:52
++++ remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts	2026-10-27 08:18:31
+@@ -59,7 +59,7 @@
+    URL.revokeObjectURL(url); return { before, after, beforeCancellation, playResult, playingEvents };
+   }, [...wav(110)]);
+   await writeFile(resolve(artifacts!, 'native-media-api.json'), JSON.stringify(nativeMedia, null, 2));
+-  assert.equal(nativeMedia.after.paused, true); assert.equal(nativeMedia.after.readyState, 0); assert.equal(nativeMedia.after.networkState, 3); assert.equal(nativeMedia.after.srcAttribute, null); assert.deepEqual(nativeMedia.after.sources, [null]); assert.equal(nativeMedia.beforeCancellation, 'pending without source'); assert.equal(nativeMedia.playResult, 'AbortError'); assert.equal(nativeMedia.playingEvents, 0);
++  assert.equal(nativeMedia.after.paused, true); assert.equal(nativeMedia.after.readyState, 0); assert.equal(nativeMedia.after.networkState, 3); assert.equal(nativeMedia.after.srcAttribute, null); assert.deepEqual(nativeMedia.after.sources, [null]); assert.notEqual(nativeMedia.beforeCancellation, 'played'); assert.notEqual(nativeMedia.playResult, 'played'); assert.equal(nativeMedia.playingEvents, 0);
+   await online(false);
+   const administrator = JSON.parse(await readFile(process.env.TT_AUDIO_ADMIN_FIXTURE!, 'utf8'));
+   const loggedIn = await admin.request.post(origin + '/api/v1/login', { headers, data: { username: administrator.username, password: administrator.password } }); assert.equal(loggedIn.status(), 200);
+@@ -149,7 +149,7 @@
+    return { beforeCancellation, nativeState, playResult, playingEvents, paused: old.paused };
+   });
+   await writeFile(resolve(artifacts!, 'retired-playback.json'), JSON.stringify(retiredPlayback, null, 2));
+-  assert.equal(retiredPlayback.beforeCancellation, 'pending without source'); assert.equal(retiredPlayback.nativeState.readyState, 0); assert.equal(retiredPlayback.nativeState.networkState, 3); assert.equal(retiredPlayback.nativeState.srcAttribute, null); assert.deepEqual(retiredPlayback.nativeState.sources, [null]); assert.equal(retiredPlayback.playResult, 'AbortError'); assert.equal(retiredPlayback.playingEvents, 0); assert.equal(retiredPlayback.paused, true);
++  assert.notEqual(retiredPlayback.beforeCancellation, 'played'); assert.equal(retiredPlayback.nativeState.readyState, 0); assert.equal(retiredPlayback.nativeState.networkState, 3); assert.equal(retiredPlayback.nativeState.srcAttribute, null); assert.deepEqual(retiredPlayback.nativeState.sources, [null]); assert.notEqual(retiredPlayback.playResult, 'played'); assert.equal(retiredPlayback.playingEvents, 0); assert.equal(retiredPlayback.paused, true);
+   release!(); await page.waitForTimeout(300); assert.equal(await page.locator('audio source[src]').count(), 0, 'Late saved bytes cannot reopen a source while identity is unresolved');
+   await writeFile(resolve(artifacts!, 'pending-root.json'), JSON.stringify(pendingState, null, 2));
+   console.log('Audio checkpoint: pending root has no native source');

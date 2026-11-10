@@ -1,0 +1,10 @@
+{
+  "containersRemaining": [],
+  "scope": "Read-only renderer daemon inventory after the real desktop tool calls. No containers or volumes created since the source commit remain. Older asset volumes were left untouched; this is not a claim that the entire daemon has no historical resources.",
+  "cachedImage": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be",
+  "volumesCreatedSinceSourceCommit": [],
+  "preexistingAssetVolumeCount": 3,
+  "sourceCommitTime": "2026-10-26T09:14:28+00:00",
+  "configuredDefaultRunnerSha256": "d56b0a8f26925ff24f7f6df4253a50dbdffc22a471b5eae363ee9ab897275467",
+  "runnerMatchesTool": true
+}

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, parseTimelineBranch, parseTimelineBranchHead, parseTimelineBranchCommand, timelineBranchHeadId, type TimelineBranch, type TimelineBranchHead, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from '../../../timeline/branches.ts';
-import { parseTimelineEvent, type TimelineEntry } from '../../../timeline/contract.ts';
+import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, parseTimelineBranchCommand, type TimelineBranch, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from '../../../timeline/branches.ts';
 import { timelineBranchThingId, timelineBranchHeadThingId, branchFromDoc, branchHeadFromDoc, readTimelineBranchHead, packTimelineBranchRecord as pack } from './branchEnvelope.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -8,12 +7,13 @@ import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { StorageMutationError, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore.ts';
 import { appendTimelineEvent, readTimelineEntries, readTimelineNodes, timelineFolderId } from './repository.ts';
-import { loadVersionGraph } from './versions.ts';
+import { createBranchMutationTools } from '../../../timeline/branchMutation.ts';
 
 export { timelineBranchThingId, timelineBranchHeadThingId, branchFromDoc, branchHeadFromDoc, readTimelineBranchHead } from './branchEnvelope.ts';
 
 const digest = (parts: unknown) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 const refuse = (status: number, message: string): never => { throw new StorageMutationError(status, status === 409 ? 'storage_conflict' : 'storage_invariant', message); };
+const { replayBranch, planBranch } = createBranchMutationTools(refuse);
 export async function readTimelineBranchEntry(things: any, ownerId: string, branchId: string, thingId: string) {
 	const [doc, head] = await Promise.all([
 		things.findOne({ ownerId, thingtime: TIMELINE_BRANCH_KIND, shareId: timelineBranchThingId(ownerId, branchId) }),
@@ -41,36 +41,16 @@ export function createBranchService(overrides: Partial<typeof dependencies> = {}
 		const eventId = `branch-op-${command.operationId}`; const signature = digest(command);
 		return deps.transaction(async session => {
 			const prior = (await readTimelineEntries(things, ownerId, [eventId], session))[0];
-			if (prior) {
-				if (prior.event.operationId !== signature || prior.event.source !== 'api' || prior.event.actorId !== ownerId || prior.event.after?.adapter !== 'timeline-branch') refuse(409, 'This operation id was already used for another branch request.');
-				const value = prior.event.after!.value as any;
-				const branch = parseTimelineBranch(value.branch); const head = parseTimelineBranchHead(value.head);
-				if (branch.ownerId !== ownerId || head.ownerId !== ownerId || head.branchId !== branch.id || head.thingId !== command.thingId) throw new Error('Invalid branch operation receipt');
-				return { ok: true, branch, head, entry: prior };
-			}
+			const replay = replayBranch(prior, ownerId, command, signature);
+			if (replay) return replay;
 			const branchShareId = timelineBranchThingId(ownerId, command.branchId);
 			const branchDoc = await things.findOne({ ownerId, thingtime: TIMELINE_BRANCH_KIND, shareId: branchShareId }, { session });
-			if (command.command === 'create-branch' && branchDoc) refuse(409, 'This branch id already exists. Retry its original creation request or choose a new branch.');
-			if (command.command === 'advance-branch' && !branchDoc) refuse(404, 'Branch not found.');
-			const branch = branchDoc ? branchFromDoc(branchDoc) : parseTimelineBranch({ formatVersion: 1, id: command.branchId, ownerId, name: command.name, createdAt: now.toISOString() });
-			const current = await readTimelineBranchHead(things, ownerId, branch.id, command.thingId, session);
-			if ((current?.revision ?? 0) !== command.expectedRevision) refuse(409, 'This branch changed on another device. Pull its current version and compare before pushing.');
-			const version = (await readTimelineEntries(things, ownerId, [command.eventId], session))[0];
-			if (!version || version.event.thingId !== command.thingId || !version.event.after || version.event.mode === 'effect') refuse(404, 'The branch version is not available.');
-			if (current && current.eventId !== command.eventId) {
-				const graph = await loadVersionGraph([command.eventId], command.thingId, ids => readTimelineNodes(things, ownerId, ids));
-				if (!graph.has(current.eventId)) refuse(409, 'These versions diverged. Merge them before pushing; both versions remain in History.');
-			}
-			if ((current?.revision ?? 0) >= Number.MAX_SAFE_INTEGER) refuse(409, 'This branch revision limit has been reached. Create another branch.');
-			const updatedAt = new Date(Math.max(now.getTime(), current ? Date.parse(current.updatedAt) + 1 : now.getTime())).toISOString();
-			const head = parseTimelineBranchHead({ formatVersion: 1, id: timelineBranchHeadId(branch.id, command.thingId), ownerId, branchId: branch.id, thingId: command.thingId, eventId: command.eventId, revision: (current?.revision ?? 0) + 1, createdAt: current?.createdAt ?? now.toISOString(), updatedAt });
-			const entry: TimelineEntry = await appendTimelineEvent(things, parseTimelineEvent({
-				formatVersion: 1, id: eventId, ownerId, thingId: command.thingId, branchId: branch.id, parentIds: [],
-				operationId: signature, actorId: ownerId, source: 'api', clientId: null, occurredAt: now.toISOString(), mode: 'effect', operation: 'effect',
-				label: command.command === 'create-branch' ? 'Created branch' : current ? 'Pushed branch version' : 'Added Thing to branch',
-				before: current ? { adapter: 'timeline-branch', version: 1, value: { branch, head: current } } : null,
-				after: { adapter: 'timeline-branch', version: 1, value: { branch, head } }, dependencies: [{ thingId: command.thingId, eventId: command.eventId }]
-			}), session, { debit: deps.debit, now });
+			const current = await readTimelineBranchHead(things, ownerId, command.branchId, command.thingId, session);
+			const { branch, head, event } = await planBranch({ ownerId, command, signature, existing: branchDoc ? branchFromDoc(branchDoc) : null, current,
+				readEntry: async id => (await readTimelineEntries(things, ownerId, [id], session))[0] ?? null,
+				readNodes: ids => readTimelineNodes(things, ownerId, ids), now });
+			const updatedAt = head.updatedAt;
+			const entry = await appendTimelineEvent(things, event, session, { debit: deps.debit, now });
 			const common = { schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, ownerId, acl: ['tt:user'], folderId: timelineFolderId(ownerId), extended: null, tags: [] };
 			if (!branchDoc) {
 				const doc: any = { ...common, shareId: branchShareId, thingtime: [TIMELINE_BRANCH_KIND], targetId: null, crystal: { name: branch.name }, createdAt: new Date(entry.receipt.position), updatedAt: now, ...pack(branch) };

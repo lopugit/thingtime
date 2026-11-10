@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readManagedContentMetadata, readManagedContentFolder } from './managedPlacement';
 import { createTransferTheme, readTransferTheme, validateTransferTheme } from './themeTransfer';
 import { importTransfer } from './importTransfer';
 import { exportTransferPlan } from './exportTransfer';
@@ -60,4 +61,26 @@ test('theme exports support legacy dedicated reads and have no attachment discov
     bound: async (docs) => { assert.deepEqual(docs, []); return []; }
   });
   assert.ok(result.ok); if (result.ok) assert.deepEqual(result.plan.things, [theme()]);
+});
+
+
+test('owned display titles survive portable export/import without changing source names or publishing', async () => {
+ const original=theme(); original.crystal.title='Library label'; let boundary:unknown;
+ const deps:any={owned:async()=>({id:original.id,name:original.crystal.name,theme:original.crystal.theme}),shared:async()=>null,
+ metadata:async(owner:string,id:string)=>{assert.equal(owner,'owner');assert.equal(id,'source');return {title:'Library label'};},
+ save:async(_owner:string,input:any,options:unknown)=>{assert.equal(input.name,'My palette');assert.equal(input.visibility,'private');assert.equal('id' in input,false);boundary=options;return {ok:true,theme:{id:'independent'}};}};
+ assert.deepEqual(await readTransferTheme('owner','source',deps),original);
+ await createTransferTheme('owner',original,deps);assert.deepEqual(boundary,{title:'Library label'});
+ for(const title of [42,{},'x'.repeat(121)])await assert.rejects(createTransferTheme('owner',{...original,crystal:{...original.crystal,title}} as any,deps));
+});
+
+
+test('managed title reads retain owner/home boundaries and do not change folder-only readers',async()=>{
+ const queries:any[]=[]; let custom=false; let row:any={folderId:'folder',crystal:{title:'Owned label'},ownerId:'private-owner',hidden:'secret'};
+ const deps:any={customEndpoint:()=>custom,collection:async()=>({findOne:async(filter:any,options:any)=>{queries.push({filter,options});return row;}})};
+ assert.deepEqual(await readManagedContentMetadata('owner','theme',deps),{folderId:'folder',title:'Owned label'});
+ assert.equal(queries[0].filter.ownerId,'owner');assert.equal(queries[0].filter.shareId,'theme');assert.deepEqual(queries[0].filter.$or,[{thingtime:['theme']},{thingtime:['feed-algorithm']}]);
+ assert.equal(await readManagedContentMetadata(undefined,'theme',deps),undefined);custom=true;assert.equal(await readManagedContentMetadata('owner','theme',deps),undefined);assert.equal(queries.length,1);
+ custom=false;row.crystal.title={not:'text'};await assert.rejects(readManagedContentMetadata('owner','theme',deps),/title/);
+ assert.equal(await readManagedContentFolder('owner','theme',deps),'folder');assert.deepEqual(queries.at(-1).options.projection,{folderId:1});
 });

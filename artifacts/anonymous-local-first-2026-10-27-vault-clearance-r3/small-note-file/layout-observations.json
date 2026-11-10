@@ -1,0 +1,93 @@
+[
+  {
+    "width": 1440,
+    "scroll": 1440,
+    "y": 0,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 1440,
+    "scroll": 1440,
+    "y": 672,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 1440,
+    "scroll": 1440,
+    "y": 0,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 390,
+    "scroll": 390,
+    "y": 0,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  },
+  {
+    "width": 390,
+    "scroll": 390,
+    "y": 633,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  },
+  {
+    "width": 390,
+    "scroll": 390,
+    "y": 1266,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 390,
+    "scroll": 390,
+    "y": 1342,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 390,
+    "scroll": 390,
+    "y": 0,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "y": 0,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "y": 633,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "y": 1266,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "y": 1623,
+    "intersects": false,
+    "launcherVisibility": "visible"
+  },
+  {
+    "width": 320,
+    "scroll": 320,
+    "y": 0,
+    "intersects": true,
+    "launcherVisibility": "hidden"
+  }
+]

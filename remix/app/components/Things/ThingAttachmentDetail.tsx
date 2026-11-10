@@ -2,7 +2,7 @@ import { PostAttachments } from '../Attachments/PostAttachments';
 import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
-import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, FormLabel, Heading, Input, Stack, Text, Textarea } from '@chakra-ui/react';
 import { ChevronDown, ChevronUp, Download, ExternalLink, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -70,7 +70,10 @@ const ReferenceRow = ({ reference }: { reference: PublicPost }) => {
 	);
 };
 
-export const ThingAttachmentDetail = ({ attachment, references }: { attachment: PublicAttachment; references: PublicPost[] }) => {
+export const ThingAttachmentDetail = ({ attachment, references, onSaveDetails }: { attachment: PublicAttachment; references: PublicPost[]; onSaveDetails?: (details: { filenamePreview: string; title: string; description: string }) => Promise<void> }) => {
+	const [editing, setEditing] = React.useState(false), [saving, setSaving] = React.useState(false), [saveError, setSaveError] = React.useState('');
+	const [details, setDetails] = React.useState({ filenamePreview: '', title: '', description: '' });
+	React.useEffect(() => { setEditing(false); setSaveError(''); }, [attachment.id]);
 	const mediaUrl = useSharedMediaUrl();
 	const [referencesOpen, setReferencesOpen] = React.useState(false);
 	const [showSensitiveImage, setShowSensitiveImage] = React.useState(false);
@@ -104,9 +107,10 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 							{attachmentTypeLabel(attachment)}
 						</Text>
 					</Box>
+					{onSaveDetails ? <Button size="sm" variant="outline" onClick={() => { setDetails({ filenamePreview: attachment.filenamePreview || '', title: attachment.title || '', description: attachment.description || '' }); setSaveError(''); setEditing(true); }}>Edit file details</Button> : null}
 					<Button
 						as="a"
-						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
+						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true)) || undefined}
 						{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 						size="sm"
 						variant="outline"
@@ -115,6 +119,21 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 						Download
 					</Button>
 				</Flex>
+
+				{editing && onSaveDetails ? <Box as="form" mt={4} onSubmit={async (event: React.FormEvent) => {
+					event.preventDefault(); if (saving) return; setSaving(true); setSaveError('');
+					try { await onSaveDetails(details); setEditing(false); }
+					catch (error) { setSaveError(error instanceof Error ? error.message : 'File details could not be saved. Your edits remain here.'); }
+					finally { setSaving(false); }
+				}}>
+					<Stack spacing={3}>
+						<Box><FormLabel htmlFor="file-display-name">Display filename</FormLabel><Input id="file-display-name" value={details.filenamePreview} onChange={event => setDetails(value => ({ ...value, filenamePreview: event.target.value }))} /></Box>
+						<Box><FormLabel htmlFor="file-title">Title</FormLabel><Input id="file-title" value={details.title} onChange={event => setDetails(value => ({ ...value, title: event.target.value }))} /></Box>
+						<Box><FormLabel htmlFor="file-description">Description</FormLabel><Textarea id="file-description" value={details.description} onChange={event => setDetails(value => ({ ...value, description: event.target.value }))} /></Box>
+						{saveError ? <Text role="alert" color="red.600">{saveError}</Text> : null}
+						<Flex gap={2} wrap="wrap"><Button type="submit" size="sm" isLoading={saving}>Save file details</Button><Button type="button" size="sm" variant="ghost" isDisabled={saving} onClick={() => setEditing(false)}>Cancel</Button></Flex>
+					</Stack>
+				</Box> : null}
 
 				{isImage ? (
 					<Box mt={5} borderRadius="var(--tt-radius-lg, 14px)" overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">

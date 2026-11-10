@@ -1,0 +1,1 @@
+{"payloadBytes": 4294967297, "archiveBytes": 4294968525, "payloadSha256": "2796b8078bc15b6f263639d77b54b01ebfcf9ea9610c20bc6b976931946d57ce", "lastByte": 173, "trailingOffset": 4294968140, "verification": "Python zipfile streamed every payload byte; CRC32, SHA256, manifest, trailing entry, ZIP64 directory/footer/locator"}

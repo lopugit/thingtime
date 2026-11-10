@@ -1,0 +1,14 @@
+
+> test:workflow-callers
+> node scripts/workflow-caller-contract.mjs && node --test scripts/workflow-nitro-scan-roots.test.mjs
+
+workflow caller contract: 7 thin listeners pinned to github-actions
+✔ Nitro workflow scan roots cover every authored directive without scanning generated draft bundles (0.969084ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 659.0975

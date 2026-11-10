@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createVaultEnvironmentMover } from './userVault';
+import { createVaultEnvironmentMover, saveUserVaultProvider } from './userVault';
 
 test('moving secrets and providers only writes group metadata and never returns encryption', async () => {
 	for (const recordKind of ['secret', 'provider']) {
@@ -65,4 +65,11 @@ test('missing/foreign entries and non-owned environments cannot be moved', async
 		/not found/
 	);
 	assert.equal(writes, 0);
+});
+
+
+test('server rejects malformed provider replacements before touching owned records', async () => {
+ for (const token of [false, 42, {}, '🦄'.repeat(8193)]) {
+  await assert.rejects(saveUserVaultProvider('synthetic-owner', { id: 'synthetic-provider', name: 'Example', provider: 'openai', endpoint: 'https://api.openai.com/v1', token }), /token/);
+ }
 });

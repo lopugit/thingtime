@@ -1,0 +1,53 @@
+{
+  "checkedAt": "2026-10-28",
+  "worktree": {
+    "branch": "codex/anonymous-cloud-continuation",
+    "head": "48bda31698b726331d9eae050ec028b1e0134c34",
+    "status": "clean"
+  },
+  "runtime": {
+    "endpoint": "unix:///Users/lopu/.colima/thingtime-agents/docker.sock",
+    "inventorySeconds": 2,
+    "containers": [
+      {
+        "name": "tt-agent-3784d01e-1c19-4935-a45a-1ace2b471a7f",
+        "state": "Up about a minute",
+        "cpuPercent": "23.12%",
+        "memory": "879MiB / 2GiB",
+        "memoryPercent": "42.92%",
+        "ownership": "another active task; untouched"
+      },
+      {
+        "name": "tt-agent-67c40f60-4179-4a07-8d0f-30248058e1bf",
+        "state": "Exited (0) 30 hours ago"
+      }
+    ],
+    "capacityDecision": "No new capacity window: the specifically named prior conflicting container has stopped, but a different task currently occupies the runtime and consumes 879MiB. Prepared runner refuses any active-container inventory, so do not execute it. No runtime action taken."
+  },
+  "pullRequest": {
+    "url": "https://github.com/lopugit/thingtime/pull/1000",
+    "number": 1000,
+    "expectedHead": "48bda31698b726331d9eae050ec028b1e0134c34",
+    "fetchedHead": "48bda31698b726331d9eae050ec028b1e0134c34",
+    "base": "develop",
+    "open": true,
+    "workflowRunId": 40676291296,
+    "checks": {
+      "selector": {
+        "name": "control-plane / route / Select GitHub or Vercel compute",
+        "status": "queued",
+        "checkRunId": 122782413451
+      },
+      "siblingJobs": "skipped; do not interpret as product CI passes",
+      "allChecks": "No Web CI or CodeQL pass established in this read."
+    },
+    "preview": {
+      "url": "https://pr-1000.previews.dev.thingtime.com",
+      "aliasReachability": "previous checkpoint HTTP 200",
+      "currentPRBody": "preview deploying for commit 48bda316",
+      "exactHeadDeploymentAssociation": "unverified; no deployment status proving current alias serves this commit"
+    }
+  },
+  "nextAction": "Wait for a concrete change in the currently active task-owned runtime, not for a timer. Once it exits and Docker inventory is empty, recheck headroom and run corrected fixture once with a unique evidence root. For PR, wait for the queued compute selector to complete; verify exact-head preview association in the resulting deployment evidence before claiming preview acceptance.",
+  "scope": "Read-only only. No source/setting/VM/proxy/credential changes; no runtime started, stopped, claimed, or reused."
+}

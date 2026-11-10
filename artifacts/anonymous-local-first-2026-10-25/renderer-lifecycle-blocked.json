@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "scope": "Earlier actual Docker lifecycle attempt; no model call",
+  "reason": "Docker daemon ENOSPC during container creation; SDK initialization timeout was secondary",
+  "diagnostic": "mkdir /var/lib/docker/containers/<task-container-id>: no space left on device",
+  "codeAtAttempt": "before final TMPDIR/quiescence fixes; not acceptance evidence",
+  "ownership": "Other default-600-second connection resources left untouched; only exact test-owned resources cleaned"
+}

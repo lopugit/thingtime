@@ -1,0 +1,64 @@
+{
+  "url": "https://thingtime-pis7pbt63-lopugits-projects.vercel.app/draft-preview/index.html",
+  "observedAt": "2026-11-09T15:03:15.699Z",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "documentWidth": 1440,
+      "card": {
+        "x": 520,
+        "y": 220,
+        "width": 400,
+        "height": 560,
+        "right": 920,
+        "bottom": 780
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "documentWidth": 390,
+      "card": {
+        "x": 24,
+        "y": 182.59375,
+        "width": 342,
+        "height": 478.796875,
+        "right": 366,
+        "bottom": 661.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    },
+    {
+      "width": 320,
+      "height": 844,
+      "documentWidth": 320,
+      "card": {
+        "x": 24,
+        "y": 231.59375,
+        "width": 272,
+        "height": 380.796875,
+        "right": 296,
+        "bottom": 612.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    }
+  ],
+  "requests": [
+    "https://thingtime-pis7pbt63-lopugits-projects.vercel.app/draft-preview/index.html",
+    "https://thingtime-pis7pbt63-lopugits-projects.vercel.app/draft-preview/runner.js",
+    "https://thingtime-pis7pbt63-lopugits-projects.vercel.app/draft-preview/index.html",
+    "https://thingtime-pis7pbt63-lopugits-projects.vercel.app/draft-preview/runner.js"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "jsonSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "matchesPriorCanonical": true,
+  "invalidJsonRejected": true,
+  "emptyAfterReload": true,
+  "ok": true
+}

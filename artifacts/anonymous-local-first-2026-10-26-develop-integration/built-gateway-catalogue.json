@@ -1,0 +1,23 @@
+{
+  "ok": false,
+  "exitCode": 1,
+  "command": "/Users/lopu/.nvm/versions/node/v24.18.0/bin/node remix/scripts/environment-gateway-acceptance.mjs",
+  "environment": "Sanitized fresh temporary HOME/TMPDIR; child sandbox-exec fixture loopback policy unchanged",
+  "observedAt": "2026-10-26T11:09:12.835299+00:00",
+  "log": "/tmp/tt-catalogue-built-acceptance-retry.log",
+  "cleanup": {
+    "fixturePortsWithRemainingListeners": [],
+    "checkedPorts": [
+      19771,
+      19772,
+      19773,
+      19774,
+      19775,
+      19776,
+      19777,
+      19778,
+      19779,
+      19780
+    ]
+  }
+}

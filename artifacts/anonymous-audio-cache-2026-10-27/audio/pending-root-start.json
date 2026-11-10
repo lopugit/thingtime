@@ -1,0 +1,16 @@
+{
+  "body": "Thingtime\n\nRefreshing your session\n\nYour previous view is hidden while we check your current session.",
+  "mountedAudioCount": 0,
+  "sourceCount": 0,
+  "old": {
+    "connected": false,
+    "paused": true,
+    "currentSrc": "http://127.0.0.1:18724/api/v1/attachments/content?id=att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+    "srcAttribute": null,
+    "sources": [
+      null
+    ],
+    "readyState": 0,
+    "networkState": 3
+  }
+}

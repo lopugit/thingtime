@@ -1,0 +1,34 @@
+✖ native anonymous theme History reviews restore, undo and merge offline (33634.869454ms)
+✖ native account theme History reviews restore, undo and merge offline (42468.525915ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 76573.894652
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1332
+✖ native anonymous theme History reviews restore, undo and merge offline (33634.869454ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:65:92) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible` ]
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1332
+✖ native account theme History reviews restore, undo and merge offline (42468.525915ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for getByRole('dialog', { name: 'History', exact: true }).getByText('Both versions changed') to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:77:70) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('dialog', { name: 'History', exact: true }).getByText('Both versions changed') to be visible" ]
+  }
