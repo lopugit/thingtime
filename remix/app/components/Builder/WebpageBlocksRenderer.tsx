@@ -1,4 +1,5 @@
-import { isSafeWebpageCssValue } from '~/schemas/cssDeclarationNames';
+import { isCssPropertyName, isSafeWebpageCssValue, normalizeCssPropertyName } from '~/schemas/cssDeclarationNames';
+import { splitCssPriority } from '../ElementInspector/cssDeclarations';
 import { useInlineCssDeclarations } from '../ElementInspector/useInlineCssDeclarations';
 import { authoredHtmlPropValue } from '../Kinds/htmlRenderPolicy';
 import { collectionSource, indexCollectionRows } from './collectionSource';
@@ -88,12 +89,29 @@ export type BuilderChrome = {
 	onMediaToBlock?: (blockId: string, files: File[]) => void;
 };
 
-// Apply the same value screen to live drafts before the save endpoint runs.
+const cssStyleMembers = new Set([
+ 'cssText', 'length', 'parentRule', 'item', 'getPropertyValue', 'getPropertyPriority', 'setProperty', 'removeProperty',
+ 'getPropertyCSSValue', 'getPropertyShorthand', 'isPropertyImplicit'
+]);
+
+// Screen live drafts before saving. Ordinary declarations also appear in
+// initial markup. CSSOM handles priority and values that cannot be safely
+// interpolated into a serialized style attribute, such as data URLs with ';'.
 function useBlockCss(ref: React.RefObject<HTMLElement>, css: Record<string, string> | undefined, mediaUrl: (url: string) => string, editorOnly?: string[]) {
- const allowed = css ? Object.fromEntries(Object.entries(css).filter(([key, value]) =>
-  typeof value === 'string' && isSafeWebpageCssValue(value) && !editorOnly?.includes(key)
- )) : undefined;
- useInlineCssDeclarations(ref, allowed, value => mapCssMediaUrls(value, mediaUrl));
+ const declarations: Record<string, string> = Object.create(null);
+ const style: Record<string, string> = {};
+ for (const [key, source] of Object.entries(css || {})) {
+  const name = normalizeCssPropertyName(key);
+  if (!isCssPropertyName(name) || typeof source !== 'string' || !isSafeWebpageCssValue(source) || editorOnly?.includes(name)) continue;
+  const mapped = mapCssMediaUrls(source, mediaUrl);
+  declarations[name] = mapped;
+  const { value, priority } = splitCssPriority(mapped);
+  if (!value || priority || /[;\\]|\/\*/.test(value)) continue;
+  const prop = name.startsWith('--') ? name : name.replace(/^-ms-/, 'ms-').replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
+  if (!cssStyleMembers.has(prop) && !Object.hasOwn(Object.prototype, prop)) style[prop] = value;
+ }
+ useInlineCssDeclarations(ref, css ? declarations : undefined);
+ return Object.keys(style).length ? style as React.CSSProperties : undefined;
 }
 
 const DRAG_MIME = 'application/x-tt-block-id';
@@ -419,14 +437,14 @@ const BlockFrame = ({
 	const selected = !live && chrome?.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
 	const frameRef = React.useRef<HTMLDivElement>(null);
-	useBlockCss(frameRef, block.css, mediaUrl);
+	const style = useBlockCss(frameRef, block.css, mediaUrl);
 	const register = React.useContext(BlockChromeElements);
 	React.useLayoutEffect(() => register?.(block.id, frameRef.current), [register, block.id, layout]);
 
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
 	if (!chrome || live)
 		return (
-			<Box ref={frameRef} data-block-id={block.id} {...selfPlacement(block, parentDirection)}>
+			<Box ref={frameRef} data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={style}>
 				{null}
 				{children}
 				{null}
@@ -487,6 +505,7 @@ const BlockFrame = ({
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
+			style={style}
 			onContextMenu={
 				layout && chrome.onContextMenu && !locked
 					? (event: React.MouseEvent) => {
@@ -939,7 +958,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const selected = chrome?.selectedId === block.id;
  const hovered = chrome?.hoverId === block.id;
  const hidden = attributes.hidden === true || (typeof attributes.hidden === 'string' && authoredHtmlPropValue('hidden', attributes.hidden) !== false);
- useBlockCss(authoredRef, block.css, mediaUrl, editing
+ const style = useBlockCss(authoredRef, block.css, mediaUrl, editing
   ? [...(hidden ? ['display', 'min-height'] : []), ...(selected || hovered ? ['outline', 'outline-offset'] : [])]
   : undefined);
 
@@ -949,9 +968,9 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const editorProps: Record<string, any> = {
   ref: authoredRef,
   'data-block-id': block.id,
-  style: editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : undefined,
+  style: { ...style, ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
   ...(editing ? {
-   ...(hidden ? { hidden:false, style:{ display:'block', minHeight:44, ...(selected || hovered ? { outline:'2px solid var(--tt-accent, hotpink)', outlineOffset:'2px' } : {}) } } : {}),
+   ...(hidden ? { hidden:false, style:{ ...style, display:'block', minHeight:44, ...(selected || hovered ? { outline:'2px solid var(--tt-accent, hotpink)', outlineOffset:'2px' } : {}) } } : {}),
    onFocus: (event: React.FocusEvent<HTMLElement>) => { if (!ownsBlockTarget(event.target, event.currentTarget)) return; event.stopPropagation(); chrome.onHover(block.id); },
    onMouseLeave: (event: React.MouseEvent<HTMLElement>) => { if (!(event.relatedTarget as Element | null)?.closest?.('.ttBlockChip')) chrome.onHover(null); },
    onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
@@ -1025,7 +1044,7 @@ const BlockView = (
 	const mediaUrl = useSharedMediaUrl();
 
 	const plainRef = React.useRef<HTMLDivElement>(null);
-	useBlockCss(plainRef, block.css, mediaUrl);
+	const style = useBlockCss(plainRef, block.css, mediaUrl);
 
 	// Inspector typography (font-size, color, …) must reach the text itself,
 	// not just the wrapper — explicit sizes in the typo presets and the rich
@@ -1249,7 +1268,7 @@ const BlockView = (
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
 		return (
-			<Box ref={plainRef} data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)}>
+			<Box ref={plainRef} data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)} style={style}>
 				{body}
 			</Box>
 		);

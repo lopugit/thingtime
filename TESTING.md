@@ -4507,7 +4507,8 @@ email whose link points at the attacker.
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
       Custom drawer items, immediate reload once Save closes, and account
-      separation. Editing must prefill every field. Locally bound rows must render
+      separation. Use a long unbroken title at phone width and confirm it wraps
+      within the drawer on first paint. Editing must prefill every field. Locally bound rows must render
       their template without database Collection controls. Failed writes must
       retain the draft or restore the removed item; changing accounts or editing
       layouts during a save must not leave stuck controls or write another

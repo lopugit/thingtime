@@ -10,9 +10,10 @@ existing validated source may load media.
 
 Builder uses the same property and attribute inputs. Standards suggestions are
 generated from the pinned inventory, with free typing for declarations and HTML
-markup. Authored CSS is applied through CSSOM. Passive HTML attributes, default
-values, and multiple-select Action inputs retain their normal rendering and
-validation boundaries.
+markup. Ordinary authored CSS is present in initial markup. CSSOM applies
+priority and complex values without interpolating additional declarations.
+Passive HTML attributes, default values, and multiple-select Action inputs
+retain their normal rendering and validation boundaries.
 
 - The final source passed 167 focused profile, subspace, Builder, renderer, and
   sharing tests and 164 capability tests. TypeScript, changed-file lint, and
@@ -33,6 +34,13 @@ The merged origin advertises Things 1.59.0, Things-update 1.25.0, and Webpages
 resolve 1.17.0 so clients can distinguish expanded authoring from the earlier
 selection-only contracts. The merged renderer, schema, Action, and isolated
 Chrome regression batch passed 104 tests.
+
+The required build check exposed missing initial wrapping styles in the custom
+drawer. The existing wrapping assertions now pass, and a new renderer test
+covers ordinary and Unicode declarations, vendor names, and exclusion of
+unsafe style attribute content. The continued CI suite also caught a change
+to the object shape returned by CSS validation. The validator preserves plain
+CSS records so authored demos and behavior suites round trip unchanged.
 
 The portable Graphify snapshot was refreshed structurally. The local semantic
 proxy did not finish the scoped document refresh within the task budget, so

@@ -5836,7 +5836,7 @@ const sanitizeWebpageBlock = (
 		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
 			return fail(400, `Block ${id} css must be an object of css property → value`);
 		}
-		const css: Record<string, string> = Object.create(null);
+		const css: Record<string, string> = {};
 		for (const [name, value] of Object.entries(raw.css as Record<string, unknown>)) {
 			const key = normalizeCssPropertyName(name);
 			if (!isCssPropertyName(key) || name !== key) {
