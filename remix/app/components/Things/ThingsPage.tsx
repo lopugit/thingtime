@@ -905,16 +905,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         navigateToFolder(thing.id);
         return;
       }
-      if (thing.thingtime.includes('post')) {
-        navigate(`/post/${thing.id}`);
-        return;
-      }
-      // actions open their inspector — the /things half of the program loop
-      if (thing.thingtime.includes('action')) {
-        navigate(`/actions/${encodeURIComponent(thing.id)}`);
-        return;
-      }
-      setPreviewThing(thing);
+      navigate(thingOpenHref(thing, 'things', user?.id));
     },
     [navigate, navigateToFolder, searchParams, user?.id, locationPicker, builderMode]
   );

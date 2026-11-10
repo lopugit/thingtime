@@ -23,6 +23,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RenderThing } from '~/components/Kinds';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { ThingComments } from './ThingComments';
 
@@ -455,8 +456,8 @@ export const PreviewModal = ({
   // caller cannot forget it.
   const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
   return (
-  <Modal isOpen={!!thing} onClose={onClose} size="lg">
-    <ModalOverlay />
+  <Modal isOpen={!!thing} onClose={onClose} size="lg" scrollBehavior="inside">
+    <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
     {thing && (
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">

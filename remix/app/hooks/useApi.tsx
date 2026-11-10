@@ -1663,11 +1663,24 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       // creation rides the unified path: things.create({ thingtime: ['component'], crystal })
     },
     actions: {
-      // execute one action inside its capability + budget envelope
-      run: useCallback(
-        async (args) => asyncFetcher.submit({ action: args?.action, inputs: args?.inputs }, { action: '/api/v1/actions/run' }),
-        [asyncFetcher]
-      ),
+      // execute one action inside its capability + budget envelope.
+      // The body comes from the shared pure builder rather than an inline key
+      // list: `source` is a security control (it narrows server-side
+      // resolution to actions the viewer owns — execute.ts ownedOnly), and an
+      // inline list silently dropped it, disarming the delegated ttAction
+      // path in every browser while the API-level battery stayed green.
+      run: useCallback(async (args) => {
+        const actor = actionActor.current;
+        const expectedPlane = planeRef.current;
+        const origin = window.location.origin;
+        await requireThingtimeCapability('api.actions-run', '1.37.0');
+        if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
+        if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
+        if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+      }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })
