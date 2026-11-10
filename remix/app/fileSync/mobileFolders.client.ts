@@ -453,9 +453,11 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	// iOS includes the validated grant snapshot on successful gated replies.
+	// The action-specific fields bind the reply to the requested Photos run.
 	if (request.action === 'arm-photo-run') {
 		if (payload.rootId !== request.rootId || payload.configurationId !== request.authorization.id || payload.photoRunArmed !== true ||
-			typeof payload.scheduled !== 'boolean' || payload.roots.length) throw Error('Native Photos did not confirm the background run.');
+			typeof payload.scheduled !== 'boolean') throw Error('Native Photos did not confirm the background run.');
 		if (request.execution === 'native') {
 			const revision = payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision;
 			if (payload.nativeOwnsRun !== true || revision !== request.authorization.updatedAt ||
@@ -463,13 +465,13 @@ export function parseMobileFolderResult(
 			result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
 		}
 	} else if (request.action === 'photo-run-status') {
-		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.deviceId !== request.deviceId ||
-			payload.roots.length) throw Error('Native Photos run status scope changed.');
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId || payload.deviceId !== request.deviceId)
+			throw Error('Native Photos run status scope changed.');
 		result.photoRunStatus = parseNativePhotoRunStatus(payload.configurationRevision ?? payload.photoRunProgress?.configurationRevision, payload.photoRunProgress);
 	}
 	if (request.action === 'run-photo-in-background') {
 		const status = payload.photoContinuationStatus;
-		if (payload.roots.length || payload.rootId !== request.rootId || payload.configurationId !== request.configurationId ||
+		if (payload.rootId !== request.rootId || payload.configurationId !== request.configurationId ||
 			payload.deviceId !== request.deviceId || payload.configurationRevision !== request.configurationRevision ||
 			!['active', 'declined', 'complete', 'waiting'].includes(status) || payload.photoContinuationRequested !== (status === 'active'))
 			throw Error('Native Photos did not confirm the background request.');

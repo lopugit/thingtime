@@ -9,6 +9,7 @@ import {
 	coerceValueText,
 	componentBindsAction,
 	deriveRequiredCapabilities,
+	describeActionStep,
 	runInputDescriptorsOf,
 	selectActionByKey
 } from './actionInspect.ts';
@@ -30,6 +31,15 @@ test('literal step schemas derive scoped capabilities', () => {
 		{ capability: 'things.create', schemas: ['customer'] },
 		{ capability: 'things.read', schemas: ['invoice'] }
 	]);
+});
+
+test('ensure derives both permissions and describes creation and reuse', () => {
+	const step = { op: 'things.ensure', schema: 'customer', key: 'current-customer', values: {} };
+	assert.deepEqual(deriveRequiredCapabilities([step]), [
+		{ capability: 'things.create', schemas: ['customer'] },
+		{ capability: 'things.read', schemas: ['customer'] }
+	]);
+	assert.equal(describeActionStep(step), 'Reuse or create a customer thing by key');
 });
 
 test('a dynamic-id get alone derives an unscoped things.read', () => {

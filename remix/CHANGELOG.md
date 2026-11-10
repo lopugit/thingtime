@@ -145,6 +145,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-09 — Add private webpage cutoff settings, ordered idempotent Action
+  batches and passive data sources. Preserve existing form ownership, manual
+  selection and cutoff rollover. [Verification](../PRs/1437-codex-routes-planning-preferences-support-scheduled-private-webpage-activation.md). **Codex (AI)**
+
+- 2026-11-09: Use bcrypt's packaged native binding in Vercel builds and check
+  its glibc requirements and password hash compatibility before release.
+  **Codex (AI)**
+
+- 2026-11-09: Authorize ChatGPT plan usage from Thingtime desktop while keeping
+  the selected account API. Protect the grant on the device and save completed
+  Lopu text turns through the account's transcript API. **Codex (AI)**
+
+- 2026-11-09: Accept the installed iOS bridge's folder grant snapshot on Photos
+  status, start, and background replies. Enabled backups can proceed after their
+  first status check, and the card can show native progress. **Codex (AI)**
+
+- 2026-11-08: Add per-Thing cloud and device storage choices, private device policies, verified managed copies, and safe iOS local release/open controls. Existing storage behavior is inherited until a choice changes. Bound LiDAR archive preparation memory with per-chunk autorelease pools, verified against an 11.36 GB archive. See [Thing storage](../docs/thing-storage.md) and [PR 1427 validation](../PRs/1427-codex-thing-storage-placement-add-per-thing-cloud-and-device-storage-choices.md). — Codex (AI)
+
+- 2026-11-09: Add atomic create-or-reuse to saved server Actions, private page
+  activation, independent map point sources, and optional per-point map fitting. [Builder Action contract](../docs/builder-browser-actions.md) · [PR 1430 validation](../PRs/1430-codex-routes-daily-activation-add-private-page-activation-and-map-sources.md). **Codex (AI)**
+
 - 2026-11-08: Show referenced Thing metadata with canonical JSON hashing, human-readable JSON and verified attachment sizes, editable layouts and access-aware refresh. Preserve original LiDAR archives during recovery and refuse empty captures. [Contract](../docs/thing-metadata.md) · [PR 1425 validation](../PRs/1425-codex-thing-metadata-sizes-show-thing-metadata-sizes-and-preserve-original-lidar-scans.md). **Codex (AI)**
 
 - 2026-11-08: Resume enabled iPhone Photos backup on launch and after temporary
@@ -345,6 +366,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Deployment and real-account acceptance remain separate checks.
   See [PR 1351](../PRs/1351-codex-routes-home-performance-add-precise-collection-paging-and-progressive-maps.md).
   **Codex (AI)**
+
+### Provider credential handoff
+
+- 2026-11-09: Check credential handoff compatibility without reading provider input. Add scoped Connections OAuth client imports for Meta and other registered confidential clients while preserving other environment and origin entries. [Agent runbook](../docs/agent-credential-workflows.md). **Codex (AI)**
+
+- 2026-11-04: Add Google web OAuth and generic provider file imports, a one-use approved agent handoff with status-only receipts, an editable import/approval UI, and cross-platform Node delivery. Document agent password, OAuth and passkey workflows with distinct live acceptance gates. [PR #1341 notes](../PRs/1341-credential-handoff-approved-provider-imports.md). **Codex (AI)**
 
 ### 2026-11-05
 - Accept canonical zero-byte file entries in the native sync cloud change feed

@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import { openSyncJournal, syncScopeKey } from '../app/fileSync/journal.client';
 import { writeStampedCache } from '../app/hooks/localCache';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
@@ -188,7 +189,9 @@ if (photoRecovery || mobilePanel) {
     if (rootId !== photosRoot || !row || (request.authorization?.scope.deviceId ?? device) !== deviceId)
      throw Error('Unexpected native Photos scope');
     nativeCalls.push({ action, execution: request.execution, revision: request.authorization?.updatedAt ?? request.configurationRevision });
-    const result = { roots: [], rootId, configurationId: id, deviceId };
+    // Build 53 includes the owner's scoped grant list on every successful
+    // gated folder reply. The immediate cancellation denial returns none.
+    const result = { roots: action === 'cancel-deferred-upload' ? [] : photoRoots, rootId, configurationId: id, deviceId };
     if (action === 'arm-photo-run') {
      if (request.execution !== 'native' || request.authorization.updatedAt !== row.updatedAt || row.crystal.paused)
       throw Error('Native runner was armed without exact reviewed settings');
@@ -208,10 +211,12 @@ if (photoRecovery || mobilePanel) {
       persistNativeRun();
      }
      reply('mobile-files-result', { ...result, configurationRevision: nativeRun.revision,
-      photoRunArmed: true, scheduled: true, nativeOwnsRun: true, photoRunProgress: nativeRun.progress });
+      photoRunArmed: true, scheduled: true, nativeOwnsRun: true,
+      photoRunProgress: { ...nativeRun.progress, configurationRevision: nativeRun.revision } });
     } else if (action === 'photo-run-status') {
-     reply('mobile-files-result', { ...result, configurationRevision: id === photoScope.rootId ? nativeRun?.revision ?? null : null,
-      photoRunProgress: id === photoScope.rootId ? nativeRun?.progress ?? null : null });
+     const run = id === photoScope.rootId ? nativeRun : null;
+     reply('mobile-files-result', run ? { ...result, configurationRevision: run.revision,
+      photoRunProgress: { ...run.progress, configurationRevision: run.revision } } : { ...result, photoRunProgress: null });
     } else if (action === 'run-photo-in-background') {
      if (!nativeRun || nativeRun.revision !== request.configurationRevision || row.crystal.paused || !nativeRun.progress.pendingOriginals)
       throw Error('Background request did not target current native work');
@@ -525,7 +530,7 @@ const nativeFixtureHost = {
  fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
+ element: <CurrentPageBuilderFixture><ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
   {autoPhotos && <NativeSyncBootstrap ownerId={ownerId} generation={0} />}
   {editPhotos && <Box aria-label="Account settings"><RemoteDeviceSync ownerId={ownerId} deviceId={deviceId} devicePlatform="ios" /></Box>}
   <Box aria-label="Local sync">{nativeOnly ? <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} /> :
@@ -533,5 +538,5 @@ const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ use
  </> : params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <>
   <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} devicePlatform={mobile ? 'ios' : 'macos'} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />
   {mobilePanel && <MobileDeviceSetupCard ownerId={ownerId} syncAnchor />}
- </>}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }, { path: '/things', element: <h1>Folder opened</h1> }]);
+ </>}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider></CurrentPageBuilderFixture> }, { path: '/things', element: <h1>Folder opened</h1> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

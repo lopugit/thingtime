@@ -57,6 +57,17 @@ test('fork creates independently owned media once, binds it transactionally and 
 	assert.equal(JSON.stringify([...f.composition.docs]), before);
 });
 
+test('a composition fork drops the automatic Action opt-in and leaves its source unchanged', async () => {
+	const f = fixture();
+	const activationAction = { action: 'existing-private-action', cadence: 'open' };
+	assert.ok(f.composition.root.crystal);
+	f.composition.root.crystal.activationAction = activationAction;
+	const result = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(result.ok, true);
+	assert.equal(f.created.find(doc => doc.thingtime.includes('webpage')).crystal.activationAction, undefined);
+	assert.deepEqual(f.composition.root.crystal.activationAction, activationAction);
+});
+
 test('fork refuses unavailable files and cleans only its new partial uploads', async () => {
 	const f = fixture(); const copy = f.deps.copyFile;
 	f.deps.copyFile = async (...args) => args[1] === 'att_other' ? { ok: false, status: 404, error: 'Attachment not found' } : copy(...args);

@@ -133,6 +133,11 @@
     }
   },
   {
+    "pattern": "/credentials/import",
+    "label": "Credentials Import",
+    "preview": {}
+  },
+  {
     "pattern": "/crypto",
     "label": "Crypto",
     "preview": {}

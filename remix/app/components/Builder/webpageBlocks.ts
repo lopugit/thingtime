@@ -1,3 +1,5 @@
+import type { WebpageActivation } from '~/schemas/webpageActivation';
+
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
 
@@ -9,6 +11,8 @@ export type WebpageMediaKind = 'image' | 'video' | 'audio';
 
 export interface WebpageBlockSource {
 	action: string;
+	// Bind data without creating a local form, click or event boundary.
+	passive?: boolean;
 	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
 	inputs?: Record<string, string | number | boolean>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.
@@ -66,6 +70,7 @@ export interface WebpageCrystal {
 	version?: number;
 	forkOf?: string;
 	previewBg?: string;
+	activationAction?: WebpageActivation;
 	// the behaviour suite (installable app bundle) this page belongs to
 	suiteKey?: string;
 	blocks: WebpageBlock[];

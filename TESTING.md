@@ -44,6 +44,12 @@ Run `npm --prefix remix run test:chatgpt`, `test:api-capabilities`,
 - [ ] Sign out, switch account/API origin, disconnect, expire/release scope and quit; verify grant invalidation and task-browser/profile cleanup. Validate the Windows named pipe and actual DPAPI on a Windows runner separately from a personal-account GUI acceptance.
 - [ ] Record installed personal-account/service sign-in and required passkey presence separately. A successful synthetic API, runtime or package check is not that acceptance.
 
+## Saved private page activation
+
+- [ ] Open an owned private page with an activation binding on desktop and mobile. Ensure today's record once across refresh, reload and simultaneous tabs; an existing record keeps its edits. Verify the configured timezone's civil midnight and a manual selection made while startup is in flight. Deep links keep their selection.
+- [ ] Turn automatic setup off and reopen; no new record or selection. In Builder edit and preview, a historical branch, a shared account and signed out, no activation starts. Confirm a transient error leaves the page usable and one explicit retry uses the same civil key. Scroll to the bottom at both widths and check the inline state for overflow.
+- [ ] Run `test:webpages`, `test:schemas`, `test:api-capabilities` and the isolated `scripts/webpage-activation.browser.mjs` fixture; also verify the Action and ensure behavior through the real disposable HTTP API.
+
 ## Builder Thing navigation (2026-10-29)
 
 - [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
@@ -2306,6 +2312,11 @@ email whose link points at the attacker.
       existing Remix verifier and the root wrapper pass, then inspect
       `.vercel/output/static/index.html` and `.vercel/output/config.json` rather
       than an `outputDirectory` selected by the dashboard.
+- [ ] Confirm the emitted Nitro function loads bcrypt from its packaged native
+      binding. Linux builds must reject symbols newer than Vercel's glibc 2.34.
+      The emitted binding must verify existing bcrypt 5 hashes and fresh hashes
+      at the requested cost. Before promotion, confirm the staged deployment's
+      app shell and Nitro capability manifest respond successfully.
 - [ ] Confirm the Vercel output verifier rejects any server chunk that leaves
       `unicode-emoji-json/data-by-emoji.json` as a runtime package lookup
       without tracing the JSON asset. In an isolated copy of the generated
@@ -3793,6 +3804,14 @@ email whose link points at the attacker.
 - [ ] A free-form data crystal with the same `voteKey` cannot squat another
       user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
 
+## Current-page Builder mode
+
+- [ ] On desktop and mobile, verify Settings, Connections, Subspaces and
+      focused layout surfaces default to view mode with no layout editing
+      controls. Toggle **Builder on current page** and check editing, draft
+      recovery, and save/reload. Switch routes and accounts to verify the
+      mode resets while content and permissions remain correct.
+
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
 - [x] 2026-10-19 isolated real API and desktop/390px acceptance: message send/read, saved views/comments, draft retention, live permission revocation, searchable moderator embeds and independent Builder control/repeated-title edits survive reload. See [PR 1045 evidence and remaining production gates](PRs/1045-subspace-messages-views-and-moderated-embeds.md).
@@ -3810,6 +3829,12 @@ email whose link points at the attacker.
       default presentation or horizontal overflow. Edit the Component's nested
       text block in Builder independently, save/reload and verify both placements.
 - [ ] Select nested view/embed control labels independently in Builder, edit/save/reload, and confirm the real controls still act on the correct subspace.
+- [ ] On desktop and mobile, open a subspace and verify Posts/Messages plus both
+      embed regions render without **Edit layout**. In the drawer, toggle
+      **Builder on current page** on and off, including while editing. Check
+      that view mode shows the saved layout while unsaved changes remain
+      available on reentry. Reload into view mode and verify that moderation
+      and embedded Thing permissions stay enforced.
 
 
 - [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.
@@ -5513,7 +5538,11 @@ halves.
       Slowly hover along each edge and corner, pause, then move between the border and nearby content: the resize
       cursor must remain stable throughout the same band that accepts a drag. Repeat after resizing and switching
       compact/default modes; text selection, header buttons and result actions must retain their normal cursors
-      and input. An endpoint-only automated drag does not establish hover-cursor stability.
+      and input. Keep a pinned launcher non-key and repeat. Verify WindowServer targets the launcher across the
+      transparent exterior half of each resize band, including rounded corners; AppKit hitTest alone does not prove
+      OS event targeting. Run Commander's loaded-WebKit WindowServer/motion regression, including disabled-band
+      removal and central text/link cursor restoration. An endpoint-only automated drag does not establish
+      physical hover-cursor stability.
       Begin a resize, then release the mouse, press Escape, change focus, hide, close, insert an emoji, or press
       Return to paste from Commander’s Emoji & Symbols picker; later pointer movement must never continue resizing
       the launcher. Relaunch and verify the selected mode persists.
@@ -7183,6 +7212,12 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       bundle must retain its signing identity and designated requirement before
       replacement; verify the installed copy and permission preflights after
       launch. A fresh install uses Apple Development and never ad-hoc signing.
+- [ ] With the installed app's managed Node and its bundled Electron child
+      running, quit the desktop window and install the next verified stable
+      bundle with `install:local`. The installer must let the stopped service's
+      processes exit before replacing the app, then start one managed Node from
+      the verified replacement. If an installed process stays open, preserve
+      the prior app and restart its managed service.
 - [ ] In the installed Electron app's footer, confirm the branch and full commit
       link match `Contents/Resources/web/metadata.json`, even when the selected
       Thingtime origin's root data reports a different deployment branch.
@@ -7896,7 +7931,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Scroll modal/page from top to bottom; Save remains reachable.
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (100 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -7904,6 +7939,31 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       runs refusing a foreign action by id, docs twins).
       Declared own prototype-named inputs remain ordinary data; omitted inputs
       never resolve through an inherited prototype.
+- [ ] On the disposable replica, run parallel `things.ensure` calls for the
+      same Action and key and confirm one private Data Thing ID. Edit and move
+      it, then retry with different creation values. Verify current saved
+      content and placement, schema-mismatch refusal, owner isolation,
+      foreign-folder refusal and shared read-only refusal in `verify-actions`.
+- [ ] In the same harness, activate a saved private page twice and read back
+      the same Thing stamped with the verified civil day. Refuse stale days
+      and revisions, supplied inputs, shared roots, other viewers, public
+      pages, foreign Action IDs, Action key aliases and plain creates.
+- [ ] In the same harness, change a private cutoff source and verify stale
+      schedule revision refusal. Run overlapping 7-, 14- and 30-date
+      ensure batches, including concurrent opens. Verify old keyed rows,
+      manual matching rows, scope and ordered IDs. Revoke the source
+      audience and verify automatic activation refuses it. Unit checks
+      cover the exact cutoff and local daylight-saving gaps and folds.
+- [ ] Leave a private scheduled page open through a cutoff. Verify navigation
+      that carries the same selection still allows the scheduled change and
+      an explicit different selection stays pinned. Change settings in another
+      tab, then verify stale activation refresh and an explicit fresh-read retry.
+- [ ] Bind an additional map points source with cursor pages and interval
+      refresh. Confirm it updates only its own markers, retains static and
+      route markers, and clears its layer on refusal or error. With an
+      editable status block bound to the same source, set `showError: false`
+      and verify one status. Reopen a private copy and verify its source
+      reference points to the copied Action.
 - [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
       lists it, DELETE the action, and confirm the same query is now empty while
       another action keeps its own runs. action-run is protected (no route deletes
@@ -8463,6 +8523,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 ## Commander emoji paste recovery
 
+- [ ] Follow `Commander/docs/TESTING.md` for reopening Emoji & Symbols: every new opening starts with a blank, focused search, including shortcut reopen in a reused launcher; recents and skin tone persist.
 - [ ] Seed a disposable clipboard value, paste an emoji into TextEdit and a browser text field, and verify the emoji arrives before restoration. Repeat with a busy destination, rapid Return presses, and two Commander windows. Copy a new value during the paste and verify restoration never overwrites that new copy; check Paste and Keep a Copy separately.
 - [ ] Open Commander over a text editor, dismiss the root launcher with Escape, and immediately type: input must return to the original editor. Escape from Actions must only close Actions. Clicking another app, opening a result, or switching to Commander Settings must not reactivate an older destination. Repeat with a pinned launcher.
 
@@ -12300,6 +12361,14 @@ transfer, whole-account snapshots or production deployment.
   request never suspends the active one, an account or origin change drops
   stale queued work, and Pause still reaches native immediately. A busy status
   read may retry once. An unconfirmed arm must be checked before sending again.
+- In the mounted native Photos scenario, return the installed iOS bridge's
+  nonempty grant snapshot on successful status, arm, and continuation replies.
+  Verify an enabled connection arms after a null initial status, live progress
+  appears, and the explicit background action acknowledges the same run.
+- Run `testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey` to
+  exercise Foundation's resolved directory URLs. On the iPhone, reopen the app
+  after arming an enabled backup and confirm the saved native run resumes
+  without a second tap and publishes verified originals to its destination.
 - Let the native run authorization expire at the same saved revision. On the
   next five-minute check, verify the browser reauthorizes the exact current
   binding. A live binding returns its existing handle. An expired binding
@@ -13307,6 +13376,19 @@ separate from deterministic discovery/lease tests.
 - [ ] Against the intended API, personalize a private settings page, reload it, create a competing edit in another window, and verify the conflict. Capability negotiation and expected-actor/data-plane guards must fail closed after account/backend changes. Offline recovery remains usable with the API unreachable.
 
 ## ChatGPT plan connections (local/self-hosted)
+
+- [ ] In the installed desktop app, keep the selected production API and existing
+      personal account. Connect via Secure Vault → ChatGPT plan, complete OpenAI
+      consent and the exact localhost callback, select a discovered model, and
+      verify the connected account after reload and restart. Keep account access,
+      encrypted device storage, provider response, and saved chat evidence separate.
+- [ ] Start a Lopu text chat with the device connection, complete a real reply,
+      and reload the account conversation. Send a follow-up using the same pin.
+      From another installation, the chat must remain readable while its missing
+      device connection refuses inference without billing fallback. Switch owner
+      or origin during the callback, generation or save; refuse or suppress the
+      stale result. Verify text-only refusal for an attachment or Action, and that
+      the cloud transcript route cannot execute anything or grant inference.
 
 - [ ] In the editable ChatGPT settings layout, select and edit a nested button label,
       repeated model option and transfer-dialog text through Builder; save and reload.
@@ -14690,6 +14772,45 @@ the isolated real-API/browser command and the metadata-only session boundary.
   Escape closes it, and focus returns to its button. A real site sign-in and a
   native-provider operation require separate acceptance.
 
+## Agent provider-credential import
+
+- On an isolated replica-set API, exercise the real browser approval plus Node
+  file handoff and the direct file/paste importer. Verify the exact root admin,
+  origin, environment, label, format and create/replace revision, then reload
+  metadata and compare the receipt. Use synthetic credentials only.
+- Import Google web JSON with the exact callback; refuse installed-client,
+  wrong callback and malformed files. Replace one environment/origin entry and
+  independently verify other scopes remain unchanged. Refuse stale revisions,
+  duplicate labels and foreign account/Character/bearer approvals.
+- Run the CLI's read-only preflight for `oauth-client`. Version 1.0 accepts
+  the existing Google format and refuses the scoped format before a handoff or
+  input read. Approve a synthetic Facebook scoped replacement, verify the
+  callback and exact vault revision in the browser, then read the receipt and
+  verify the other origin survived.
+- Cancel, expire, revoke/logout and switch account during work; protected drafts
+  must clear and stale completions must not save. Test proof mismatch, replay
+  with different bytes, concurrent save/revoke, and lost initial/retry responses.
+  A committed receipt must not turn into duplicate creation or false failure.
+- Switch the approving session to a Character and back without polling in
+  between; the previous approval must remain revoked. An owner header must not
+  override persisted Character selection. Load approval inside a same-origin
+  iframe: headers and client guards must refuse its controls and requests.
+- Reconcile a lost write, intermediary HTTP 500, partial receipt and JSON-null
+  status without duplicate saves or false success. Replacement receipts must
+  match the approved credential ID, including when their other fields match.
+- CLI stdout/errors must contain only allowlisted status/metadata, including
+  base64url IDs with underscores and canonical dates; raw remote errors, bytes
+  and verifier headers never appear. Ctrl-C must close a stalled local pipe.
+- At desktop/mobile sizes, scroll fully, use keyboard file selection/review,
+  open paste/replace/approval states and verify one inline loading indicator,
+  no overflow, focus preservation and retry. Edit nested heading/control blocks
+  separately, save and reload without persisting transient secret input.
+- Verify capability discovery, all executable registrations, signed gateway
+  header integrity and refused cross-origin fallback. Run `test:credentials-import`,
+  `test:credentials-import:browser`, and after building the real
+  `test:credentials-import:acceptance`. A passed fixture does not establish a
+  real provider credential or installed device acceptance; test the consuming
+  provider operation separately on the authorized deployed account.
 ## Device sync live and historical resources — 2026-11-04
 
 - [ ] Hold a native upload longer than two recorder intervals. The live and
@@ -15533,3 +15654,31 @@ private readback while an unrelated Home fixture remains paused.
   account and hidden-link access. Metadata must never grant access to its source.
 - Check JSON-only, failed/retried refresh and account/origin changes. Keep good
   same-account measurements during a transient refresh; clear inaccessible data.
+## Thing storage and device copies
+
+- On desktop and narrow mobile, open Storage from a Thing page and from its
+  context menu; scroll to the bottom, open every choice, edit a nested label
+  and control in Builder, save and reload.
+- Keep an owned JSON Thing and a real file on this device. Independently compare
+  the downloaded bytes and hash, reload offline, and verify the retained data.
+  Switch accounts and verify no prior account's data or status appears.
+- Pause automatic cloud sync, edit enrolled JSON, and verify the cloud copy is
+  unchanged. Re-enable sync, read the exact Thing back, and test a lost reply
+  and a conflicting cloud edit without dropping the local pending change.
+- Select Cloud and this device, then use a second independently paired device
+  or browser installation. Verify catalog access without an automatic original
+  download; explicit online opening remains available.
+- Select Cloud only. Verify exact cloud identity and bytes before local release.
+  Interrupt an upload, modify local bytes, reverse the policy during transfer,
+  revoke access and simulate quota/fingerprint errors. Each must preserve the
+  last good copy or pending edit and offer an accurate retry state.
+- Exercise existing folder sync: policy exclusions must not become cloud Trash,
+  false copy receipts, unrelated-file stalls or repeated automatic downloads.
+- On an installed iPhone build, keep/open a real File and retry a known LiDAR
+  archive. Verify its exact receipt and local fingerprint before cloud-only
+  removal; retain and disclose any unuploaded recovery original. Photos,
+  picker files and user exports must remain untouched.
+- Prepare and stage a multi-gigabyte LiDAR archive while sampling resident
+  memory. Growth must remain bounded across the entire archive, with exact
+  fingerprints and unchanged original bytes. Keep simulator/build evidence,
+  a physical app exit, and an actual iOS crash/termination report distinct.

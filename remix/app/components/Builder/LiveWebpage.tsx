@@ -22,6 +22,8 @@ import { BuilderViewport, type BuilderViewportSize } from './BuilderViewport';
 import { type SeamlessMode, isSeamlessMode, usesPageRuntime } from './seamlessMode';
 import { useCopyPage } from './useCopyPage';
 import { PageActionSurface } from './PageActionSurface';
+import { RefreshWebpageActivationSchedule, WebpageActivation } from './WebpageActivation';
+import { isPrivateActivationPage, parseWebpageActivation } from '~/schemas/webpageActivation';
 
 const SeamlessPageEditor = React.lazy(() => import('./SeamlessPageEditor'));
 
@@ -61,7 +63,8 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	const id = builderPageId || params.id;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const requestedMode = searchParams.get('mode') || (builderPageId ? 'edit' : null);
-	const standalone = useLocation().pathname.startsWith('/t/');
+	const pathname = useLocation().pathname;
+	const standalone = pathname.startsWith('/t/');
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
 	const runMode = !draft.branch && (standalone || requestedMode === 'run' || requestedMode === 'visit');
 	const linkKey = (searchParams.get('key') || '').trim();
@@ -272,6 +275,18 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 
 	const shared = !isOwner && (!isSeeded || !user?.id);
 	const interactive = !executionHeld && (isOwner || isSeeded || shared);
+	// Only the saved, full-account standalone viewer can activate. Builder
+	// edit/view modes and any other preview are intentionally inert.
+	const savedActivation = page?.updatedAt && isOwner && user?.accountKind === 'user' && !user.temporary && !user.isCharacter &&
+		!builderPageId && !draft.branch && !executionHeld && !linkKey && !page.crystal.siteRoute &&
+		isPrivateActivationPage(page.acl) && /^\/(p|t)\//.test(pathname) &&
+		(!requestedMode || requestedMode === 'run' || requestedMode === 'visit')
+		? parseWebpageActivation(page.crystal.activationAction) : null;
+	const sourcedCutoff = typeof savedActivation?.cutoffTime === 'object';
+	const schedule = sourcedCutoff ? draft.resolved?.activationSchedule : undefined;
+	const activation = savedActivation && (!sourcedCutoff || schedule) ? {
+		...savedActivation, cutoffTime: typeof savedActivation.cutoffTime === 'string' ? savedActivation.cutoffTime : schedule?.cutoffTime
+	} : null;
 
 	return (
 		<WebpageRuntimeProvider
@@ -298,6 +313,14 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 				whiteSpace="normal"
 			>
 				<Box width="100%" minWidth={0} boxSizing="border-box" flex="1">
+					{sourcedCutoff ? <RefreshWebpageActivationSchedule refresh={draft.refresh} /> : null}
+					{activation && page?.updatedAt ? <WebpageActivation binding={activation} revision={page.updatedAt} scheduleRevision={schedule?.revision}
+						refreshSchedule={sourcedCutoff ? draft.refresh : undefined} /> : sourcedCutoff && !draft.loading ? (
+						<Flex align="center" gap={2} px={3} py={1} wrap="wrap">
+							<Text role="status" fontSize="sm">Page setup needs its saved schedule.</Text>
+							<Button size="xs" variant="ghost" onClick={draft.refresh}>Retry</Button>
+						</Flex>
+					) : null}
 					{draft.branch ? (
 						<Flex role="status" px={4} pr={editorMode ? { base: 4, md: '344px' } : 4} py={2} gap={2} wrap="wrap" bg="var(--tt-surface)">
 							<Text fontWeight="600" overflowWrap="anywhere">Branch: {draft.branch.name}</Text>

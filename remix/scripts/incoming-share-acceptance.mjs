@@ -4,6 +4,7 @@
 // Prerequisite: NITRO_PRESET=node-server pnpm --dir remix run build:server.
 // SHARE_COMPOSER_EVIDENCE_DIR=/tmp/... PLAYWRIGHT_MODULE=/absolute/index.mjs
 // CHROMIUM_EXECUTABLE=/absolute/chrome node remix/scripts/incoming-share-acceptance.mjs
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -207,6 +208,7 @@ async function browserAcceptance() {
     await page.getByText('7 columns', { exact: true }).waitFor();
     await inspect('post-7-column-layout');
     await page.getByRole('button', { name: 'Rows 🥞', exact: true }).click();
+    await enableCurrentPageBuilder(page);
     await page.getByRole('button', { name: 'Customise toolbar', exact: true }).click();
     const customLabel = 'Create post ' + batch.id.slice(0, 4);
     const oldGlyph = await page.locator('[data-block-id="context-icon-post"]').innerText();

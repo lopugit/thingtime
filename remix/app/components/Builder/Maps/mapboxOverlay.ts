@@ -173,8 +173,9 @@ export function updateMapboxOverlay(map: any, gl: any, oldPins: any[], data: Map
 		if (key === focused) node.focus({ preventScroll: true });
 		return pin;
 	});
-	for (const point of data.fitPoints ?? data.points) bounds.extend(point.coordinates);
+	const fittedPoints = (data.fitPoints ?? data.points).filter(point => point.fitBounds !== false);
+	for (const point of fittedPoints) bounds.extend(point.coordinates);
 	for (const coordinate of data.route?.geometry.coordinates || []) bounds.extend(coordinate);
-	if (data.fitBounds && !bounds.isEmpty()) map.fitBounds(bounds, { padding: 42, maxZoom: data.points.length + (data.route?.geometry.coordinates.length || 0) === 1 ? 15 : 17, duration: 0 });
+	if (data.fitBounds && !bounds.isEmpty()) map.fitBounds(bounds, { padding: 42, maxZoom: fittedPoints.length + (data.route?.geometry.coordinates.length || 0) === 1 ? 15 : 17, duration: 0 });
 	return pins;
 }

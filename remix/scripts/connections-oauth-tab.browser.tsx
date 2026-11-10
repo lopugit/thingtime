@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
@@ -10,7 +11,7 @@ const router = createBrowserRouter([{
   id: 'root',
   path: '/connections',
   loader: () => ({ user: owner ? { id: owner, accountKind: 'user' } : null, dataPlane: 'home' }),
-  element: <ConnectionsPage />
+  element: <CurrentPageBuilderFixture><ConnectionsPage /></CurrentPageBuilderFixture>
 }]);
 
 Object.assign(window, {

@@ -8,7 +8,8 @@ import { EMPTY_CONTENT_SHA256, fingerprintSource } from './contentFingerprint';
 import { prepareCloudInventoryRun } from './cloudWrite';
 import { localTrashContexts } from './localTrash';
 import { createPagedCloudSyncPort } from './cloudSyncPort.client';
-import { executePagedSyncRun } from './pagedExecute';
+import { AutomaticStoragePlacementExcluded } from '../utils/thingStoragePolicy';
+import { executePreparedPagedSyncRun, executePagedSyncRun } from './pagedExecute';
 import type { PagedRunSpec } from './pagedRunJournal';
 import type { SyncOperation, SyncReceipt } from './execute';
 import { sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
@@ -173,6 +174,30 @@ test('shared cloud transport resumes a paged download after an accepted publicat
 	assert.equal(effects, 270); assert.equal(receipts.size, 270); assert.equal(ranges, 270);
 	for (const n of remote) assert.deepEqual(local.get(n.path)?.fingerprint, fingerprint);
 	assert.equal((await f.runs.begin(s)).confirmed, 270); f.journal.close();
+});
+
+test('a first storage refusal retires only the exact unpublished operation and preserves sibling transfers', async () => {
+	const f = await fixture(), c = config(), s = spec(c), remote = [node('a-excluded'), node('b-allowed')];
+	await seed(f, s, [], remote); await f.runs.prepareCloud(s, c);
+	const original = (await f.runs.find(s, 'a-excluded'))!, published: string[] = [];
+	const done = await executePreparedPagedSyncRun(s, scope, f.runs, {
+		currentScope: () => scope,
+		admit: async () => {},
+		lookup: async () => ({ status: 'missing' }),
+		read: async (side, path) => side === 'local' ? null : inventorySyncEntry(remote.find(row => row.path === path)!),
+		apply: async op => {
+			if (op.id === original.id) throw new AutomaticStoragePlacementExcluded();
+			assert.equal(op.mutation.kind, 'copy');
+			published.push(op.mutation.path);
+			return { operationId: op.id, scope, entry: { ...op.mutation.source, id: 'downloaded-b', version: 'written' } };
+		}
+	});
+	assert.equal(done.phase, 'complete');
+	assert.equal(done.confirmed, 1);
+	assert.equal(done.operations, 1);
+	assert.equal(await f.runs.find(s, 'a-excluded'), null);
+	assert.deepEqual(published, ['b-allowed']);
+	f.journal.close();
 });
 
 test('expanded bindings obey the byte limit and resume before reaching the entry limit', async () => {

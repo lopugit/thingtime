@@ -1,5 +1,8 @@
-import { contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
+import { contentExecutionHeld, contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
+import { isCivilTime } from '../../../schemas/civilDates';
+import { isPrivateActivationPage, parseWebpageActivation, type WebpageActivation } from '../../../schemas/webpageActivation';
 import { THING_METADATA_KIND } from '../../../utils/thingMetadata';
+import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../../../utils/thingStoragePolicy';
 import { relatedCommentPipeline, relatedInteractionPipeline, pagedThreadCounts, tallyRelatedUpdown, tallyRelatedPoll, type CountedPollVote, type CountedUpdown } from './relatedWindows';
 import { discussionAttachmentMap } from './discussionAttachments';
 import { builderThingUpdateKinds } from '../../../schemas/builderThing';
@@ -14,7 +17,7 @@ import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMa
 import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
@@ -22,6 +25,7 @@ import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withM
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
+import { toBin } from '../auth/binary';
 import {
 	CONTROL_PLANE_STORAGE_THINGTIMES,
 	StorageMutationError,
@@ -1388,6 +1392,7 @@ export type ThingWriteTransaction = { session: any; afterCommit: (effect: () => 
 export type CreateThingHooks = {
 	/** Trusted creation coordinator only; never copied from input/snapshots. */
 	executionHold?: ContentExecutionHold;
+	uniqueKeys?: Binary[];
 	transaction?: ThingWriteTransaction;
 	timelineCapture?: ThingMutationCapture;
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
@@ -1458,6 +1463,9 @@ export const createThing = async (
 		postAttachments: hooks.postAttachments
 	});
   if (isFail(validated)) return validated;
+	const activation = validated.thingtime.includes('webpage') ? parseWebpageActivation(validated.crystal.activationAction) : null;
+	if (activation && typeof activation.cutoffTime === 'object' && (app || !(await readWebpageActivationCutoff(asOwner, activation.cutoffTime, hooks.transaction?.session))))
+		return fail(400, 'The activation cutoff must reference an exact private settings Thing you can read');
 
   // system kinds are written ONLY by their dedicated utils (register, themes,
   // algorithms, waitlist — each a direct insert with the right secure/uniqueKeys
@@ -1674,6 +1682,7 @@ export const createThing = async (
     createdAt: now,
     updatedAt: now,
 		...(hooks.executionHold ? { executionHold: contentExecutionHold(hooks.executionHold) } : {}),
+		...(hooks.uniqueKeys?.length ? { uniqueKeys: hooks.uniqueKeys } : {}),
 		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
 		...(hooks?.sourceDeviceId ? { sourceDeviceId: hooks.sourceDeviceId } : {})
 	};
@@ -1811,6 +1820,59 @@ export const createThing = async (
   if (hooks.transaction) hooks.transaction.afterCommit(afterCommit);
   else await afterCommit();
   return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
+};
+
+/** Bind an invoker's Action intent to one Data Thing in the selected data plane. */
+export const ensureOwnedDataThing = async (
+	viewer: NonNullable<Viewer>,
+	intent: { actionId: string; key: string },
+	schema: { id: string; name: string },
+	values: Record<string, unknown>,
+	folderId?: string,
+	match?: Record<string, string | number | boolean>
+): Promise<CreateThingResult> => {
+	const ownerId = viewer.id;
+	const digest = createHash('sha256').update(JSON.stringify([ownerId, intent.actionId, intent.key])).digest('hex');
+	const uniqueKey = toBin(`actionEnsure:${digest}`);
+	const things = await getThingsCollection();
+	const findExisting = async (): Promise<CreateThingResult | null> => {
+		const doc = await things.findOne({ uniqueKeys: uniqueKey }) as ThingDoc | null;
+		if (!doc) return null;
+		if (doc.ownerId !== ownerId || !thingtimeOf(doc).includes('data') || crystalOf(doc).schemaId !== schema.id
+			|| genericThingReadBlocked(doc) || doc.appId != null || doc.sandboxSpace != null || doc.sandboxExpiresAt != null
+			|| !(await canViewInherited(doc, viewer))) {
+			return fail(409, 'The intent is bound to an unavailable or incompatible Thing');
+		}
+		return { ok: true, doc };
+	};
+	const existing = await findExisting();
+	if (existing) return existing;
+	if (match) {
+		// The Action grammar validates plain field names and scalar equality.
+		// The match never adopts a foreign schema, app, sandbox or owner row,
+		// and never attaches a protected key to manually authored content.
+		const entries = Object.entries(match);
+		const matches = Object.fromEntries(entries.map(([field, value]) => [`crystal.${field}`, { $eq: value }]));
+		// An indexed scalar equality can also match an array element. The
+		// expression requires equality to the whole field before adoption.
+		const exact = entries.map(([field, value]) => ({ $eq: [`$crystal.${field}`, { $literal: value }] }));
+		const candidate = await things.findOne({ ownerId, thingtime: 'data', 'crystal.schemaId': schema.id,
+			appId: null, sandboxSpace: null, sandboxExpiresAt: null, ...matches, $expr: { $and: exact } }, { sort: { createdAt: 1, shareId: 1 } }) as ThingDoc | null;
+		if (candidate) {
+			if (genericThingReadBlocked(candidate) || await contentExecutionHeld(candidate) || !(await canViewInherited(candidate, viewer)))
+				return fail(409, 'The matching Thing is unavailable');
+			return { ok: true, doc: candidate };
+		}
+	}
+	const created = await createThing(ownerId, {
+		thingtime: ['data'],
+		acl: [ACL_OWNER],
+		folderId,
+		crystal: { ...values, schema: schema.name, schemaId: schema.id }
+	}, viewer, null, { uniqueKeys: [uniqueKey] });
+	// The unique index serializes concurrent creates. Re-read after a failed
+	// create in case a winner committed while this request was being admitted.
+	return isFail(created) ? (await findExisting()) ?? created : created;
 };
 
 // Posts land in followers'/friends' notification feeds, capped — big accounts
@@ -2303,10 +2365,14 @@ const resolvePostAttachments = async (
 // Bound attachments are server-authored state, so live presence is exactly as
 // trustworthy as the create-time inspection, and an attachment-only post must
 // stay editable (its content IS the bound media).
-const boundAttachmentPresence = async (ownerId: string, targetId: string): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
+const boundAttachmentPresence = async (ownerId: string, targetId: string, prospective: readonly unknown[] = [], session?: any): Promise<{ hasAny: boolean; hasVisual: boolean }> => {
 	const things = await getThingsCollection();
+	const requested = prospective.filter((id): id is string => typeof id === 'string').map(id => id.trim());
+	const target = requested.length ? { $or: [{ targetId }, { shareId: { $in: requested } }] } : { targetId };
+	// Prospective rows inform validation only. The guarded transaction binds
+	// them through the exact attachment lifecycle before publishing any change.
 	const docs = (await things
-		.find({ thingtime: 'attachment', targetId, ownerId, attachmentState: 'ready' } as any)
+		.find({ thingtime: 'attachment', ...target, ownerId, attachmentState: 'ready' } as any, session ? { session } : {})
 		.project({ 'crystal.mediaKind': 1 })
 		.toArray()) as any[];
 	return {
@@ -2909,14 +2975,15 @@ const isPrivateConnectionThing = (doc: ThingDoc) => {
 // carries another schema marker. No generic owner, shared, inherited, export
 // or reference read may turn those records into ordinary editable content.
 const isBackupControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === 'backup-job' || kind === 'backup-job-event');
+const isThingStorageControl = (doc: ThingDoc) => thingtimeOf(doc).some(kind => kind === THING_STORAGE_POLICY_KIND || kind === THING_DEVICE_STORAGE_POLICY_KIND || kind === THING_STORAGE_POLICY_INDEX_KIND);
 
 // Single and batched exact reads share the same protected-record exclusion.
 const genericThingReadBlocked = (doc: ThingDoc) => isBackupControlThing(doc) || isDeviceControlThing(doc) || isPrivateConnectionThing(doc) ||
-  thingtimeOf(doc).includes(THING_METADATA_KIND) ||
+  thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc) ||
   thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'draft', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind));
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
-  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc)) return false;
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
@@ -3019,7 +3086,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (thingtimeOf(doc).includes(THING_METADATA_KIND)) return false;
+  if (thingtimeOf(doc).includes(THING_METADATA_KIND) || isThingStorageControl(doc)) return false;
   if (isBackupControlThing(doc) || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['agent-reporting-binding', 'agent-reporting-operation', 'subspace-embed', 'password-manager-entry', 'password-verification-device', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
@@ -3222,6 +3289,25 @@ const findThing = async (shareId: unknown, session?: any): Promise<ThingDoc | nu
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   const things = await getThingsCollection();
   return (await things.findOne({ shareId: shareId.trim() } as any, session ? { session } : {})) as any as ThingDoc | null;
+};
+
+/** Read the single opted-in clock field, through the same current owner,
+ * audience and execution fences for authoring, resolving and activation. */
+export const readWebpageActivationCutoff = async (
+	viewer: Viewer,
+	source: Exclude<WebpageActivation['cutoffTime'], string | undefined>,
+	session?: any
+): Promise<{ cutoffTime: string; revision: string } | null> => {
+	if (!viewer?.id) return null;
+	const doc = await findThing(source.thingId, session);
+	if (!doc || doc.shareId !== source.thingId || doc.ownerId !== viewer.id || !thingtimeOf(doc).includes('data') ||
+		crystalOf(doc).schemaId !== source.schemaId || !isPrivateActivationPage(aclOf(doc)) || genericThingReadBlocked(doc) ||
+		doc.appId != null || doc.sandboxSpace != null || doc.sandboxExpiresAt != null || patSandboxBlocks(viewer, doc) ||
+		!(await canViewInherited(doc, viewer)) || await contentExecutionHeld(doc, undefined, session)) return null;
+	const crystal = crystalOf(doc);
+	const cutoffTime = Object.prototype.hasOwnProperty.call(crystal, source.field) ? crystal[source.field] : '00:00';
+	if (!isCivilTime(cutoffTime)) return null;
+	return { cutoffTime, revision: new Date(doc.updatedAt).toISOString() };
 };
 
 // exported for the dedicated engagement utils that live outside this module
@@ -5376,7 +5462,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; storageCloudWrite?: { expectedRevision: string | null; attachmentIds?: readonly unknown[] }; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -5386,6 +5472,12 @@ export const updateThing = async (
   const things = await getThingsCollection();
   const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  const storageCloudWrite = options.storageCloudWrite;
+  const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
+  if (storageCloudWrite && (app || viewer.pat || isCustomMongoEndpointActive() ||
+      (!ownsPlacement && storageCloudWrite.expectedRevision !== null) ||
+      (doc.ownerId !== viewer.id && storageCloudWrite.attachmentIds)))
+    return fail(404, 'Thing not found');
   if (options.timeline && (doc.ownerId !== viewer.id || doc.timelineHeadId !== options.timeline.expectedHeadId)) return fail(409, 'Thing changed after the version preview. Refresh and compare again.');
   if (String(doc.ownerId) !== viewer.id) {
     // Shared editing — custom audiences may grant WRITE to picked users or
@@ -5468,9 +5560,14 @@ export const updateThing = async (
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".
 	const postAttachments =
-		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId, storageCloudWrite?.attachmentIds) : undefined;
   const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
+	const activation = validated.thingtime.includes('webpage') ? parseWebpageActivation(validated.crystal.activationAction) : null;
+	const previousActivation = parseWebpageActivation(crystalOf(doc).activationAction);
+	if (activation && typeof activation.cutoffTime === 'object' && !isDeepStrictEqual(activation.cutoffTime, previousActivation?.cutoffTime) &&
+		(app || doc.ownerId !== viewer.id || !(await readWebpageActivationCutoff(viewer, activation.cutoffTime))))
+		return fail(400, 'The activation cutoff must reference an exact private settings Thing you can read');
 	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
 		const { validateSharedComponentAdditions } = await import('../webpages/webpages');
 		const denied = await validateSharedComponentAdditions(viewer, doc, validated.crystal);
@@ -5699,10 +5796,25 @@ export const updateThing = async (
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
+		if (storageCloudWrite || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
 			await withMongoTransaction(async (session) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
+        if (storageCloudWrite) {
+          if (ownsPlacement) {
+            const { assertThingStorageCloudWrite } = await import('./thingStoragePolicy');
+            await assertThingStorageCloudWrite(things, doc.ownerId, doc.shareId, storageCloudWrite.expectedRevision, session);
+          }
+          if (storageCloudWrite.attachmentIds) {
+            const { syncBoundTargetAttachments } = await import('../attachments/attachmentStore');
+            await syncBoundTargetAttachments(doc.ownerId, doc.shareId, storageCloudWrite.attachmentIds, session);
+            if (postAttachments) {
+              const bound = await boundAttachmentPresence(doc.ownerId, doc.shareId, [], session);
+              if ((postAttachments.hasAny && !bound.hasAny) || (postAttachments.hasVisual && !bound.hasVisual))
+                throw new StorageMutationError(409, 'storage_conflict', 'Attachments changed while the Thing was being updated');
+            }
+          }
+        }
         await options.timeline?.beforeCommit?.({ session, afterCommit: effect => afterCommit.push(effect) });
 				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
@@ -5714,7 +5826,7 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
-						...((timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
+						...((storageCloudWrite || timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
 					} as any,
 					{ $set: set, $unset: unset } as any,
 					{ session }
@@ -5978,6 +6090,7 @@ export const bulkThings = async (
   const copyOne = async (doc: ThingDoc, destination: string | null, nameHint: boolean) => {
     const thingtime = thingtimeOf(doc);
     const crystal: Record<string, any> = { ...crystalOf(doc) };
+    if (thingtime.includes('webpage')) delete crystal.activationAction;
     if (nameHint && typeof crystal.name === 'string' && crystal.name.trim()) {
       crystal.name = `Copy of ${crystal.name}`.slice(0, 120);
     }

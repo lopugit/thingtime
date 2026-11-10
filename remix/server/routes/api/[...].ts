@@ -55,6 +55,13 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
   'v1/admin/system/environment': () => import('../../../app/routes/api/v1/admin/system/environment/_environment'),
   'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
+  'v1/credentials/import/start': () => import('../../../app/routes/api/v1/credentials/import/start/_start'),
+  'v1/credentials/import/status': () => import('../../../app/routes/api/v1/credentials/import/status/_status'),
+  'v1/credentials/import/upload': () => import('../../../app/routes/api/v1/credentials/import/upload/_upload'),
+  'v1/credentials/import/inspect': () => import('../../../app/routes/api/v1/credentials/import/inspect/_inspect'),
+  'v1/credentials/import/approve': () => import('../../../app/routes/api/v1/credentials/import/approve/_approve'),
+  'v1/credentials/import/revoke': () => import('../../../app/routes/api/v1/credentials/import/revoke/_revoke'),
+  'v1/credentials/import/direct': () => import('../../../app/routes/api/v1/credentials/import/direct/_direct'),
   'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
   'v1/admin/marketing/publications': () => import('../../../app/routes/api/v1/admin/marketing/publications/_publications'),
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
@@ -244,6 +251,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/lopu/chats/delete': () => import('../../../app/routes/api/v1/lopu/chats/delete/_delete'),
   'v1/lopu/live-activity': () => import('../../../app/routes/api/v1/lopu/live-activity/_live-activity'),
   'v1/lopu/chats/reply': () => import('../../../app/routes/api/v1/lopu/chats/reply/_reply'),
+  'v1/lopu/chats/device-turns': () => import('../../../app/routes/api/v1/lopu/chats/device-turns/_device-turns'),
 	'v1/lopu/vault': () => import('../../../app/routes/api/v1/lopu/vault/_vault'),
 	'v1/lopu/voice/reply': () => import('../../../app/routes/api/v1/lopu/voice/reply/_reply'),
 	'v1/lopu/voice/session': () => import('../../../app/routes/api/v1/lopu/voice/session/_session'),
@@ -321,6 +329,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/metadata': () => import('../../../app/routes/api/v1/things/metadata/_metadata'),
+	'v1/things/storage-policy': () => import('../../../app/routes/api/v1/things/storage-policy/_storage-policy'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/users/activity': () => import('../../../app/routes/api/v1/users/activity/_activity'),
@@ -431,7 +440,27 @@ export default defineHandler(async (event) => {
     return method === 'HEAD' ? new Response(null, { status: response.status, headers: response.headers }) : response;
   }
 
+  // Credential bodies and one-use proofs must never reach fallback transports,
+  // generic diagnostic/action dispatch, custom data planes, or background jobs.
+  if (path.startsWith('v1/credentials/import/')) {
+    const load = routeModules[path];
+    const headers = { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' };
+    if (!load) return jsonResponse({ ok: false, code: 'not_found', error: 'Credential import route was not found.' }, { status: 404, headers });
+    if (method !== 'POST') return jsonResponse({ ok: false, code: 'method_not_allowed', error: 'Use POST for this operation.' }, { status: 405, headers: { ...headers, Allow: 'POST' } });
+    if (shouldProxyApiToFallback(event.req) || !hasSelfHostedApiEnv()) {
+      return jsonResponse({ ok: false, code: 'unavailable', error: 'Credential import is unavailable on this Thingtime origin.' }, { status: 503, headers });
+    }
+    const route = await load();
+    return normalizeResponse(await route.action!({ request: event.req }));
+  }
+
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/lopu/chats/reply' && event.req.headers.get('X-Thingtime-Device-Inference') === '1') {
+      const origin = getApiFallbackOrigin();
+      if (!origin) return unavailableLocalApiResponse();
+      const { desktopChatGPTReply } = await import('../../utils/desktopChatGPTReply');
+      return desktopChatGPTReply(event.req, origin);
+    }
     if (path === 'v1/files/sync-transfer-admissions') return jsonResponse({ ok: false, error: 'File transfer admissions require this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/ai/chatgpt-plan' && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return jsonResponse({ ok: false, available: false, error: 'Choose a configured local or self-hosted account runtime for ChatGPT plan usage.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/mail/google/callback') return jsonResponse({ ok: false, error: 'Google callback requires this configured origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
@@ -461,6 +490,11 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
       if (path === 'v1/ai/chatgpt-plan' && !await selectedRuntimeSupportsPlan(configured, event.req.signal))
         return jsonResponse({ ok: false, error: 'The selected API does not support portable ChatGPT plan connections. Update that runtime first.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      if (path === 'v1/ai/chatgpt-plan') {
+        const { desktopChatGPTPlan } = await import('../../utils/desktopChatGPTPlan');
+        const device = await desktopChatGPTPlan(event.req, configured);
+        if (device) return device;
+      }
       // Nitro's lazy request is not a native Request; preserve its body API
       // while pinning the selected origin across asynchronous negotiation.
       return proxyApiRequestToFallback(event.req, { expectedOrigin: configured, stripForwardedOrigin: true });

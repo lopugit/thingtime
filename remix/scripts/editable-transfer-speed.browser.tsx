@@ -1,3 +1,4 @@
+import { CurrentPageBuilderFixture } from './lib/CurrentPageBuilderFixture';
 // Synthetic metadata only; the checker enforces an OS-level loopback boundary.
 import { readStampedCache, writeStampedCache } from '../app/hooks/localCache';
 import React, { useState } from 'react';
@@ -8,7 +9,7 @@ import { TransferSpeedSeries } from '../app/fileSync/transferSpeed';
 import { SyncProgressViewer } from '../app/components/Devices/SyncProgressViewer';
 import type { SyncProgressRow, SyncProgressSource, SyncProgressState } from '../app/fileSync/progressProjection';
 import type { ForegroundSyncProgress } from '../app/fileSync/foregroundSync';
-import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
+import { settingsFixtureCapabilities } from './lib/settings-fixture-capabilities';
 const scope = { origin: location.origin, ownerId: 'progress-fixture', dataPlane: 'home', deviceId: 'synthetic-device', rootId: 'synthetic-root' };
 const rows: SyncProgressRow[] = [];
 const add = (path: string, size: number, kind: 'file' | 'folder' = 'file', confirmed = false) => {
@@ -27,7 +28,7 @@ const source: SyncProgressSource = { async *rows() { for (const row of rows) yie
 const layoutKey = 'speed-fixture-layout', originalFetch = window.fetch.bind(window);
 window.fetch = async function(input, init) {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
-	if (url.pathname.includes('thingtime-capabilities')) return Response.json(thingtimeCapabilityManifest(location.origin));
+	if (url.pathname.includes('thingtime-capabilities')) return Response.json(settingsFixtureCapabilities(location.origin));
 	if (url.pathname === '/api/v1/webpages/resolve') {
 		const page = JSON.parse(localStorage.getItem(layoutKey + ':' + (url.searchParams.get('id') || '')) || 'null');
 		return Response.json(page ? { ok: true, page, source: 'user' } : { ok: false }, { status: page ? 200 : 404 });
@@ -78,6 +79,6 @@ function Fixture() {
 		<SyncProgressViewer scopeKey="synthetic-progress" series={series} source={progress.stage === 'scanning' ? undefined : source} currentScope={() => scope} progress={progress} status={status} />
 	</Box></ChakraProvider>;
 }
-const router = createMemoryRouter([{ id: 'root', path: '*', element: <Fixture /> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
+const router = createMemoryRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }], { hydrationData: { loaderData: { root: { user: { id: scope.ownerId, username: 'synthetic-progress' }, dataPlane: 'home' } } } });
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
 Object.assign(window, { progressFixture: { total: rows.length, layout: (document = 'file-sync-speed-trackers') => JSON.parse(localStorage.getItem(layoutKey + ':settings-' + document) || 'null') } });

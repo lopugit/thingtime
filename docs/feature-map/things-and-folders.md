@@ -1,5 +1,28 @@
 # Things and folders
 
+## Thing storage choices
+
+`ThingStoragePanel` and the shared Thing context menu expose individually editable
+storage controls. `thingStoragePolicy.ts` in the Things utility layer owns private,
+revision-fenced owner and device preferences; `storage/thingReplicaStore.ts` and
+`thingReplicas.client.ts` own browser JSON and byte copies. iOS `FileReplicaBridge`
+uses the shared AppleFileSync managed-copy adapter. Preferences never authorize
+cloud deletion or imply a completed transfer. See [Thing storage](../thing-storage.md)
+and the Thing storage and device copies checklist in `TESTING.md`.
+
+## Idempotent Action creation
+
+Server Actions use `things.ensure` to create or reuse one owned Data Thing by
+intent. The key is scoped to the invoker and saved Action in the selected data
+plane. A protected root unique key and the canonical insert serialize
+concurrent creation. An existing readable Thing with the same schema retains
+its current fields, placement and audience. See [Action authoring](../builder-browser-actions.md)
+and the real API regression in `remix/scripts/verify-actions.mjs`.
+Ordered batches reuse the same protected namespace. An optional exact
+scalar match can reuse an accessible existing Data Thing with the same
+owner and schema before a new key is created. Existing rows retain their
+fields, placement and audience.
+
 ## Derived Thing metadata
 
 `ThingMetadataPanel.tsx` sits at the top of Thing detail pages. Its individually

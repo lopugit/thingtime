@@ -10,7 +10,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const cwd = resolve(import.meta.dirname, '..');
 const browser = process.argv.slice(2).includes('--browser');
-assert.ok(process.argv.slice(2).every(arg => arg === '--browser'), 'Unknown Thing metadata fixture mode');
+const storagePolicy = process.argv.slice(2).includes('--storage-policy');
+const storageBrowser = process.argv.slice(2).includes('--storage-browser');
+const withBrowser = browser || storageBrowser;
+assert.ok(process.argv.slice(2).every(arg => ['--browser', '--storage-policy', '--storage-browser'].includes(arg)), 'Unknown Thing metadata fixture mode');
 const probe = createServer();
 probe.listen(0, '127.0.0.1');
 await once(probe, 'listening');
@@ -57,11 +60,11 @@ try {
     `rs.initiate({_id:'thing-metadata',members:[{_id:0,host:'127.0.0.1:${port}'}]}); while(!db.hello().isWritablePrimary){sleep(100)}`]);
   const output = await run(process.execPath, ['--import', 'tsx', 'scripts/thing-metadata.integration.mts'], {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${port}/thingtime?replicaSet=thing-metadata`,
-    THINGTIME_METADATA_TEST_DIRECTORY: directory, THINGTIME_EMAIL_PROVIDER: 'console', THINGTIME_METADATA_BROWSER: browser ? '1' : '0',
-    ...(browser && process.env.TT_PLAYWRIGHT_MODULE ? { TT_PLAYWRIGHT_MODULE: process.env.TT_PLAYWRIGHT_MODULE } : {}),
-    ...(browser && process.env.THINGTIME_METADATA_BROWSER_EVIDENCE ? { THINGTIME_METADATA_BROWSER_EVIDENCE: process.env.THINGTIME_METADATA_BROWSER_EVIDENCE } : {})
+    THINGTIME_METADATA_TEST_DIRECTORY: directory, THINGTIME_EMAIL_PROVIDER: 'console', THINGTIME_METADATA_BROWSER: browser ? '1' : '0', THINGTIME_STORAGE_POLICY_TEST: storagePolicy ? '1' : '0', THINGTIME_STORAGE_BROWSER_TEST: storageBrowser ? '1' : '0',
+    ...(withBrowser && process.env.TT_PLAYWRIGHT_MODULE ? { TT_PLAYWRIGHT_MODULE: process.env.TT_PLAYWRIGHT_MODULE } : {}),
+    ...(withBrowser && process.env.THINGTIME_METADATA_BROWSER_EVIDENCE ? { THINGTIME_METADATA_BROWSER_EVIDENCE: process.env.THINGTIME_METADATA_BROWSER_EVIDENCE } : {})
   }, 180_000);
-  for (const line of output.split('\n')) if (line.startsWith('Thing metadata ') || line.startsWith('THING_METADATA_BROWSER_PASS')) console.log(line);
+  for (const line of output.split('\n')) if (line.startsWith('Thing metadata ') || line.startsWith('Thing storage policy ') || line.startsWith('THING_METADATA_BROWSER_PASS') || line.startsWith('THING_STORAGE_BROWSER_PASS')) console.log(line);
 } finally {
   terminate();
   await stopped;

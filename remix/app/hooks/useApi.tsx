@@ -1,14 +1,16 @@
+import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, usesAuthoredControls } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { THING_STORAGE_CLOUD_WRITE_REQUIREMENTS } from '~/utils/thingStoragePolicy';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
 import type { TimelineScope } from '~/timeline/contract';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
@@ -48,7 +50,7 @@ import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStr
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
-import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { createApiFailure, readApiResponsePayload, ThingtimeApiError } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
@@ -59,7 +61,7 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string; storageMode?: 'cloud' };
 const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
@@ -483,13 +485,34 @@ export function useApi() {
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
       models: useCallback(async () => {
+        const owner = actionActor.current;
         const result = await getJson('/api/v1/ai/models');
+        // The signed desktop's loopback route contributes the redacted plan
+        // catalogue. A website or another desktop cannot expose these records.
+        if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1' && owner && !character && planeRef.current === 'home') {
+          try {
+            await requireThingtimeCapability('api.ai-chatgpt-plan', '1.2.0');
+            const plan = await fetch('/api/v1/ai/chatgpt-plan', { credentials: 'same-origin', cache: 'no-store', headers: {
+              'X-Thingtime-Expected-Actor': owner, 'X-Thingtime-Expected-User': owner, [EXPECTED_DATA_PLANE_HEADER]: 'home'
+            } });
+            if (plan.ok) {
+              const status = await plan.json();
+              if (status.storageMode === 'device' && status.deviceChatAvailable === true && actionActor.current === owner && planeRef.current === 'home' && Array.isArray(status.accounts)) {
+                return { ...result, vaultProviders: [...(result.vaultProviders ?? []), ...status.accounts.filter((account: any) => typeof account?.id === 'string').map((account: any) => ({
+                  id: account.id, name: `ChatGPT plan · this device · ${account.id.slice(-8)} · ${account.label}`, kind: 'openai', model: account.model, endpointHost: 'api.openai.com',
+                  available: account.connected === true && !!account.model, planChatEligible: account.connected === true && !!account.model,
+                  realtimeModels: []
+                }))] };
+              }
+            }
+          } catch { /* Keep the ordinary model catalogue usable during device loss. */ }
+        }
         if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
           try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;
-      }, []),
+      }, [getJson, character]),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
@@ -763,7 +786,9 @@ export function useApi() {
       },
       // the streamed turn — returns the RAW Response (NDJSON body); read it
       // with readNdjson from components/Lopu/lopuChatStream
-      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, {
+        ...options, ownerId: actionActor.current, dataPlane: planeRef.current
+      }), []),
       // direct voice (design note §6.1): the provider-minted five-minute
       // realtime credential for one of the viewer's own Secure Vault
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
@@ -1206,13 +1231,46 @@ export function useApi() {
 			get: useCallback(
 				async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
-          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireSharedContentCapability('api.things', options);
-          await requireSharedContentCapability('api.attachment-content', options);
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+          const ownerId = options?.expectedActor ?? actionActor.current;
+          const generation = rootIdentity.read().generation, origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== ownerId ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Account changed', 'AbortError');
+          };
+          const storageScope = origin && !character && !options?.characterId && ownerId && expectedDataPlane === 'home' &&
+            options?.storageMode !== 'cloud' && !args?.key && !args?.sharedRoot && !args?.commentProjection && !args?.commentSort &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)
+            ? { apiOrigin: origin, ownerId, dataPlane: expectedDataPlane } : null;
+          let replica: Awaited<ReturnType<typeof import('../storage/thingReplicas.client').readStoredThing>> = null;
+          if (storageScope && typeof args?.id === 'string') {
+            try { replica = await (await import('../storage/thingReplicas.client')).readStoredThing(storageScope, args.id, guard); }
+            catch { guard(); /* Browser storage may be unavailable; normal cloud reads still work. */ }
+          }
+          if (replica && navigator.onLine === false) {
+            guard(); return structuredClone(replica.response);
+          }
+          try {
+            if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+            if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+            await requireSharedContentCapability('api.things', options);
+            await requireSharedContentCapability('api.attachment-content', options);
+            const cloud = await getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
+            if (replica && cloud?.ok === true && cloud.thing?.id === args?.id &&
+                (!replica.policy.policy.cloudSync || replica.pendingMutation)) {
+              guard(); return structuredClone(replica.response);
+            }
+            return cloud;
+          } catch (error) {
+            if (replica && error instanceof ThingtimeApiError && (error.status === null || error.status >= 500)) {
+              guard(); return structuredClone(replica.response);
+            }
+            throw error;
+          }
         },
-				[getJson]
+				[getJson, character]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
@@ -1245,8 +1303,39 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          const storageOwner = expectedActor ?? actionActor.current, generation = rootIdentity.read().generation;
+          const origin = typeof window === 'undefined' ? null : window.location.origin;
+          const guard = () => {
+            options?.signal?.throwIfAborted();
+            const current = rootIdentity.read();
+            if (current.pending || current.generation !== generation || actionActor.current !== storageOwner ||
+                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
+              throw new DOMException('Storage scope changed', 'AbortError');
+          };
+          let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
+          if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
+            expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
+            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)) {
+            const replicas = await import('../storage/thingReplicas.client');
+            const storageScope = { apiOrigin: origin, ownerId: storageOwner, dataPlane: expectedDataPlane };
+            if (typeof window.indexedDB !== 'undefined') {
+              try {
+                const local = await replicas.queueStoredThingUpdate(storageScope, args, guard);
+                if (local) return local;
+              } catch (error) {
+                if (!(error instanceof replicas.ReplicaLookupUnavailable)) throw error;
+              }
+            }
+            confirmStorageCloudWrite = () => replicas.checkGenericCloudThingUpdate(storageScope, args.id, guard, () => {
+              rootIdentity.changed(); refreshRootData();
+            }, options?.signal);
+          }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
+          if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
@@ -1264,6 +1353,19 @@ export function useApi() {
           else if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          const expectedStoragePolicyRevision = options?.storageMode === 'cloud'
+            ? args?.expectedStoragePolicyRevision : await confirmStorageCloudWrite?.();
+          let writeOrigin = options?.expectedApiOrigin, writeActor = expectedActor;
+          if (expectedStoragePolicyRevision !== undefined) {
+            if (!origin || !storageOwner || character || options?.characterId || expectedDataPlane !== 'home' ||
+                (writeOrigin && writeOrigin !== origin))
+              throw new DOMException('Storage scope changed', 'AbortError');
+            for (const [feature, minimum] of Object.entries(THING_STORAGE_CLOUD_WRITE_REQUIREMENTS))
+              await requireThingtimeCapability(feature, minimum, origin);
+            guard();
+            writeOrigin = origin;
+            writeActor = storageOwner;
+          }
           options?.signal?.throwIfAborted();
           return asyncFetcher.submit(
             {
@@ -1272,6 +1374,7 @@ export function useApi() {
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(expectedStoragePolicyRevision !== undefined ? { expectedStoragePolicyRevision } : {}),
               ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
@@ -1285,10 +1388,11 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor: writeActor, expectedDataPlane,
+              expectedApiOrigin: writeOrigin, signal: options?.signal }
           );
         },
-        [asyncFetcher]
+        [asyncFetcher, character]
       ),
       renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
         await requireThingtimeCapability('api.things', '1.27.0');
@@ -1315,6 +1419,10 @@ export function useApi() {
       upsert: useCallback(
         async (args) => {
           if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1341,6 +1449,10 @@ export function useApi() {
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
+            : actionActivationWriteMinimum(args?.crystal, 'api.things');
+          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
+          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1756,17 +1868,20 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => {
+      run: useCallback(async (args, options?: { signal?: AbortSignal }) => {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
         await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane, signal: options?.signal });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
         if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
         if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
-        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
+        options?.signal?.throwIfAborted();
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current, undefined, undefined, args?.source === 'activation' ? {
+          signal: options?.signal, expectedDataPlane: expectedPlane, currentDataPlane: () => planeRef.current
+        } : undefined));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])

@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
+`/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
+source ownership and per-device identity, atomically fences policy revisions,
+and pages exact authorized attachment descriptors. Browser credentials are
+HttpOnly; private policy rows are excluded from generic Thing discovery. See
+[the placement contract](../thing-storage.md) and its opt-in real replica test.
+
 `api.things-metadata` 1.0.0 registers GET/POST
 `/api/v1/things/metadata` in the canonical docs registry and Nitro import map.
 GET reads authorized current measurements; same-origin owning-session POST
@@ -403,6 +410,15 @@ transport/interpreter live in `components/Actions/browserActionHost.ts` and
 `browserActionRuntime.ts`; no endpoint-specific UI behavior lives there.
 See [authoring and verification](../builder-browser-actions.md).
 
+Private webpage cutoff settings use `api.webpages-resolve` 1.15.0 and
+`api.actions-run` 1.45.0. The ordinary owning-account resolve projects a
+revision and validated local wall time from an exact private Data Thing.
+The Action route verifies the settings, page and Action revisions before
+automatic writes. Ordered ensure batches use the same existing Action
+authorization, operation budget and protected intent keys. Saved definitions
+require `api.things` 1.57.0 or `api.things-update` 1.23.0. See the
+[cutoff and batch contracts](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
+
 JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
 `api.things-update` 1.10.0, `api.actions-run` 1.12.0 and
 `api.webpages-suites-install` 1.3.0. Both manifests and client negotiation cover
@@ -624,7 +640,16 @@ produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
 Public docs and capability discovery remain local and available.
 
 
-`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
+`api.ai-chatgpt-plan` 1.2.0 adds OS-protected device storage and redacted text
+availability to the signed desktop's existing loopback flow. The desktop
+verifies the current session against its selected account API and leaves remote
+self-hosted plan runtimes available. `api.lopu-chats-reply` 1.22.0 routes a
+device pin only on the desktop owning the grant; there is no hosted inference or
+billing fallback. The desktop negotiates `api.lopu-chats-device-turns` 1.0.0 on
+the exact remote API for text history and idempotent private transcript writes.
+The transcript route cannot invoke models, tools, actions, or billing. Both
+manifests use the canonical docs registry. Verify the plan, API capabilities,
+API fallback and Lopu stream suites, then run installed-app acceptance in TESTING.
 
 General compressor storage adds `api.things` 1.41.0, `api.things-update`
 1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
@@ -729,6 +754,17 @@ asset stays on the document origin without opening a data-plane connection or
 forwarding user headers to the provider. Verify both manifests and route
 registration with `test:api-capabilities` and `test:connections:built`.
 
+## Write-only credential handoff
+
+The shared `api.credentials-import` 1.1.0 contract accompanies seven registered
+`/api/v1/credentials/import/{start,status,inspect,approve,revoke,upload,direct}`
+operations, each explicitly versioned in the canonical docs registry and present
+in both generated manifests. Browser clients and `scripts/credential-import.ts`
+negotiate the selected origin. The signed home gateway binds the exact import
+headers; generic origin fallback and background dispatch are refused. Responses
+are private/no-store and project only destination metadata/status/receipts.
+See [the runbook](../agent-credential-workflows.md); run the credential, gateway
+and API-capability checks and smoke the built Nitro discovery/route family.
 ## Dynamic map workspaces
 
 `api.things` 1.47.0 / `api.things-update` 1.16.0 accept editable `tt-upload` blocks.
@@ -807,6 +843,13 @@ not satisfy clients requiring complete shared Data values. Both generators
 read the canonical version; shared-content Action clients require 1.42.0, while
 older authored-control-only minima remain valid for their narrower contract.
 
+Optional saved map `pointsSource` descriptors use `api.things` 1.56.0,
+`api.things-update` 1.22.0, `api.webpages-resolve` 1.14.0 and
+`api.actions-run` 1.44.0. Existing source authorization and cursor paths
+apply. `mapboxSource.ts` publishes the completed points layer, and a failed
+refresh clears only that layer. The shared composition visitor and copy
+rewriter follow its literal Action ID. See [map source authoring](../builder-browser-actions.md#load-an-independent-map-points-layer).
+
 `api.timeline` 1.19.2 corrects ordinary revision copy/reconstruction for valid
 broad content. Existing snapshot parts handle breadth beyond inline processing
 windows; no total-content node cap remains. Full-content checkout, merge,
@@ -868,3 +911,10 @@ stage over retained exact-timestamp descriptors. Browser reads never obtain
 provider configuration, session references, execution leases or writable intents.
 See the first-party backup workspace checklist in TESTING for real HTTP/Builder
 acceptance and the separate deployed scheduler/provider gates.
+
+Saved private page activation uses `schemas/webpageActivation.ts`,
+`components/Builder/WebpageActivation.tsx` and the existing Actions run
+route. The route verifies the exact private owner/page/revision/action/date
+and uses the literal saved inputs; the viewer protects manual page query
+selection and keeps preview/edit/shared execution inert. See
+[Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).

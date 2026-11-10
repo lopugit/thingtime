@@ -1,3 +1,4 @@
+import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdtemp, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -225,6 +226,7 @@ try {
    await page.getByText('My Mac / Files / Documents on Mac', { exact: true }).waitFor();
    assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).rows.filter(row => row.thingtime.includes('folder')).length, folderWritesBefore, 'opening a new draft cannot create folders');
    const destinationLayout = page.locator('[data-settings-document="file-sync-destination"]').filter({ visible: true });
+   await enableCurrentPageBuilder(page);
    await destinationLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
    await destinationLayout.locator('[data-block-id="sync-destination-path"]').click();
    const destinationSelected = page.getByRole('combobox', { name: 'Select block', exact: true });
@@ -252,6 +254,7 @@ try {
    assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.remoteFolderId, 'cloud-documents', 'existing destinations remain unchanged');
    const sharedCard = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Editable folder preview', exact: true }) });
    const sharedLayout = sharedCard.locator('[data-settings-document="device-sync-folder-card"]');
+   await enableCurrentPageBuilder(page);
    await sharedLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
    await sharedLayout.locator('[data-block-id="folder-card-title"]').click();
    const selectedBlock = page.getByRole('combobox', { name: 'Select block', exact: true });

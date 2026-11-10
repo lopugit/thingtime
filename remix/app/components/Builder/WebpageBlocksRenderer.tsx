@@ -888,11 +888,19 @@ export type WebpageBlocksRendererProps = {
 };
 
 const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const inheritedScope = React.useContext(ComponentDataScope);
  const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
- return <LiveTemplate render={{ tag: 'span' }} scope={{ ...props.block.args, ...source.scope }}
+ const block = { ...props.block, source: undefined, args: undefined };
+ const scope = { ...props.block.args, ...source.scope };
+ if (props.block.source?.passive === true) return (
+  <ComponentDataScope.Provider value={{ ...inheritedScope, ...scope }}>
+   <BlockView {...props} block={block} />
+  </ComponentDataScope.Provider>
+ );
+ return <LiveTemplate render={{ tag: 'span' }} scope={scope}
   interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
   confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
-  <BlockView {...props} block={{ ...props.block, source: undefined, args: undefined }} />
+  <BlockView {...props} block={block} />
  </LiveTemplate>;
 };
 
@@ -909,6 +917,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
+ if (block.tag === 'tt-mapbox') attributes.pointsSource = block.props?.pointsSource;
  const reveal = attributes['data-tt-reveal'];
  React.useLayoutEffect(() => {
   // An authored target can reveal itself when its bound selection changes.

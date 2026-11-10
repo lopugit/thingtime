@@ -1,9 +1,11 @@
 import { THING_METADATA_KIND } from '../utils/thingMetadata.ts';
+import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../utils/thingStoragePolicy.ts';
 import { MAX_STORABLE_NESTING } from './storableLimits';
 import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
+import { parseWebpageActivation } from './webpageActivation.ts';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
 import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
@@ -1593,6 +1595,7 @@ const webpageSchema: ThingtimeSchema = {
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a pageKey.' },
 		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the webpage this one was forked from (provenance only).' },
 		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the page canvas.' },
+		{ name: 'activationAction', type: 'record', required: false, description: 'Optional owner-only Action to run when a saved private page opens or its configured civil date changes.' },
 		{
 			name: 'blocks',
 			type: 'record',
@@ -1644,6 +1647,7 @@ export const ACTION_STEP_OPS = [
 	'http.request',
 	'lookup',
 	'things.create',
+	'things.ensure',
 	'things.get',
 	'things.search',
 	'things.update',
@@ -1773,7 +1777,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_STEPS,
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
-				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
+				'things.create { schema, values }; things.ensure { schema, key, values, folderId?, each?, matchFields? }; things.get { id }; things.search { schema?, limit? }; ' +
 				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
@@ -4288,6 +4292,7 @@ export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant
 
 export const PROTECTED_THINGTIME = [
   THING_METADATA_KIND,
+  THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
   'backup-job', 'backup-job-event',
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
@@ -4372,7 +4377,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, THING_METADATA_KIND, THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -5609,7 +5614,7 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
-const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
+const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true; source: Record<string, unknown> } | Fail => {
 	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
 	const rawSource = input as Record<string, unknown>;
 	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
@@ -5617,6 +5622,10 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
 	}
 	const source: Record<string, unknown> = { action };
+	if (rawSource.passive !== undefined && (typeof rawSource.passive !== 'boolean' || (rawSource.passive && !allowPassive))) {
+		return fail(400, 'Passive sources belong on ordinary webpage blocks');
+	}
+	if (rawSource.passive) source.passive = true;
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
 			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
@@ -5881,7 +5890,7 @@ const sanitizeWebpageBlock = (
 	// Source bindings can scope any editable subtree. Execution retains the
 	// same viewer-owned Action authorization as a component source.
 	if (raw.source != null) {
-		const checked = sanitizeSourceBinding(raw.source);
+		const checked = sanitizeSourceBinding(raw.source, type !== 'component');
 		if (isFail(checked)) return checked;
 		block.source = checked.source;
 	}
@@ -6139,6 +6148,12 @@ const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; cry
 			return fail(400, 'previewBg must be a short CSS background value');
 		}
 		crystal.previewBg = previewBg;
+	}
+
+	if (input.activationAction !== undefined && input.activationAction !== null) {
+		const activationAction = parseWebpageActivation(input.activationAction);
+		if (!activationAction) return fail(400, 'Invalid webpage activation Action');
+		crystal.activationAction = activationAction;
 	}
 
 	if (input.blocks === undefined || input.blocks === null) {
@@ -6533,15 +6548,15 @@ const sanitizeActionSteps = (
 		// object ({ ttExpr } / { ttConcat }) that resolves at run time
 		const isExpressionObject = (value: unknown): boolean =>
 			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
-		const checkRefString = (value: unknown, field: string): Fail | null => {
+		const checkRefString = (value: unknown, field: string, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
 			if (isExpressionObject(value)) {
-				const checked = validateActionValue(value, stepIndex);
+				const checked = validateActionValue(value, stepIndex, 0, scope);
 				if (isFail(checked)) return checked;
 				step[field] = value;
 				return null;
 			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
-			const checked = validateActionValue(value.trim(), stepIndex);
+			const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
 			if (isFail(checked)) return checked;
 			step[field] = value.trim();
 			return null;
@@ -6575,11 +6590,27 @@ const sanitizeActionSteps = (
 			step.provider = raw.provider;
 			step.credentialId = raw.credentialId;
 			failure = checkRefString(raw.query, 'query');
-		} else if (op === 'things.create') {
+		} else if (op === 'things.create' || op === 'things.ensure') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
-			failure = checkValues(raw.values, 'values', true) || requireCapability(stepIndex, 'things.create', schema.ref);
+			const ensure = op === 'things.ensure';
+			const batch = ensure && raw.each !== undefined;
+			const itemScope = batch ? { itemDepth: 1 } : TOP_SCOPE;
+			failure = checkValues(raw.values, 'values', true, itemScope) || requireCapability(stepIndex, 'things.create', schema.ref);
+			if (!failure && ensure) {
+				failure = requireCapability(stepIndex, 'things.read', schema.ref) || checkRefString(raw.key, 'key', itemScope)
+					|| (raw.folderId !== undefined ? checkRefString(raw.folderId, 'folderId', itemScope) : null)
+					|| (batch ? checkAnyValue(raw.each, 'each') : null);
+				if (!failure && raw.matchFields !== undefined) {
+					if (!Array.isArray(raw.matchFields) || !raw.matchFields.length || raw.matchFields.length > MAX_ACTION_SEARCH_WHERE_KEYS ||
+						raw.matchFields.some(field => typeof field !== 'string' || !ACTION_SEARCH_FIELD_PATTERN.test(field) ||
+							ACTION_BANNED_SEGMENTS.has(field) || field === 'schema' || field === 'schemaId')) {
+						return fail(400, `Step ${stepIndex} matchFields needs plain crystal field names`);
+					}
+					step.matchFields = [...new Set(raw.matchFields)];
+				}
+			}
 		} else if (op === 'things.get') {
 			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');
 		} else if (op === 'things.search') {
@@ -6722,8 +6753,8 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		if (!entry || typeof entry !== 'object') continue;
 		const step = entry as Record<string, unknown>;
 		const schema = typeof step.schema === 'string' ? step.schema : null;
-		if (step.op === 'things.create' && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
-		if ((step.op === 'things.get' || step.op === 'things.search') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
+		if ((step.op === 'things.create' || step.op === 'things.ensure') && schema && !effects.creates.includes(schema)) effects.creates.push(schema);
+		if ((step.op === 'things.get' || step.op === 'things.search' || step.op === 'things.ensure') && schema && !effects.reads.includes(schema)) effects.reads.push(schema);
 		// an UNSCOPED get or search is the broadest read in the vocabulary —
 		// it must surface as the '*' ("reads things") effect, never as nothing
 		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');

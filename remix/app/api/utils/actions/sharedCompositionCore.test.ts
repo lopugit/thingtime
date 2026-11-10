@@ -113,7 +113,7 @@ test('dynamic user-controlled references do not grant inherited access', () => {
 });
 
 test('shared execution has no saved-data mutation operations and defaults unknown operations to denied', () => {
-	for (const op of ['things.create', 'things.update', 'things.delete', 'unknown']) assert.equal(sharedOperationAllowed(op), false);
+	for (const op of ['things.create', 'things.ensure', 'things.update', 'things.delete', 'unknown']) assert.equal(sharedOperationAllowed(op), false);
 	for (const op of ['return', 'compute', 'things.get', 'things.search', 'actions.invoke', 'each']) assert.equal(sharedOperationAllowed(op), true);
 });
 
@@ -151,6 +151,7 @@ test('a stored map includes its declared source and marker Component without bor
 	const props = {
 		favouritesSource: { action: 'saved-map-source', inputs: { component: '{item.component}' } },
 		routeSource: { action: '{item.action}' },
+		pointsSource: { action: 'saved-points-source', inputs: { candidate: 'not-an-action' } },
 		points: [{ component: 'ungranted-row-component', renderComponent: 'ungranted-row-renderer' }]
 	};
 	assert.deepEqual(compositionReferences(['webpage'], { blocks: [{
@@ -162,9 +163,11 @@ test('a stored map includes its declared source and marker Component without bor
 		}]
 	}] }), [
 		{ kind: 'action', ref: 'saved-map-source' },
+		{ kind: 'action', ref: 'saved-points-source' },
 		{ kind: 'component', ref: 'saved-marker', args: { label: '{point.label}' } }
 	]);
 	assert.deepEqual(compositionReferences(['component'], { render: { tag: 'tt-mapbox', props } }), [
-		{ kind: 'action', ref: 'saved-map-source' }
+		{ kind: 'action', ref: 'saved-map-source' },
+		{ kind: 'action', ref: 'saved-points-source' }
 	]);
 });

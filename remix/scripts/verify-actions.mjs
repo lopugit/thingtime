@@ -67,7 +67,10 @@ const run = async () => {
 			fields: [
 				{ name: 'name', type: 'string', required: true },
 				{ name: 'email', type: 'string' },
-				{ name: 'note', type: 'string' }
+				{ name: 'note', type: 'string' },
+				{ name: 'day', type: 'string' },
+				{ name: 'cutoffTime', type: 'string' },
+				{ name: 'count', type: 'number' }
 			]
 		}
 	});
@@ -281,6 +284,174 @@ const run = async () => {
 	check('created customer is a real data thing', createdCustomer.status === 200 && createdCrystal.name === 'Ada Lovelace');
 	check('schema provenance is stamped', createdCrystal.schema === CUSTOMER && typeof createdCrystal.schemaId === 'string');
 	check('$$ escapes a literal dollar', createdCrystal.note === '$100 club');
+
+	// Ensure is a real accounted Data insert, with the shared unique index
+	// arbitrating concurrent runs and no edit when the intent already exists.
+	const folder = await createThing(alice.cookie, { thingtime: ['folder'], crystal: { name: 'Ensure verification' }, acl: ['tt:user'] });
+	const folderId = folder.body?.thing?.id;
+	const invoiceSchemaId = invoiceSchema.body?.thing?.id;
+	const ensureSchemas = [CUSTOMER_ID, invoiceSchemaId];
+	const ensureAction = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		acl: ['tt:all'],
+		crystal: {
+			name: 'Ensure test Data',
+			inputs: [
+				{ name: 'key', type: 'string', required: true },
+				{ name: 'name', type: 'string', required: true },
+				{ name: 'folderId', type: 'string', required: true },
+				{ name: 'useOtherSchema', type: 'boolean', default: false }
+			],
+			capabilities: [
+				{ capability: 'things.create', schemas: ensureSchemas },
+				{ capability: 'things.read', schemas: ensureSchemas }
+			],
+			steps: [
+				{ op: 'things.ensure', when: '$input.useOtherSchema', schema: invoiceSchemaId, key: '$input.key', values: { name: '$input.name' } },
+				{ op: 'return', when: '$input.useOtherSchema', value: '$step.1' },
+				{ op: 'things.ensure', schema: CUSTOMER_ID, key: '$input.key', folderId: '$input.folderId', values: { name: '$input.name' } },
+				{ op: 'return', value: '$step.3' }
+			]
+		}
+	});
+	const ensureActionId = ensureAction.body?.thing?.id;
+	check('ensure Action and owned folder save', !!ensureActionId && !!folderId, JSON.stringify(ensureAction.body).slice(0, 300));
+	const runEnsure = (cookie, inputs = {}, options = {}) => runAction(cookie, {
+		action: ensureActionId,
+		inputs: { key: 'same-intent', name: 'Original', folderId, ...inputs },
+		...options
+	});
+	const ensured = await Promise.all(Array.from({ length: 4 }, () => runEnsure(alice.cookie)));
+	const ensuredId = ensured[0].body?.result?.id;
+	check('concurrent ensure calls return one Data Thing', typeof ensuredId === 'string' &&
+		ensured.every(({ body }) => body?.status === 'ok' && body?.result?.id === ensuredId),
+		JSON.stringify(ensured.map(({ status, body }) => ({ status, runStatus: body?.status, error: body?.error }))).slice(0, 400));
+	const readEnsured = (cookie) => api(`/api/v1/things?id=${encodeURIComponent(ensuredId || 'missing')}`, { cookie });
+	const ensuredBefore = (await readEnsured(alice.cookie)).body?.thing;
+	check('ensured Thing has exact schema, private ACL and owned folder', ensuredBefore?.folderId === folderId &&
+		ensuredBefore?.crystal?.schemaId === CUSTOMER_ID && ensuredBefore?.visibility === 'private');
+	const ensuredCount = await api(`/api/v1/things?thingtime=data&count=true&schemaId=${CUSTOMER_ID}&folder=${folderId}`, { cookie: alice.cookie });
+	check('concurrent ensure persists one scoped Data row', ensuredCount.status === 200 && ensuredCount.body?.count === 1);
+	const editEnsured = await api('/api/v1/things', { cookie: alice.cookie, method: 'PATCH', body: {
+		id: ensuredId, crystal: { name: 'Edited by owner' }, folderId: null
+	} });
+	const reused = await runEnsure(alice.cookie, { name: 'Replacement seed' });
+	const ensuredAfter = (await readEnsured(alice.cookie)).body?.thing;
+	check('ensure preserves saved edits and folder moves', editEnsured.status === 200 &&
+		reused.body?.result?.id === ensuredId && reused.body?.result?.crystal?.name === 'Edited by owner' && ensuredAfter?.folderId === null);
+	const mismatch = await runEnsure(alice.cookie, { useOtherSchema: true });
+	check('same intent refuses a different schema', /incompatible Thing/.test(mismatch.body?.error || '') &&
+		(await readEnsured(alice.cookie)).body?.thing?.crystal?.schemaId === CUSTOMER_ID,
+		JSON.stringify(mismatch.body).slice(0, 260));
+	const otherOwnerFolder = await createThing(bella.cookie, { thingtime: ['folder'], crystal: { name: 'Other ensure folder' }, acl: ['tt:user'] });
+	const foreignFolder = await runEnsure(bella.cookie);
+	check('ensure refuses another account’s folder', /Folder not found/.test(foreignFolder.body?.error || ''));
+	const otherOwnerEnsure = await runEnsure(bella.cookie, { folderId: otherOwnerFolder.body?.thing?.id });
+	check('same public Action and key remain owner-scoped', otherOwnerEnsure.body?.status === 'ok' &&
+		!!otherOwnerEnsure.body?.result?.id && otherOwnerEnsure.body.result.id !== ensuredId);
+	check('ensured Data Thing is invisible to other and anonymous callers',
+		(await readEnsured(bella.cookie)).status === 404 && (await readEnsured()).status === 404);
+	const audienceEdit = await api('/api/v1/things', { cookie: alice.cookie, method: 'PATCH', body: { id: ensuredId, acl: ['tt:all'] } });
+	const reuseWithChangedAudience = await runEnsure(alice.cookie);
+	check('reuse preserves an explicit audience change', audienceEdit.status === 200 && reuseWithChangedAudience.body?.result?.id === ensuredId &&
+		(await readEnsured()).body?.thing?.visibility === 'public');
+	const sharedEnsure = await runEnsure(bella.cookie, { folderId: otherOwnerFolder.body?.thing?.id }, { sharedRoot: ensureActionId });
+	check('shared read-only runs cannot ensure a Thing', sharedEnsure.body?.status !== 'ok');
+
+	const dailyActionKey = `activation-${suffix}`;
+	const dailyAction = await createThing(alice.cookie, {
+		thingtime: ['action'],
+		acl: ['tt:user'],
+		crystal: {
+			name: 'Ensure activation Data',
+			actionKey: dailyActionKey,
+			inputs: [{ name: 'day', type: 'string', required: true }],
+			capabilities: [
+				{ capability: 'things.read', schemas: [CUSTOMER_ID] },
+				{ capability: 'things.create', schemas: [CUSTOMER_ID] }
+			],
+			steps: [
+				{ op: 'things.ensure', schema: CUSTOMER_ID, key: '$input.day', values: { name: 'Daily fixture', day: '$input.day' } },
+				{ op: 'return', value: '$step.1' }
+			]
+		}
+	});
+	const dailyActionId = dailyAction.body?.thing?.id;
+	const timeZone = 'Australia/Melbourne';
+	const day = new Intl.DateTimeFormat('sv-SE', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+	const createActivationPage = async (action, acl = ['tt:user'], options = {}, owner = alice) => {
+		const result = await createThing(owner.cookie, {
+			thingtime: ['webpage'],
+			acl,
+			crystal: { name: 'Activation verification', blocks: [], activationAction: { action, cadence: 'day', timeZone, dayInput: 'day', ...options } }
+		});
+		if (!result.body?.thing) throw new Error(`Activation page did not save: ${result.body?.error}`);
+		return result.body.thing;
+	};
+	const activate = (page, user = alice, overrides = {}) => api('/api/v1/actions/run', {
+		cookie: user.cookie,
+		method: 'POST',
+		headers: { Origin: new URL(BASE).origin, 'X-Thingtime-Expected-Actor': user.id, 'X-Thingtime-Expected-Data-Plane': 'home' },
+		body: {
+			source: 'activation',
+			action: page.crystal.activationAction.action,
+			activationPageId: page.id,
+			activationPageRevision: page.updatedAt,
+			activationOnceKey: day,
+			...overrides
+		}
+	});
+	const activationPage = await createActivationPage(dailyActionId);
+	const firstActivation = await activate(activationPage);
+	const secondActivation = await activate(activationPage);
+	check('private activation supplies the verified day and reuses its Thing',
+		firstActivation.body?.status === 'ok' && firstActivation.body?.result?.crystal?.day === day &&
+		typeof firstActivation.body?.result?.id === 'string' && secondActivation.body?.result?.id === firstActivation.body.result.id,
+		JSON.stringify(firstActivation.body).slice(0, 300));
+	const copiedActivation = await api('/api/v1/things/bulk', {
+		cookie: alice.cookie, method: 'POST', body: { op: 'copy', ids: [activationPage.id] }
+	});
+	const copiedActivationId = copiedActivation.body?.results?.[0]?.newId;
+	const copiedPage = await api(`/api/v1/things?id=${encodeURIComponent(copiedActivationId || 'missing')}`, { cookie: alice.cookie });
+	check('bulk copy omits the saved page activation',
+		typeof copiedActivationId === 'string' && copiedPage.body?.thing && !('activationAction' in copiedPage.body.thing.crystal));
+	check('activation refuses stale page revisions and day keys',
+		(await activate(activationPage, alice, { activationPageRevision: 'stale-revision' })).status === 409 &&
+		(await activate(activationPage, alice, { activationOnceKey: '2000-01-01' })).status === 409);
+	check('activation refuses caller-supplied inputs and shared-root execution',
+		(await activate(activationPage, alice, { inputs: { day: '2000-01-01' } })).status === 400 &&
+		(await activate(activationPage, alice, { sharedRoot: activationPage.id })).status === 403);
+	const publicActivationPage = await createActivationPage(dailyActionId, ['tt:all']);
+	check('activation refuses another viewer or public page',
+		(await activate(activationPage, bella)).status === 409 && (await activate(publicActivationPage)).status === 409);
+	const foreignActivationAction = await createThing(bella.cookie, {
+		thingtime: ['action'], acl: ['tt:all'],
+		crystal: { name: 'Foreign activation Action', steps: [{ op: 'return', value: 'unexpected' }] }
+	});
+	const foreignActivationPage = await createActivationPage(foreignActivationAction.body?.thing?.id);
+	const aliasActivationPage = await createActivationPage(dailyActionKey);
+	const ownPublicActionPage = await createActivationPage(ensureActionId);
+	check('activation requires the exact owner-private saved Action',
+		(await activate(foreignActivationPage)).status === 403 && (await activate(aliasActivationPage)).status === 403 &&
+		(await activate(ownPublicActionPage)).status === 403);
+	const privateActivationProgram = async (step, owner = alice) => {
+		const saved = await createThing(owner.cookie, {
+			thingtime: ['action'], acl: ['tt:user'],
+			crystal: {
+				name: 'Automatic Action refusal fixture',
+				inputs: [{ name: 'day', type: 'string', required: true }],
+				capabilities: [{ capability: 'things.read', schemas: [CUSTOMER_ID] }, { capability: 'things.create', schemas: [CUSTOMER_ID] }],
+				steps: [{ schema: CUSTOMER_ID, values: { name: 'Unexpected' }, ...step }]
+			}
+		});
+		return createActivationPage(saved.body?.thing?.id, ['tt:user'], {}, owner);
+	};
+	const plainCreate = await activate(await privateActivationProgram({ op: 'things.create' }));
+	check('automatic activation refuses plain creates', plainCreate.status === 403 && /only read or ensure/.test(plainCreate.body?.error || ''));
+	const randomKey = await activate(await privateActivationProgram({ op: 'things.ensure', key: { ttConcat: ['id-', { ttExpr: ['random'] }] } }));
+	check('automatic activation refuses varying ensure keys', randomKey.status === 403 && /key/.test(randomKey.body?.error || ''));
+
+
 
 	// ---- invoice flow: create + send (get/update + $now + ttConcat) ---------
 	const generateInvoice = await createThing(alice.cookie, {
@@ -797,6 +968,87 @@ const run = async () => {
 	check('lookup results are marked transient', noKey.body?.cache === 'no-store');
 	const foreignLookup = await runAction(bella.cookie, { action: lookupAction.body?.thing?.id, inputs: { address: 'Synthetic example' } });
 	check('even deliberate foreign lookup cannot use viewer Vault', foreignLookup.body?.status === 'error' && /action you own/.test(foreignLookup.body?.error || ''));
+
+	// A separate account keeps the scheduled activation fixtures from using the
+	// operation and request budget of the ordinary Action checks above.
+	const batchOwner = await register('actbatch');
+	const batchAction = await createThing(batchOwner.cookie, {
+		thingtime: ['action'], acl: ['tt:user'], crystal: dailyAction.body?.thing?.crystal
+	});
+	const batchActionId = batchAction.body?.thing?.id;
+	const legacyBatchPage = await createActivationPage(batchActionId, ['tt:user'], {}, batchOwner);
+	const existingBatchDay = await activate(legacyBatchPage, batchOwner);
+	const prefs = await createThing(batchOwner.cookie, {
+		thingtime: ['data'], acl: ['tt:user'], crystal: { schemaId: CUSTOMER_ID, name: 'Batch settings', count: 7, cutoffTime: '00:00' }
+	});
+	const prefsId = prefs.body?.thing?.id;
+	const futureDay = (offset) => new Date(Date.parse(day) + offset * 86_400_000).toISOString().slice(0, 10);
+	const manual = await createThing(batchOwner.cookie, {
+		thingtime: ['data'], acl: ['tt:user'], crystal: { schemaId: CUSTOMER_ID, name: 'Existing manual entry', day: futureDay(1) }
+	});
+	const foreign = await createThing(bella.cookie, {
+		thingtime: ['data'], acl: ['tt:user'], crystal: { schemaId: CUSTOMER_ID, name: 'Another owner’s manual entry', day: futureDay(2) }
+	});
+	const updatedDailyAction = await api('/api/v1/things', {
+		cookie: batchOwner.cookie, method: 'PATCH', body: { id: batchActionId, crystal: {
+			limits: { timeoutMs: 10_000, maxOperations: 100 },
+			steps: [
+				{ op: 'things.get', id: prefsId },
+				{ op: 'things.ensure', schema: CUSTOMER_ID, each: { ttExpr: ['civilDateRange', '$input.day', '$step.1.crystal.count'] },
+					key: '$item', matchFields: ['day'], values: { name: 'Upcoming fixture', day: '$item' } },
+				{ op: 'return', value: '$step.2' }
+			]
+		} }
+	});
+	check('ordered ensure batch preserves the original saved Action ID', updatedDailyAction.body?.thing?.id === batchActionId);
+	const cutoffTime = { thingId: prefsId, schemaId: CUSTOMER_ID, field: 'cutoffTime' };
+	const batchPage = await createActivationPage(batchActionId, ['tt:user'], { cutoffTime }, batchOwner);
+	const resolveSchedule = (user = batchOwner) => api(`/api/v1/webpages/resolve?id=${encodeURIComponent(batchPage.id)}`, { cookie: user.cookie });
+	let previousIds = [];
+	for (const count of [7, 14, 30]) {
+		if (count !== 7) {
+			const revision = (await resolveSchedule()).body?.activationSchedule?.revision;
+			await api('/api/v1/things', { cookie: batchOwner.cookie, method: 'PATCH', body: { id: prefsId, crystal: { count } } });
+			const stale = await activate(batchPage, batchOwner, { activationScheduleRevision: revision });
+			check(`changing saved settings invalidates the previous revision for ${count} days`, stale.status === 409 && stale.body?.reason === 'activation-schedule-changed');
+		}
+		const schedule = (await resolveSchedule()).body?.activationSchedule;
+		const run = () => activate(batchPage, batchOwner, { activationScheduleRevision: schedule?.revision });
+		const [first, retry] = count === 7 ? await Promise.all([run(), run()]) : [await run(), await run()];
+		const rows = first.body?.result;
+		const ids = Array.isArray(rows) ? rows.map(row => row.id) : [];
+		check(`ordered ${count}-day batch reuses IDs on retry and keeps earlier ranges`,
+			schedule?.cutoffTime === '00:00' && first.body?.status === 'ok' && retry.body?.status === 'ok' &&
+			ids.length === count && new Set(ids).size === count && rows.every((row, i) => row.crystal.day === futureDay(i)) &&
+			JSON.stringify(retry.body.result.map(row => row.id)) === JSON.stringify(ids) && previousIds.every((id, i) => id === ids[i]),
+			first.body?.error || retry.body?.error || '');
+		if (count === 7) check('activation reuses both existing keyed and manual rows without adopting a foreign row',
+			ids[0] === existingBatchDay.body?.result?.id && ids[1] === manual.body?.thing?.id &&
+			typeof foreign.body?.thing?.id === 'string' && ids[2] !== foreign.body.thing.id && rows?.[1]?.crystal?.name === 'Existing manual entry');
+		previousIds = ids;
+	}
+	const revision = (await resolveSchedule()).body?.activationSchedule?.revision;
+	const publicBatchPage = await createActivationPage(batchActionId, ['tt:all'], { cutoffTime }, batchOwner);
+	const publicResolve = await api(`/api/v1/webpages/resolve?id=${encodeURIComponent(publicBatchPage.id)}`, { cookie: bella.cookie });
+	check('another viewer cannot resolve private schedule metadata even from a public page',
+		!(await resolveSchedule(bella)).body?.activationSchedule && publicResolve.body?.page?.id === publicBatchPage.id &&
+		!('activationSchedule' in publicResolve.body));
+	await api('/api/v1/things', { cookie: batchOwner.cookie, method: 'PATCH', body: { id: prefsId, acl: ['tt:all'] } });
+	check('revoked private cutoff source fails closed for read and run', (await resolveSchedule()).body?.activationSchedule === null &&
+		(await activate(batchPage, batchOwner, { activationScheduleRevision: revision })).status === 409);
+	const badBatch = await activate(await privateActivationProgram({ op: 'things.ensure', key: '$item', each: [day] }, batchOwner), batchOwner);
+	check('automatic activation refuses a batch of arbitrary keys', badBatch.status === 403 && /range/.test(badBatch.body?.error || ''));
+	const oversizedAction = await createThing(batchOwner.cookie, {
+		thingtime: ['action'], acl: ['tt:user'], crystal: {
+			name: 'Batch budget verification', limits: { maxOperations: 2 },
+			inputs: [{ name: 'day', type: 'string', required: true }],
+			capabilities: [{ capability: 'things.read', schemas: [CUSTOMER_ID] }, { capability: 'things.create', schemas: [CUSTOMER_ID] }],
+			steps: [{ op: 'things.ensure', schema: CUSTOMER_ID, key: '$item', each: { ttExpr: ['civilDateRange', '$input.day', 7] }, values: { name: 'Budget fixture' } }]
+		}
+	});
+	const oversized = await activate(await createActivationPage(oversizedAction.body?.thing?.id, ['tt:user'], {}, batchOwner), batchOwner);
+	check('oversized batches refuse before charging or writing an item', oversized.body?.status === 'error' &&
+		oversized.body?.opsUsed === 1 && /remaining operation budget/.test(oversized.body?.error || ''));
 
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');

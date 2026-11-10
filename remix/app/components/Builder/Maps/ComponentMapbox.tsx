@@ -12,6 +12,7 @@ import { useWebpageRuntime } from '../webpageRuntime';
 import { collectionSource } from '../collectionSource';
 import { resolveTemplate } from '~/components/ComponentsLibrary/componentTemplate';
 import { loadMapbox } from './mapboxSdk';
+import { mapboxPointsSource } from './mapboxSource';
 import { activeMapboxNavigation, mapboxFavouritePoints, mapboxHeight, markerSelection, mapboxOrderedRoutePoints, mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates, type LngLat, type MapboxPoint } from './mapboxData';
 import { mapboxPointKey, mapboxMarkerVisual, scaleMapboxMarker, updateMapboxOverlay, type MapboxOverlayData } from './mapboxOverlay';
 import { groupMapboxMarkers } from './mapboxGrouping';
@@ -27,6 +28,7 @@ type MapProps = {
 	center?: unknown;
 	zoom?: unknown;
 	points?: unknown;
+	pointsSource?: unknown;
 	route?: unknown;
 	fitBounds?: unknown;
 	height?: unknown;
@@ -58,7 +60,7 @@ export function ComponentMapbox(props: MapProps) {
 	return <MapboxViewport key={user?.id || 'anonymous'} {...props} />;
 }
 
-function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBounds, height, title, markerContent, markerGroupPath, markerScale, markerScaleWithZoom, markerScaleReferenceZoom,
+function MapboxViewport({ vaultId, styleUrl, center, zoom, points, pointsSource, route, fitBounds, height, title, markerContent, markerGroupPath, markerScale, markerScaleWithZoom, markerScaleReferenceZoom,
 	favouritesSource, routeSource, showFavourites, selectedFavouriteId, selectedRoutePointId,
 	onSelectQuery, onRouteSelectQuery, onSelectQueryParams, onRouteSelectQueryParams, onSelectState, onRouteSelectState, queryScope, focusPoint, focusZoom, transientRoute, routeId }: MapProps) {
 	const enabled = React.useContext(NativeControlsEnabled);
@@ -75,11 +77,17 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 		catch { return { binding: null, error: 'Map source configuration is invalid.' }; }
 	};
 	const favouriteConfig = source(favouritesSource), routeConfig = source(routeSource);
+	const pointConfig = (() => {
+		try { return { binding: mapboxPointsSource(pointsSource, { ...scope, query: runtime.query }), error: '' }; }
+		catch { return { binding: null, error: 'Map points source configuration is invalid.' }; }
+	})();
 	const favouriteBinding = favouriteConfig.binding;
 	const rawRouteBinding = routeConfig.binding;
 	const routeBinding = rawRouteBinding && ('routeId' in rawRouteBinding.inputs) && !rawRouteBinding.inputs.routeId ? null : rawRouteBinding;
 	const favourites = useThingSource({ source: favouriteBinding, cacheId: `map:favourites:${favouriteBinding?.action || ''}`, argValues: {}, interactive: sourcesEnabled, loadAllPages: true, resolvedInputs: true });
 	const selectedRoute = useThingSource({ source: routeBinding, cacheId: `map:route:${routeBinding?.action || ''}`, argValues: {}, interactive: sourcesEnabled, loadAllPages: true, resolvedInputs: true });
+	const extraPoints = useThingSource({ source: pointConfig.binding, cacheId: `map:points:${pointConfig.binding?.action || ''}`, argValues: {},
+		interactive: sourcesEnabled, pointPages: pointConfig.binding ?? undefined, resolvedInputs: true });
 	const host = React.useRef<HTMLDivElement>(null);
 	const mapRef = React.useRef<any>(null);
 	const glRef = React.useRef<any>(null);
@@ -105,13 +113,13 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 	const stops = mapboxOrderedRoutePoints(routeResult, navigation);
 	const routePoints: MapboxPoint[] = stops.map((point, index) => ({ ...point, group: 'route', markerLabel: point.markerLabel ?? String(index + 1), color: '#c4513c', selected: point.id === selectedRoutePointId }));
 	const favouritePoints = showFavourites === false || showFavourites === 'false' ? [] : mapboxFavouritePoints(favouriteResult?.items).map((point) => ({ ...point, selected: point.id === selectedFavouriteId }));
-	const originalMarkers = [...favouritePoints, ...mapboxPoints(points), ...routePoints];
+	const originalMarkers = [...favouritePoints, ...mapboxPoints(points), ...mapboxPoints(extraPoints.scope.result), ...routePoints];
 	const markers = groupMapboxMarkers(originalMarkers, markerGroupPath);
 	const line = mapboxRoute(navigation?.geometry ?? route);
 	// Original rows belong to the authored portal scope. The SDK overlay only
 	// needs normalized fields and should not refresh for unrelated row changes.
 	const overlayPoint = ({ item: _item, markerGroup: _group, ...point }: MapboxPoint) => point;
-	const dataKey = JSON.stringify({ points: markers.map(overlayPoint), route: line, center: origin, zoom: scale, fitBounds: fitBounds !== false, fitPoints: (routePoints.length ? routePoints : originalMarkers).map(overlayPoint), ...(routePoints.length || navigation ? { lineColor: '#c4513c' } : {}) });
+	const dataKey = JSON.stringify({ points: markers.map(overlayPoint), route: line, center: origin, zoom: scale, fitBounds: fitBounds !== false, fitPoints: (routePoints.length ? routePoints : originalMarkers).filter(point => point.fitBounds !== false).map(overlayPoint), ...(routePoints.length || navigation ? { lineColor: '#c4513c' } : {}) });
 	// The load callback always reads the newest data, even if props change while the SDK loads.
 	const dataRef = React.useRef<MapboxOverlayData>(JSON.parse(dataKey));
 	dataRef.current = JSON.parse(dataKey);
@@ -239,7 +247,8 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 
 	if (!enabled) return <div><p role="note">{label} is available on the interactive page.</p>{composedMarkers ? <div aria-label="Map marker template"><ComponentInstanceIdentity.Provider value={instanceId}>{markerContent}</ComponentInstanceIdentity.Provider></div> : null}</div>;
 	if (!id) return <p role="note">Choose a Mapbox vault connection to display the map.</p>;
-	const sourceError = favouriteConfig.error || routeConfig.error || favourites.scope.error || selectedRoute.scope.error;
+	const sourceError = favouriteConfig.error || routeConfig.error || pointConfig.error || favourites.scope.error || selectedRoute.scope.error ||
+		(pointConfig.binding?.showError !== false && extraPoints.scope.error);
 	return <div style={{ width: '100%', minWidth: 0, ...(height === '100%' ? { height: '100%' } : {}) }}>
 		{error ? <p role="alert" style={{ color: 'var(--tt-muted, #5a5a66)' }}>{error}</p> : null}
 		{sourceError ? <p role="alert">Map records could not refresh. {sourceError}</p> : null}
