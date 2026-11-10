@@ -1718,6 +1718,18 @@ is fixed, and cite the checklist you ran in the PR description.
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
       access; removing the last account revokes the ChatGPT bridge session.
+- [ ] Start with a Things-only connection in the same host chat. On an exact
+      selected account, `login_thingtime` with `requiredScopes: ["agents.report"]`
+      and a reporting read each return a tool-level `insufficient_scope`
+      challenge. The host opens its OAuth callback. Verify visible requested
+      reporting access, the signed-in account, optional Things access and the
+      Cancel path at desktop and mobile. Neither checking the session nor
+      cancelling creates a reporting PAT. Approval, exact PKCE and one-use
+      exchange are required. Verify the new profile and account ID before an
+      actual reporting write and exact record readback. Refresh retains only
+      the granted scopes; an unchanged old grant and a revoked new PAT cannot
+      report. The isolated built check is
+      `node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect`.
 - [ ] With a known Thing ID outside the first recent/list page,
       `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
       stable `thing_not_found` error; it never falls back to list/search. With a

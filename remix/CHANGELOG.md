@@ -149,6 +149,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and bounded Action batches. Check exact owner-folder placement in opted-in
   Action reads. **Codex (AI)**
 
+- 2026-11-10: Let the existing Thingtime MCP request independent private
+  reporting access through the host's OAuth prompt. Verify the owner before
+  resuming reporting; code exchange and refresh preserve the consented scopes.
+  **Codex (AI)**
+
 - 2026-11-10: Show editable iPhone Photos backup activity with indexed counts,
   preparation, iCloud retrieval, upload and recent steps. Back up now can
   request iOS continuation for the same native queue. **Codex (AI)**
