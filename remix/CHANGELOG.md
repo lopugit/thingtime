@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add an encrypted iOS Release export for an exact main commit and
+  one already-registered iPhone. Reuse production signing and verify device
+  profiles, signed entitlements and embedded targets before delivery. **Codex (AI)**
+
 - 2026-11-10: Add authored page selection, cursor-backed keyed collections
   and bounded Action batches. Check exact owner-folder placement in opted-in
   Action reads. **Codex (AI)**

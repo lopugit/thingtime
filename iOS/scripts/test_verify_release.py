@@ -1,4 +1,6 @@
+import hashlib
 import importlib.util
+from datetime import datetime, timedelta, timezone
 import plistlib
 import tempfile
 import unittest
@@ -24,6 +26,32 @@ class ShareProfileTests(unittest.TestCase):
         profile['Entitlements']['com.apple.security.application-groups'] = []
         with self.assertRaises(AssertionError):
             share_profile.verify_profile(profile, 'com.example.app.share', 'EXAMPLETEAM', 'group.example')
+
+class ReleaseTestingProfileTests(unittest.TestCase):
+    def test_exact_device_certificate_and_production_push_required(self):
+        device = '00000000-ABCDEF1234567890'
+        digest = hashlib.sha256(device.lower().encode()).hexdigest()
+        identifier = 'com.example.app'
+        team = 'EXAMPLETEAM'
+        certificate = b'certificate'
+        profile = dict(ExpirationDate=datetime.now(timezone.utc) + timedelta(days=1),
+                       ProvisionedDevices=[device], DeveloperCertificates=[certificate],
+                       Entitlements={'application-identifier': team + '.' + identifier,
+                                     'com.apple.developer.team-identifier': team,
+                                     'aps-environment': 'production'})
+        verify = lambda: release.verify_release_testing_profile(profile, identifier, team, digest, certificate, True)
+        verify()
+        for key, value in [('ProvisionedDevices', [device, 'other']), ('DeveloperCertificates', [b'other']),
+                           ('ProvisionsAllDevices', True)]:
+            with self.subTest(key=key):
+                original = profile.copy()
+                profile[key] = value
+                with self.assertRaises(AssertionError):
+                    verify()
+                profile = original
+        profile['Entitlements']['aps-environment'] = 'development'
+        with self.assertRaises(AssertionError):
+            verify()
 
 class ReleasePackageTests(unittest.TestCase):
     def setUp(self):
