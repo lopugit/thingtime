@@ -39,6 +39,22 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	}
 });
 
+test('multiple selects render named fields and individually editable option labels', () => {
+	const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, {
+		tag: 'select', attributes: { name: 'levels', multiple: true, value: ['top-level', 'subtasks'], 'aria-label': 'Task level' },
+		editorProps: { 'data-block-id': 'filter', onClick: () => {} },
+		children: React.createElement(HtmlBlockElement, {
+			tag: 'option', attributes: { value: 'top-level', onClick: 'unsafe()' }, editorProps: { 'data-block-id': 'choice' }, children: 'Top level'
+		})
+	}));
+	assert.match(markup, /data-block-id="filter"/);
+	assert.match(markup, /<div data-block-id="choice"/);
+	assert.match(markup, /<select name="levels" multiple=""/);
+	assert.match(markup, /value="top-level" selected=""/);
+	assert.match(markup, /value="subtasks" selected=""/);
+	assert.doesNotMatch(markup, /unsafe|popover=/);
+});
+
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {
 	const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: {
 		tag: 'tt-menu', props: { name: 'Record options', triggerContent: { tag: 'svg', props: { onClick: 'unsafe()', viewBox: '0 0 24 24' }, children: [{ tag: 'script', children: ['unsafe()'] }, { tag: 'path', props: { d: 'M0 0L24 24' } }] } },

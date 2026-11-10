@@ -50,18 +50,19 @@ export const reduceLocalUi = (
 	return Object.keys(next).length <= 32 ? next : current;
 };
 
-// In-page selection uses the same bounds and reserved keys as navigation.
+// In-page selection uses the same reserved keys as navigation. List fields
+// use a JSON string so each option value survives the scalar query binding.
 export function localQueryParams(params: unknown): URLSearchParams | null {
 	if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
 	const values = Object.entries(params);
 	if (values.length > 32) return null;
 	const query = new URLSearchParams();
 	for (const [key, value] of values) {
-		const cursor = isPaginationCursorKey(key) && typeof value === 'string';
-		if (!/^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(key) || ['key', 'mode', '__proto__', 'constructor', 'prototype'].includes(key) || (!cursor && !scalar(value)))
-			return null;
-		if (String(value).length > (cursor ? MAX_PAGINATION_CURSOR_CHARS : 200)) return null;
-		query.set(key, String(value));
+		if (!/^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(key) || ['key', 'mode', '__proto__', 'constructor', 'prototype'].includes(key)) return null;
+		if (isPaginationCursorKey(key) && (typeof value !== 'string' || value.length > MAX_PAGINATION_CURSOR_CHARS)) return null;
+		if (typeof value === 'string' || scalar(value)) query.set(key, String(value));
+		else if (Array.isArray(value) && value.every(entry => typeof entry === 'string')) query.set(key, JSON.stringify(value));
+		else return null;
 	}
 	return query;
 }

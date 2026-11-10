@@ -145,6 +145,96 @@ test('view/filter changes and deleted cursor targets refuse stale pagination', (
 	assert.throws(() => buildOverview({ ...input(), cursor: first.nextCursor! }, data, true, 'now'), /pagination changed/);
 });
 
+test('overview filters combine selections across task level, status, and project before paging', () => {
+	const data = records();
+	for (const id of ['alpha', 'beta', 'gamma']) data.project.push(thing(id));
+	data.task.push(
+		thing('alpha-root', { parentId: 'alpha', status: 'active' }),
+		thing('alpha-subtask', { parentId: 'alpha-root', status: 'complete' }),
+		thing('alpha-grandchild', { parentId: 'alpha-subtask', status: 'complete' }),
+		thing('agent-subtask', { parentId: 'alpha-agent', status: 'active' }),
+		thing('beta-root', { projectId: 'beta', status: 'complete' }),
+		thing('gamma-root', { projectId: 'gamma', status: 'active' }),
+		thing('excluded-status', { projectId: 'beta', status: 'blocked' }),
+		thing('detached', { parentId: 'unknown', projectId: 'beta', status: 'complete' }),
+		thing('detached-child', { parentId: 'detached', status: 'complete' })
+	);
+	data.agent.push(thing('alpha-agent', { taskId: 'alpha-root', status: 'active' }));
+	for (const role of ['question', 'progress', 'todo'] as const) data[role].push(
+		thing(`${role}-root`, { parentId: 'alpha-root' }), thing(`${role}-subtask`, { parentId: 'alpha-subtask' })
+	);
+	const filters = 'statuses=complete,active&statuses=active&projectIds=beta&projectIds=alpha';
+	const read = (levels: string, complete = true) => buildOverview(
+		parseOverviewInput(new URLSearchParams(`taskSchema=tasks&projectSchema=projects&agentSchema=agents&${filters}&${levels}`)), data, complete, 'now'
+	);
+	const roots = read('taskLevels=top-level');
+	assert.deepEqual(roots.rows.map(row => row.id), ['alpha-root', 'beta-root', 'detached']);
+	assert.deepEqual(roots.statuses, ['active', 'complete']);
+	assert.deepEqual(roots.projectIds, ['alpha', 'beta']);
+	assert.deepEqual(roots.availableStatuses, ['active', 'blocked', 'complete']);
+	assert.deepEqual(roots.projects.map(row => row.id), ['alpha', 'beta', 'gamma']);
+	assert.equal(roots.rows[0].depth, 1);
+	assert.equal(roots.rows[0].projectId, 'alpha');
+	assert.equal(roots.rows[2].orphan, true);
+	assert.equal(read('taskLevels=top-level', false).rows[2].unresolvedParent, true);
+	assert.deepEqual(roots.reports.map(row => row.id), ['progress-root']);
+	assert.deepEqual(roots.todos.map(row => row.id), ['todo-root']);
+	assert.equal(roots.stats.tasks, 3);
+	const nested = read('taskLevels=subtasks');
+	assert.deepEqual(nested.rows.map(row => row.id), ['alpha-subtask', 'alpha-grandchild', 'agent-subtask', 'detached-child']);
+	assert.deepEqual(nested.questions.map(row => row.id), ['question-subtask']);
+	assert.equal(nested.rows[1].projectId, 'alpha');
+	assert.equal(nested.rows[2].projectId, 'alpha');
+	assert.equal(nested.rows[3].projectId, 'beta');
+	assert.equal(nested.rows[3].orphan, false);
+	const both = read('taskLevels=subtasks&taskLevels=top-level');
+	assert.equal(both.rows.length, 7);
+	assert.deepEqual(both.taskLevels, ['top-level', 'subtasks']);
+	assert.deepEqual(read('taskLevels=all').rows, both.rows);
+	assert.deepEqual(read('taskLevels=').rows, both.rows);
+	assert.deepEqual(read('taskLevels=%5B%5D').rows, both.rows);
+	assert.equal(read('').rows.some(row => row.id === 'alpha-agent'), true);
+	const detail = buildOverview({ ...input(), taskLevels: ['top-level'], statuses: ['blocked'], taskId: 'alpha-subtask' }, data, true, 'now');
+	assert.equal(detail.selected?.id, 'alpha-subtask');
+	assert.deepEqual(detail.reports.map(row => row.id), ['progress-subtask']);
+});
+
+test('selection cursors canonicalize lists, reject changes, and keep legacy scalar filters literal', () => {
+	const data = records();
+	for (let index = 0; index < 55; index++) data.task.push(thing(String(index), { status: 'active', projectId: 'alpha' }));
+	data.task.push(thing('literal', { status: 'active, complete', projectId: 'alpha,beta' }));
+	const query = (filter: string) => parseOverviewInput(new URLSearchParams(`taskSchema=tasks&${filter}`));
+	const first = buildOverview(query('statuses=active,complete&projectIds=alpha,beta&taskLevels=top-level'), data, true, 'now');
+	assert.ok(first.nextCursor);
+	const reordered = query('taskLevels=top-level&projectIds=beta&projectIds=alpha,beta&statuses=complete,active,active');
+	assert.equal(buildOverview({ ...reordered, cursor: first.nextCursor! }, data, true, 'now').rows.length, 5);
+	for (const change of [{ taskLevels: ['subtasks'] as const }, { projectIds: ['beta'] }, { statuses: ['complete'] }]) {
+		const changed = { ...reordered, ...change, taskLevels: 'taskLevels' in change ? [...change.taskLevels] : reordered.taskLevels };
+		assert.throws(() => buildOverview({ ...changed, cursor: first.nextCursor! }, data, true, 'now'), /pagination changed/);
+	}
+	assert.deepEqual(buildOverview(query('status=active%2C+complete&projectId=alpha%2Cbeta'), data, true, 'now').rows.map(row => row.id), ['literal']);
+	assert.equal(buildOverview(query('status=blocked&statuses='), data, true, 'now').stats.tasks, 56);
+	assert.throws(() => query('taskLevels=invalid'), /Invalid taskLevels/);
+	assert.throws(() => query('statuses=bad%0Astatus'), /Invalid statuses/);
+});
+
+test('JSON filter lists preserve exact labels and reject non-string or control values', () => {
+	const status = ' In review, external ';
+	const data = records();
+	data.task.push(thing('exact', { status }), thing('trimmed', { status: status.trim() }), thing('active', { status: 'active' }));
+	const params = new URLSearchParams({ taskSchema: 'tasks', status: 'legacy', statuses: JSON.stringify([status, status], null, 2) });
+	params.append('statuses', 'active');
+	const result = buildOverview(parseOverviewInput(params), data, true, 'now');
+	assert.deepEqual(result.statuses, [status, 'active']);
+	assert.deepEqual(result.rows.map(row => row.id), ['exact', 'active']);
+	params.set('statuses', '[]');
+	assert.equal(buildOverview(parseOverviewInput(params), data, true, 'now').stats.tasks, 3);
+	for (const invalid of ['[', '[1]', '["a",null]', '[["nested"]]', '["bad\\nvalue"]']) {
+		params.set('statuses', invalid);
+		assert.throws(() => parseOverviewInput(params), /Invalid statuses/);
+	}
+});
+
 test('project, task-status and search filters include relational children through authorized parent tasks', () => {
 	const data = records();
 	data.project.push(thing('project-one', { recordType: 'agent-project' }), thing('project-two', { recordType: 'agent-project' }));

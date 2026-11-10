@@ -24,9 +24,10 @@ import { useCharacterScope } from '~/components/Characters/CharacterScope';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { consumeLiveSourceStream, validateLiveSourceStream, type LiveSourceStreamBinding } from './liveSourceStream';
 import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
+import { parseSourceInputArgument, type SourceInputValue } from '~/schemas/sourceInputs';
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
-import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { createTemplateResolver, defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
@@ -60,13 +61,21 @@ import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache 
 
 export type ThingSourceBinding = {
 	action: string;
-	inputs?: Record<string, string | number | boolean>;
+	inputs?: Record<string, SourceInputValue>;
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
 	stream?: LiveSourceStreamBinding;
 };
 
 export type ThingSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
+
+export function resolveThingSourceInputs(inputs: ThingSourceBinding['inputs'], scope: Record<string, unknown>) {
+	const resolve = createTemplateResolver();
+	return Object.fromEntries(Object.entries(inputs || {}).flatMap(([name, input]) => {
+		const value = resolve(typeof input === 'object' ? parseSourceInputArgument(input) : input, scope);
+		return typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? [[name, value]] : [];
+	}));
+}
 
 export type ThingSourceScope = {
 	result: unknown;
@@ -118,7 +127,7 @@ export const useThingSource = ({
 	// Only the resolved inputs identify a read. Selecting an unrelated panel
 	// or marker leaves this source, its existing result, and its cache intact.
 	const resolved = source?.inputs && !resolvedInputs
-		? resolveTemplate(source.inputs, { ...argValues, query: runtime.query })
+		? resolveThingSourceInputs(source.inputs, { ...argValues, query: runtime.query })
 		: source?.inputs;
 	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
 	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);

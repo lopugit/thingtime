@@ -5,6 +5,7 @@ import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
+import { parseSourceInputArgument } from './sourceInputs';
 import { parseWebpageActivation } from './webpageActivation.ts';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
@@ -5628,16 +5629,21 @@ const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true
 	if (rawSource.passive) source.passive = true;
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
+			return fail(400, `Component/page source.inputs must be an object of scalar values or ttArg bindings`);
 		}
 		const inputs: Record<string, unknown> = {};
 		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
 		for (const [key, value] of entries) {
-			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS || PROTOTYPE_POLLUTION_KEYS.has(key)) {
 				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
 			}
+			const binding = parseSourceInputArgument(value);
+			if (binding) {
+				inputs[key] = binding;
+				continue;
+			}
 			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
+			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a scalar or a ttArg path binding`);
 			if (scalar !== null) inputs[key] = scalar;
 		}
 		if (Object.keys(inputs).length) source.inputs = inputs;

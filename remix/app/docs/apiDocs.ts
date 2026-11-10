@@ -823,13 +823,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'The independent permission or private workspace access is missing.', body: { ok: false, error: 'Agent reporting authorization is required.' } }]
   }),
   endpoint({
-    id: 'agent-overview', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'things',
+    id: 'agent-overview', contractVersion: '2.1.0', featureVersion: '2.1.0', group: 'things',
     title: 'Agent project overview', endpoint: '/api/v1/agent-overview',
     summary: 'Reads authorized project, task and agent Things as a live Builder data source.',
-    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification; classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
+    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional statuses, projectIds and taskLevels accept JSON arrays of strings, repeated keys or comma-separated lists. Each filter matches any selected value and combines with the other filters. Task levels are top-level and subtasks. Passing an empty taskLevels or all selects both levels. Omitting taskLevels preserves the full hierarchy including project and agent rows. Explicit plural statuses and projectIds take precedence over legacy scalar status and projectId, and empty lists clear those filters. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification. Filters and classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
     auth: { mode: 'session-or-bearer', description: 'Authenticated viewer with things.read; private/no-store.' },
-    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.0.0.', 'Read the selected schema-scoped work graph or connect its live stream.'],
-    requestExamples: [{ name: 'Overview', description: 'Read the installed task schema.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy' } }],
+    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.1.0 to use multi-select filters.', 'Read the selected schema-scoped work graph or connect its live stream.'],
+    requestExamples: [{ name: 'Overview', description: 'Read top-level tasks in either selected status.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy', taskLevels: 'top-level', statuses: 'active,blocked' } }],
     responseExamples: [{ status: 200, description: 'Authorized overview snapshot or text/event-stream.' }, { status: 401, description: 'Authentication required.' }]
   }),
   endpoint({
@@ -9687,8 +9687,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.57.0',
-    contractVersion: '1.57.0',
+    featureVersion: '1.58.0',
+    contractVersion: '1.58.0',
 
 
     group: 'things',
@@ -9698,6 +9698,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.58 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
       'Version 1.57 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources. Execution requires api.actions-run 1.45.0. ' +
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
       'Version 1.56 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction descriptors. Execution requires api.actions-run 1.44.0. Saved map pointsSource descriptors load a separate optional cursor-paged points layer with interval refresh. Source points may set fitBounds:false to retain the marker and exclude it from automatic viewport fitting. ' +
@@ -11780,8 +11781,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.23.0',
-    contractVersion: '1.23.0',
+    featureVersion: '1.24.0',
+    contractVersion: '1.24.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11790,6 +11791,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Version 1.24 preserves and validates saved Component and Webpage source input references under the same revision checks. ' +
       'Version 1.23 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources under revision checks. ' +
       'Version 1.22 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction and map pointsSource descriptors under ordinary revision checks. Execution requires api.actions-run 1.44.0. ' +
       'Version 1.18.1 corrects page Component discovery and identity comparison for large/deep valid authored block trees using cycle-safe iterative traversal. Existing Component ACL/capture and revision contracts remain unchanged. Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
@@ -13661,14 +13663,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.15.0',
-    featureVersion: '1.15.0',
+    contractVersion: '1.16.0',
+    featureVersion: '1.16.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.16 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +
       'Version 1.15 includes private activationSchedule { cutoffTime, revision } for the eligible owning account when the binding uses an exact private settings Thing. An unavailable source returns null and cannot activate. Passive webpage sources provide data scope and preserve descendant form controls. ' +
       'Version 1.14 resolves the optional saved activationAction descriptor for private standalone pages. Only the full owning account in live mode can activate it; editor, branch, shared, gallery and held surfaces remain inert. It also preserves independent map pointsSource bindings for their normal authorized Action path. ' +
       'Version 1.13 includes server-derived executionHeld on the page and resolved Components. A held page or Component renders as an inert preview until its exact creation operation completes. ' +

@@ -195,6 +195,20 @@ test('ordinary webpage blocks can bind a passive source without changing source 
 	]) assert.equal(validateThingtimeCrystal(['webpage'], { name: 'Invalid', blocks: [invalid] }).ok, false);
 });
 
+test('source inputs accept only scalar values and explicit ttArg paths', () => {
+	const inputs = { selected: { ttArg: 'query.selection', fallback: 'defaultSelection' }, page: { ttArg: 'query.page-size' }, show: true };
+	const block = (inputs: Record<string, unknown>) => ({ id: 'list', type: 'element', tag: 'section', args: { defaultSelection: 'default' }, source: { action: 'read-rows', inputs } });
+	assert.deepEqual(okBlocks(page([block(inputs)]))[0].source.inputs, inputs);
+	const validComponent = validateThingtimeCrystal(['component'], { name: 'Bound component', render: { tag: 'div' }, source: { action: 'read-rows', inputs } });
+	assert.ok(validComponent.ok);
+	assert.deepEqual((validComponent.crystal.source as { inputs: unknown }).inputs, inputs);
+	for (const selected of [
+		['query.selection'], { ttMap: { arg: 'query.selection' } }, { ttArg: 'query.selection', ttEach: {} },
+		{ ttArg: 'query[selection]' }, { ttArg: 'query..selection' }, { ttArg: 'query.constructor.selection' },
+		{ ttArg: 'query.selection', fallback: 'query.__proto__' }, { ttArg: 'query.selection', fallback: 1 }
+	]) assert.equal(page([block({ selected })]).ok, false);
+});
+
 
 test('live sources preserve registered adapter contracts and reject arbitrary authenticated destinations', () => {
   const stream = { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' };

@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+`api.agent-overview` 2.1.0 adds optional multi-select task level, status and
+project filters to `GET /api/v1/agent-overview`. The read adapter applies them
+to the authorized hierarchy before pagination. The response includes effective
+selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
+the new filters. See [the overview adapter](../agent-overview.md) and run
+`test:agent-overview` and `test:api-capabilities`.
+
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
 source ownership and per-device identity, atomically fences policy revisions,

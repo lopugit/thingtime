@@ -206,6 +206,18 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 
 ## Agent overview and task reporting
 
+- [ ] On the saved overview, start without task-level parameters and confirm
+      only top-level tasks appear. Project-owned tasks are top-level; children
+      of tasks or agents are subtasks. Select both levels or All tasks, then
+      select multiple statuses and projects without modifier keys. Apply,
+      switch views, reload and use Back; preserve selections and reset the
+      cursor when filters change. Compare results/counts with exact source
+      Things, including grandchildren, detached records and more than one page.
+- [ ] Open each filter with keyboard and pointer at desktop and mobile widths.
+      Check focus, checked options, clear/All choices, long labels, seven or
+      more selected project IDs, and top-to-bottom overflow. In Builder, select
+      and edit the filter label, select and option blocks individually, save
+      and reload; selected values must survive the normal form/query path.
 - [ ] Through the actual connected MCP, verify a plain `things` token cannot
       delegate Characters; authorize `agents.report` explicitly and negotiate
       the exact origin's reporting/Characters/overview capabilities.

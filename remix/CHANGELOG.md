@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10: Add task-level, status and project multi-selection to the Agent
+  overview read adapter, with pagination-safe filtering and reusable editable
+  Builder multiple-select controls. **Codex (AI)**
+
 - 2026-11-10: Show editable iPhone Photos backup activity with indexed counts,
   preparation, iCloud retrieval, upload and recent steps. Back up now can
   request iOS continuation for the same native queue. **Codex (AI)**

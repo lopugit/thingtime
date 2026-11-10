@@ -29,6 +29,39 @@ and optional comma-separated `activeStatuses`, `blockedStatuses`, and
 that group. The classification values are part of the cursor context; start a
 new scan when schemas, filters, view, or classifications change.
 
+Clients using multi-select filters negotiate `api.agent-overview` **2.1.0**.
+Use `statuses`, `projectIds`, and `taskLevels` as JSON string arrays in the
+query, such as `statuses=["In review, external","active"]`. JSON preserves
+punctuation and whitespace in each value. Repeated query keys and comma-separated
+lists are also accepted. Each list matches any selected value. The dimensions
+combine with one another and with search. Use `[]` to clear a selection.
+When supplied, `statuses` and `projectIds` take precedence over the existing
+single-value `status` and `projectId` filters. Responses include the effective
+selection arrays alongside the original scalar fields. Use `availableStatuses`
+and `projects` to populate filter choices from all authorized scanned records
+regardless of the current selection.
+
+To author a saved default with an explicit clear value, bind the input with
+`{ "ttArg": "query.taskLevels", "fallback": "taskLevelsDefault" }` and set
+the page block argument `taskLevelsDefault` to `top-level`. An absent query key
+uses the fallback. A cleared multi-select sends `[]` to the adapter.
+For typed source input references, negotiate `api.things` **1.58.0** on create,
+`api.things-update` **1.24.0** on update and `api.webpages-resolve` **1.16.0**
+on resolve.
+
+Use `taskLevels=top-level` for a page that opens on top-level tasks. A task
+with an authorized task or agent parent is a `subtasks` match. A task with no
+such parent, including a task linked directly to a project or one with a
+detached or unresolved parent, is a `top-level` match. Existing orphan,
+unresolved-parent, and cycle indicators remain available. Selecting both
+levels, passing an empty `taskLevels`, or using `taskLevels=all` shows all task
+rows. Omit `taskLevels` to keep the legacy hierarchy with project and agent
+rows. The Projects and Agents views
+continue showing their own rows. Task counts and task-related reports, questions
+and todos follow the level filter. An exact `taskId` still reads its selected
+task and related records directly. Filters apply before paging and changing a
+selection requires a new cursor.
+
 The adapter supports hierarchy, projects, agents, kanban, reports, and
 questions views. It returns raw status values and numeric hierarchy `depth`; display
 labels, indentation, titles and other layout belong to the saved Thing page.

@@ -112,6 +112,15 @@ Shared HTML template fields adopt late defaults only while their current value
 still matches the previous default. Reloaded search/select filters therefore
 stay aligned with results, while delayed reads preserve visitor edits.
 
+Saved Component and Webpage sources can declare a typed argument reference in
+`source.inputs`. For example, `{ "ttArg": "query.filter", "fallback": "defaultFilter" }`
+reads a scalar from the current template scope. The fallback is another path
+in the same scope and applies only when the primary is absent. Empty strings,
+zero and false remain explicit values. These references are inert data and
+keep the source's existing authorization. Create, update and resolve clients
+negotiate `api.things` 1.58.0, `api.things-update` 1.24.0 and
+`api.webpages-resolve` 1.16.0 respectively.
+
 ## HTML form receivers
 
 The form recipes use typed native setters, text-selection operations, validation

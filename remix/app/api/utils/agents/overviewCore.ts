@@ -1,10 +1,14 @@
+import { createHash } from 'node:crypto';
 import { INVALID_PAGINATION_CURSOR, MAX_PAGINATION_CURSOR_CHARS } from '~/schemas/paginationCursor';
 
 /** Public, inert projections for saved Builder pages. Never forward raw crystals. */
 export const OVERVIEW_ROLES = ['task', 'project', 'agent', 'question', 'progress', 'todo'] as const;
 export type OverviewRole = (typeof OVERVIEW_ROLES)[number];
 export type OverviewThing = { id: string; crystal: Record<string, unknown>; createdAt?: string; updatedAt?: string };
+const taskLevels = ['top-level', 'subtasks'] as const;
+type TaskLevel = (typeof taskLevels)[number];
 export type OverviewInput = { view: string; q: string; status: string; projectId: string; taskId: string; cursor: string; schemas: Partial<Record<OverviewRole, string>>; scanStart?: Partial<Record<OverviewRole, string | null>>;
+	statuses?: string[]; projectIds?: string[]; taskLevels?: TaskLevel[];
 	activeStatuses?: string[]; blockedStatuses?: string[]; completeStatuses?: string[] };
 export type OverviewRow = ReturnType<typeof overviewRow>;
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -32,7 +36,18 @@ const defaultStatuses = {
 	complete: ['complete', 'completed', 'done']
 };
 const statusGroups = (input: OverviewInput) => ({ active: input.activeStatuses ?? defaultStatuses.active, blocked: input.blockedStatuses ?? defaultStatuses.blocked, complete: input.completeStatuses ?? defaultStatuses.complete });
-export const overviewContext = (input: OverviewInput) => JSON.stringify([input.schemas, input.view, input.q, input.status, input.projectId, input.taskId, statusGroups(input)]);
+const normalizedValues = (values: string[]) => [...new Set(values)].sort();
+const hasControlCharacters = (value: string) => Array.from(value).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+export const overviewContext = (input: OverviewInput) => {
+	const legacy = [input.schemas, input.view, input.q, input.status, input.projectId, input.taskId, statusGroups(input)];
+	if (input.statuses === undefined && input.projectIds === undefined && !input.taskLevels?.length) return JSON.stringify(legacy);
+	// Keep cursors compact even when many projects or statuses are selected.
+	const context = [...legacy,
+		input.statuses === undefined ? null : normalizedValues(input.statuses),
+		input.projectIds === undefined ? null : normalizedValues(input.projectIds),
+		normalizedValues(input.taskLevels ?? [])];
+	return createHash('sha256').update(JSON.stringify(context)).digest('base64url');
+};
 export const overviewCursor = (input: OverviewInput, after?: string, scanStart = input.scanStart) => Buffer.from(JSON.stringify({ context: overviewContext(input), ...(after ? { after } : {}), ...(scanStart ? { scanStart } : {}) })).toString('base64url');
 export function decodeOverviewCursor(input: OverviewInput): { after?: string; scanStart?: OverviewInput['scanStart'] } {
 	try {
@@ -60,13 +75,32 @@ export function parseOverviewInput(params: URLSearchParams): OverviewInput {
 		if (params.getAll(key).length > 1) throw new OverviewError(400, `Send ${key} once as comma-separated status values`);
 		const raw = params.get(key);
 		if (raw === null) return [...fallback];
-		if (Array.from(raw).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw new OverviewError(400, `Invalid ${key} status values`);
+		if (hasControlCharacters(raw)) throw new OverviewError(400, `Invalid ${key} status values`);
 		if (!raw.trim()) return [];
 		const values = raw.split(',').map(value => value.trim());
 		if (values.some(value => !value)) throw new OverviewError(400, `Invalid ${key} status values`);
-		return [...new Set(values)].sort();
+		return normalizedValues(values);
 	};
+	const filterValues = (key: string) => {
+		if (!params.has(key)) return undefined;
+		const invalid = () => new OverviewError(400, `Invalid ${key} filter values`);
+		const values = params.getAll(key).flatMap(entry => {
+			if (!entry.trimStart().startsWith('[')) {
+				if (hasControlCharacters(entry)) throw invalid();
+				return entry.split(',').map(value => value.trim()).filter(Boolean);
+			}
+			let decoded: unknown;
+			try { decoded = JSON.parse(entry); } catch { throw invalid(); }
+			if (!Array.isArray(decoded) || decoded.some(value => typeof value !== 'string' || hasControlCharacters(value))) throw invalid();
+			return decoded as string[];
+		});
+		return normalizedValues(values);
+	};
+	const requestedLevels = filterValues('taskLevels');
+	if (requestedLevels?.some(level => level !== 'all' && !taskLevels.some(value => value === level))) throw new OverviewError(400, 'Invalid taskLevels filter values');
+	const levels = requestedLevels && taskLevels.filter(level => !requestedLevels.length || requestedLevels.includes('all') || requestedLevels.includes(level));
 	return { schemas, view: params.get('view') || 'hierarchy', q: params.get('q') || '', status: params.get('status') || '', projectId: params.get('projectId') || '', taskId: params.get('taskId') || '', cursor,
+		statuses: filterValues('statuses'), projectIds: filterValues('projectIds'), taskLevels: levels,
 		activeStatuses: statuses('activeStatuses', defaultStatuses.active), blockedStatuses: statuses('blockedStatuses', defaultStatuses.blocked), completeStatuses: statuses('completeStatuses', defaultStatuses.complete) };
 }
 
@@ -118,8 +152,17 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 	const agentIds = new Set(normalized.agent.map(row => row.id));
 	const agentRows = allRows.filter(row => agentIds.has(row.id));
 	const taskById = new Map(taskRows.map(row => [row.id, row]));
-	const matches = (row: OverviewRow) => (!input.status || input.status === 'all' || row.status === input.status) && (!input.projectId || row.projectId === input.projectId || row.id === input.projectId) && (!input.q || `${row.title}\n${row.description}`.toLocaleLowerCase().includes(input.q.toLocaleLowerCase()));
-	const tasks = taskRows.filter(matches);
+	const statuses = input.statuses ?? (input.status && input.status !== 'all' ? [input.status] : []);
+	const projectIds = input.projectIds ?? (input.projectId ? [input.projectId] : []);
+	const levels = input.taskLevels ?? [];
+	const statusFilter = new Set(statuses), projectFilter = new Set(projectIds);
+	const matchesStatus = (status: string) => !statusFilter.size || statusFilter.has(status);
+	const matchesTaskLevel = (row: OverviewRow) => {
+		const nested = taskIds.has(row.parentId) || agentIds.has(row.parentId);
+		return !levels.length || levels.includes(nested ? 'subtasks' : 'top-level');
+	};
+	const matches = (row: OverviewRow) => matchesStatus(row.status) && (!projectFilter.size || projectFilter.has(row.projectId) || projectFilter.has(row.id)) && (!input.q || `${row.title}\n${row.description}`.toLocaleLowerCase().includes(input.q.toLocaleLowerCase()));
+	const tasks = taskRows.filter(row => matches(row) && matchesTaskLevel(row));
 	const selected = taskRows.find(row => row.id === input.taskId) || null;
 	// Relational child records store only parentId. Resolve their scope through
 	// already-authorized task projections; never fetch a hidden parent or rely
@@ -129,12 +172,13 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 		const parent = taskById.get(row.taskId || row.parentId);
 		return { row: { ...row, projectId: row.projectId || parent?.projectId || '', chatUrl: row.chatUrl || parent?.chatUrl || '', externalId: row.externalId || parent?.externalId || '' }, parent };
 	}).filter(({ row, parent }) => input.taskId ? row.taskId === input.taskId || row.parentId === input.taskId :
-		(!input.projectId || row.projectId === input.projectId) &&
-		(!input.status || input.status === 'all' || (parent?.status || row.status) === input.status) &&
+		(!projectFilter.size || projectFilter.has(row.projectId)) &&
+		matchesStatus(parent?.status || row.status) &&
+		(!levels.length || (!!parent && matchesTaskLevel(parent))) &&
 		(!input.q || `${row.title}\n${row.description}\n${parent?.title || ''}\n${parent?.description || ''}`.toLocaleLowerCase().includes(input.q.toLocaleLowerCase()))
 	).map(({ row }) => row);
 	const selectedQuestions = forSelected(questions), selectedReports = forSelected(reports), selectedTodos = forSelected(normalized.todo);
-	const source = input.view === 'agents' ? agentRows.filter(matches) : input.view === 'projects' ? normalized.project.filter(matches) : input.view === 'reports' ? selectedReports : input.view === 'questions' ? selectedQuestions : input.view === 'kanban' ? tasks : allRows.filter(matches);
+	const source = input.view === 'agents' ? agentRows.filter(matches) : input.view === 'projects' ? normalized.project.filter(matches) : input.view === 'reports' ? selectedReports : input.view === 'questions' ? selectedQuestions : input.view === 'kanban' || levels.length ? tasks : allRows.filter(matches);
 	let start = 0;
 	if (input.cursor) {
 		try {
@@ -150,15 +194,17 @@ export function buildOverview(input: OverviewInput, records: Record<OverviewRole
 	const rows = source.slice(start, start + 50);
 	const nextCursor = start + rows.length < source.length ? overviewCursor(input, rows[rows.length - 1].id) : null;
 	const values = tasks.flatMap(row => row.tokenUsage === null ? [] : [row.tokenUsage]);
-	const statuses = [...new Set(tasks.map(row => row.status))];
+	const columnStatuses = [...new Set(tasks.map(row => row.status))];
 	const groups = statusGroups(input);
 	return { view: input.view, q: input.q, status: input.status, projectId: input.projectId,
+		statuses, projectIds, taskLevels: levels,
+		availableStatuses: normalizedValues(taskRows.map(row => row.status).filter(Boolean)),
 		statusGroups: groups,
 		stats: { projects: normalized.project.length, tasks: tasks.length, agents: normalized.agent.length, active: tasks.filter(row => groups.active.includes(row.status)).length,
 			blocked: tasks.filter(row => groups.blocked.includes(row.status)).length, questions: selectedQuestions.filter(row => !['answered','complete','resolved'].includes(row.status)).length,
 			complete: tasks.filter(row => groups.complete.includes(row.status)).length, tokenUsage: values.length ? values.reduce((sum, value) => sum + value, 0) : null },
 		rows, projects: normalized.project, agents: agentRows, selected, todos: selectedTodos,
-		columns: statuses.map(status => ({ status, count: tasks.filter(row => row.status === status).length, rows: rows.filter(row => taskIds.has(row.id) && row.status === status) })),
+		columns: columnStatuses.map(status => ({ status, count: tasks.filter(row => row.status === status).length, rows: rows.filter(row => taskIds.has(row.id) && row.status === status) })),
 		reports: selectedReports, questions: selectedQuestions, nextCursor, measuredAt,
 		coverage: { complete, countsScope: complete ? 'all-authorized-records' : 'scanned-authorized-records', countsLabel: complete ? 'Authorized records; task counts follow the current filters' : 'Partial scan; counts are lower bounds, not totals', matchedRows: source.length, pageSize: 50 } };
 }
