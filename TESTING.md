@@ -12327,7 +12327,19 @@ transfer, whole-account snapshots or production deployment.
   verify exact prior receipts stay intact. Leave an original unavailable across
   terminal verification, then make the same version local and retry. Run the
   installed fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1` and verify the
-  first native admissions match independently read PhotoKit metadata.
+  newest synthetic video publishes first while the scoped PhotoKit status still
+  reports a partial index. Check the discovery hint before the first upload,
+  the sample capture timestamps and indexed counts,
+  the saved original hashes and bytes, and no duplicate revisions after reopen.
+- [ ] On the mounted iPhone card, verify the first photo or video discovery
+  appears while indexing, with the captured time when available. Verify the
+  subsequent indexed asset and file counts, and that unknown counts are absent.
+  On a physical device, end an iOS continued session using its system UI.
+  Verify ordinary execution retries the exact saved queue without a new
+  continued-task request or manual resume. Then use **Pause sync** and
+  confirm it persists across reopening and replacing a local grant. Upgrade
+  from an old system-only hold and verify the exact authorized queue resumes
+  without discarding its checkpoint.
 - [ ] With ordinary Photos consent and an isolated replica, run
   `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
   Hold the first WebView upload, expire native processing after a confirmed

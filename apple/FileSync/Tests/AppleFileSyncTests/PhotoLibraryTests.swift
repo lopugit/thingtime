@@ -3,7 +3,7 @@ import XCTest
 import CryptoKit
 import Photos
 
-private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
+private class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     var permission = "full", exports = 0, inventoryCalls = 0
     var records: [PhotoResource] = [], bytes: [String: Data] = [:], iCloud: [String: Data] = [:]
     var downloads = 0
@@ -39,6 +39,45 @@ private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
         records.append(r); self.bytes[r.path] = bytes; membershipRevision = membershipRevision.map { $0 + 1 }; return r
     }
 }
+private final class OrderedPhotoFixtures: PhotoFixtures, OrderedPhotoResourceProvider, @unchecked Sendable {
+    var discovered = [String]()
+    private final class Inventory: OrderedPhotoInventory {
+        let source: OrderedPhotoFixtures
+        let groups: [[PhotoResource]]
+        private(set) var checkpoint: OrderedPhotoCheckpoint
+        private var latest: PhotoLibraryReader.InventoryProgress.Item?
+
+        init(_ source: OrderedPhotoFixtures, resuming: OrderedPhotoCheckpoint?) {
+            self.source = source
+            groups = PhotoBackupAssetOrder.groups(source.records)
+            let token = source.token
+            checkpoint = token == resuming?.libraryToken ? (resuming ?? .init(libraryToken: token)) : .init(libraryToken: token)
+        }
+        var progress: PhotoLibraryReader.InventoryProgress {
+            .init(inspected: checkpoint.dated, total: groups.count, indexed: checkpoint.indexed, latest: latest)
+        }
+        func isCurrent() throws -> Bool { source.token == checkpoint.libraryToken }
+        func next() throws -> [PhotoResource]? {
+            guard checkpoint.dated < groups.count else { return nil }
+            let resources = groups[checkpoint.dated], asset = resources[0]
+            source.discovered.append(asset.asset)
+            checkpoint.dated += 1
+            if asset.assetKind == "video" { checkpoint.indexed.videos += 1 }
+            else { checkpoint.indexed.photos += 1 }
+            checkpoint.indexed.files += resources.count
+            latest = .init(kind: asset.assetKind == "video" ? .video : .photo, capturedAt: asset.capturedAt)
+            return resources
+        }
+    }
+    private var token: Data { Data(String(membershipRevision ?? 0).utf8) }
+    func orderedInventory(resuming: OrderedPhotoCheckpoint?) throws -> any OrderedPhotoInventory {
+        Inventory(self, resuming: resuming)
+    }
+    func orderedResources(identifiers: [String]) throws -> [[PhotoResource]] {
+        identifiers.map { id in records.filter { $0.asset == id }.sorted { $0.index < $1.index } }
+    }
+}
+
 final class PhotoLibraryTests: XCTestCase {
     func testPhotoExportFailuresDescribeTheActualRecoveryWithoutLeakingNativeDetails() {
         let cases: [(String, Int, PhotoLibraryReader.Failure)] = [
@@ -295,6 +334,7 @@ final class PhotoLibraryTests: XCTestCase {
                     switch $0 {
                     case .indexed(let counts): indexed = counts
                     case .checking(let complete, _, _): prepared.append(complete)
+                    case .enumerating, .hashing: break
                     }
                 })
             return try XCTUnwrap(reader.sealCapture(scope: scope, capture: result).photoQueue)
@@ -319,6 +359,57 @@ final class PhotoLibraryTests: XCTestCase {
         let record = try XCTUnwrap(outcomes.compactMap { $0 as? URL }.first { $0.deletingLastPathComponent().lastPathComponent == "attempts" })
         try files.moveItem(at: record, to: record.deletingLastPathComponent().appendingPathComponent("wrong.json"))
         XCTAssertThrowsError(try capture(makeReader(provider, queueDirectory: alias)))
+    }
+
+    func testOrderedCaptureSealsFirstGroupBeforeFullDiscoveryAndResumesExactCursor() throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        let companion = provider.add("newest", index: 1, bytes: Data([8]), captured: 90, kind: "video")
+        let newest = provider.add("newest", bytes: Data([9]), captured: 90, kind: "video")
+        let older = (0..<8).map { provider.add("older-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
+        let owner = try FileSyncOwnerScope(ownerId: "ordered", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ordered-photo-queue-" + UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+        func capture(_ reader: PhotoLibraryReader, observed: (PhotoLibraryReader.InventoryProgress) -> Void = { _ in }) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let capture = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true,
+                queueRequest: request, startWithSingleAsset: true, activity: {
+                    if case .enumerating(let update) = $0 { observed(update) }
+                })
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: capture).photoQueue)
+        }
+
+        let initial = try makeReader(provider, queueDirectory: directory)
+        var firstDiscovery: PhotoLibraryReader.InventoryProgress?
+        let first = try capture(initial) { if $0.latest != nil { firstDiscovery = $0 } }
+        XCTAssertEqual(firstDiscovery?.inspected, 1)
+        XCTAssertEqual(firstDiscovery?.total, 9)
+        XCTAssertEqual(firstDiscovery?.indexed.files, 2)
+        XCTAssertEqual(firstDiscovery?.latest?.kind, .video)
+        XCTAssertEqual(first.remainingKnown, false)
+        XCTAssertEqual(provider.discovered, ["newest"])
+        XCTAssertEqual(provider.attempts, [newest.path, companion.path])
+        XCTAssertEqual(provider.inventoryCalls, 0)
+
+        let restarted = try makeReader(provider, queueDirectory: directory)
+        XCTAssertEqual(try restarted.queueBatchEntries(scope: scope, request: request, batchId: first.id).map(\.path),
+                       [newest.path, companion.path])
+        XCTAssertEqual(provider.discovered, ["newest"], "Exact retained resources reopen without scanning")
+        try restarted.finishQueueBatch(scope: scope, request: request, batchId: first.id)
+        let next = try capture(restarted)
+        XCTAssertEqual(next.assetKeys.count, 4)
+        XCTAssertEqual(next.remainingKnown, false)
+        XCTAssertEqual(provider.discovered, ["newest"] + older.suffix(4).reversed().map(\.asset))
+        try restarted.finishQueueBatch(scope: scope, request: request, batchId: next.id)
+
+        let later = provider.add("added", bytes: Data([99]), modified: 100, kind: "photo")
+        let changed = try capture(restarted)
+        XCTAssertEqual(try restarted.queueBatchEntries(scope: scope, request: request, batchId: changed.id).first?.path, later.path)
+        XCTAssertEqual(provider.attempts.filter { $0 == newest.path }.count, 1)
+        XCTAssertEqual(provider.inventoryCalls, 0)
     }
 
     func testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen() throws {

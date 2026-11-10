@@ -63,7 +63,13 @@ export function useNativePhotoRunProgress(
 			else { clearTimeout(hintTimer); hintTimer = undefined; pending?.abort(); }
 		};
 		const nativeUpdate = (event: Event) => {
-			if ((event as CustomEvent).detail?.type === 'mobile-files-photo-progress' && document.visibilityState === 'visible' && hintTimer === undefined) {
+			const message = (event as CustomEvent).detail;
+			if (message?.type !== 'mobile-files-photo-progress' || document.visibilityState !== 'visible') return;
+			if (message.payload?.immediate === true) {
+				clearTimeout(hintTimer);
+				hintTimer = undefined;
+				refresh.request();
+			} else if (hintTimer === undefined) {
 				hintTimer = setTimeout(() => { hintTimer = undefined; refresh.request(); }, 200);
 			}
 		};
@@ -103,7 +109,8 @@ export function nativePhotoRunLabel(view?: NativePhotoRunView): string {
 		case 'ready': return 'Backup queued';
 		case 'preparing': return 'Preparing Photos backup…';
 		case 'uploading': return 'Uploading originals';
-		case 'waiting': return photoSyncWaitingMessage(progress.syncWait, progress.minimumPartBytes) || 'Waiting to continue backup.';
+		case 'waiting': return photoSyncWaitingMessage(progress.syncWait, progress.minimumPartBytes) ||
+			(progress.activity?.reason === 'interrupted' ? 'Backup interrupted. Automatic retry pending.' : 'Waiting to continue backup.');
 		case 'complete': return 'Last transfer finished.';
 		case 'paused': return 'Paused';
 		case 'needs-review': return 'Photos backup needs attention.';
@@ -143,7 +150,7 @@ const phaseLabels: Record<NativePhotoActivityPhase, string> = {
 	complete: 'Backup check finished'
 };
 const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string> = {
-	interrupted: 'The previous run was interrupted. The backup can resume from its saved progress.',
+	interrupted: 'The backup will retry automatically when iOS and your saved settings allow it.',
 	'library-changed': 'The Photos library changed. Its index needs another check.',
 	'photo-access': 'Review Thingtime’s access to the Photos library on this iPhone.',
 	'device-storage': 'This iPhone needs more free space to prepare an original.',
@@ -154,11 +161,12 @@ const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string
 	retry: 'Waiting to retry the backup.'
 };
 
-export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['backgroundRequest']) {
+export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['backgroundRequest'], reason?: NativePhotoRunActivity['reason']) {
 	switch (status) {
 		case 'active': return 'Background processing requested for this backup.';
 		case 'declined': return 'iOS didn’t start background processing. You can keep Thingtime open or try again.';
-		case 'waiting': return 'This backup is waiting for its saved transfer conditions.';
+		case 'waiting': return reason === 'interrupted' ? 'iOS ended this background session. Automatic backup will retry.' :
+			'This backup is waiting for its saved transfer conditions.';
 		case 'complete': return 'This backup check has finished.';
 		default: return '';
 	}
@@ -167,23 +175,31 @@ export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['back
 const count = (value: number, singular: string, plural = singular + 's') =>
 	`${value.toLocaleString()} ${value === 1 ? singular : plural}`;
 const eventTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+const captureTime = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
+const discoveryLabel = (item: NonNullable<NativePhotoRunActivity['latestFound']>, index?: number) =>
+	`Found ${index === undefined ? 'a ' + item.kind : index === 1 ? '1 ' + item.kind : item.kind + ' ' + index.toLocaleString()}${item.capturedAt ? ` taken at ${captureTime.format(new Date(item.capturedAt))}` : ''}`;
 
 export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false) {
 	const activity = view?.progress?.activity;
 	if (!view?.progress || !activity || view.previousRevision) return undefined;
 	const { continuation } = view.progress;
 	const phase = paused ? 'Paused' : continuation === 'held' ? 'Background processing stopped' : phaseLabels[activity.phase];
-	const { indexed, prepared, backlogOriginals: backlog } = activity;
+	const { indexed, indexing, latestFound, prepared, backlogOriginals: backlog } = activity;
 	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction : undefined;
 	return {
 		phase: view.stale ? `Last reported · ${phase}` : phase,
 		reason: activity.reason ? reasonLabels[activity.reason] : '',
 		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : '',
+		indexing: !paused && !view.stale && activity.phase === 'indexing' && indexing ?
+			`${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : '',
+		latestFound: !paused && !view.stale && activity.phase === 'indexing' && latestFound ?
+			discoveryLabel(latestFound, indexed?.[latestFound.kind === 'photo' ? 'photos' : 'videos']) : '',
 		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : '',
 		backlog: backlog === undefined ? '' : count(backlog, 'original'),
 		downloadPercent: fraction === undefined ? undefined : Math.floor(fraction * 100),
-		events: activity.events?.map(({ phase, at }, index) => ({
-			id: `${at}:${phase}:${index}`, label: phaseLabels[phase], at, time: eventTime.format(new Date(at))
+		events: activity.events?.map(({ phase, at, item, discovered }, index) => ({
+			id: `${at}:${phase}:${index}`, label: item && discovered ? `${discoveryLabel(item)} · item ${discovered.toLocaleString()}` : phaseLabels[phase],
+			at, time: eventTime.format(new Date(at))
 		})) ?? []
 	};
 }

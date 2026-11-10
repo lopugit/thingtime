@@ -692,6 +692,13 @@ test('optional native Photos activity exposes only measured progress and known, 
 	assert.equal(parse({ phase: 'unknown' })?.activity, undefined);
 	assert.deepEqual(parse({ phase: 'unknown' })?.confirmed, progress.confirmed);
 	assert.equal(parse({ phase: 'indexing', events: Array.from({ length: 30 }, () => ({ phase: 'indexing', at: revision })) })?.activity?.events?.length, 12);
+	const latestFound = { kind: 'video', capturedAt: '2026-11-08T07:23:41Z' };
+	const indexing = { unit: 'assets', completed: 1, total: 6 };
+	assert.deepEqual(parse({ phase: 'indexing', indexing, latestFound: { ...latestFound, asset: 'private' },
+		events: [{ phase: 'indexing', at: revision, discovered: 1, item: { ...latestFound, path: '/private' } }]
+	})?.activity, { phase: 'indexing', indexing, latestFound, events: [{ phase: 'indexing', at: revision, discovered: 1, item: latestFound }] });
+	assert.deepEqual(parse({ phase: 'indexing', indexing: { ...indexing, completed: 7 }, latestFound: { kind: 'photo', capturedAt: 'private' } })?.activity,
+		{ phase: 'indexing', latestFound: { kind: 'photo' } });
 });
 
 test('continued Photos work is separately negotiated and bound to one exact configuration revision', () => {

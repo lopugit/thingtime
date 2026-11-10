@@ -921,7 +921,9 @@ function Connections({
                         } : undefined}
                         continuationStatus={!nativeOwns || saved.configuration.paused || nativeProgress?.stage === 'complete' ? undefined :
                             continuationActive && !nativeRun?.stale ? 'Continuing this backup with iOS background processing.' :
-                            continuationHeld ? undefined : continuation?.status || (!nativeRun?.stale ? nativePhotoBackgroundLabel(nativeProgress?.activity?.backgroundRequest) : undefined)}
+                            continuationHeld ? undefined : !nativeRun?.stale && nativeProgress?.activity?.reason === 'interrupted' ?
+                                nativePhotoBackgroundLabel(nativeProgress.activity.backgroundRequest, nativeProgress.activity.reason) :
+                                continuation?.status || (!nativeRun?.stale ? nativePhotoBackgroundLabel(nativeProgress?.activity?.backgroundRequest) : undefined)}
                         quickAction={!pausing && automaticallyWaiting ? undefined : { label: actionLabel,
                             disabled: pausing || (running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready || (nativeOwns && (!nativeRun || nativeRun.stale))),
                             run: () => {

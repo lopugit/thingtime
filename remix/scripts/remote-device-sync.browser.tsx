@@ -81,9 +81,9 @@ const webTransfers: string[] = [];
 let folderSlot: string | undefined, nativeFolderContentions = 0;
 let nativeTimer: ReturnType<typeof setTimeout> | undefined;
 let declineNextContinuation = true;
-const nativeHint = () => {
+const nativeHint = (immediate = false) => {
  if (document.visibilityState === 'visible') window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
-  detail: { type: 'mobile-files-photo-progress' }
+  detail: { type: 'mobile-files-photo-progress', payload: { immediate } }
  }));
 };
 const persistNativeRun = () => {
@@ -340,6 +340,22 @@ Object.assign(window, { remoteSyncFixture: {
  photoRecovery: async () => ({ events: photoEvents, job: await readPhotoJob(), oldPhotoEpoch, uploaded: [...photoUploads.values()].filter(row => row.bytes), files: [...photoFiles.values()] }),
  photoScanCount: () => photoEvents.filter(event => event.type === 'scan-capture').length,
  nativeOnlyState: () => structuredClone({ nativeRun, nativeCalls, webTransfers, nativeFolderContentions }),
+ setNativePhotoDiscovery(completed?: number) {
+  if (!nativeActivity || !nativeRun) throw Error('Photos activity fixture missing');
+  if (completed === undefined) {
+   nativeRun.progress = { stage: 'complete', confirmed: nativeRun.progress.confirmed };
+   persistNativeRun();
+   return;
+  }
+  const latestFound = completed === 1 ? { kind: 'video' as const, capturedAt: '2026-11-08T01:02:03.000Z' } :
+   completed === 2 ? { kind: 'photo' as const, capturedAt: '2026-11-08T00:04:05.000Z' } : undefined;
+  nativeRun.progress = { stage: 'preparing', confirmed: nativeRun.progress.confirmed, activity: {
+   phase: 'indexing', indexing: { unit: 'assets', completed, total: 6 }, latestFound,
+   indexed: completed === 0 ? undefined : { photos: completed - 1, videos: 1, files: completed }
+  } };
+  localStorage.setItem(nativeRunKey, JSON.stringify(nativeRun));
+  nativeHint(completed === 1);
+ },
  setNativePhotoWait(reason: 'expired' | 'held' | 'budget') {
   if (!nativeRun?.confirmedPayload) throw Error('The native receipt is missing');
   clearTimeout(nativeTimer);

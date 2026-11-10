@@ -660,8 +660,12 @@ Apple photo originals use `apple/FileSync/PhotoLibraryReader` and the PhotoKit
 intent in the existing account/origin Keychain envelope. iOS `MobileFolderBridge`
 owns native source/permission dialogs, rejects photo mutations and projects live
 access into the shared backup-only editor. `PhotoLibraryTests` covers private
-one-resource caching and authority boundaries; `PhotoBackupInstalledTests` drives
-real original-byte cloud acceptance. See `iOS/README.md` for current local-original,
+one-resource caching and authority boundaries. iOS Photos automation 1.4.0
+feeds bounded, newest-first asset groups into the durable queue, streams
+per-asset discovery to the editable activity card, and preserves automatic
+backup after a continued-task interruption. `PhotoBackupInstalledTests`
+drives real original-byte cloud acceptance, including the mixed Photos/video
+fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1`. See `iOS/README.md` for current local-original,
 foreground and inventory limits. Installed Mac PhotoKit UI acceptance remains pending.
 
 ### iOS file-backed multipart upload path

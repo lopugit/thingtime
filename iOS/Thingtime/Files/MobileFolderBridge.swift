@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.3.0"
+    static let photoAutomationVersion = "1.4.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
         return nil
@@ -104,7 +104,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var background: NativeUploadBackgroundLease?
     private var photoTransferContinuation: UIBackgroundTaskIdentifier = .invalid
     var conditionsChanged: (() -> Void)?
-    var photoProgressChanged: (() -> Void)?
+    var photoProgressChanged: ((Bool) -> Void)?
     init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore(), inventories: MobileFolderInventory? = nil) {
         self.inventories = inventories ?? MobileFolderInventory(transport: RustEmbeddedInventoryTransport.default); self.photos = PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default); self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
@@ -142,7 +142,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             }
         }
         photoProgressObserver = NotificationCenter.default.addObserver(forName: NativeDeferredUpload.photoProgressChanged,
-            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.photoProgressChanged?() } }
+            object: nil, queue: .main) { [weak self] notice in
+                let immediate = notice.userInfo?["immediate"] as? Bool == true
+                MainActor.assumeIsolated { self?.photoProgressChanged?(immediate) }
+            }
     }
     static func suspendsForLifecycle(state: UIApplication.State, photoPermissionPending: Bool, hasContinuation: Bool) -> Bool {
         state == .background && !photoPermissionPending && !hasContinuation
@@ -660,7 +663,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                       let configurationId = payload["configurationId"] as? String, let deviceId = payload["deviceId"] as? String,
                       [configurationId, deviceId].allSatisfy({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil })
                 else { throw MobileFolderStore.Failure.invalid }
-                try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId, deviceId: deviceId)
+                try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId,
+                    deviceId: deviceId, explicitPause: payload["explicitPause"] as? Bool == true)
                 let result: [String: Any] = ["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": [[String: Any]]()]
                 reply("mobile-files-result", base.merging(result) { _, new in new })
             } catch {

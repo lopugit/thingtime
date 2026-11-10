@@ -604,7 +604,7 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number, s
 				check();
 				if (window.location.origin !== scope.origin || !isNativeSyncAdapterCurrent(adapter)) throw Error('The selected sync server changed.');
 				await requestMobileFolders(scope.ownerId, { action: 'cancel-deferred-upload', rootId: paused.reviewed.configuration.localRootId,
-					configurationId: paused.reviewed.id, deviceId: scope.deviceId }, signal);
+					configurationId: paused.reviewed.id, deviceId: scope.deviceId, ...(photo ? { explicitPause: true as const } : {}) }, signal);
 			}
 			if (paused?.strictCaptureId) {
 				const adapter = getNativeSyncAdapter();

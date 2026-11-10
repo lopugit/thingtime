@@ -6,14 +6,17 @@ const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'devi
 const backgroundStatuses = ['active', 'declined', 'waiting', 'complete'] as const;
 export type NativePhotoActivityPhase = (typeof activityPhases)[number];
 export type NativePhotoContinuation = { requested: boolean; status: (typeof backgroundStatuses)[number] };
+type DiscoveredPhoto = { kind: 'photo' | 'video'; capturedAt?: string };
 export type NativePhotoRunActivity = {
 	phase: NativePhotoActivityPhase;
 	indexed?: { photos: number; videos: number; files: number };
+	indexing?: { unit: 'assets' | 'files'; completed: number; total: number };
+	latestFound?: DiscoveredPhoto;
 	prepared?: { completed: number; total: number };
 	backlogOriginals?: number;
 	downloadFraction?: number;
 	reason?: (typeof activityReasons)[number];
-	events?: { phase: NativePhotoActivityPhase; at: string }[];
+	events?: { phase: NativePhotoActivityPhase; at: string; discovered?: number; item?: DiscoveredPhoto }[];
 	backgroundRequest?: NativePhotoContinuation['status'];
 };
 export type NativePhotoRunProgress = {
@@ -33,16 +36,24 @@ export type NativePhotoRunStatus = { configurationRevision: string | null; photo
 const whole = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const date = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
+const discoveredPhoto = (value: unknown): DiscoveredPhoto | undefined =>
+	record(value) && (value.kind === 'photo' || value.kind === 'video') ?
+		{ kind: value.kind, ...(date(value.capturedAt) ? { capturedAt: value.capturedAt } : {}) } : undefined;
 
 /** Additive telemetry cannot invalidate an otherwise valid, scoped run. */
 function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 	if (!record(value)) return undefined;
-	const { indexed, prepared, backlogOriginals, downloadFraction, events } = value;
+	const { indexed, indexing, prepared, backlogOriginals, downloadFraction, events } = value;
 	const phase = activityPhases.find(candidate => candidate === value.phase);
 	if (!phase) return undefined;
 	const activity: NativePhotoRunActivity = { phase };
 	if (record(indexed) && whole(indexed.photos) && whole(indexed.videos) && whole(indexed.files))
 		activity.indexed = { photos: indexed.photos, videos: indexed.videos, files: indexed.files };
+	if (record(indexing) && (indexing.unit === 'assets' || indexing.unit === 'files') &&
+		whole(indexing.completed) && whole(indexing.total) && indexing.completed <= indexing.total)
+		activity.indexing = { unit: indexing.unit, completed: indexing.completed, total: indexing.total };
+	const latestFound = discoveredPhoto(value.latestFound);
+	if (latestFound) activity.latestFound = latestFound;
 	if (record(prepared) && whole(prepared.completed) && whole(prepared.total) && prepared.completed <= prepared.total)
 		activity.prepared = { completed: prepared.completed, total: prepared.total };
 	if (whole(backlogOriginals)) activity.backlogOriginals = backlogOriginals;
@@ -57,7 +68,9 @@ function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 		activity.events = events.slice(0, 12).flatMap(event => {
 			if (!record(event) || !date(event.at)) return [];
 			const eventPhase = activityPhases.find(candidate => candidate === event.phase);
-			return eventPhase ? [{ phase: eventPhase, at: new Date(event.at).toISOString() }] : [];
+			const item = eventPhase === 'indexing' ? discoveredPhoto(event.item) : undefined;
+			return eventPhase ? [{ phase: eventPhase, at: new Date(event.at).toISOString(),
+				...(item && whole(event.discovered) && event.discovered > 0 ? { item, discovered: event.discovered } : {}) }] : [];
 		}).sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
 	}
 	return activity;

@@ -89,11 +89,13 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let orderedProof = env["THINGTIME_PHOTO_EXPECT_NEWEST"] == "1"
         let resumeReceipt = env["THINGTIME_PHOTO_REOPEN_RECEIPT"].flatMap { Data($0.utf8) }
         let uiVerified = uiAutomation && env["THINGTIME_PHOTO_PREPARE_ONLY"] != "1"
+        let mixedProof = uiVerified && automaticProof && orderedProof
         guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] || uiAutomation else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
         web.configuration.userContentController.addUserScript(WKUserScript(source: """
         window.__photoDocument=performance.timeOrigin;
         window.__nativeUploadStarted=null;window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
         window.__photoDeferredHeld=false;window.__photoDeferredPaths=[];window.__photoNativeArms=0;
+        window.__photoIndexStream={hintBeforeTransfer:false,partialIndexSeen:false,sawTransfer:false,indexedFiles:0,items:{}};
         const testHold=\(deferredProof ? "true" : "false");
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
@@ -115,6 +117,17 @@ final class PhotoBackupInstalledTests: XCTestCase {
         const received=new Map();
         window.addEventListener('thingtime:native-message',e=>{
           if(e.detail?.type==='mobile-files-started')window.__nativeUploadStarted=e.detail.payload;
+          const stream=window.__photoIndexStream, result=e.detail?.payload;
+          if(e.detail?.type==='mobile-files-photo-progress'&&result?.immediate===true&&!stream.sawTransfer)stream.hintBeforeTransfer=true;
+          if(e.detail?.type==='mobile-files-result'&&result?.photoRunProgress){
+            const progress=result.photoRunProgress, activity=progress.activity;
+            if(progress.stage==='uploading'||progress.currentFile?.sentBytes>0)stream.sawTransfer=true;
+            if(activity?.indexing?.unit==='assets'&&activity.indexing.completed>0&&activity.indexing.completed<activity.indexing.total)stream.partialIndexSeen=true;
+            stream.indexedFiles=Math.max(stream.indexedFiles,activity?.indexed?.files??0);
+            for(const event of activity?.events??[]){
+              if(event.phase==='indexing'&&event.item&&Number.isInteger(event.discovered))stream.items[event.discovered]=event.item;
+            }
+          }
           if(e.detail?.type!=='mobile-files-progress')return;
           const p=e.detail.payload, prior=received.get(p.requestId)||0;
           if(p.received>prior){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=p.received-prior;received.set(p.requestId,p.received);}
@@ -143,7 +156,8 @@ final class PhotoBackupInstalledTests: XCTestCase {
         print("IOS_PHOTO_NATIVE_GRANT: \(grant.id)")
         let provider = SystemPhotoResources()
         XCTAssertEqual(provider.access(), "full")
-        guard try provider.inventory().count < 20 else { throw XCTSkip("Use a small disposable simulator library") }
+        let initialLibrary = try provider.inventory()
+        guard initialLibrary.count < 20 else { throw XCTSkip("Use a small disposable simulator library") }
         var owned: [String] = [], cloud: String?, connection: String?
         // A deterministic, incompressible original spans two canonical parts.
         let width = 2048, height = 1536
@@ -158,33 +172,75 @@ final class PhotoBackupInstalledTests: XCTestCase {
             provider: providerData, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
         let bytes = try XCTUnwrap(UIImage(cgImage: image).pngData())
         XCTAssertGreaterThan(bytes.count, 8 * 1024 * 1024)
-        if prior != nil {
-            // Explicit interrupted-fixture recovery: match both original name and
-            // exact synthetic PNG bytes before claiming an asset for cleanup.
-            for resource in try provider.inventory() where resource.name == "thingtime-acceptance.png" {
-                let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-                defer { try? FileManager.default.removeItem(at: temp) }
-                let worker = Task.detached { try provider.write(resource, to: temp); return try Data(contentsOf: temp) }
-                if try await worker.value == bytes { owned.append(resource.asset) }
+        let photoName = "thingtime-acceptance.png", videoName = "thingtime-acceptance-video.mov"
+        let stock = initialLibrary.filter { $0.name != photoName && $0.name != videoName }
+        let anchor = Date(timeIntervalSince1970: 978_307_200)
+        let fixtureDate = min(anchor, stock.compactMap(\.capturedAt).min() ?? anchor).addingTimeInterval(-86_400)
+        let videoDate = max(anchor, stock.map { $0.capturedAt ?? $0.modifiedAt ?? .distantPast }.max() ?? anchor).addingTimeInterval(10 * 86_400)
+        let videoFixture: (url: URL, bytes: Data)?
+        if mixedProof {
+            let bundle = Bundle(for: PhotoBackupInstalledTests.self)
+            let url = try XCTUnwrap(bundle.url(forResource: "live-photo", withExtension: "mov") ??
+                bundle.url(forResource: "live-photo", withExtension: "mov", subdirectory: "Fixtures/ShareLivePhoto"))
+            videoFixture = (url, try Data(contentsOf: url))
+        } else { videoFixture = nil }
+        func readOriginal(_ resource: PhotoResource) async throws -> Data {
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: temp) }
+            return try await Task.detached { try provider.write(resource, to: temp); return try Data(contentsOf: temp) }.value
+        }
+        var stockOriginals: [String: (hash: SHA256.Digest, size: Int)] = [:]
+        if mixedProof {
+            for resource in stock {
+                let original = try await readOriginal(resource)
+                stockOriginals[resource.path] = (SHA256.hash(data: original), original.count)
             }
         }
-        func createPhoto() async throws -> String {
+        var videoID: String?
+        if prior != nil {
+            // Explicit interrupted-fixture recovery: match both original name and
+            // exact synthetic bytes before claiming an asset for cleanup.
+            for resource in initialLibrary {
+                let expected: Data
+                if resource.name == photoName { expected = bytes }
+                else if resource.name == videoName, let videoFixture { expected = videoFixture.bytes }
+                else { continue }
+                if try await readOriginal(resource) == expected {
+                    if resource.name == videoName { videoID = resource.asset }
+                    else { owned.append(resource.asset) }
+                }
+            }
+        }
+        func createPhoto(capturedAt: Date? = nil) async throws -> String {
             var identifier: String?
             try await PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset(), options = PHAssetResourceCreationOptions()
-                options.originalFilename = "thingtime-acceptance.png"
+                if let capturedAt { request.creationDate = capturedAt }
+                options.originalFilename = photoName
                 request.addResource(with: .photo, data: bytes, options: options); identifier = request.placeholderForCreatedAsset?.localIdentifier
             }
             let id = try XCTUnwrap(identifier); owned.append(id); return id
+        }
+        func createVideo(_ url: URL, capturedAt: Date) async throws -> String {
+            var identifier: String?
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset(), options = PHAssetResourceCreationOptions()
+                request.creationDate = capturedAt
+                options.originalFilename = videoName
+                request.addResource(with: .video, fileURL: url, options: options)
+                identifier = request.placeholderForCreatedAsset?.localIdentifier
+            }
+            return try XCTUnwrap(identifier)
         }
         func cloudNodes() async throws -> [[String: Any]] {
             let result = try await api("/api/v1/files?rootId=" + cloud!)
             return try XCTUnwrap((result["inventory"] as? [String: Any])?["nodes"] as? [[String: Any]])
         }
-        func verifyBytes(_ file: [String: Any]) async throws {
+        func verifyBytes(_ file: [String: Any], expectedHash: SHA256.Digest, expectedSize: Int) async throws {
             let content = try XCTUnwrap(file["content"] as? [String: Any]), id = try XCTUnwrap(content["attachmentId"] as? String)
             let (download, response) = try await session.data(from: origin.appendingPathComponent("api/v1/attachments/content").appending(queryItems: [URLQueryItem(name: "id", value: id), URLQueryItem(name: "cache", value: "bytes")]))
-            guard (response as? HTTPURLResponse)?.statusCode == 200, SHA256.hash(data: download) == SHA256.hash(data: bytes) else {
+            guard (response as? HTTPURLResponse)?.statusCode == 200, content["size"] as? Int == expectedSize,
+                  download.count == expectedSize, SHA256.hash(data: download) == expectedHash else {
                 throw NSError(domain: "PhotoBackupAcceptance", code: 4, userInfo: [NSLocalizedDescriptionKey: "Downloaded cloud original did not match the exact fixture bytes"])
             }
         }
@@ -378,11 +434,32 @@ final class PhotoBackupInstalledTests: XCTestCase {
         do {
             let firstID: String
             if let retained = owned.first { firstID = retained }
-            else { firstID = try await createPhoto() }
+            else { firstID = try await createPhoto(capturedAt: mixedProof ? fixtureDate : nil) }
             if (deferredProof || automaticProof) && uiVerified {
-                for _ in 0..<(automaticProof ? 4 : 1) { _ = try await createPhoto() }
+                let count = mixedProof ? max(0, 5 - owned.count) : automaticProof ? 4 : 1
+                for index in 0..<count {
+                    _ = try await createPhoto(capturedAt: mixedProof ? fixtureDate.addingTimeInterval(Double(index + 1) * 86_400) : nil)
+                }
             }
-            let resources = try provider.inventory(), first = try XCTUnwrap(resources.first { $0.asset == firstID })
+            if let videoFixture, videoID == nil {
+                videoID = try await createVideo(videoFixture.url, capturedAt: videoDate)
+            }
+            let resources = try provider.inventory()
+            let first = try XCTUnwrap(resources.first { $0.asset == (videoID ?? firstID) })
+            let videoResources = resources.filter { $0.asset == videoID }
+            if mixedProof {
+                XCTAssertEqual(resources.count, stock.count + 6)
+                XCTAssertEqual(videoResources.count, 1)
+                XCTAssertEqual(first.assetKind, "video")
+                XCTAssertEqual(first.capturedAt, videoDate)
+                XCTAssertEqual(resources.compactMap(\.capturedAt).min(), fixtureDate)
+                XCTAssertTrue(resources.filter { $0.name == photoName }.allSatisfy { resource in
+                    resource.assetKind == "photo" && resource.capturedAt.map { $0 < (first.capturedAt ?? .distantPast) } == true
+                })
+            }
+            let photoAssets = Set(resources.filter { $0.assetKind == "photo" }.map(\.asset)).count
+            let videoAssets = Set(resources.filter { $0.assetKind == "video" }.map(\.asset)).count
+            let expectedMixedBytes = stockOriginals.values.reduce(5 * bytes.count + (videoFixture?.bytes.count ?? 0)) { $0 + $1.size }
             let excluded: [String] = [] // Strict Photos captures cover the disposable library, without unsupported exclusions.
             phase = "read verified native pairing"
             let paired = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
@@ -402,10 +479,32 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let firstReceipt = Task { @MainActor in
                 for _ in 0..<120 {
                     try Task.checkCancellation()
-                    if let node = try await cloudNodes().first(where: { $0["path"] as? String == first.path }),
+                    let savedNodes = try await cloudNodes()
+                    if mixedProof && !savedNodes.isEmpty {
+                        XCTAssertEqual(savedNodes.compactMap { $0["path"] as? String }, [first.path],
+                                       "The newest video should be the first published original")
+                    }
+                    if let node = savedNodes.first(where: { $0["path"] as? String == first.path }),
                        let file = node["file"] as? [String: Any] {
-                        try await verifyBytes(file)
-                        print("IOS_PHOTO_FIRST_HASH_PASS: bytes=\(bytes.count)")
+                        if mixedProof {
+                            let configurationId = try XCTUnwrap(connection)
+                            let status = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope,
+                                configurationId: configurationId, rootId: grant.id, deviceId: paired))
+                            let activity = try XCTUnwrap(status["activity"] as? [String: Any])
+                            let indexing = try XCTUnwrap(activity["indexing"] as? [String: Any])
+                            let completed = try XCTUnwrap(indexing["completed"] as? Int)
+                            let total = try XCTUnwrap(indexing["total"] as? Int)
+                            let indexed = try XCTUnwrap((activity["indexed"] as? [String: Any])?["files"] as? Int)
+                            XCTAssertEqual(indexing["unit"] as? String, "assets")
+                            XCTAssertEqual(total, Set(resources.map(\.asset)).count)
+                            XCTAssertGreaterThan(completed, 0)
+                            XCTAssertLessThan(completed, total, "The first original must publish before full Photos enumeration")
+                            XCTAssertLessThan(indexed, resources.count)
+                            print("IOS_PHOTO_FIRST_PUBLICATION_INDEX: assets=\(completed)/\(total) files=\(indexed)/\(resources.count)")
+                        }
+                        let expected = videoFixture?.bytes ?? bytes
+                        try await verifyBytes(file, expectedHash: SHA256.hash(data: expected), expectedSize: expected.count)
+                        print("IOS_PHOTO_FIRST_HASH_PASS: bytes=\(expected.count)")
                         print("IOS_PHOTO_FIRST_CONFIRMED_MS: \(Int(Date().timeIntervalSince(firstStarted) * 1000))")
                         return file
                     }
@@ -421,6 +520,33 @@ final class PhotoBackupInstalledTests: XCTestCase {
             if uiVerified {
                 nodes = firstNodes
                 XCTAssertEqual(nodes.count, resources.count)
+                if let videoFixture {
+                    for original in resources {
+                        let file = try XCTUnwrap(nodes.first { $0["path"] as? String == original.path }?["file"] as? [String: Any])
+                        if let stock = stockOriginals[original.path] {
+                            try await verifyBytes(file, expectedHash: stock.hash, expectedSize: stock.size)
+                        } else {
+                            let expected = original.asset == videoID ? videoFixture.bytes : bytes
+                            try await verifyBytes(file, expectedHash: SHA256.hash(data: expected), expectedSize: expected.count)
+                        }
+                    }
+                    print("IOS_PHOTO_MIXED_ORIGINALS_PASS: photos=\(photoAssets) videos=\(videoAssets) files=\(resources.count) bytes=\(expectedMixedBytes)")
+                    let value = try await web.evaluateJavaScript("window.__photoIndexStream")
+                    let stream = try XCTUnwrap(value as? [String: Any])
+                    let items = try XCTUnwrap(stream["items"] as? [String: [String: Any]])
+                    let dates = ISO8601DateFormatter()
+                    dates.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    func captureDate(_ item: [String: Any]) -> Date? {
+                        guard let date = item["capturedAt"] as? String else { return nil }
+                        return dates.date(from: date) ?? ISO8601DateFormatter().date(from: date)
+                    }
+                    XCTAssertEqual(stream["hintBeforeTransfer"] as? Bool, true)
+                    XCTAssertEqual(stream["indexedFiles"] as? Int, resources.count)
+                    XCTAssertNotNil(items["1"], "The first discovered asset must reach the web bridge")
+                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "photo" && captureDate($0) == fixtureDate })
+                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "video" && captureDate($0) == first.capturedAt })
+                    print("IOS_PHOTO_INDEX_STREAM: items=\(items.count) files=\(resources.count) partialSnapshot=\(stream["partialIndexSeen"] as? Bool == true)")
+                }
             } else {
                 let secondID = try await createPhoto()
                 let second = try XCTUnwrap(provider.inventory().first { $0.asset == secondID })
@@ -430,7 +556,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 try await startAndAwaitUpload()
                 nodes = try await cloudNodes(); XCTAssertEqual(nodes.count, firstNodes.count + 1)
                 let secondFile = try XCTUnwrap(nodes.first { $0["path"] as? String == second.path }?["file"] as? [String: Any])
-                try await verifyBytes(secondFile)
+                try await verifyBytes(secondFile, expectedHash: SHA256.hash(data: bytes), expectedSize: bytes.count)
             }
             let retained = try XCTUnwrap(nodes.first { $0["path"] as? String == first.path }?["file"] as? [String: Any])
             XCTAssertEqual(retained["revision"] as? String, firstFile["revision"] as? String)
@@ -441,9 +567,11 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 let progress = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: configId, rootId: grant.id, deviceId: paired))
                 let confirmed = try XCTUnwrap(progress["confirmed"] as? [String: Int64])
                 XCTAssertEqual(stats["files"], 0)
-                XCTAssertEqual(confirmed["photos"], Int64(resources.count + (uiVerified ? 0 : 1)))
+                let photoCount = (mixedProof ? photoAssets : resources.count) + (uiVerified ? 0 : 1)
+                XCTAssertEqual(confirmed["photos"], Int64(photoCount))
+                if mixedProof { XCTAssertEqual(confirmed["videos"], Int64(videoAssets)) }
                 XCTAssertEqual((confirmed["wifiBytes"] ?? 0) + (confirmed["mobileBytes"] ?? 0) + (confirmed["unknownBytes"] ?? 0),
-                               Int64((resources.count + (uiVerified ? 0 : 1)) * bytes.count))
+                               Int64(mixedProof ? expectedMixedBytes : photoCount * bytes.count))
             } else {
                 XCTAssertEqual((stats["files"] ?? 0) + deferredCount, resources.count + (uiVerified ? 0 : 1))
                 XCTAssertGreaterThanOrEqual((stats["parts"] ?? 0) + deferredPartCount, uiVerified ? 2 : 4)
