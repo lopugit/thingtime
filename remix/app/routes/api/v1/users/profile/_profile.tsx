@@ -68,7 +68,8 @@ export const loader = createProfileLoader();
 const MAX_BODY_BYTES = 256 * 1024;
 
 // POST /api/v1/users/profile — { displayName?, bio?, avatarUrl?, bannerUrl?,
-// avatarAttachmentId?, bannerAttachmentId?, hideEmailOnProfile? }
+// avatarAttachmentId?, bannerAttachmentId?, avatarPresentation?, bannerPresentation?,
+// avatarPresentationSource?, bannerPresentationSource?, hideEmailOnProfile? }
 // — update the caller's own profile fields.
 type ProfileActionDependencies = {
 	getUser: typeof getCurrentUser;

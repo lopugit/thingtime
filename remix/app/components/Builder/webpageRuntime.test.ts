@@ -207,13 +207,23 @@ test('forms preserve empty text, false, leading zeros and long text without coll
 	assert.deepEqual(result, { notes: '', phone: '0412345678', long: 'a'.repeat(5000) });
 });
 
-test('form gathering captures all selected options and clears an empty multiple field', () => {
-	const select = (name: string, values: string[], disabled = false) => ({
-		tagName: 'SELECT', multiple: true, value: values[0] || '', selectedOptions: values.map(value => ({ value })),
-		getAttribute: () => name, matches: () => disabled
-	});
-	const fields = [select('status', ['active', 'blocked']), select('projects', []), select('excluded', ['secret'], true)];
-	assert.deepEqual(gatherFormFields({ querySelectorAll: () => fields } as unknown as HTMLElement), { status: ['active', 'blocked'], projects: [] });
+test('multiple select Action fields preserve DOM order, empty selection and form exclusions', () => {
+ const option = (value: string, disabled = false) => ({ value, matches: (selector: string) => selector === ':disabled' && disabled });
+ const field = (name: string, options: ReturnType<typeof option>[], { multiple = true, disabled = false, transient = false } = {}) => ({
+  tagName: 'SELECT', multiple, value: options[0]?.value ?? '', selectedOptions: options,
+  matches: (selector: string) => selector === ':disabled' && disabled,
+  closest: (selector: string) => transient && selector === '[data-tt-transient-boundary]' ? {} : null,
+  getAttribute: (key: string) => key === 'name' ? name : null
+ });
+ const form = { querySelectorAll: () => [
+  field('topics', [option('html'), option('blocked', true), option('css')]),
+  field('cleared', []),
+  field('single', [option('html')], { multiple: false }),
+  field('disabled', [option('hidden')], { disabled: true }),
+  field('transient', [option('private')], { transient: true }),
+  field('constructor', [option('ignored')])
+ ] } as unknown as HTMLElement;
+ assert.deepEqual(gatherFormFields(form), { topics: ['html', 'css'], cleared: [], single: 'html' });
 });
 
 test('a source cache paints only the matching action and resolved input binding', () => {

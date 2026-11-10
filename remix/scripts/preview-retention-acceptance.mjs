@@ -158,8 +158,8 @@ try {
     await select.selectOption('preview-retention-cleanup-description');
     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(`Editable retention guidance ${width}`);
     await select.selectOption('preview-retention-orphan-grace-input');
-    await page.getByRole('textbox', { name: 'Element title', exact: true }).fill(`Editable grace input ${width}`);
-    await page.getByRole('textbox', { name: 'Element title', exact: true }).blur();
+    await page.getByLabel('Element title', { exact: true }).fill(`Editable grace input ${width}`);
+    await page.getByLabel('Element title', { exact: true }).blur();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Opened Builder inspector overflow');
     await page.screenshot({ path: join(out, `retention-builder-${width}.png`), fullPage: true });
     await page.getByRole('button', { name: 'Close builder', exact: true }).click();

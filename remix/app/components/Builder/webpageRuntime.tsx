@@ -464,7 +464,9 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 			}
 		}
 		if (field.tagName === 'SELECT' && (field as HTMLSelectElement).multiple) {
-			out[name] = Array.from((field as HTMLSelectElement).selectedOptions, option => option.value);
+			out[name] = Array.from((field as HTMLSelectElement).selectedOptions)
+				.filter((option) => !option.matches(':disabled'))
+				.map((option) => option.value);
 			return;
 		}
 		if (typeof field.value === 'string') {

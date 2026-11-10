@@ -1,3 +1,5 @@
+import { PresentedImage } from '~/components/Media/PresentedImage';
+import type { ImagePresentation } from '~/components/Media/imagePresentation';
 import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
 import React from 'react';
 import { Box, Button, Center, Flex, Text } from '@chakra-ui/react';
@@ -57,7 +59,7 @@ const formatJoined = (iso: string): string | null => {
 
 // Banner strip: image when a URL is set, animated rainbow fallback otherwise.
 // Shared with EditProfileModal's live preview.
-export const ProfileBanner = (props: { bannerUrl: string | null; height: string | string[]; radius?: string }) => {
+export const ProfileBanner = (props: { bannerUrl: string | null; presentation?: ImagePresentation | null; height: string | string[]; radius?: string }) => {
   const src = (props.bannerUrl || '').trim();
 
   return (
@@ -70,7 +72,7 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
       flexShrink={0}
     >
       {src ? (
-				<Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" />
+				<PresentedImage src={src} presentation={props.presentation} />
       ) : (
 				<Box width="100%" height="100%" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: RAINBOW_ANIM }} />
       )}
@@ -80,7 +82,7 @@ export const ProfileBanner = (props: { bannerUrl: string | null; height: string 
 
 // Avatar circle: image when a URL is set, rainbow initial otherwise (the
 // UserAvatarCircle idiom, sized). Shared with EditProfileModal's live preview.
-export const ProfileAvatarCircle = (props: { avatarUrl: string | null; name: string; size: string; fontSize?: string; borderWidth?: string }) => {
+export const ProfileAvatarCircle = (props: { avatarUrl: string | null; presentation?: ImagePresentation | null; name: string; size: string; fontSize?: string; borderWidth?: string }) => {
   const src = (props.avatarUrl || '').trim();
   const initial = (props.name || '?').trim().charAt(0).toUpperCase() || '?';
 
@@ -98,7 +100,7 @@ export const ProfileAvatarCircle = (props: { avatarUrl: string | null; name: str
       fontWeight={700}
       fontSize={props.fontSize || '2xl'}
     >
-			{src ? <Box as="img" src={src} alt="" referrerPolicy="no-referrer" width="100%" height="100%" objectFit="cover" display="block" /> : initial}
+			{src ? <PresentedImage src={src} presentation={props.presentation} /> : initial}
     </Center>
   );
 };
@@ -539,6 +541,8 @@ export const ProfilePage = (props: ProfilePageProps) => {
           bio: user.bio,
           avatarUrl: user.avatarUrl,
           bannerUrl: user.bannerUrl,
+          bannerPresentation: user.bannerPresentation,
+          avatarPresentation: user.avatarPresentation,
           createdAt: user.createdAt
         }
       : remote.status === 'loaded'
@@ -558,10 +562,10 @@ export const ProfilePage = (props: ProfilePageProps) => {
 
   return pageShell(
     <>
-      <ProfileBanner bannerUrl={profile.bannerUrl} height={['140px', '220px']} />
+      <ProfileBanner bannerUrl={profile.bannerUrl} presentation={profile.bannerPresentation} height={['140px', '220px']} />
 
       <Flex px={[4, 6]} marginTop="-48px" position="relative" zIndex={1}>
-				<ProfileAvatarCircle avatarUrl={profile.avatarUrl} name={getUserDisplayName(profile)} size="96px" borderWidth="4px" />
+				<ProfileAvatarCircle avatarUrl={profile.avatarUrl} presentation={profile.avatarPresentation} name={getUserDisplayName(profile)} size="96px" borderWidth="4px" />
       </Flex>
 
       <Box px={[4, 6]} pt={3} whiteSpace="normal">

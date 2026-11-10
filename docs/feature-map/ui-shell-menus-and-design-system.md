@@ -497,3 +497,11 @@ unknown. Pairing, approval, permission, compatibility and concrete errors keep
 their independent safety meanings. Run `deviceStatusPresentation.test.ts` with
 the device component tests; machine status contracts and action admission stay
 unchanged.
+
+### Shared HTML and CSS inspector
+
+`app/components/ElementInspector/` supplies the Builder and image editor with
+editable property and attribute rows, typed value choices and CSS source. Its
+lazy catalog is a projection of the existing standards pipeline. See
+[the inspector contract](../web-standards-builder.md#html-and-css-inspector)
+and the Builder element inspector checklist in `TESTING.md`.
