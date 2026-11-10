@@ -2,6 +2,7 @@ import SwiftUI
 import ThingtimeRecoveryCore
 
 private enum RecoverySelection: Hashable {
+    case aiApps
     case cache(RecoveryComponent)
     case release(RecoveryComponent, String)
 }
@@ -14,6 +15,7 @@ private struct RecoveryCatalogRow: Identifiable {
 
 struct RecoveryContentView: View {
     @ObservedObject var store: RecoveryStore
+    @ObservedObject var integrations: AIIntegrationStore
     @State private var selection: RecoverySelection? = .cache(.desktop)
 
     private var releaseRows: [RecoveryCatalogRow] {
@@ -25,6 +27,8 @@ struct RecoveryContentView: View {
         NavigationSplitView {
             List(selection: $selection) {
                 Section("This Mac") {
+                    Label("AI Apps", systemImage: "app.connected.to.app.below.fill")
+                        .tag(RecoverySelection.aiApps)
                     Label("Cached \(store.selectedProduct.title)", systemImage: store.selectedProduct.systemImage)
                         .tag(RecoverySelection.cache(store.selectedProduct.component))
                 }
@@ -44,10 +48,12 @@ struct RecoveryContentView: View {
                     }
                 }
             }
+            .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
             .navigationSplitViewColumnWidth(min: 300, ideal: 370, max: 520)
         } detail: {
             detail
         }
+        .frame(maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Picker("App", selection: $store.selectedProduct) {
@@ -76,6 +82,8 @@ struct RecoveryContentView: View {
 
     @ViewBuilder private var detail: some View {
         switch selection {
+        case .aiApps:
+            AIIntegrationsView(store: integrations)
         case .cache(let component):
             CacheListView(component: component, bundles: store.bundles(for: component), store: store)
         case .release(let component, let id):
