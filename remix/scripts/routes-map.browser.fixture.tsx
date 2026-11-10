@@ -68,7 +68,7 @@ const markerComponents = buildComponentsByRef({
  components: [
   { id: 'resolved-marker', crystal: { args: [{ name: 'badge', type: 'string', default: '' }, { name: 'menuDisabled', type: 'boolean', default: false }, { name: 'alternateSlot', type: 'boolean', default: false }, { name: 'sourceRevision', type: 'number', default: 0 }], render: {
    tag: 'tt-menu', props: { contextMenu: true, name: 'Commands for {point.label}', disabled: { ttArg: 'menuDisabled' } }, children: [
-    { tag: 'div', props: { 'data-tt-menu-slot': 'target' }, children: [
+    { tag: 'div', props: { 'data-tt-menu-slot': 'target', style: { paddingBottom: 8 } }, children: [
      { tag: 'button', props: { 'aria-pressed': { ttIf: { arg: 'query.group', then: { ttIf: { arg: 'page.selection.picked.items', op: 'includes', valueArg: 'point.id', then: true, else: false } }, else: '{point.selected}' } }, type: 'button', 'data-tt-modifier-action-inputs': { ttIf: { arg: 'query.group', then: selectMarker } }, 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}', group: '{query.group}' } }) }, children: ['{badge} · {point.label}',
       { ttEach: { arg: 'page.collections.details', keyArg: 'point.id', node: { tag: 'span', children: ['{item.label}'] } } }] }
     ] },
@@ -105,7 +105,7 @@ function ComposedFixture({ owned = false }: { owned?: boolean }) {
  }, []);
 	const authored: WebpageBlock[] = [{
 		id: 'composed-map', type: 'element', tag: 'tt-mapbox', props: {
-			title: 'Composed fixture map', height: 430, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
+			title: 'Composed fixture map', height: 430, markerScale: owned ? 0.5 : 1, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
 			showFavourites: show, selectedFavouriteId: '{query.markerId}'
 		}, children: [
 			{ id: 'marker-note', type: 'element', tag: 'p', text: note },
