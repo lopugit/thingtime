@@ -1,5 +1,8 @@
 require "base64"
+require "digest"
 require "fileutils"
+require "openssl"
+require "open3"
 require "plist"
 require "shellwords"
 require "tempfile"
@@ -120,9 +123,9 @@ def xcodebuild_xcargs
   args.join(" ")
 end
 
-def export_options(destination: "export")
+def export_options(destination: "export", method: "app-store-connect")
   options = {
-    method: "app-store-connect",
+    method: method,
     destination: destination,
     distributionBundleIdentifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
     manageAppVersionAndBuildNumber: false,
@@ -142,6 +145,93 @@ def export_options(destination: "export")
       password_provider_bundle_identifier => password_provider_profile_name
     }
   )
+end
+
+def verify_release_ipa(ipa_path)
+  verifier = File.expand_path("../scripts/verify-release.py", __dir__)
+  Dir.mktmpdir("thingtime-release-check") do |directory|
+    sh("ditto", "-x", "-k", ipa_path, directory)
+    sh("python3", verifier, File.join(directory, "Payload/Thingtime.app"))
+  end
+end
+
+def release_testing_device(devices, device_class, digest)
+  device = devices.find do |candidate|
+    candidate.enabled? && candidate.device_class == device_class &&
+      Digest::SHA256.hexdigest(candidate.udid.downcase) == digest
+  end
+  UI.user_error!("The requested #{device_class} is not registered and enabled for this Apple team") unless device
+  puts "::add-mask::#{device.udid}"
+  puts "::add-mask::#{device.udid.downcase}"
+  puts "::add-mask::#{device.id}"
+  device
+end
+
+# Only the four dedicated profiles may be created. Existing Apple assets are
+# never changed. The Watch app is scoped to its own registered hardware.
+def install_release_testing_profiles(keychain_path)
+  app_store_api_key
+  api = Spaceship::ConnectAPI
+  devices = api::Device.all(filter: { status: "ENABLED", platform: "IOS" })
+  phone_digest = ENV.fetch("IOS_RELEASE_TESTING_DEVICE_SHA256")
+  watch_digest = ENV.fetch("WATCH_RELEASE_TESTING_DEVICE_SHA256")
+  phone = release_testing_device(devices, "IPHONE", phone_digest)
+  watch = release_testing_device(devices, "APPLE_WATCH", watch_digest)
+
+  cert_id = ENV.fetch("IOS_DISTRIBUTION_CERTIFICATE_ID")
+  cert = api::Certificate.get(certificate_id: cert_id)
+  UI.user_error!("The configured Apple Distribution certificate is unavailable") unless
+    cert&.valid? && %w[DISTRIBUTION IOS_DISTRIBUTION].include?(cert.certificate_type)
+  certificate = OpenSSL::X509::Certificate.new(Base64.strict_decode64(cert.certificate_content))
+  team = ENV.fetch("DEVELOPMENT_TEAM")
+  UI.user_error!("The configured certificate belongs to a different Apple team") unless
+    certificate.subject.to_a.any? { |attribute, value| attribute == "OU" && value == team }
+  fingerprint = Digest::SHA1.hexdigest(certificate.to_der).upcase
+  identities, result = Open3.capture2e("security", "find-identity", "-v", "-p", "codesigning", keychain_path)
+  UI.user_error!("The imported identity does not match the configured Apple Distribution certificate") unless
+    result.success? && identities.lines.any? { |line| line.include?(fingerprint) && line.include?("Apple Distribution:") }
+
+  targets = {
+    "PROVISIONING_PROFILE_SPECIFIER" => ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
+    "WATCH_PROVISIONING_PROFILE_SPECIFIER" => ENV.fetch("WATCH_BUNDLE_IDENTIFIER"),
+    "LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER" => lopu_widget_bundle_identifier,
+    "SHARE_PROVISIONING_PROFILE_SPECIFIER" => share_bundle_identifier
+  }
+  bundles = targets.transform_values { |identifier| api::BundleId.find(identifier) }
+  UI.user_error!("A required existing Apple bundle ID is unavailable") if bundles.value?(nil)
+
+  profile_type = api::Profile::ProfileType::IOS_APP_ADHOC
+  Dir.mktmpdir("thingtime-release-testing-profiles") do |directory|
+    targets.each do |setting, identifier|
+      device, digest = if setting == "WATCH_PROVISIONING_PROFILE_SPECIFIER"
+                         [watch, watch_digest]
+                       else
+                         [phone, phone_digest]
+                       end
+      name = "Thingtime Release Testing #{identifier} #{digest[0, 16]} #{cert_id}"
+      profiles = api::Profile.all(filter: { name: name, profileType: profile_type }, includes: "bundleId")
+      UI.user_error!("Multiple dedicated profiles exist for #{identifier}") if profiles.length > 1
+      profile = profiles.first
+      bundle = bundles.fetch(setting)
+      if profile
+        UI.user_error!("The dedicated profile for #{identifier} cannot be reused") unless profile.valid? &&
+          profile.bundle_id&.id == bundle.id &&
+          profile.fetch_all_devices.map(&:id) == [device.id] &&
+          profile.fetch_all_certificates.map(&:id) == [cert_id]
+      else
+        profile = api::Profile.create(
+          name: name, profile_type: profile_type, bundle_id_id: bundle.id,
+          certificate_ids: [cert_id], device_ids: [device.id]
+        )
+      end
+      UI.user_error!("Apple did not return a usable profile for #{identifier}") unless
+        profile&.valid? && !profile.profile_content.to_s.empty? && !profile.uuid.to_s.empty?
+      path = File.join(directory, "#{identifier}.mobileprovision")
+      File.binwrite(path, Base64.decode64(profile.profile_content))
+      FastlaneCore::ProvisioningProfile.install(path)
+      ENV[setting] = profile.uuid
+    end
+  end
 end
 
 platform :ios do
@@ -192,7 +282,8 @@ platform :ios do
   end
 
   desc "Build a signed Release archive (.ipa)"
-  lane :build do
+  lane :build do |options|
+    release_testing = options[:release_testing] == true
     ENV["WATCH_BUNDLE_IDENTIFIER"] ||= "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.watchkitapp"
     generate
     setup_ci if ENV["CI"]
@@ -213,7 +304,7 @@ platform :ios do
       )
     end
 
-    unless ENV["SKIP_CERT_SYNC"] == "1"
+    unless release_testing || ENV["SKIP_CERT_SYNC"] == "1"
       get_certificates(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
@@ -230,7 +321,10 @@ platform :ios do
       end
     end
 
-    unless ENV["SKIP_PROFILE_SYNC"] == "1"
+    if release_testing
+      UI.user_error!("Release testing requires the existing CI distribution identity") unless keychain_path && ENV["IOS_DISTRIBUTION_CERTIFICATE_PATH"]
+      install_release_testing_profiles(keychain_path)
+    elsif ENV["SKIP_PROFILE_SYNC"] != "1"
       app_store_api_key
       prepare_share_bundle_identifier
       get_provisioning_profile(
@@ -291,7 +385,8 @@ platform :ios do
     )
 
     Tempfile.create(["ThingtimeExportOptions", ".plist"]) do |export_options_file|
-        export_options_file.write(export_options(destination: "export").to_plist)
+      method = release_testing ? "release-testing" : "app-store-connect"
+      export_options_file.write(export_options(method: method).to_plist)
       export_options_file.flush
       sh(
         "xcodebuild",
@@ -303,6 +398,15 @@ platform :ios do
     end
 
     UI.user_error!("Xcode did not export #{OUTPUT_NAME}") unless File.exist?(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
+  end
+
+  desc "Export a production Release IPA for a registered iPhone and its paired Watch"
+  lane :release_testing do
+    digests = ENV.values_at("IOS_RELEASE_TESTING_DEVICE_SHA256", "WATCH_RELEASE_TESTING_DEVICE_SHA256")
+    UI.user_error!("Release testing requires distinct iPhone and Watch digests") unless
+      digests.all? { |digest| digest.to_s.match?(/\A[0-9a-f]{64}\z/) } && digests.uniq.length == 2
+    build(release_testing: true)
+    verify_release_ipa(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   desc "Build and upload to TestFlight"
@@ -356,10 +460,7 @@ platform :ios do
     if ENV["EXPECTED_BUILD_NUMBER"]
       verifier = File.expand_path("../scripts/verify-release.py", __dir__)
       sh("python3", verifier, File.join(archive_path, "Products/Applications/Thingtime.app"))
-      Dir.mktmpdir("thingtime-release-check") do |directory|
-        sh("ditto", "-x", "-k", options.fetch(:ipa_path), directory)
-        sh("python3", verifier, File.join(directory, "Payload/Thingtime.app"))
-      end
+      verify_release_ipa(options.fetch(:ipa_path))
     end
     Tempfile.create(["ThingtimeUploadOptions", ".plist"]) do |upload_options_file|
       upload_options_file.write(export_options(destination: "upload").to_plist)
