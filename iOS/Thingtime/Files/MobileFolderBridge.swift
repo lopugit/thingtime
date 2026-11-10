@@ -9,9 +9,9 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.2.0"
+    static let photoAutomationVersion = "1.3.0"
     static var photoContinuationVersion: String? {
-        if #available(iOS 26.0, *) { return "1.0.0" }
+        if #available(iOS 26.0, *) { return "1.1.0" }
         return nil
     }
     static let stagingVersion = "1.2.0"
@@ -761,6 +761,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                         let exclusive = payload["execution"] as? String == "native"
                         guard payload["execution"] == nil || exclusive, grant.sourceKind == "photos", let verifyDevice, let cookies else { throw MobileFolderStore.Failure.invalid }
                         let resume = exclusive && payload["resume"] as? Bool == true
+                        let continueInBackground = payload["continueInBackground"] as? Bool == true
+                        guard payload["continueInBackground"] == nil ||
+                              (resume && continueInBackground && Self.photoContinuationVersion != nil && webView.window != nil) else {
+                            throw MobileFolderStore.Failure.invalid
+                        }
                         try await verifyDevice(scope, authorization.scope.deviceId, check); try check()
                         let scheduled = try await self.armPhotoRun(authorization, scope: scope, grant: grant, webView: webView, cookies: cookies,
                                                                   exclusive: exclusive, explicitResume: resume, check: check)
@@ -769,6 +774,16 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             result["deviceId"] = authorization.scope.deviceId
                             result["configurationRevision"] = authorization.updatedAt
                             result["nativeOwnsRun"] = true
+                            if continueInBackground {
+                                // An explicit Back up now action is the user
+                                // gesture. Attach to the admitted native run.
+                                let requested = Task { @MainActor in
+                                    try await NativeDeferredUpload.shared.requestContinuedPhotoRun(scope: scope, rootId: rootId,
+                                        configurationId: authorization.id, deviceId: authorization.scope.deviceId,
+                                        configurationRevision: authorization.updatedAt)
+                                }
+                                _ = try await requested.value
+                            }
                             result["photoRunProgress"] = try NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: authorization.id,
                                 rootId: rootId, deviceId: authorization.scope.deviceId)
                         }
