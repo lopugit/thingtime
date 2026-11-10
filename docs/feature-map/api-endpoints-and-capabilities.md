@@ -96,6 +96,18 @@ Run `test:chatgpt`, `test:api-capabilities`, and
 `test:connector-mutations:acceptance`. See the hosted connector documentation
 for staged text parts and unavoidable upstream transport constraints.
 
+## MCP permission upgrades
+
+`api.chatgpt-mcp` 2.2.0 adds tool-level `insufficient_scope` and exact-account
+scope requests on the existing `login_thingtime` tool. `api.chatgpt-oauth-authorize`
+1.3.0 displays independent requested permissions and binds consent to an exact
+first-party browser session. `api.chatgpt-oauth-token` 1.1.0 issues and rotates
+the approved OAuth scopes, with PKCE, one-use and live backing PAT checks.
+`api.chatgpt-oauth-register` 1.1.0 validates optional scope metadata. The MCP's
+own manifest publishes `chatgpt.oauth` 1.12.0 and maps its existing discovery and
+token routes. Test both public manifests and run the built scoped reconnect
+check in [reporting](../agent-reporting.md).
+
 `api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
 measurements to the existing device state mirror. `DeviceResources.swift`
 samples host counters, `ThingtimeAPIClient` sends the fields only to a

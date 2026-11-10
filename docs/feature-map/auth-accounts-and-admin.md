@@ -77,6 +77,12 @@ Preserve exact redirect/origin checks, PKCE, one-use challenges and session
 revocation in every OAuth/SSO change; a browser "success" text alone never
 proves the host connected.
 
+The same Thingtime MCP uses per-tool OAuth scope challenges for independent
+permissions. `chatgpt/plugin.ts` validates the exact same-origin browser
+principal, records a one-use scoped consent, and mints a reporting PAT only
+after matching code and PKCE exchange. Refresh preserves the consented scope
+and checks that the backing PAT is still live. See [reporting](../agent-reporting.md).
+
 `components/Account/AutoLoginPopup.tsx` starts browser-native FedCM on signed-out
 foreign origins. `ssoHub.ts` selects the explicit data authority before deployment
 metadata; its built-in origins in `ssoHubOrigins.mjs` are shared with the application
