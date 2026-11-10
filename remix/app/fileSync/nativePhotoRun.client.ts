@@ -3,7 +3,7 @@ import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS } from './configuration';
 import { assertConfiguredSyncApproval, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { openSyncJournal, syncScopeKey, withSyncRootLock } from './journal.client';
-import { readNativePhotoRunProgress } from './mobileFolders.client';
+import { readNativePhotoRunProgress, supportsNativePhotoContinuation } from './mobileFolders.client';
 import { createNativeSyncHost, isNativeSyncAdapterCurrent, type NativeSyncAdapter } from './nativeSyncHost.client';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { samePhotoBackupSource } from './photoSettingsPolicy';
@@ -80,8 +80,10 @@ export async function armNativePhotoRun(input: {
 					input.resumeScope(scope);
 				}
 				if (input.isPaused(scope)) return;
+				const continueInBackground = !automatic && adapter.platform === 'ios' && supportsNativePhotoContinuation(adapter.bridge, '1.1.0');
 				await host.request(scope.ownerId, { action: 'arm-photo-run', rootId: localRootId,
-					authorization: { ...reviewed, scope }, execution: 'native', ...(!automatic ? { resume: true as const } : {}) }, signal);
+					authorization: { ...reviewed, scope }, execution: 'native', ...(!automatic ? { resume: true as const } : {}),
+					...(continueInBackground ? { continueInBackground: true as const } : {}) }, signal);
 				check();
 			} finally { journal.close(); }
 		}, undefined, signal);

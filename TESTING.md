@@ -12349,6 +12349,17 @@ transfer, whole-account snapshots or production deployment.
   exercise Foundation's resolved directory URLs. On the iPhone, reopen the app
   after arming an enabled backup and confirm the saved native run resumes
   without a second tap and publishes verified originals to its destination.
+- Run `testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt`
+  with the shared Rust indexer. Keep Live Photo companions in the first
+  selection, retain regular later batches and reject a wrongly named receipt.
+- In the mounted Photos activity scenario, expand the editable disclosure on
+  phone and desktop. Compare unknown, measured zero, indexing, iCloud fetch,
+  upload, publication, waits and recent steps with the actual native payload.
+  On iOS 26+, tap Back up now once while preparation counts are still unknown,
+  then leave the app. Verify the system session shows measured progress and
+  the same native run publishes originals while the app is backgrounded.
+  Check refusal and cancellation separately. For a saved-byte target, count
+  distinct current file IDs and exact sizes from the verified destination.
 - Let the native run authorization expire at the same saved revision. On the
   next five-minute check, verify the browser reauthorizes the exact current
   binding. A live binding returns its existing handle. An expired binding

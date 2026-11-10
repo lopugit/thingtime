@@ -113,7 +113,14 @@ final class PhotoBackupQueue {
         var result: [String: Attempt] = [:]
         for file in files {
             try Task.checkCancellation()
-            guard let attempt = try read(Attempt.self, at: file), record(attempt.stamp.key) == file else { throw PhotoLibraryReader.Failure.changed }
+            // Foundation can resolve the app container alias on enumeration.
+            // Entries still come from this queue's own attempts directory.
+            guard let attempt = try read(Attempt.self, at: file),
+                  attempt.stamp.key.utf8.count == 64,
+                  attempt.stamp.key.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                  file.lastPathComponent == attempt.stamp.key + ".json" else {
+                throw PhotoLibraryReader.Failure.changed
+            }
             result[attempt.stamp.key] = attempt
         }
         outcomes = result
@@ -123,7 +130,8 @@ final class PhotoBackupQueue {
               unavailable: selection.priorUnavailable + (selection.attempts?.reduce(0) { $0 + $1.unavailable.count } ?? 0))
     }
 
-    func select(revision: String, resources: [PhotoResource], replaceStale: Bool = false) throws -> Work {
+    func select(revision: String, resources: [PhotoResource], replaceStale: Bool = false,
+                startWithSingleAsset: Bool = false) throws -> Work {
         try loadOutcomes()
         if membership?.revision != revision {
             var pending = 0, unavailable = 0
@@ -141,16 +149,22 @@ final class PhotoBackupQueue {
         let assets: [Asset]
         if let retained = try read(Selection.self, at: selectedFile) {
             assets = retained.stamps.compactMap { membership.byKey[$0.key] }
-            guard assets.map(Stamp.init) == retained.stamps else {
+            let refineUnpreparedFirstBatch = startWithSingleAsset && outcomes?.isEmpty == true &&
+                retained.attempts == nil && retained.stamps.count > 1
+            guard assets.map(Stamp.init) == retained.stamps && !refineUnpreparedFirstBatch else {
                 guard replaceStale else { throw PhotoLibraryReader.Failure.changed }
-                // This was an unacknowledged selection. Never advance its
-                // cursor or erase any independently acknowledged asset.
+                // This was an unacknowledged selection. A previous app can
+                // also have written its first selection without preparing it.
+                // Neither case advances the cursor or erases any receipt.
                 try FileManager.default.removeItem(at: selectedFile)
-                return try select(revision: revision, resources: resources)
+                return try select(revision: revision, resources: resources, startWithSingleAsset: startWithSingleAsset)
             }
             selection = retained
         } else {
-            assets = Array(membership.ordered.dropFirst(membership.position).prefix(Self.batchSize))
+            // Let the first newest asset upload without waiting for other
+            // originals to materialize. Resume retains the existing batch.
+            let limit = startWithSingleAsset && outcomes?.isEmpty == true ? 1 : Self.batchSize
+            assets = Array(membership.ordered.dropFirst(membership.position).prefix(limit))
             let pending = membership.pending - assets.reduce(0) { $0 + $1.resources.count }
             selection = .init(id: UUID(), stamps: assets.map(Stamp.init), pending: pending, priorUnavailable: membership.unavailable)
             try write(selection, at: selectedFile)

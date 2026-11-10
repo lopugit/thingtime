@@ -520,14 +520,24 @@ unfinished work. iOS chooses when or whether to run it, including after lock,
 force quit, battery constraints and app refresh restrictions. Brief inactive
 transitions such as system prompts preserve the foreground request. A short
 UIKit continuation protects the existing worker across a minimize; a granted
-background processing task joins that same worker. On iOS 26 or later, the
-explicit **Run in Background** action can request an additional system session
-for the current work. It reports the actual originals checked, finishes when
-there is no eligible work and never opens itself again. iOS uses the same
+background processing task joins that same worker. On iOS 26 or later,
+continuation 1.1.0 lets **Back up now** request a system session for the same
+admitted run. **Run in Background** can also request one for a backup that is
+already preparing. The system presentation reports the originals checked and
+the measured bytes sent for the current original. It ends when this check
+finishes and automatic retries use the ordinary scheduler. iOS uses the same
 expiration callback for its resource limit and for Cancel on the system UI;
 either leaves this backup locally paused until **Resume backup**. Normal waits
 for charging, network or data budget end the requested session and use the
 ordinary scheduler when the policy allows work again.
+
+Photos automation 1.3.0 adds scoped **Backup activity** with indexed asset
+and file counts, the selected batch, iCloud download progress, cloud
+verification, and recent steps. Counts appear as they become known. The first
+fresh selection prepares one newest asset group, including its companions,
+before processing the next batches. Existing selections and checkpoints reopen
+under the same identity. Reported network traffic can include retry bytes.
+Measure saved data from verified current Files in the exact destination.
 
 Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
 by default. An optional hourly budget uses the measured payload bytes from all
