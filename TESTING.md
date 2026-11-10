@@ -14273,6 +14273,11 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] Zoom out until an unscaled marker anchor overlaps a neighbouring marker.
+  Click or tap the visible underlying button through the foreground marker's
+  empty area. Verify both markers' own controls and context menus still work,
+  and that empty overlap leaves the map surface available to pan.
+
 - [ ] On an authored marker with modifier selection enabled, exercise
   Cmd-primary, Ctrl-primary, macOS Ctrl-primary context and click pairing,
   ordinary pointer activation, secondary menu, and a keyboard/touch selection
