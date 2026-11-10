@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { validateThingtimeCrystal } from '~/schemas/registry';
 import { resolveThingsActor, revalidateThingsActor } from '../auth/patTokens';
 import { findUserById } from '../auth/users';
 import { canManageCharacters, createCharacter } from '../auth/characters';
@@ -7,10 +8,11 @@ import { resolvePublicOrigin } from '../auth/publicOrigin';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
+import { attachmentModerationStatus } from '../moderation/moderationCore';
 import { newThingDoc } from '../messenger/shared';
 import { findSubspaceById, findSubspaceBySlug, accessOf, canModerate, isActiveMember, membershipOf } from '../subspaces/gate';
 import { listSubspaces, mutateMember } from '../subspaces/subspaces';
-import { createThing, getThing, updateThing, viewerOf, type Viewer } from '../things/things';
+import { createThing, getThing, updateThing, viewerOf, type Fail, type PublicPost, type PublicThing, type Viewer } from '../things/things';
 import { runAction, type ActionOperationPolicy } from '../actions/execute';
 import { REPORT_ACTION_ROLES, privateReportingAcl, reportingDigest, reportingUuid, validReportingWorkspace, type ReportAction, type ReportingWorkspace } from './reportingCore';
 
@@ -21,6 +23,22 @@ const safeBinding = (binding: any) => ({ id: binding.shareId, externalTaskId: bi
   characterId: binding.crystal.characterId, parentTaskId: binding.crystal.parent?.taskId || null, sharedTaskId: binding.crystal.parent?.sharedTaskId || binding.crystal.records?.taskId || null, coordinationPostId: binding.crystal.coordinationPostId || null, workspace: binding.crystal.workspace, records: binding.crystal.records || {} });
 const requireOk = (result: any) => { if (!result || result.ok === false) throw new ReportingError(result?.status || 503, result?.error || 'Reporting dependency unavailable'); return result; };
 class ReportingError extends Error { constructor(public status: number, message: string) { super(message); } }
+type CoordinationRead = { ok: true; thing: PublicThing; post: PublicPost | null };
+const isSubspacePostAcl = (acl: unknown) => Array.isArray(acl) && acl.length === 1 && acl[0] === 'tt:all';
+const isPrivateCoordinationPost = (post: any, subspaceId: string) => post?.subspacePrivate === true &&
+  post.crystal?.subspaceId === subspaceId && !post.targetId && !post.appId && isSubspacePostAcl(post.acl);
+const privateCoordinationProjection = (read: Fail | CoordinationRead, postId: string, characterId: string, subspaceId: string): read is CoordinationRead =>
+  read.ok === true && read.thing.id === postId && read.thing.targetId === null && read.thing.author?.id === characterId &&
+  isSubspacePostAcl(read.thing.acl) && read.post?.id === postId &&
+  read.post.subspace?.id === subspaceId && read.post.subspace.access === 'private' &&
+  !!read.post.subspace.viewerRole && !read.post.subspaceMod?.removed;
+// Reporting admits private-only PATs for this closed workflow. A subspace post
+// uses tt:all *within* its stamped private subspace, but generic PAT filtering
+// buckets it as public. Only after verifying that exact bound post and the
+// current private membership may we check the owner's ordinary member view.
+// The canonical read still enforces moderation and live subspace access.
+const readCoordinationAsOwner = (ownerViewer: Viewer, id: string) =>
+  getThing(ownerViewer?.pat?.visibility === 'private' ? { id: ownerViewer.id, username: ownerViewer.username } : ownerViewer, id);
 
 /** The scope delegates only this closed task workflow. No session/token is
  * minted, and the Character is never returned as a general account actor. */
@@ -135,7 +153,14 @@ export async function agentReporting(request: Request, input: any) {
       const activeId = binding.crystal.activeOperation;
       const active = activeId ? await things.findOne({ thingtime: 'agent-reporting-operation', ownerId, targetId: binding.shareId,
         ...thingUniqueKeyFilter('agentReportingOperation', reportingDigest([binding.shareId, activeId])) } as any) : null;
-      const coordinationPost = binding.crystal.coordinationPostId ? requireOk(await getThing(ownerViewer, binding.crystal.coordinationPostId)).thing : null;
+      const postId = binding.crystal.coordinationPostId;
+      let coordinationPost = null;
+      const characterId = String(verified.character._id), subspaceId = binding.crystal.workspace.subspaceId;
+      if (postId && isPrivateCoordinationPost(await things.findOne({ shareId: postId, ownerId: characterId, thingtime: 'post' }), subspaceId)) {
+        await assertOwner();
+        const read = await readCoordinationAsOwner(ownerViewer, postId);
+        if (privateCoordinationProjection(read, postId, characterId, subspaceId)) coordinationPost = read.thing;
+      }
       return { ok: true as const, binding: safeBinding(binding), records, coordinationPost,
         activeOperation: activeId ? { requestId: activeId, status: active?.crystal.status || 'unknown',
           createdIds: active?.crystal.createdIds || [], mutationAttempted: active?.crystal.mutationAttempted === true } : null };
@@ -328,6 +353,10 @@ async function coordinateReporting(context: {
   if (!ref(input.requestId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId) ||
       !ref(input.title) || !ref(input.text) || !input.renderComponent || typeof input.renderComponent !== 'object' || Array.isArray(input.renderComponent))
     return fail(400, 'Coordination requires a stable UUID requestId, title, text and explicit renderComponent');
+  const subspaceId = binding.crystal.workspace.subspaceId;
+  const crystal = { type: 'text', title: input.title, text: input.text, subspaceId, renderComponent: input.renderComponent };
+  const validated = validateThingtimeCrystal(['post'], crystal);
+  if (validated.ok === false) return fail(validated.status, validated.error);
   if (input.renderComponent.id !== undefined) {
     if (!ref(input.renderComponent.id)) return fail(400, 'renderComponent.id must reference an accessible saved Component');
     const component = requireOk(await getThing(viewer, input.renderComponent.id)).thing;
@@ -336,52 +365,107 @@ async function coordinateReporting(context: {
   }
   const digest = reportingDigest({ operation: 'coordinate', title: input.title, text: input.text, renderComponent: input.renderComponent });
   const receiptKey = reportingDigest([binding.shareId, input.requestId]);
-  const receiptFilter = { thingtime: 'agent-reporting-operation', ownerId, ...thingUniqueKeyFilter('agentReportingOperation', receiptKey) };
+  const receiptFilter = { thingtime: 'agent-reporting-operation', ownerId, targetId: binding.shareId, ...thingUniqueKeyFilter('agentReportingOperation', receiptKey) };
+  const activeFilter = { ...filter, 'crystal.activeOperation': input.requestId };
+  const pendingFilter = { ...receiptFilter, 'crystal.status': 'pending', 'crystal.digest': digest };
+  const stablePostId = reportingUuid(`${binding.shareId}:coordination-post`);
+  const postFilter = (id: string) => ({ shareId: id, ownerId: String(character._id), thingtime: 'post' });
+  const releaseLock = () => things.updateOne(activeFilter, { $unset: { 'crystal.activeOperation': '' } });
+  const confirmPost = async (postId: string, legacyReceipt?: any) => {
+    await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
+    const saved = await things.findOne(postFilter(postId));
+    const sameContent = (candidate: any) => ['type', 'title', 'text', 'subspaceId', 'renderComponent'].every(
+      field => reportingDigest([candidate?.[field]]) === reportingDigest([validated.crystal[field]]));
+    if (!isPrivateCoordinationPost(saved, subspaceId) || !sameContent(saved.crystal))
+      throw new ReportingError(409, 'Saved coordination post does not match this request and private subspace');
+    if (legacyReceipt && (!(saved.createdAt instanceof Date) || !(legacyReceipt.createdAt instanceof Date) ||
+        saved.createdAt.getTime() < legacyReceipt.createdAt.getTime()))
+      throw new ReportingError(409, 'Saved coordination post predates the pending request');
+    if (attachmentModerationStatus(saved) === 'pending')
+      throw new ReportingError(409, 'Coordination post is saved and waiting for text moderation; retry this same requestId and payload after release');
+    if (attachmentModerationStatus(saved) === 'blocked')
+      throw new ReportingError(409, 'Coordination post was blocked by text moderation');
+    const [authorRead, ownerRead, anonymousRead] = await Promise.all([getThing(viewer, postId), readCoordinationAsOwner(ownerViewer, postId), getThing(null, postId)]);
+    const exactPrivateProjection = (read: typeof ownerRead) => privateCoordinationProjection(read, postId, String(character._id), subspaceId) &&
+      sameContent(read.thing.crystal);
+    if (!exactPrivateProjection(authorRead) || !exactPrivateProjection(ownerRead) || anonymousRead.ok !== false || anonymousRead.status !== 404)
+      throw new ReportingError(409, 'Private coordination post readback or audience verification failed');
+    await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
+    // Keep the active request fenced until both the binding and receipt are
+    // saved. A second verifier can only complete the same immutable request.
+    if (legacyReceipt) await things.updateOne(pendingFilter, { $set: { 'crystal.coordinationWritten': true } });
+    const bound = await things.updateOne(activeFilter, { $set: { 'crystal.coordinationPostId': postId, updatedAt: new Date() } });
+    if (bound.matchedCount === 1)
+      await things.updateOne(pendingFilter, { $set: { 'crystal.status': 'complete', 'crystal.result': { ids: [postId] }, updatedAt: new Date() } });
+    const finalized = await things.findOne(receiptFilter);
+    if (finalized?.crystal.status !== 'complete') throw new ReportingError(409, 'Coordination receipt changed before completion');
+    await releaseLock();
+    return receiptResponse(finalized, digest, await things.findOne(filter));
+  };
+  const existing = async (receipt: any) => {
+    if (receipt.crystal.digest !== digest || receipt.crystal.actionName !== 'coordinate')
+      return fail(409, 'This requestId belongs to a different immutable reporting payload');
+    if (receipt.crystal.status === 'complete') {
+      await releaseLock();
+      return receiptResponse(receipt, digest, await things.findOne(filter));
+    }
+    const state = receipt.crystal;
+    const [postId] = Array.isArray(state.createdIds) ? state.createdIds : [];
+    if (state.status !== 'pending' || state.mutationAttempted !== true || state.createdIds?.length !== 1 ||
+        binding.crystal.activeOperation !== input.requestId || postId !== (binding.crystal.coordinationPostId || stablePostId))
+      return receiptResponse(receipt, digest, binding);
+    // New requests always need a durable write marker. The one legacy case
+    // without it is an initial create: its candidate must be the deterministic
+    // first post, while the same request still holds the unbound task's lock.
+    if (state.coordinationWritten !== true && !(postId === stablePostId &&
+      !state.coordinationWrite && !binding.crystal.coordinationPostId))
+      return receiptResponse(receipt, digest, binding);
+    return confirmPost(postId, state.coordinationWritten === true ? undefined : receipt);
+  };
   const prior = await things.findOne(receiptFilter as any);
-  if (prior) return receiptResponse(prior, digest, binding);
+  if (prior) return existing(prior);
   const locked = await things.updateOne({ ...filter, 'crystal.activeOperation': { $exists: false } } as any, { $set: { 'crystal.activeOperation': input.requestId } });
   if (!locked.modifiedCount) return fail(409, 'Another reporting operation is active or has an uncertain outcome; inspect its receipt before continuing');
-  let receipt: any, attempted = false;
+  let receipt: any, insertedReceipt = false, attempted = false;
   try {
-    binding = await things.findOne({ ...filter, 'crystal.activeOperation': input.requestId } as any);
+    binding = await things.findOne(activeFilter);
     if (!binding) throw new ReportingError(409, 'Reporting task changed before coordination');
     const raced = await things.findOne(receiptFilter as any);
-    if (raced) { receipt = raced; return receiptResponse(raced, digest, binding); }
+    if (raced) { receipt = raced; return await existing(raced); }
     receipt = { ...newThingDoc('agent-reporting-operation', { ownerId, targetId: binding.shareId,
       uniqueKeys: [thingUniqueKey('agentReportingOperation', receiptKey)], crystal: { requestId: input.requestId, digest, status: 'pending', actionName: 'coordinate' } }), storageClass: 'control' };
-    try { await things.insertOne(receipt); } catch (error: any) { if (error?.code !== 11000) throw error; return receiptResponse(await things.findOne(receiptFilter as any), digest, binding); }
+    try { await things.insertOne(receipt); insertedReceipt = true; }
+    catch (error: any) { if (error?.code !== 11000) throw error; return await existing(await things.findOne(receiptFilter)); }
     await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
-    const postId = binding.crystal.coordinationPostId || reportingUuid(`${binding.shareId}:coordination-post`);
-    const crystal = { type: 'text', title: input.title, text: input.text, subspaceId: binding.crystal.workspace.subspaceId, renderComponent: input.renderComponent };
-    if (binding.crystal.coordinationPostId) {
-      const priorPost = await things.findOne({ shareId: postId, ownerId: String(character._id), thingtime: 'post' } as any);
-      if (!priorPost || priorPost.subspacePrivate !== true || priorPost.crystal?.subspaceId !== crystal.subspaceId) throw new ReportingError(403, 'Coordination post no longer belongs to this exact private task subspace');
-    }
+    const updating = !!binding.crystal.coordinationPostId;
+    const postId = binding.crystal.coordinationPostId || stablePostId;
+    if (updating && !isPrivateCoordinationPost(await things.findOne(postFilter(postId)), subspaceId))
+      throw new ReportingError(403, 'Coordination post no longer belongs to this exact private task subspace');
+    const markWritten = async (session?: any) => {
+      const result = await things.updateOne(pendingFilter, { $set: { 'crystal.coordinationWritten': true } }, session ? { session } : {});
+      if (result.matchedCount !== 1) throw new ReportingError(409, 'Coordination receipt changed before the write was recorded');
+    };
     attempted = true;
-    await things.updateOne(receiptFilter as any, { $set: { 'crystal.mutationAttempted': true, 'crystal.createdIds': [postId] } });
-    const written = binding.crystal.coordinationPostId
+    const marked = await things.updateOne(pendingFilter, { $set: { 'crystal.mutationAttempted': true, 'crystal.createdIds': [postId], 'crystal.coordinationWrite': updating ? 'update' : 'create' } });
+    if (marked.matchedCount !== 1) throw new ReportingError(409, 'Coordination receipt changed before the write');
+    const written = updating
       ? await updateThing(viewer, postId, { crystal })
-      : await createThing(String(character._id), { shareId: postId, thingtime: ['post'], acl: ['tt:all'], crystal }, viewer);
+      : await createThing(String(character._id), { shareId: postId, thingtime: ['post'], acl: ['tt:all'], crystal }, viewer, null, {
+        afterInsert: (_post, session) => markWritten(session)
+      });
     if (written.ok === false) attempted = false;
     requireOk(written);
-    await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
-    const saved = await things.findOne({ shareId: postId, ownerId: String(character._id), thingtime: 'post' } as any);
-    if (!saved || saved.subspacePrivate !== true || saved.crystal?.subspaceId !== crystal.subspaceId || !saved.crystal?.renderComponent ||
-        !(await getThing(viewer, postId)).ok || !(await getThing(ownerViewer, postId)).ok || (await getThing(null, postId)).ok)
-      throw new ReportingError(409, 'Private coordination post readback or audience verification failed');
-    await things.updateOne(filter as any, { $set: { 'crystal.coordinationPostId': postId, updatedAt: new Date() } });
-    binding.crystal.coordinationPostId = postId;
-    await things.updateOne(receiptFilter as any, { $set: { 'crystal.status': 'complete', 'crystal.result': { ids: [postId] }, updatedAt: new Date() } });
-    return { ok: true as const, binding: safeBinding(binding), receipt: { requestId: input.requestId, status: 'complete', result: { ids: [postId] } } };
+    if (updating) await markWritten();
+    return await confirmPost(postId);
   } catch (error) {
-    if (!attempted && receipt) await things.updateOne(receiptFilter as any, { $set: { 'crystal.status': 'failed', 'crystal.noDataEffects': true } });
+    if (!attempted && insertedReceipt) await things.updateOne(pendingFilter, { $set: { 'crystal.status': 'failed', 'crystal.noDataEffects': true } });
     if (error instanceof ReportingError) return fail(error.status, error.message);
     return fail(503, 'Coordination outcome is uncertain; inspect the stable reporting receipt before continuing');
   } finally {
     if (receipt) {
       const final = await things.findOne(receiptFilter as any);
       if (final?.crystal.status === 'complete' || final?.crystal.noDataEffects === true)
-        await things.updateOne({ ...filter, 'crystal.activeOperation': input.requestId } as any, { $unset: { 'crystal.activeOperation': '' } });
+        await releaseLock();
     }
   }
 }
