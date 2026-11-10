@@ -8,17 +8,21 @@ import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
 import { photoDownloadPreparation, photoQueueDisplay, syncFolderActivityLabel, type PhotoQueueProgress } from './syncFolderCardBlocks';
 import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
+import { newSyncConfigDraft, useRevealNewSyncDraft } from './syncFolderEditor';
+import { SyncConfigActivity } from './SyncConfigActivity';
+import { syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
+import { SyncEditorBlocks, syncConfigBasicsBlocks, syncConfigDirectionBlocks, syncConfigTransferBlocks, syncConfigExclusionBlocks, syncConfigModes, syncConfigEditBlocks, syncFolderEditorBlocks, syncLocalEditorActionBlocks, syncSourceBlocks } from './SyncEditorBlocks';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
 import { cloudFolderPaths, type CloudFolderPath } from '~/fileSync/folderPaths';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { SyncResourceControls } from './SyncResourceControls';
 import { PhotoAutomationControls } from './PhotoAutomationControls';
-import { photoSyncScheduleLabel, photoSyncWaitingMessage, usePhotoSyncJobs } from './photoSyncPresentation';
+import { photoSyncScheduleLabel, photoSyncWaitingMessage, useSyncJobs } from './photoSyncPresentation';
 import { nativePhotoActivityDisplay, nativePhotoBackgroundLabel, nativePhotoCanContinue, nativePhotoRunActive, nativePhotoRunGlance, nativePhotoRunLabel, nativePhotoRunSchedule, useNativePhotoRunProgress } from './nativePhotoRunView';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
 import { readNativeInventory } from '~/fileSync/nativeInventory';
-import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
+import { enrollNativeFolderSync, nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
@@ -26,7 +30,6 @@ import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { SyncConflictReview } from './SyncConflictReview';
 import { SyncDetailsSection } from './SyncDetailsSection';
-import { SettingsSection } from '../Settings/SettingsSection';
 import { SyncFolderCard } from './SyncFolderCard';
 import { PagedSyncConflictReview } from './PagedSyncConflictReview';
 import { DesktopSyncAutomation } from './DesktopSyncAutomation';
@@ -38,7 +41,7 @@ import { createTransferActivitySession } from '~/fileSync/transferActivity';
 import { createConflictReviewController } from '~/fileSync/conflictReviewController';
 import type { PagedConflictReviewResult, PagedConflictReviewSession } from '~/fileSync/pagedForegroundReview';
 import type { SyncConflict, SyncConflictChoice, SyncConflictReviewResult } from '~/fileSync/conflictResolution';
-import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Stack, Text } from '@chakra-ui/react';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
 import { useApi } from '~/hooks/useApi';
@@ -49,6 +52,7 @@ import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hook
 import { rootIdentity } from '~/utils/rootIdentity';
 import {
 	type MobileFolder,
+	type FolderRequest,
 	requestMobileFolders,
 	mobileFolderSource,
 	supportsMobileSyncConditions,
@@ -73,22 +77,29 @@ import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/
 import { runPagedForegroundCloudSync } from '~/fileSync/pagedForegroundSync';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
-import { newFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS, type FileSyncConfiguration } from '~/fileSync/configuration';
-import { SYNC_JOBS_CHANGED_EVENT } from '~/fileSync/syncJobJournal';
+import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS, type FileSyncConfiguration } from '~/fileSync/configuration';
+import { SYNC_JOBS_CHANGED_EVENT, syncJobEnabled } from '~/fileSync/syncJobJournal';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import {
 	canonicalDraftConfiguration,
 	configurationDraftKey,
+	claimSyncEnrollment,
+	cancelSyncEnrollmentRecovery,
+	SYNC_ENROLLMENT_RECOVERED_EVENT,
+	SYNC_ENROLLMENT_WAKE_EVENT,
 	ConfigurationConflict,
 	persistConfigurationDrafts,
 	readConfigurationDrafts,
+	readPendingSyncEnrollment,
+	type SyncEnrollmentIntent,
 	saveConfigurationDraft,
 	type ConfigurationDraft,
 	type ConfigurationEditorScope
 } from '~/fileSync/configurationEditor';
 
-type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; rootsReady?: boolean; host?: FolderHost; active?: boolean; onNativePhotoActivity?(active: boolean): void };
-export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = true, host, active = true, onNativePhotoActivity }: ConnectionsProps) {
+type FolderManagement = { run(request: FolderRequest): Promise<void>; busy: boolean; transferring: boolean; error: string; waiting: boolean; checked: Record<string, string>; picked?: MobileFolder };
+type ConnectionsProps = { folderManagement?: FolderManagement; ownerId: string; deviceId: string; roots: MobileFolder[]; rootsReady?: boolean; host?: FolderHost; active?: boolean; onNativePhotoActivity?(active: boolean): void };
+export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = true, host, folderManagement, active = true, onNativePhotoActivity }: ConnectionsProps) {
 	const owner = useCurrentUser(),
 		dataPlane = useDataPlane();
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
@@ -103,6 +114,7 @@ export function MobileSyncConnections({ ownerId, deviceId, roots, rootsReady = t
 			roots={roots}
 			rootsReady={rootsReady}
 			host={host}
+			folderManagement={folderManagement}
 			onNativePhotoActivity={onNativePhotoActivity}
 		/>
 	);
@@ -116,6 +128,7 @@ function Connections({
 	rootsReady,
 	active,
 	host,
+	folderManagement,
 	onNativePhotoActivity
 }: {
 	scope: ConfigurationEditorScope;
@@ -124,6 +137,7 @@ function Connections({
 	rootsReady: boolean;
 	active: boolean;
 	host?: FolderHost;
+	folderManagement?: FolderManagement;
 	onNativePhotoActivity?(active: boolean): void;
 }) {
 	const requestFolders = host?.request ?? requestMobileFolders;
@@ -166,16 +180,17 @@ function Connections({
 	const photoContinuation = soleNativePhotoRun && supportsNativePhotoContinuation(capabilities);
 	const automaticEnabled = useSyncExternalStore(activityManager.subscribe,
 		() => activityManager.enabled('sync.automation') && activityManager.enabled('sync.execution'), () => true);
-	const photoJobs = usePhotoSyncJobs(scope, generation, photoAutomation && !soleNativePhotoRun);
+	const syncJobs = useSyncJobs(scope, generation, appOwned, runtimeOrigin);
 	const pauseRequests = useRef(new Map<string, AbortController>());
 	const continuationRequests = useRef(new Map<string, AbortController>());
 	const [pausingIds, setPausingIds] = useState<string[]>([]);
 	const [continuations, setContinuations] = useState<Record<string, { revision: string; pending: boolean; status: string }>>({});
-	const [draft, setDraft] = useState<ConfigurationDraft | null>(null);
+	const [draft, setDraft] = useState<ConfigurationDraft | null>(() => initial.drafts.find(row => row.enrollment) ?? null);
 	const draftJournalCurrent = useRef(true);
 	const retainedDrafts = useRef(new Map<string, ConfigurationDraft>(initial.drafts.map(draft => [draft.id, draft])));
-	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const [selectedId, setSelectedId] = useState<string | null>(() => initial.drafts.find(row => row.enrollment)?.id ?? null);
 	const editorPrefix = useId();
+	const revealDraft = useRevealNewSyncDraft(editorPrefix, selectedId, initial.drafts.some(row => row.enrollment));
 	const resourceValidity = useRef(new Map<string, boolean>());
 	const [intervalDrafts, setIntervalDrafts] = useState<Record<string, number>>({});
 	const speedDrafts = useRef(new Map<string, TransferSpeedDraftState>());
@@ -218,6 +233,7 @@ function Connections({
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
 	const [inventoryDescriptors, setInventoryDescriptors] = useState<Record<string, SyncInventoryDescriptor | undefined>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
+	const [admissionFailed, setAdmissionFailed] = useState<Record<string, boolean>>({});
 	const [transferErrors, setTransferErrors] = useState<Record<string, string>>({});
 	const [foregroundFileReview, setFileReview] = useState<{
 		id: string;
@@ -232,6 +248,7 @@ function Connections({
 	const reviewTransport = React.useMemo(() => host ? { origin: scope.origin, fetch: host.fetch, currentOrigin: host.origin } : undefined, [host, scope.origin]);
 	const [folders, setFolders] = useState<CloudFolderPath[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
+		[loaded, setLoaded] = useState(false),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
 	const preparingUpload = useRef(false);
 	const controller = useRef<AbortController | null>(null),
@@ -247,15 +264,14 @@ function Connections({
 		expectedDataPlane: scope.dataPlane,
 		signal: controller.current?.signal
 	});
-	const persist = (next: ConfigurationDraft | null) => {
+	const persist = (next: ConfigurationDraft | null, clearId = draft?.id, expose = true) => {
 		assertCurrent();
 		const retained = new Map(retainedDrafts.current);
 		if (next) retained.set(next.id, next);
-		else if (draft) retained.delete(draft.id);
+		else if (clearId) retained.delete(clearId);
 		raw.current = persistConfigurationDrafts(window.localStorage, key, raw.current, [...retained.values()]);
 		retainedDrafts.current = retained;
-		setDraft(next);
-		if (!next) setSelectedId(null);
+		if (expose) setDraft(next);
 		setStorageError('');
 	};
 	const cache = (next: SavedFileSyncConfiguration[]) => {
@@ -321,13 +337,16 @@ function Connections({
 				}
 			cache(reconcileSavedSyncList(before, connectionsRef.current, accepted, !!cursor));
 			setConnectionCursor(result.nextCursor ?? null);
-			if (skipped) setNotice('Some shared or invalid connections are excluded. You can review them in Things.');
+			setLoaded(true);
+			if (skipped) setNotice('Some shared or invalid sync configs are excluded. You can review them in Things.');
+			return result.nextCursor ?? null;
 		} else {
-						const paths = await cloudFolderPaths(result.things, scope.ownerId, async id => (await apiRef.current.v1.things.get({ id }, options())).thing, assertCurrent);
+						const paths = await cloudFolderPaths(result.things, scope.ownerId, async id => (await apiRef.current.v1.things.get({ id }, { ...options(), storageMode: 'cloud' })).thing, assertCurrent);
 			assertCurrent();
 			setFolders((previous) => [...new Map([...(cursor ? previous : []), ...paths].map(row => [row.id, row])).values()]);
 			setFolderCursor(result.nextCursor ?? null);
 		}
+		return null;
 	};
 	useEffect(() => {
 		const unsubscribe = observeSavedSyncConnections(scope, generation, saved => {
@@ -352,6 +371,17 @@ function Connections({
 		const leave = () => controller.current?.abort();
 		window.addEventListener('pagehide', leave);
 		document.addEventListener('visibilitychange', hidden);
+		const recovered = (event: Event) => {
+			const detail = (event as CustomEvent<{ key: string; previous: string | null; raw: string | null }>).detail;
+			if (detail?.key !== key || detail.previous !== raw.current || window.localStorage.getItem(key) !== detail.raw) return;
+			try {
+				const next = new Map(readConfigurationDrafts(detail.raw, scope.deviceId).map(row => [row.id, row]));
+				raw.current = detail.raw;
+				retainedDrafts.current = next;
+				setDraft(current => current ? next.get(current.id) ?? null : null);
+			} catch { /* Preserve the existing verified draft journal. */ }
+		};
+		window.addEventListener(SYNC_ENROLLMENT_RECOVERED_EVENT, recovered);
 		window.addEventListener('storage', changed);
 		return () => {
 			unsubscribe();
@@ -362,6 +392,8 @@ function Connections({
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);
+			window.removeEventListener(SYNC_ENROLLMENT_RECOVERED_EVENT, recovered);
+			if ([...retainedDrafts.current.values()].some(row => row.enrollment)) window.dispatchEvent(new Event(SYNC_ENROLLMENT_WAKE_EVENT));
 			window.removeEventListener('pagehide', leave);
 			document.removeEventListener('visibilitychange', hidden);
 		};
@@ -439,7 +471,7 @@ function Connections({
 			}, cause => cause);
 			check();
 			const read = async () => {
-				const response = await apiRef.current.v1.things.get({ id }, transport);
+				const response = await apiRef.current.v1.things.get({ id }, { ...transport, storageMode: 'cloud' });
 				check();
 				const saved = readOwnedFileSyncConfiguration(response.thing, scope.ownerId);
 				if (saved.id !== id || saved.configuration.deviceId !== scope.deviceId || saved.configuration.sourceKind !== 'photos')
@@ -471,7 +503,7 @@ function Connections({
 			}
 		}
 	};
-	const transfer = (id: string) => {
+	const transfer = (id: string, enroll = false) => {
 		void run(async (assertActive) => {
 			const requested = connectionsRef.current.find(row => row.id === id);
 			if (!requested) throw Error('Refresh this device’s connections before continuing.');
@@ -479,7 +511,7 @@ function Connections({
                 assertCurrent: assertActive,
                 hasDraft: id => !draftJournalCurrent.current || retainedDrafts.current.has(id) || hasSavedSyncDraft(scope, id),
                 get: async id => {
-                    const value = (await apiRef.current.v1.things.get({ id }, { ...options(), expectedApiOrigin: scope.origin })).thing;
+                    const value = (await apiRef.current.v1.things.get({ id }, { ...options(), expectedApiOrigin: scope.origin, storageMode: 'cloud' })).thing;
                     assertActive();
                     const current = readOwnedFileSyncConfiguration(value, scope.ownerId);
                     if (current.id === id && current.configuration.deviceId === scope.deviceId && !remember(current))
@@ -491,6 +523,16 @@ function Connections({
             assertActive();
             acceptSave(saved);
             if (appOwned) {
+                if (enroll && saved.configuration.sourceKind !== 'photos') {
+                    try {
+                        await enrollNativeFolderSync(saved, { ...scope, rootId: saved.id }, generation,
+                            intervalDrafts[saved.id] ?? syncJobs[saved.id]?.intervalMs, controller.current?.signal);
+                        assertActive(); setAdmissionFailed(previous => ({ ...previous, [saved.id]: false }));
+                    } catch (cause) {
+                        assertActive(); setAdmissionFailed(previous => ({ ...previous, [saved.id]: true })); throw cause;
+                    }
+                    return;
+                }
                 void startNativeSyncTask(saved, { ...scope, rootId: saved.id }, generation).catch(cause => {
                     if (mounted.current && !rootIdentity.read().pending && rootIdentity.read().generation === generation && runtimeOrigin() === scope.origin) {
                         const message = cause instanceof Error ? cause.message : 'Transfer could not start.';
@@ -684,32 +726,45 @@ function Connections({
 			}
 		}, id);
 	};
-	const start = () =>
-		edit({
-			version: 1,
-			id: crypto.randomUUID(),
-			baseUpdatedAt: null,
-			pending: false,
-			exclusions: '',
-			configuration: {
-				...newFileSyncConfiguration({
-					name: roots[0]?.name || 'Folder connection',
-					deviceId: scope.deviceId,
-					localRootId: roots[0]?.id || 'unselected',
-					remoteFolderId: 'unselected',
-					sourceKind: roots[0]?.sourceKind
-				}),
-				localRootId: roots[0]?.id ?? '',
-				remoteFolderId: ''
-			}
-		});
+	const picked = folderManagement?.picked;
+	const handledPick = useRef<MobileFolder | undefined>(undefined);
+	const add = (root: MobileFolder) => {
+		const next = newSyncConfigDraft(root, scope.deviceId, !appOwned || root.sourceKind === 'photos');
+		revealDraft(next.id);
+		edit(next);
+	};
+	const discover = async (assertActive: () => void, rootId?: string) => {
+		let cursor = await load('connections');
+		const seen = new Set<string>();
+		while (cursor && (!rootId || !connectionsRef.current.some(row => row.configuration.localRootId === rootId))) {
+			if (seen.has(cursor)) throw Error('The sync config list repeated a page. Refresh and try again.');
+			seen.add(cursor);
+			cursor = await load('connections', cursor);
+			assertActive();
+		}
+	};
+	const setUpFolder = (root: MobileFolder) => void run(async check => {
+		await discover(check, root.id);
+		const existing = connectionsRef.current.find(row => row.configuration.localRootId === root.id);
+		const retained = [...retainedDrafts.current.values()].find(row => row.configuration.localRootId === root.id);
+		if (retained) edit(retained);
+		else if (existing) setSelectedId(existing.id);
+		else add(root);
+	});
+	useEffect(() => {
+		if (!picked || handledPick.current === picked || busy || !ready || storageError || !rootsReady) return;
+		handledPick.current = picked;
+		setUpFolder(picked);
+		// The picker publishes a new object only after observing the exact grant.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [picked, busy, ready, storageError, rootsReady]);
 	const open = (id: string, replace = false) =>
 		void run(async (assertCurrent) => {
 			setSelectedId(id);
 			setResourceDraftValid(resourceValidity.current.get(id) ?? true);
 			const retained = !replace && retainedDrafts.current.get(id);
 			if (retained) { persist(retained); setConflict(null); return; }
-			const result = await apiRef.current.v1.things.get({ id }, options());
+			const result = await apiRef.current.v1.things.get({ id }, { ...options(), storageMode: 'cloud' });
 			assertCurrent();
 			const saved = readOwnedFileSyncConfiguration(result.thing, scope.ownerId);
 			if (saved.configuration.deviceId !== scope.deviceId || saved.id !== id) throw Error('This connection belongs to another device.');
@@ -723,116 +778,137 @@ function Connections({
 			});
 			setConflict(null);
 		});
-	const save = () =>
-		void run(async (assertCurrent) => {
-			if (!draft || !ready) return;
-			if (!resourceDraftValid) throw Error('Correct the resource limit fields before saving.');
-			let prepared = draft;
-            if (draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId) {
-                if (!draft.configuration.localRootId) throw Error('Choose a device folder first.');
-                const result = await apiRef.current.v1.deviceFolders.resolve({ deviceId: scope.deviceId, connectionId: draft.id, name: roots.find(root => root.id === draft.configuration.localRootId)?.name || (draft.configuration.sourceKind === 'photos' ? 'Photo Library' : draft.configuration.name) }, options());
-                const destination = result.folder as CloudFolderPath;
-                assertCurrent();
-                prepared = { ...draft, configuration: { ...draft.configuration, remoteFolderId: destination.id } };
-                persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
-            }
-            const pending = { ...prepared, configuration: canonicalDraftConfiguration(prepared), pending: true };
-			if (pending.configuration.photoAutomation) {
-				for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await requireCapability(feature, minimum);
-				assertCurrent();
-			}
-			if (pending.configuration.resourceLimits) {
-				for (const [feature, minimum] of Object.entries({ ...FILE_SYNC_RESOURCE_REQUIREMENTS, ...fileSyncDownloadRequirements(pending.configuration) })) await requireCapability(feature, minimum);
-			} else if (pending.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
-			persist(pending); // Must succeed before even starting the first write attempt.
-			let dispatched = false;
-			let saved: SavedFileSyncConfiguration;
-			try {
-				saved = await saveConfigurationDraft(pending, scope, {
-					assertCurrent,
-					get: async (id) => (await apiRef.current.v1.things.get({ id }, options())).thing,
-					create: (id, configuration) => {
-						dispatched = true;
-						return apiRef.current.v1.things.create({ shareId: id, thingtime: ['file-sync'], crystal: configuration, acl: ['tt:user'] }, options());
-					},
-					update: (id, configuration, expectedUpdatedAt) => {
-						dispatched = true;
-						return apiRef.current.v1.things.update({ id, crystal: configuration, expectedUpdatedAt, replaceCrystal: true }, options());
-					},
-					verifyDeviceRoot: async (deviceId, rootId) => {
-						await authorizeDevice(deviceId, controller.current!.signal);
-						assertCurrent();
-						const access = await requestFolders(scope.ownerId, { action: 'list' }, controller.current!.signal);
-						assertCurrent();
-						if (!access.roots.some((root) => root.id === rootId))
-							throw Error('Folder access was removed. Restore access to this folder before retrying.');
-					}
-				});
-			} catch (cause) {
-				// A first attempt that never reached a mutation can remain editable.
-				// A restored pending save may still have an older request in flight.
-				assertCurrent();
-				if (!draft.pending && !dispatched && !(cause instanceof ConfigurationConflict)) persist(prepared);
-				throw cause;
-			}
+	const verifyDeviceRoot = async (deviceId: string, rootId: string) => {
+		await authorizeDevice(deviceId, controller.current!.signal);
+		assertCurrent();
+		const access = await requestFolders(scope.ownerId, { action: 'list' }, controller.current!.signal);
+		assertCurrent();
+		if (!access.roots.some(root => root.id === rootId))
+			throw Error('Folder access was removed. Restore access to this folder before retrying.');
+	};
+	const nativeFolderBusy = !!(nativeTask?.active || nativePhotoTransferActive);
+	const mobileFolderBusy = !host && nativeFolderBusy;
+	const canQueueDraft = (row: ConfigurationDraft) => appOwned && nativeFolderBusy && row.baseUpdatedAt === null &&
+		rootsReady && !row.configuration.paused && row.configuration.sourceKind !== 'photos' &&
+		roots.some(root => root.id === row.configuration.localRootId);
+	const isConfigRunning = (id: string) => activeTransfer === id || (ownNativeTask?.active && ownNativeTask.scope.rootId === id) || nativePhotoRunActive(nativePhotoRuns.get(id));
+	const readCloud = async (id: string) => (await apiRef.current.v1.things.get({ id }, { ...options(), storageMode: 'cloud' })).thing;
+	const completeEnrollment = async (saved: SavedFileSyncConfiguration, intent: SyncEnrollmentIntent, queue: boolean) => {
+		setNotice('Sync config saved. Confirming automatic setup on this device.');
+		try {
+			const job = await enrollNativeFolderSync(saved, { ...scope, rootId: saved.id }, generation,
+				intent.intervalMs, controller.current?.signal, { queue });
 			assertCurrent();
-			persist(null);
-			setConflict(null);
-			acceptSave(saved);
-			if (photoAutomation && saved.configuration.sourceKind === 'photos') window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
-			setNotice('Connection saved. Supported transfers can run while this app stays open.');
+			persist(null, saved.id, draft?.id === saved.id);
+			setAdmissionFailed(previous => ({ ...previous, [saved.id]: false }));
+			setTransferErrors(previous => ({ ...previous, [saved.id]: '' }));
+			setNotice(job.pendingFolderValidation ? 'Sync config saved. Folder access will be checked when the device is free.' : 'Sync config saved. Automatic sync is on.');
+		} catch (cause) {
+			assertCurrent();
+			setAdmissionFailed(previous => ({ ...previous, [saved.id]: true }));
+			setNotice('Sync config saved. Automatic setup is pending.');
+			setTransferErrors(previous => ({ ...previous, [saved.id]: cause instanceof Error ? cause.message : 'Could not start automatic sync.' }));
+		}
+	};
+	const save = (startAfterSave: boolean) =>
+		void run(async (assertCurrent) => {
+			if (!draft || !ready || isConfigRunning(draft.id)) return;
+			const release = startAfterSave ? claimSyncEnrollment(scope) : undefined;
+			if (startAfterSave && !release) throw Error('Automatic setup is already being checked.');
+			try {
+				const deferRootVerification = startAfterSave && canQueueDraft(draft);
+				if (mobileFolderBusy && !deferRootVerification && !draft.enrollment?.savedRevision) return;
+				const verify = async (deviceId: string, rootId: string) => {
+					assertCurrent();
+					if (deferRootVerification && deviceId === scope.deviceId && roots.some(root => root.id === rootId)) return;
+					await verifyDeviceRoot(deviceId, rootId);
+				};
+				if (!resourceDraftValid) throw Error('Correct the resource limit fields before saving.');
+				if (startAfterSave && (!appOwned || draft.configuration.paused || draft.configuration.sourceKind === 'photos' || scope.dataPlane !== 'home')) throw Error('This sync config cannot start automatically on this device.');
+				if (draft.enrollment && !startAfterSave) throw Error('Retry automatic setup, or keep the saved config as it is.');
+				const enrollment = startAfterSave ? draft.enrollment ?? { transport: 'local' as const, intervalMs: intervalDrafts[draft.id] ?? syncJobs[draft.id]?.intervalMs ?? 300_000 } : undefined;
+				if (enrollment?.savedRevision) {
+					const saved = await readPendingSyncEnrollment(draft, scope, { get: readCloud, assertCurrent });
+					acceptSave(saved);
+					await completeEnrollment(saved, enrollment, deferRootVerification);
+					return;
+				}
+				let prepared = draft;
+	            if (draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId) {
+	                if (!draft.configuration.localRootId) throw Error('Choose a device folder first.');
+	                await verify(scope.deviceId, draft.configuration.localRootId);
+	                const result = await apiRef.current.v1.deviceFolders.resolve({ deviceId: scope.deviceId, connectionId: draft.id, name: roots.find(root => root.id === draft.configuration.localRootId)?.name || (draft.configuration.sourceKind === 'photos' ? 'Photo Library' : draft.configuration.name) }, options());
+	                const destination = result.folder as CloudFolderPath;
+	                assertCurrent();
+	                prepared = { ...draft, configuration: { ...draft.configuration, remoteFolderId: destination.id } };
+	                persist(prepared); setFolders(previous => [...previous.filter(folder => folder.id !== destination.id), destination]);
+	            }
+	            const pending = { ...prepared, configuration: canonicalDraftConfiguration(prepared), pending: true, enrollment };
+				if (pending.configuration.photoAutomation) {
+					for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await requireCapability(feature, minimum);
+					assertCurrent();
+				}
+				if (pending.configuration.resourceLimits) {
+					for (const [feature, minimum] of Object.entries({ ...FILE_SYNC_RESOURCE_REQUIREMENTS, ...fileSyncDownloadRequirements(pending.configuration) })) await requireCapability(feature, minimum);
+				} else if (pending.configuration.ignoreRules) await requireCapability('api.things', '1.38.0');
+				persist(pending); // Must succeed before even starting the first write attempt.
+				let dispatched = false;
+				let saved: SavedFileSyncConfiguration;
+				try {
+					saved = await saveConfigurationDraft(pending, scope, {
+						assertCurrent,
+						get: readCloud,
+						create: (id, configuration) => {
+							dispatched = true;
+							return apiRef.current.v1.things.create({ shareId: id, thingtime: ['file-sync'], crystal: configuration, acl: ['tt:user'] }, options());
+						},
+						update: (id, configuration, expectedUpdatedAt) => {
+							dispatched = true;
+							return apiRef.current.v1.things.update({ id, crystal: configuration, expectedUpdatedAt, replaceCrystal: true }, options());
+						},
+						verifyDeviceRoot: verify
+					});
+				} catch (cause) {
+					// A first attempt that never reached a mutation can remain editable.
+					// A restored pending save may still have an older request in flight.
+					assertCurrent();
+					if (!draft.pending && !dispatched && !(cause instanceof ConfigurationConflict)) persist(prepared);
+					throw cause;
+				}
+				assertCurrent();
+				setConflict(null);
+				acceptSave(saved);
+				setSelectedId(saved.id);
+				if (enrollment) {
+					const confirmed = { ...enrollment, savedRevision: saved.updatedAt };
+					// Clearing the draft before admission loses the user's explicit
+					// request if the app leaves this view at the next await.
+					persist({ ...pending, enrollment: confirmed });
+					await completeEnrollment(saved, confirmed, deferRootVerification);
+				} else {
+					persist(null);
+					if (photoAutomation && saved.configuration.sourceKind === 'photos') window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
+					setNotice('Sync config saved.');
+				}
+			 } finally { release?.(); }
 		});
-	return (
-		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={4} paddingTop={3} minWidth={0}>
-			<Flex justify="space-between" align="center" gap={2} wrap="wrap">
-				<Text fontSize="13px" fontWeight={700}>
-					Sync connections
-				</Text>
-				<Flex gap={2} wrap="wrap">
-					<Button
-						size="sm"
-						minHeight="40px"
-						variant="ghost"
-						isDisabled={busy}
-						onClick={() =>
-							void run(async () => {
-								await load('connections');
-								await load('folders');
-							})
-						}
-					>
-						Refresh
-					</Button>
-					<Button size="sm" minHeight="40px" variant="outline" isDisabled={!ready || busy || !!storageError || !roots.length} onClick={start}>
-						Add connection
-					</Button>
-				</Flex>
-			</Flex>
-			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				{photoAutomation ? 'Enabled Photos backups resume when you open Thingtime and check again every 5 minutes while it’s open. iOS chooses when to allow background work. Your network, charging, upload limits, and pauses still apply.' : appOwned && !host ? 'You can leave this screen while Thingtime stays open. iOS may let the current upload finish in the background. Open Thingtime to continue saved work with the same account and folder access. Pause sync keeps a job paused until you resume it.' : appOwned ? 'Started transfers continue when you leave this screen or close the Mac window. Reopen this connection to review conflicts or stop a transfer. Quitting interrupts transfers; unfinished jobs resume when you reopen Thingtime with the same account and access. Stop transfer keeps a job paused until you retry.' :
-					'Transfer selected folders in either direction while this app stays open. Background transfers are still being added.'}
-				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
-			</Text>
-			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
-				<SyncDetailsSection title="Recover device files" retainChildren><NativeFileRecovery
-					roots={roots.filter((root) => supportsMobileFolderPublication(root, capabilities))}
-					busy={busy}
-					versionsScopeKey={supportsNativeFileVersions(capabilities) ? key : undefined}
-					perform={(work) =>
-						run(async (assertActive) => {
-							await work(async (request) => {
-								assertActive();
-								await authorizeDevice(scope.deviceId, controller.current!.signal);
-								assertActive();
-								const result = await requestFolders(scope.ownerId, request, controller.current!.signal);
-								assertActive();
-								return result;
-							});
-						})
-					}
-				/></SyncDetailsSection>
-			)}
-			{connections.map((saved) => {
+	const renderHeader = () => <SyncEditorBlocks documentKey="file-sync-folder-editor" title="Folders & sync configs" blocks={syncFolderEditorBlocks}
+		scopeKey={key} accountTransport={reviewTransport} scope={{ editor: {
+			canChoose: !!folderManagement, chooseDisabled: !rootsReady || !loaded || busy || !!folderManagement?.busy || !!folderManagement?.transferring,
+			busy: viewBusy || !!folderManagement?.busy, cold: (viewBusy || folderManagement?.busy) && !roots.length && !connections.length,
+			description: appOwned ? 'Choose a folder, then set where its files go. You can add more than one sync config to each folder.' :
+				'Choose a folder and set where its files go. This app can run supported transfers while it is open.',
+			notice: folderManagement?.waiting ? 'Folder access will refresh when Thingtime is active.' : notice,
+			error: storageError || error || folderManagement?.error || ''
+		} }} actions={{
+			choose: () => { if (rootsReady && loaded && !busy && !folderManagement?.busy && !folderManagement?.transferring) return folderManagement?.run({ action: 'choose' }); },
+			refresh: () => void run(async () => {
+				await load('connections');
+				await load('folders');
+				await folderManagement?.run({ action: 'list' });
+			})
+		}} />;
+	const renderSaved = (saved: SavedFileSyncConfiguration) => {
 				const automatic = photoAutomation && saved.configuration.sourceKind === 'photos';
 				const nativeOwns = soleNativePhotoRun && automatic;
 				const observed = nativeOwns ? nativePhotoRuns.get(saved.id) : undefined;
@@ -841,19 +917,21 @@ function Connections({
 				const continuation = continuations[saved.id]?.revision === saved.updatedAt ? continuations[saved.id] : undefined;
 				const continuationHeld = nativeProgress?.continuation === 'held';
 				const continuationActive = nativeProgress?.continuation === 'active';
-				const job = automatic && !nativeOwns ? photoJobs[saved.id] : undefined;
+				const job = !nativeOwns ? syncJobs[saved.id] : undefined;
 				const currentJob = job?.reviewed.updatedAt === saved.updatedAt ? job : undefined;
 				const pausing = pausingIds.includes(saved.id);
 				const task = !nativeOwns && ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
 				const progress: ConnectionProgress | null = nativeOwns ? null : task?.progress ?? transfers[saved.id] ?? readStampedCache<ConnectionProgress>(progressKey(saved.id));
 				const running = nativeOwns ? nativePhotoRunActive(nativeRun) : !!task?.active || (viewBusy && activeTransfer === saved.id);
-				const taskPaused = nativeOwns ? nativeProgress?.stage === 'paused' || continuationHeld : job?.state === 'paused' || (task?.status === 'paused' && !task.waiting);
+				const taskPaused = nativeOwns ? nativeProgress?.stage === 'paused' || continuationHeld : currentJob?.state === 'paused' || (task?.status === 'paused' && !task.waiting);
 				const paused = saved.configuration.paused || taskPaused;
-				const jobWaiting = !running && !paused ? photoSyncWaitingMessage(currentJob?.waitReason, currentJob?.minimumPartBytes) : '';
-				const waiting = !paused && (nativeOwns ? nativeProgress?.stage === 'waiting' : (task?.waiting ?? (!!jobWaiting || progress?.waiting === true)));
+				const admitted = !!currentJob && syncJobEnabled(currentJob);
+				const queued = admitted && !!currentJob?.pendingFolderValidation;
+				const jobWaiting = !running && !paused ? photoSyncWaitingMessage(currentJob?.waitReason, currentJob?.minimumPartBytes, saved.configuration.sourceKind === 'photos') : '';
+				const waiting = !paused && (nativeOwns ? nativeProgress?.stage === 'waiting' : (task?.waiting ?? (!!jobWaiting || (!currentJob && progress?.waiting === true))));
 				const runError = transferErrors[saved.id] || (!running && !waiting && !paused &&
-					(task?.status === 'error' || currentJob?.state === 'attention' || (!task && progress?.message && !['complete', 'retained'].includes(progress.stage))
-						? progress?.message || 'Sync needs attention. Retry this connection.' : ''));
+					(task?.status === 'error' || currentJob?.state === 'attention' || (!task && !currentJob && progress?.message && !['complete', 'retained'].includes(progress.stage))
+						? currentJob?.state === 'attention' ? syncJobAttentionMessage(currentJob) : progress?.message || 'Sync needs attention. Retry this config.' : ''));
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				const photos = saved.configuration.sourceKind === 'photos' || nativeRoot?.sourceKind === 'photos';
 				const preparation = photos && running && !waiting && !task?.stopping ? photoDownloadPreparation(progress?.photoDownload) : undefined;
@@ -866,11 +944,12 @@ function Connections({
 					(progress?.message === 'Waiting for the selected network.' || progress?.message?.startsWith('Waiting for Wi-Fi.'));
 				const statusMessage = wifiWait ? photoSyncWaitingMessage('wifi') : jobWaiting;
 				const statusProgress = statusMessage ? { stage: 'checking' as const, confirmed: 0, total: 0, ...progress, message: statusMessage } : progress;
-				const automaticallyWaiting = nativeOwns ? nativeProgress?.stage === 'ready' || (waiting && nativeProgress?.syncWait === 'data-budget') :
+				const automaticallyWaiting = admitted && !automatic && !running && !paused && !runError ? true : nativeOwns ? nativeProgress?.stage === 'ready' || (waiting && nativeProgress?.syncWait === 'data-budget') :
 					automaticEnabled && waiting && (currentJob?.waitReason === 'inactive' ||
 					(currentJob?.waitReason === 'data-budget' && (currentJob.minimumPartBytes !== undefined || (currentJob.retryAt ?? Infinity) > Date.now())));
+				const retryAutomatic = !photos && (admissionFailed[saved.id] || (!!job?.intervalMs && (taskPaused || currentJob?.state === 'attention')));
 				const actionLabel = pausing || task?.stopping ? 'Pausing…' : running ? 'Pause sync' :
-					automatic && paused ? 'Resume automatic backup' :
+					automatic && paused ? 'Resume automatic backup' : currentJob?.failureReason === 'write-approval' ? 'Approve folder writes' : retryAutomatic ? (taskPaused ? 'Resume automatic sync' : 'Retry automatic sync') :
 					saved.configuration.paused ? saved.configuration.mode === 'backup' ? 'Start backup' : 'Resume sync' :
 					waiting ? 'Check again' : taskPaused ? 'Resume sync' :
 					runError || nativeProgress?.stage === 'needs-review' || (progress && !['complete', 'retained'].includes(progress.stage)) ? 'Retry transfer' :
@@ -905,15 +984,20 @@ function Connections({
 					roots.some((root) => root.id === saved.configuration.localRootId);
 				return (
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
-						path={(nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
-                        destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Cloud destination unavailable · refresh folders'}
+						path={folderManagement ? '' : (nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
+                        destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Saved cloud folder'}
+                        summaryContent={active && appOwned && !nativeOwns && <SyncConfigActivity scope={progressScope} scopeKey={`${key}:activity:${saved.id}`}
+                            currentOrigin={runtimeOrigin} generation={generation} accountTransport={reviewTransport} live={task?.active ? task.activity : undefined} />}
                         error={runError || ''}
                         preparation={preparation}
                         photoQueue={photoQueue}
                         photoActivity={nativeOwns && photos && rootsReady && nativeRoot ? nativePhotoActivityDisplay(nativeRun, paused) : undefined}
                         automation={nativeOwns ? nativePhotoRunSchedule(nativeRun) : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
-                            photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' : undefined}
-                        pauseAction={automatic && !running && !paused && !pausing ? { label: 'Pause sync', run: () => pausePhotoAutomation(saved.id) } : undefined}
+                            photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' :
+                            currentJob?.state === 'attention' ? 'Automatic sync needs attention.' :
+                            admitted && !paused && !running && !waiting ? automaticEnabled ? queued ? undefined : 'Automatic sync is on.' : 'Automatic sync is disabled in Activity manager.' : undefined}
+                        pauseAction={(automatic || admitted) && !running && !paused && !pausing ? { label: 'Pause sync', run: () => automatic ? pausePhotoAutomation(saved.id) :
+                            pauseNativeSyncJob(progressScope, generation).catch(cause => setTransferErrors(previous => ({ ...previous, [saved.id]: cause instanceof Error ? cause.message : 'Pause could not be saved.' }))) } : undefined}
                         continuationAction={nativeOwns && photoContinuation && !saved.configuration.paused && nativePhotoCanContinue(nativeRun) ? {
                             label: continuation?.pending ? 'Requesting background processing…' : 'Run in Background',
                             disabled: pausing || continuation?.pending,
@@ -927,56 +1011,21 @@ function Connections({
                             run: () => {
                                 if (running && automatic) return pausePhotoAutomation(saved.id);
                                 if (running) { if (task?.active) return pauseNativeSyncJob(task.scope, generation).catch(cause => setError(cause instanceof Error ? cause.message : 'Pause could not be saved.')); controller.current?.abort(); }
-                                else transfer(saved.id);
+                                else transfer(saved.id, retryAutomatic);
                             }
                         }}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
 						glance={nativeOwns ? nativePhotoRunGlance(nativeRun) : syncConnectionGlance({ deviceLabel: capabilities?.platform === 'ios' ? 'iPhone' : capabilities?.platform === 'android' ? 'Device' : 'Mac', progress, online: rootsReady, active: running, paused, waiting, preparing: !!preparation, mode: saved.configuration.mode, ...(task?.transferSeries ? { rates: { upload: task.transferSeries.read({ direction: 'upload', unit: 'Mbps', windowMs: 5000 }), download: task.transferSeries.read({ direction: 'download', unit: 'Mbps', windowMs: 5000 }) } } : {}) })}
-                        stats={nativeOwns ? pausing ? 'Pausing…' : saved.configuration.paused ? 'Paused' : rootsReady && !nativeRoot ? 'Folder access missing' : nativePhotoRunLabel(nativeRun) : preparation ? '' : syncFolderActivityLabel({ paused: saved.configuration.paused || (automatic && taskPaused), rootsReady, hasRoot: !!nativeRoot,
+                        stats={nativeOwns ? pausing ? 'Pausing…' : saved.configuration.paused ? 'Paused' : rootsReady && !nativeRoot ? 'Folder access missing' : nativePhotoRunLabel(nativeRun) : queued ? 'Queued · checking folder access when the device is free.' : preparation ? '' : syncFolderActivityLabel({ paused, rootsReady, hasRoot: !!nativeRoot,
                             taskPaused, running, waiting, failed: !!runError, stopping: pausing || task?.stopping, progress: statusProgress, photos })}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
-						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
-							<Text fontSize="13px" fontWeight={600}>
-								{saved.configuration.name}
-							</Text>
-							{nativeRoot?.sourceKind === 'photos' && (
-								<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-									{photoAccessDescription(nativeRoot)}
-								</Text>
-							)}
-							<Text fontSize="12px">
-								{rootsReady && !sourceAllowed
-									? 'Source access or backup policy needs review'
-									: !supported
-									? downloading || twoWay
-										? 'Downloads and two-way sync need folder approval and an updated app for recoverable deletions'
-										: 'This direction is not available yet'
-									: !supportsMobileSyncConditions(capabilities)
-									? 'Update this app to transfer files'
-									: nativeOwns || !rootsReady || running || saved.configuration.paused || taskPaused || waiting || runError ? null : twoWay
-									? 'Ready for two-way sync with folder approval'
-									: downloading
-									? 'Ready to download with folder approval'
-										: appOwned ? 'Ready to upload' : 'Ready for a foreground upload'}
-								{rootsReady && !nativeRoot ? ' · Folder access missing' : ''}
-							</Text>
-							{running && progress?.path && progress.stage === 'transferring' && (
-								<Text fontSize="12px" marginTop={1} overflowWrap="anywhere">
-									{progress.path}: {Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%
-								</Text>
-							)}
-							{progress?.stage === 'retained' && (
-								<Button as="a" href="/history?storage=home&kind=file" size="xs" variant="link" mt={2}>
-									View saved versions
-								</Button>
-							)}
-						</Box>
-						<Button size="sm" minHeight="40px" variant="outline" isDisabled={viewBusy || !!storageError || !ready} onClick={() => open(saved.id)}>
-							Edit
-						</Button>
+						<SyncEditorBlocks documentKey="file-sync-edit-actions" title="Sync config actions" blocks={syncConfigEditBlocks}
+							scopeKey={`${key}:${saved.id}`} accountTransport={reviewTransport}
+							scope={{ config: { disabled: viewBusy || isConfigRunning(saved.id) || !!storageError || !ready, retained: progress?.stage === 'retained' } }}
+							actions={{ edit: () => { if (!viewBusy && !isConfigRunning(saved.id) && !storageError && ready) open(saved.id); } }} />
 
-						{active && selectedId === saved.id && appOwned && !!host && <Box width="100%" minW={0}>
+						{active && selectedId === saved.id && appOwned && !photos && <Box width="100%" minW={0}>
 							<SyncDetailsSection title="Automatic sync"><DesktopSyncAutomation saved={saved} scope={{ ...scope, rootId: saved.id }} generation={generation}
 								disabled={!allowed || saved.configuration.paused || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
 						</Box>}
@@ -1015,31 +1064,74 @@ function Connections({
 					</Flex>
 					</SyncFolderCard>
 				);
+	};
+	const savedIds = new Set(connections.map(saved => saved.id));
+	const groups = new Map<string, { root?: MobileFolder; saved: SavedFileSyncConfiguration[]; drafts: ConfigurationDraft[] }>(
+		roots.map(root => [root.id, { root, saved: [], drafts: [] }])
+	);
+	const groupFor = (id: string) => {
+		let group = groups.get(id);
+		if (!group) { group = { saved: [], drafts: [] }; groups.set(id, group); }
+		return group;
+	};
+	for (const saved of connections) groupFor(saved.configuration.localRootId).saved.push(saved);
+	for (const row of retainedDrafts.current.values()) if (!savedIds.has(row.id)) groupFor(row.configuration.localRootId).drafts.push(row);
+	return (
+		<Box as="section" aria-label="Folders & sync configs" minWidth={0} marginTop={3}>
+			{renderHeader()}
+			{groups.size === 0 && loaded && rootsReady && !error && !folderManagement?.error && <Text fontSize="sm" marginBlock={3}>No folders added yet.</Text>}
+			{[...groups].map(([id, { root, saved, drafts }]) => {
+				const hasConfigs = !!(saved.length || drafts.length);
+				const nativeDisabled = !!folderManagement?.busy || !!folderManagement?.transferring || viewBusy;
+				return <Box key={id} as="section" aria-label={root?.name || 'Folder access unavailable'} minW={0} padding={3} marginTop={3}
+					border="1px solid var(--tt-border, #ececef)" borderRadius="12px" overflowWrap="anywhere">
+					<SyncEditorBlocks documentKey="file-sync-source" title="Device folder" blocks={syncSourceBlocks}
+						scopeKey={`${key}:${id}`} accountTransport={reviewTransport} scope={{ source: {
+							name: root?.name || (saved[0]?.configuration.sourceKind === 'photos' ? 'Photo Library' : 'Folder access unavailable'),
+							path: root?.sourceKind !== 'photos' && supportsNativeSourcePaths(capabilities) && validNativeSourcePath(root?.sourcePath) ? root?.sourcePath : '',
+							count: `${saved.length} sync ${saved.length === 1 ? 'config' : 'configs'}`,
+							status: !root ? (rootsReady ? 'Restore access on this device to continue syncing.' : 'Checking folder access') : folderManagement?.checked[id] || '',
+							canAdd: !!root, addLabel: hasConfigs ? 'Add sync config' : 'Set up sync',
+							disabled: !ready || !loaded || viewBusy || !!storageError, canManage: !!root && !!folderManagement, nativeDisabled
+						} }} actions={{
+							add: () => { if (root && ready && loaded && !viewBusy && !storageError) { if (hasConfigs) add(root); else setUpFolder(root); } },
+							scan: () => { if (root && !nativeDisabled) return folderManagement?.run({ action: 'scan', rootId: id }); },
+							remove: () => { if (root && !nativeDisabled) return folderManagement?.run({ action: 'remove', rootId: id }); }
+						}} />
+					{saved.map(renderSaved)}
+					{drafts.map(row => <SyncFolderCard key={row.id} title={row.configuration.name || 'New sync config'} description="Unsaved sync config"
+						stats="Draft" path="" scopeKey={`${key}:draft:${row.id}`} accountTransport={reviewTransport}
+						expanded={selectedId === row.id} editorSlotId={`${editorPrefix}-${row.id}`}
+						onToggle={expanded => { if (expanded && !viewBusy && ready && !storageError) open(row.id); else if (!expanded && selectedId === row.id) setSelectedId(null); }}>
+						{null}
+					</SyncFolderCard>)}
+				</Box>;
 			})}
-			{connectionCursor && (
-				<Button size="sm" minHeight="40px" isDisabled={busy} onClick={() => void run(() => load('connections', connectionCursor))}>
-					More connections
-				</Button>
+			{connectionCursor && <Button size="sm" minHeight="44px" isDisabled={viewBusy} onClick={() => void run(() => load('connections', connectionCursor).then(() => {}))}>
+				More sync configs
+			</Button>}
+			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
+				<SyncDetailsSection title="Recover device files" retainChildren><NativeFileRecovery
+					roots={roots.filter((root) => supportsMobileFolderPublication(root, capabilities))}
+					busy={busy}
+					versionsScopeKey={supportsNativeFileVersions(capabilities) ? key : undefined}
+					perform={(work) =>
+						run(async (assertActive) => {
+							await work(async (request) => {
+								assertActive();
+								await authorizeDevice(scope.deviceId, controller.current!.signal);
+								assertActive();
+								const result = await requestFolders(scope.ownerId, request, controller.current!.signal);
+								assertActive();
+								return result;
+							});
+						})
+					}
+				/></SyncDetailsSection>
 			)}
-			{[...retainedDrafts.current.values()].filter(row => !connections.some(saved => saved.id === row.id)).map(row => (
-                <SettingsSection key={`draft-${row.id}`} eyebrow={row.configuration.name || 'New folder connection'} description="Unsaved connection settings"
-                    summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { if (!viewBusy && ready && !storageError) open(row.id); } else if (selectedId === row.id) setSelectedId(null); }}><Text fontSize="13px">Continue editing this draft below.</Text></SettingsSection>
-            ))}
 			{[...retainedDrafts.current.values()].map(draft => (
-				<SyncEditorPlacement key={draft.id} targetId={connections.some(saved => saved.id === draft.id) ? `${editorPrefix}-${draft.id}` : undefined}><Box hidden={selectedId !== draft.id} marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
-					<SyncConfigurationForm photoAutomation={photoAutomation} iosManagedResources={iosManagedSyncResources(capabilities)} sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={viewBusy || draft.pending || !ready} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceDraftChange={resourceDraft => { const latest = retainedDrafts.current.get(draft.id); if (latest) edit({ ...latest, resourceDraft }); }} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
-					{folderCursor && (
-						<Button size="sm" minHeight="40px" marginTop={2} isDisabled={busy} onClick={() => void run(() => load('folders', folderCursor))}>
-							More cloud folders
-						</Button>
-					)}
-					<Text fontSize="12px" marginTop={3}>
-						{draft.pending
-							? 'This save is not confirmed. Retry checks the same connection; its settings stay fixed until resolved.'
-							: storageError
-							? 'Draft changes have not been saved on this device.'
-							: 'Draft saved on this device. Saving settings does not grant permission to transfer files.'}
-					</Text>
+				<SyncEditorPlacement key={draft.id} targetId={`${editorPrefix}-${draft.id}`}><Box hidden={selectedId !== draft.id} marginTop={4} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={3}>
+					<SyncConfigurationForm photoAutomation={photoAutomation} iosManagedResources={iosManagedSyncResources(capabilities)} sourcePathsAvailable={supportsNativeSourcePaths(capabilities)} draft={draft} roots={roots} folders={folders} disabled={viewBusy || isConfigRunning(draft.id) || draft.pending || !ready} lockSource={roots.some(root => root.id === draft.configuration.localRootId)} scopeKey={`${key}:${generation}:${draft.id}`} accountTransport={reviewTransport} onChange={edit} onResourceDraftChange={resourceDraft => { const latest = retainedDrafts.current.get(draft.id); if (latest) edit({ ...latest, resourceDraft }); }} onResourceValidityChange={valid => { resourceValidity.current.set(draft.id, valid); if (selectedId === draft.id) setResourceDraftValid(valid); }} />
 					{conflict?.latest && (
 						<Box as="details" marginTop={3}>
 							<Box as="summary" cursor="pointer" paddingY={2} fontSize="13px">
@@ -1061,51 +1153,33 @@ function Connections({
 							/>
 						</Box>
 					)}
-					<Flex gap={2} marginTop={3} wrap="wrap">
-						<Button size="sm" minHeight="40px" isDisabled={busy || !ready || !!conflict || !resourceDraftValid} onClick={save}>
-							{draft.pending ? 'Retry save' : 'Save connection'}
-						</Button>
-						{!draft.pending && (
-							<Button size="sm" minHeight="40px" variant="ghost" isDisabled={busy || !ready} onClick={() => void run(async () => persist(null))}>
-								Discard draft
-							</Button>
-						)}
-						{conflict && (
-							<Button
-								size="sm"
-								minHeight="40px"
-								variant="outline"
-								isDisabled={busy || !ready}
-								onClick={() =>
-									conflict.latest
-										? open(draft.id, true)
-										: void run(async () => {
-												persist(null);
-												setConflict(null);
-										  })
-								}
-							>
-								{conflict.latest ? 'Replace draft with saved version' : 'Discard draft for deleted connection'}
-							</Button>
-						)}
-					</Flex>
+					<SyncEditorBlocks documentKey="file-sync-save-actions" title="Save sync config" blocks={syncLocalEditorActionBlocks}
+						scopeKey={`${key}:save:${draft.id}`} accountTransport={reviewTransport} scope={{ editor: {
+							status: draft.enrollment?.savedRevision ? 'Settings are saved. Retry automatic setup to finish this exact config.' :
+								draft.pending ? 'This save is not confirmed. Retry checks the same sync config.' :
+								mobileFolderBusy && !canQueueDraft(draft) ? 'Folder access is busy. Your draft is saved; apply it when this transfer finishes.' :
+								appOwned && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' ? 'Saving and syncing enables automatic checks on this device. Downloads may require folder approval.' : 'Draft saved on this device.',
+							canSync: appOwned && scope.dataPlane === 'home' && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' && !!draft.configuration.localRootId,
+							canSave: !draft.enrollment && (draft.baseUpdatedAt !== null || !appOwned || draft.configuration.sourceKind === 'photos' || draft.configuration.paused || scope.dataPlane !== 'home' || !draft.configuration.localRootId),
+							syncLabel: draft.enrollment?.savedRevision ? 'Retry automatic setup' : draft.pending ? 'Retry save & sync' : 'Save & sync',
+							saveLabel: draft.pending ? 'Retry save' : 'Save sync config',
+							canDiscard: !draft.pending, canKeepSaved: !!draft.enrollment?.savedRevision, saveDisabled: viewBusy || (mobileFolderBusy && !canQueueDraft(draft) && !draft.enrollment?.savedRevision) || isConfigRunning(draft.id) || !ready || !!conflict || !resourceDraftValid || !!storageError,
+							hasConflict: !!conflict, conflictLabel: conflict?.latest ? 'Replace draft with saved version' : 'Discard draft for deleted sync config',
+							hasMoreFolders: !!folderCursor, busy: viewBusy || !ready
+						} }} actions={{
+							'save-sync': () => save(true), save: () => save(false),
+							'keep-saved': () => void run(async () => {
+								if (!draft.enrollment?.savedRevision) return;
+								cancelSyncEnrollmentRecovery(scope);
+								persist(null);
+								setNotice('Saved settings kept. Check this config’s automatic sync status.');
+							}),
+							discard: () => void run(async () => { if (!draft.pending) { persist(null); setSelectedId(null); } }),
+							reload: () => { if (conflict?.latest) open(draft.id, true); else void run(async () => { persist(null); setSelectedId(null); setConflict(null); }); },
+							'more-folders': () => void run(() => load('folders', folderCursor).then(() => {}))
+						}} />
 				</Box></SyncEditorPlacement>
 			))}
-			{notice && (
-				<Text role="status" fontSize="12px" marginTop={2}>
-					{notice}
-				</Text>
-			)}
-			{storageError && (
-				<Text role="alert" color="orange.600" fontSize="12px" marginTop={2}>
-					{storageError}
-				</Text>
-			)}
-			{error && (
-				<Text role="alert" color="orange.600" fontSize="12px" marginTop={2} overflowWrap="anywhere">
-					{error}
-				</Text>
-			)}
 		</Box>
 	);
 }
@@ -1115,6 +1189,7 @@ export function SyncConfigurationForm({
 	roots,
 	folders,
 	disabled,
+	lockSource = false,
 	scopeKey,
 	accountTransport,
 	onChange,
@@ -1130,6 +1205,7 @@ export function SyncConfigurationForm({
 	roots: MobileFolder[];
 	folders: CloudFolderPath[];
 	disabled: boolean;
+	lockSource?: boolean;
 	scopeKey?: string;
 	accountTransport?: Parameters<typeof SyncIgnoreRulesEditor>[0]['accountTransport'];
 	onChange(draft: ConfigurationDraft): void;
@@ -1142,113 +1218,57 @@ export function SyncConfigurationForm({
 	const photos = selectedRoot?.sourceKind === 'photos' || c.sourceKind === 'photos';
 	const showPhotoControls = photos && (photoAutomation || !!c.photoAutomation);
 	const change = (patch: Partial<FileSyncConfiguration>) => onChange({ ...draft, configuration: { ...c, ...patch } });
-	const field = (name: string, label: string, child: React.ReactNode) => (
-		<FormControl isDisabled={disabled}>
-			<FormLabel htmlFor={`${prefix}-${name}`} fontSize="12px" marginBottom={1}>
-				{label}
-			</FormLabel>
-			{child}
-		</FormControl>
-	);
+	const key = scopeKey ?? `${draft.id}:${c.deviceId}`;
+	const rootOptions = c.localRootId && !selectedRoot ? [{ id: c.localRootId, name: 'Folder access missing' }, ...roots] : roots;
+	const fieldNames = ['name', 'source', 'mode', 'network', 'exclusions'];
+	const fieldScope = { form: {
+		ids: Object.fromEntries(fieldNames.map(name => [name, `${prefix}-${name}`])),
+		name: c.name, source: c.localRootId, mode: c.mode, network: c.network, disabled,
+		paused: c.paused, 'charging-only': c.chargingOnly, 'propagate-deletes': c.propagateDeletes,
+		exclusions: draft.exclusions, roots: rootOptions, canChooseSource: !lockSource,
+		modeDisabled: disabled || photos, isBackup: c.mode === 'backup', deleteDisabled: disabled || c.mode === 'backup',
+		photoAccess: selectedRoot?.sourceKind === 'photos' ? photoAccessDescription(selectedRoot) + '.' : ''
+	} };
 	return (
 		<Stack spacing={3} fontSize="13px" minWidth={0}>
-			{field(
-				'name',
-				'Connection name',
-				<Input id={`${prefix}-name`} value={c.name} onChange={(e) => change({ name: e.target.value })} />
-			)}
-			{field(
-				'local',
-				'Device folder',
-				<Select
-					id={`${prefix}-local`}
-					value={c.localRootId}
-					onChange={(e) => {
-						const root = roots.find((root) => root.id === e.target.value);
+			<SyncEditorBlocks documentKey="file-sync-config-basics" title="Sync config details" blocks={syncConfigBasicsBlocks}
+				scopeKey={key} accountTransport={accountTransport} scope={fieldScope} actions={{
+					name: ({ value }) => { if (!disabled && typeof value === 'string') change({ name: value }); },
+					source: ({ value }) => {
+						if (disabled || lockSource || typeof value !== 'string') return;
+						const root = roots.find(row => row.id === value);
+						if (!root && value) return;
 						if (root?.sourceKind !== 'photos' && c.photoAutomation) {
 							onChange({ ...draft, photoAutomationDraft: undefined, configuration: {
-								...c, localRootId: e.target.value, sourceKind: root?.sourceKind, photoAutomation: undefined,
+								...c, localRootId: value, sourceKind: root?.sourceKind, photoAutomation: undefined,
 								configurationVersion: c.resourceLimits ? 3 : c.ignoreRules ? 2 : 1
 							} });
-							return;
-						}
-						change({
-							localRootId: e.target.value,
-							sourceKind: root?.sourceKind,
-							...(root?.sourceKind === 'photos' ? { mode: 'backup', propagateDeletes: false } : {})
-						});
-					}}
-				>
-					<option value="">Choose a device folder</option>
-					{c.localRootId && !roots.some((r) => r.id === c.localRootId) && <option value={c.localRootId}>Folder access missing</option>}
-					{roots.map((r) => (
-						<option key={r.id} value={r.id}>
-							{r.name}
-						</option>
-					))}
-				</Select>
-			)}
-			{selectedRoot?.sourceKind === 'photos' && (
-				<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-					{photoAccessDescription(selectedRoot)}.
-				</Text>
-			)}
-            <SyncDestinationControl sourceName={selectedRoot?.name || (photos ? 'Photo Library' : c.name)} draft={draft} folders={folders} disabled={disabled} scopeKey={scopeKey} accountTransport={accountTransport} onChange={remoteFolderId => change({ remoteFolderId })} />
-			{field(
-				'mode',
-				'Direction',
-				<Select
-					id={`${prefix}-mode`}
-					isDisabled={disabled || photos}
-					value={c.mode}
-					onChange={(e) =>
-						change({ mode: e.target.value as FileSyncConfiguration['mode'], ...(e.target.value === 'backup' ? { propagateDeletes: false } : {}) })
+						} else change({ localRootId: value, sourceKind: root?.sourceKind,
+							...(root?.sourceKind === 'photos' ? { mode: 'backup', propagateDeletes: false } : {}) });
 					}
-				>
-					<option value="two-way">Two-way</option>
-					<option value="upload">Device to cloud</option>
-					<option value="download">Cloud to device</option>
-					<option value="backup">Backup to cloud · keep deleted files</option>
-				</Select>
-			)}
-			<Box as="details"><Box as="summary" cursor="pointer" paddingY={2}>Transfer options</Box><Stack spacing={3}>
-			{field(
-				'network',
-				'Network',
-				<Select id={`${prefix}-network`} value={c.network} onChange={(e) => change({ network: e.target.value as FileSyncConfiguration['network'] })}>
-					<option value="wifi">Wi-Fi only</option>
-					<option value="any">Any network · mobile data may be used</option>
-				</Select>
-			)}
-			<Checkbox minHeight="40px" isDisabled={disabled} isChecked={c.paused} onChange={(e) => change({ paused: e.target.checked })}>
-				Paused
-			</Checkbox>
-			<Checkbox minHeight="40px" isDisabled={disabled} isChecked={c.chargingOnly} onChange={(e) => change({ chargingOnly: e.target.checked })}>
-				Only while charging
-			</Checkbox>
-			<Checkbox
-				minHeight="40px"
-				isDisabled={disabled || c.mode === 'backup'}
-				isChecked={c.propagateDeletes}
-				onChange={(e) => change({ propagateDeletes: e.target.checked })}
-			>
-				Move deleted files to Trash on the other side
-			</Checkbox>
-			</Stack></Box>
+				}} />
+			<SyncDestinationControl sourceName={selectedRoot?.name || (photos ? 'Photo Library' : c.name)} draft={draft}
+				folders={folders} disabled={disabled} scopeKey={key} accountTransport={accountTransport}
+				onChange={remoteFolderId => change({ remoteFolderId })} />
+			<SyncEditorBlocks documentKey="file-sync-config-direction" title="Sync direction" blocks={syncConfigDirectionBlocks}
+				scopeKey={key} accountTransport={accountTransport} scope={fieldScope} actions={{
+					mode: ({ value }) => {
+						const match = syncConfigModes.find(([mode]) => mode === value);
+						if (!disabled && !photos && match) change({ mode: match[0], ...(value === 'backup' ? { propagateDeletes: false } : {}) });
+					}
+				}} />
+				<SyncEditorBlocks documentKey="file-sync-config-transfer" title="Transfer options" blocks={syncConfigTransferBlocks}
+					scopeKey={key} accountTransport={accountTransport} scope={fieldScope} actions={{
+						network: ({ value }) => { if (!disabled && (value === 'wifi' || value === 'any')) change({ network: value }); },
+						paused: ({ value }) => { if (!disabled && typeof value === 'boolean') change({ paused: value }); },
+						'charging-only': ({ value }) => { if (!disabled && typeof value === 'boolean') change({ chargingOnly: value }); },
+						'propagate-deletes': ({ value }) => { if (!disabled && c.mode !== 'backup' && typeof value === 'boolean') change({ propagateDeletes: value }); }
+					}} />
 			<Box as="details"><Box as="summary" cursor="pointer" paddingY={2}>Exclusions and ignore rules</Box><Stack spacing={3}>
-			{field(
-				'exclusions',
-				'Excluded paths · one per line',
-				<Textarea
-					id={`${prefix}-exclusions`}
-					value={draft.exclusions}
-					placeholder={'Private\nDocuments/archive.zip'}
-					onChange={(e) => onChange({ ...draft, exclusions: e.target.value })}
-				/>
-			)}
-			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				Paths are relative to the selected folder. A folder exclusion includes its contents. Wildcards are not supported.
-			</Text>
+				<SyncEditorBlocks documentKey="file-sync-config-exclusions" title="Excluded paths" blocks={syncConfigExclusionBlocks}
+					scopeKey={key} accountTransport={accountTransport} scope={fieldScope} actions={{
+						exclusions: ({ value }) => { if (!disabled && typeof value === 'string') onChange({ ...draft, exclusions: value }); }
+					}} />
 			<SyncIgnoreRulesEditor rules={c.ignoreRules ?? ''} excludedPaths={draft.exclusions.split(/\r?\n/).filter(Boolean)} disabled={disabled || photos}
 				scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
 				onChange={ignoreRules => change({ configurationVersion: c.photoAutomation ? 4 : c.resourceLimits ? 3 : ignoreRules ? 2 : 1, ignoreRules })} />

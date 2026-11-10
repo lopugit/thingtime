@@ -3,7 +3,8 @@ import {
 	type DeviceSyncHistory, type DeviceSyncHistoryRange, type DeviceSyncHistorySample, type DeviceSyncHistoryScope
 } from './deviceSyncHistory';
 
-const STORE = 'device-sync-history';
+export const DEVICE_SYNC_HISTORY_STORE = 'device-sync-history';
+const STORE = DEVICE_SYNC_HISTORY_STORE;
 const READ_BATCH = 256;
 export function upgradeDeviceSyncHistoryJournal(db: IDBDatabase) {
 	if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);

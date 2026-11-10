@@ -7,6 +7,13 @@ type CapabilityManifest = {
   features?: Record<string, { version?: string }>;
 };
 
+export class IncompatibleThingtimeCapabilityError extends Error {
+  constructor(public readonly feature: string, public readonly actual: string | null) {
+    super(`Thingtime capability ${feature} is incompatible`);
+    this.name = 'IncompatibleThingtimeCapabilityError';
+  }
+}
+
 export type CapabilityTransport = {
   fetch: typeof fetch;
   currentOrigin: () => string;
@@ -74,12 +81,10 @@ export const createThingtimeCapabilityChecker = () => {
       const manifest = await request;
       assertCurrent();
       const version = manifest?.features?.[feature]?.version;
-      if (
-        manifest?.schemaVersion !== 1 || manifest.origin !== expectedOrigin ||
-        typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion)
-      ) {
+      if (manifest?.schemaVersion !== 1 || manifest.origin !== expectedOrigin)
         throw new Error(`Thingtime capability ${feature} is incompatible`);
-      }
+      if (typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion))
+        throw new IncompatibleThingtimeCapabilityError(feature, typeof version === 'string' ? version : null);
     } catch (error) {
       // An older caller must not evict a newer retry that is already in flight.
       if (manifestPromise === request) manifestPromise = null;

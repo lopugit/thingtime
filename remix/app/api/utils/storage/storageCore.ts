@@ -7,6 +7,7 @@ import {
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
+import { attachmentBlobBytesForAccounting } from '../attachments/attachmentBlobs.ts';
 import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
 import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
 
@@ -35,6 +36,11 @@ export const thingStorageJsonPayload = (doc: { crystal?: unknown; extended?: unk
 // indexes, and replication remain excluded shared physical costs.
 export const thingStorageSizeBytes = (doc: {
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   crystal?: unknown;
   extended?: unknown;
   tags?: unknown;
@@ -46,6 +52,9 @@ export const thingStorageSizeBytes = (doc: {
   timelineNoteVersion?: unknown;
   secure?: unknown;
 }): number => {
+  const blobBytes = attachmentBlobBytesForAccounting(doc);
+  if (blobBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
+  if (blobBytes !== undefined) return blobBytes;
   const payloadBytes = Buffer.byteLength(
     JSON.stringify(thingStorageJsonPayload(doc)),
     'utf8'
@@ -69,6 +78,11 @@ export const thingStorageSizeBytes = (doc: {
 export const currentContentStorageSizeBytes = (doc: {
   schemaVersion?: unknown;
   thingtime?: unknown;
+  ownerId?: unknown;
+  shareId?: unknown;
+  attachmentBlob?: unknown;
+  attachmentRedundantDeleteAfter?: unknown;
+  attachmentBlobData?: unknown;
   storageClass?: unknown;
   storageAccountingVersion?: unknown;
   sizeBytes?: unknown;

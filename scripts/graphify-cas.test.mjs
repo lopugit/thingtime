@@ -127,6 +127,85 @@ test("immutable output variants coexist and richer valid output wins", () => {
   }
 })
 
+test("oversized snapshots deterministically preserve and route exact graph bytes from a fresh clone", () => {
+  const root = fixture()
+  const scratch = mkdtempSync(path.join(tmpdir(), "thingtime-graphify-packed-clone-"))
+  try {
+    git(root, ["rm", "graphify-out/graph.json"])
+    writeFileSync(path.join(root, ".gitignore"), [
+      "graphify-out/graph.json", "graphify-out/.work/", "graphify-out/.locks/",
+      "graphify-out/snapshots/**/.graphify_*", "",
+    ].join("\n"))
+    git(root, ["add", ".gitignore"])
+    git(root, ["commit", "-qm", "remove legacy graph"])
+    const fingerprint = computeSourceFingerprint(root)
+    const graph = Buffer.from(` {\r\n"nodes":[{"id":"${"é a ".repeat(800)}","weight":9007199254740993}],"links":[]}\n`)
+    const finalize = () => {
+      const output = writeOutput(root, "packed", 1)
+      writeFileSync(path.join(output, "graph.json"), graph)
+      return finalizeSnapshot(root, output, { ...fingerprint, version: "test", maximumPortableGraphBytes: 1024 })
+    }
+    const packed = finalize()
+    assert.equal(packed.metadata.graph_encoding, "gzip")
+    assert.equal(packed.metadata.graph_bytes, graph.length)
+    assert.equal(finalize().path, packed.path)
+    const archive = readFileSync(path.join(packed.path, "graph.json.gz"))
+    assert(archive.length < 1024)
+    assert.equal(archive.readUInt32LE(4), 0, "gzip mtime is zero")
+    assert.equal(existsSync(path.join(packed.path, "graph.json")), false)
+    const relative = path.relative(root, packed.path)
+    git(root, ["add", relative])
+    git(root, ["commit", "-qm", "add packed portable snapshot"])
+    const clone = path.join(scratch, "clone")
+    git(root, ["clone", "-q", "--local", root, clone])
+    assert.deepEqual(computeSourceFingerprint(clone), fingerprint)
+    const snapshot = selectSnapshot(clone, fingerprint.sourceFingerprint)
+    const hydrated = path.join(snapshot.path, ".graphify_graph.json")
+    assert.equal(existsSync(hydrated), false)
+
+    const bin = path.join(scratch, "bin")
+    mkdirSync(bin)
+    writeFileSync(path.join(bin, "graphify"), `#!${process.execPath}\n
+      const fs = require("node:fs"), path = require("node:path");
+      const graph = path.join(process.env.GRAPHIFY_OUT, "graph.json");
+      fs.readFileSync(graph).equals(Buffer.from(${JSON.stringify(graph.toString("base64"))}, "base64")) || process.exit(42);
+      JSON.parse(fs.readFileSync(path.join(process.env.GRAPHIFY_OUT, "manifest.json")));
+    `, { mode: 0o755 })
+    const routed = spawnSync(process.execPath, [path.resolve(import.meta.dirname, "graphify-cas.mjs"), "query", "node"], {
+      cwd: clone, env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` }, encoding: "utf8",
+    })
+    assert.equal(routed.status, 0, routed.stderr)
+    assert.deepEqual(readFileSync(path.join(clone, "graphify-out", "graph.json")), graph)
+    assert.equal(statSync(hydrated).mode & 0o222, 0)
+    copyPortableFiles(snapshot.path, path.join(scratch, "working"))
+    assert.deepEqual(readFileSync(path.join(scratch, "working", "graph.json")), graph)
+    assert.equal(existsSync(path.join(scratch, "working", "graph.json.gz")), false)
+
+    chmodSync(hydrated, 0o600)
+    writeFileSync(hydrated, Buffer.alloc(graph.length, 0x20))
+    activateSnapshot(clone, snapshot)
+    assert.deepEqual(readFileSync(hydrated), graph, "tampered local hydration is rebuilt")
+
+    const metadataPath = path.join(snapshot.path, "snapshot.json")
+    const originalMetadata = readFileSync(metadataPath)
+    chmodSync(metadataPath, 0o600)
+    writeFileSync(metadataPath, JSON.stringify({ ...snapshot.metadata, graph_sha256: "0".repeat(64) }))
+    const tampered = selectSnapshot(clone, fingerprint.sourceFingerprint)
+    assert.throws(() => activateSnapshot(clone, tampered), /Compressed snapshot integrity check failed/)
+    writeFileSync(metadataPath, originalMetadata)
+
+    const pathToArchive = path.join(snapshot.path, "graph.json.gz")
+    chmodSync(pathToArchive, 0o600)
+    archive[archive.length - 1] ^= 1
+    writeFileSync(pathToArchive, archive)
+    assert.throws(() => activateSnapshot(clone, snapshot), /Compressed snapshot integrity check failed/)
+    assert.throws(() => copyPortableFiles(snapshot.path, path.join(scratch, "rejected")), /Compressed snapshot integrity check failed/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+    rmSync(scratch, { recursive: true, force: true })
+  }
+})
+
 test("a Graphify query stamp does not invalidate the immutable baseline", () => {
   const root = fixture()
   try {

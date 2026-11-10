@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import { createHash } from 'node:crypto';
 import { type TimelineSnapshot } from '../../../timeline/contract';
 import { parseCloudFile, type CloudFileContent } from '../../../fileSync/cloudFile';
@@ -34,6 +35,8 @@ export const backupAttachmentProjection = {
 	objectSizeBytes: 1,
 	objectKey: 1,
 	objectVersionId: 1,
+  attachmentBlob: 1,
+  attachmentRedundantDeleteAfter: 1,
 	attachmentPurpose: 1,
 	attachmentProfileSlot: 1,
 	attachmentLinked: 1,
@@ -163,7 +166,8 @@ export async function backupAttachmentFromDoc(
 	let content: CloudFileContent | null = null;
 	if (!doc.attachmentLinked) {
 		const stored = await head(doc);
-		if (stored.attachmentId !== doc.shareId || stored.versionId !== doc.objectVersionId || stored.sizeBytes !== doc.objectSizeBytes)
+		const physical = attachmentPhysicalObject(doc);
+    if (stored.attachmentId !== physical.attachmentId || stored.versionId !== physical.versionId || stored.sizeBytes !== doc.objectSizeBytes)
 			throw Error('Attachment backup storage identity changed');
 		const fingerprint = fingerprintFromVerifiedHead(stored);
 		if (!fingerprint) throw Error('Attachment backup needs a verified canonical fingerprint');

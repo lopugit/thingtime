@@ -163,6 +163,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   resuming reporting; code exchange and refresh preserve the consented scopes.
   **Codex (AI)**
 
+- 2026-11-10: Group device folders and their sync configs in one editable
+  management flow, prepare the first backup config on folder selection, and
+  enroll saved configs for background recovery. Add measured per-config activity
+  and same-account shared file content with reference-safe deletion and unique
+  payload accounting. Historical consolidation and shared-data-plane activation
+  retain explicit rollout gates. See [the contract and acceptance checklist](../docs/device-sync-configs.md).
+  [PR 1449 validation and rollout notes](../PRs/1449-codex-device-sync-configs--unify-device-folder-sync-configs-and-share-identical-file-content.md).
+  **Codex (AI)**
+
+- 2026-11-10: Document the production attachment-writer fence and rollback
+  boundary. A tested broad host rule also blocked Vercel Cron and was restored
+  to monitoring; activation remains gated on compatible writers and a narrower
+  retired-host fence. See [deployment notes](../VERCEL_DEPLOYMENTS.md).
+  **Codex (AI)**
+
 - 2026-11-10: Show editable iPhone Photos backup activity with indexed counts,
   preparation, iCloud retrieval, upload and recent steps. Back up now can
   request iOS continuation for the same native queue. **Codex (AI)**

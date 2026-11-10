@@ -1,3 +1,5 @@
+import { IncompatibleThingtimeCapabilityError } from '../api/utils/capabilities/requireCapability.client';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { nativePhotoAssetKey } from './nativeInventory';
 import { parseFileSyncUploadOrigin, type FileSyncUploadOrigin } from './uploadOrigin';
 import { UPLOAD_BATCH_FILE_BYTES } from './uploadBatch';
@@ -275,12 +277,22 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	};
 	const reserve = async (size: number, plan = contentPartPlan(size)) => {
 		if (m.kind !== 'copy') throw Error('Only a file copy can reserve bytes.');
+    let contentFingerprint = !stagingTargetId ? m.source.fingerprint : undefined;
+    if (contentFingerprint) {
+      try { await negotiateRequirements({ 'api.attachment-uploads': '1.11.0' }); }
+      catch (error) {
+        if (!(error instanceof IncompatibleThingtimeCapabilityError) || error.feature !== 'api.attachment-uploads' ||
+          !capabilitySatisfies(error.actual ?? undefined, CLOUD_TRANSFER_REQUIREMENTS['api.attachment-uploads'])) throw error;
+        check(); contentFingerprint = undefined;
+      }
+    }
 		const started = await json('/api/v1/attachments/uploads', {
 			requestId: write.operation.id,
 			filename: m.path.split('/').at(-1),
 			contentType: 'application/octet-stream',
 			sizeBytes: size,
 			purpose: stagingTargetId ? stagingOptions?.purpose ?? 'file-import' : 'file',
+      ...(contentFingerprint ? { contentFingerprint } : {}),
         ...(stagingTargetId ? (stagingOptions?.fileSyncOrigin ? { fileSyncOrigin: stagingOptions.fileSyncOrigin } : {}) : { fileSyncOrigin: { version: 1, deviceId: scope.deviceId, localRootId: scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId, folderId: write.folderId, path: m.path } })
 		});
 		const upload = started.upload;
@@ -330,7 +342,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			// send them into a native multipart loop or complete an empty MPU.
 			if (source.size === 0 && upload.state !== 'ready')
 				throw Error('The server has not durably stored the empty file; retain this run.');
-			if (compound && nativeApproval) {
+			if (upload.state !== 'ready' && compound && nativeApproval) {
 				transferred?.(null);
 				const content = await compound({ uploadId: upload.id, requestId: write.operation.id, authorization: structuredClone(nativeApproval) }, signal);
 				check();

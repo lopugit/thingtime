@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+Device sync control 1.5.0 adds config-scoped activity and paged receipt history
+to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
+same native receipt journal used locally; `api/utils/devices/` enforces pairing,
+owning account and private-config authorization. Closed result validation and
+client requirement maps must stay aligned. Attachment upload deduplication and
+its activation/consolidation migrations use the canonical attachment lifecycle;
+see [device sync configs](../device-sync-configs.md) for rollout and deletion
+invariants, and the `TESTING.md` checklist for real API acceptance.
+
 `api.agent-overview` 2.1.0 adds optional multi-select task level, status and
 project filters to `GET /api/v1/agent-overview`. The read adapter applies them
 to the authorized hierarchy before pagination. The response includes effective
