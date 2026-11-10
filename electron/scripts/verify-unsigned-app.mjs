@@ -30,5 +30,8 @@ await verifyUnsignedArtifacts({
     runtimePath
 }, undefined, { requireNodeLocationEntitlement: true });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
+const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
+if (requireBundledMongo || existsSync(mongoRoot))
+    await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });
 verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

@@ -86,8 +86,6 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
     retiring = true;
     return desktop ? desktop.invalidate() : platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect', { automatic: true, origin: new URL(endpoint()).origin })) : Promise.resolve();
   };
-  handle.start = () => desktop?.start();
-  handle.close = () => desktop?.close();
   return handle;
 }
 module.exports = { createPasswordProvider, requirePasswordSender };

@@ -120,19 +120,11 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 `read`, `save`, `delete`, `export`, `catalog`, `verify-passkey`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
-`catalog` returns names, usernames, exact HTTPS origins, legacy domain hints and public passkey
+`catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
 excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
 The native picker checks the same account again before filling and requires
 device-owner verification.
-
-Opening a card by pointer or keyboard brings the entry editor into view, even
-when a long results list precedes it. Closing returns focus to the card when it
-is still present. A card's subtitle, catalog entry and verified fill share the
-saved login identifier. Descriptions, notes, hidden form inputs and concealed
-fields are excluded. A legacy import can use an explicit saved login email or
-username when the canonical field is missing or points at metadata. If the
-fallback is ambiguous, the subtitle stays empty. This does not rewrite imports.
 
 Autofill interprets a saved bare Website host such as `thingtime.com` as
 `https://thingtime.com`, through the same normalizer for catalog discovery and
@@ -185,9 +177,8 @@ without screen capture, upload a screenshot instead.
 
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
 key. Importing its image does not register a passkey. Native passkey creation
-is implemented by the signed Apple credential provider described below. Choose
-Thingtime in the native system provider picker when the service requests a new
-passkey. A passkey reference can record the location of a key held elsewhere.
+is implemented by the signed Apple credential provider described below. A passkey
+reference can record the location of a key held elsewhere.
 
 Import/export supports 1Password 1PUX v3 and CSV, Chrome CSV and Apple Passwords
 CSV. Imports preview every entry using ranged ZIP reads and a streaming JSON/CSV
@@ -329,7 +320,8 @@ for testing; never import personal browser sessions or production credentials.
 
 `apple/Passwords` contains the shared Swift library. `apple/PasswordProvider`
 contains the AuthenticationServices extension used by iOS and the macOS
-Thingtime Passwords companion embedded in Electron. The containing app needs
+Thingtime Passwords companion embedded in Electron; the desktop bridge negotiates
+the installed provider. The containing app needs
 Apple's AutoFill entitlement and the same Keychain group as its extension.
 Only the selected first-party HttpOnly session cookie is stored in the device's
 unlocked-only, non-synchronizing data-protection Keychain. Every session operation
@@ -348,10 +340,6 @@ ES256 passkeys use random credential IDs, none attestation, a zero signature
 counter for synchronized credentials and user verification. Encrypted storage
 is acknowledged and read back before a new registration completes.
 
-Native provider code is present in `apple/Passwords` and
-`apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
-This checkout does not expose an iOS native-password bridge; web-only behavior
-remains available there.
 The provider handles a website-initiated WebAuthn registration, checks the relying
 party and supported algorithm, creates an ES256 key, saves it through the encrypted
 vault, verifies readback and completes the operating-system request. Registration starts at the destination website rather than in a standalone
@@ -525,16 +513,8 @@ It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
 
+The installed desktop bridge checks the selected HTTPS server's capability manifest before forwarding private password requests. Full-vault title search requires `api.passwords` 1.2.0 or a compatible update there, even when the bundled UI is newer. Missing, wrong-origin, or breaking manifests produce an explicit compatibility error instead of silently using an older listing contract.
 
-### Local search and combined contract
-
-The device workspace searches unlocked, encrypted-on-disk titles before paging;
-matching entries beyond the first page remain discoverable without remote access.
-Changing the query resets its cursor and cancels the prior refresh. Account-local
-listing uses the same device adapter; background synchronization is independent.
-`api.passwords` 1.3.0 combines whole-vault title search with durable encrypted-file
-cancellation receipts. Search and receipt-dependent workers negotiate this version
-before remote operations; anonymous device search does not negotiate or fetch.
 The synthetic UI fixture at `scripts/password-tools.browser.html` mounts the real
 password components with a fail-closed synthetic transport. Its Run regression
 control exercises generator presets, target selection, masked values, save/reload,
@@ -585,7 +565,9 @@ The tree is decorative beside visible accessible text; entry/site icons retain
 their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
 1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
 System bundle icons are separate from website-controlled passkey/account artwork.
-The current iOS project has no shared PasswordProvider target/resource consumer.
+The iOS project's `ThingtimePasswordProvider` target shares the
+`apple/PasswordProvider` source but does not package these branding resources;
+only the macOS host and provider extension consume them.
 
 Password confirmation timing, durable account/origin/device Never trust,
 per-entry overrides, explicit forgetting, native reuse boundaries and the 1.5 API

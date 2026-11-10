@@ -111,12 +111,18 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
-export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean } = {}) => {
+export const EXPECTED_API_ORIGIN_HEADER = 'X-Thingtime-Expected-Api-Origin';
+
+const endpointChangedResponse = () => Response.json({
+  ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
+}, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
   if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const requestUrl = new URL(request.url);
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
-  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin()!);
+  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
   if (options.stripForwardedOrigin) {
     // A bundled client and its selected server can be released independently.
     // Negotiate the actual authority before forwarding credentials or bodies.
@@ -142,6 +148,10 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
         });
       }
     }
+    // The negotiation above is async. Re-pin the authority so a completed
+    // check for a previous endpoint cannot authorize forwarding to its
+    // replacement.
+    if (expectedOrigin !== getApiFallbackOrigin()) return endpointChangedResponse();
   }
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
   if (options.stripForwardedOrigin) {
