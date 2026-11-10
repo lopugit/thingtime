@@ -1,5 +1,6 @@
 import { attachmentContentPath } from '../../../utils/attachmentContentUrl';
-import { isExternalProfileImageUrl, type ProfileMediaMutation } from '../../../components/Profile/profileMediaCore';
+import { normalizeImagePresentation, type ImagePresentation } from '../../../components/Media/imagePresentation';
+import { isExternalProfileImageUrl, isManagedProfileMediaUrl, type ProfileMediaMutation } from '../../../components/Profile/profileMediaCore';
 
 export const SUBSPACE_MEDIA_SLOTS = ['icon', 'banner'] as const;
 export type SubspaceMediaSlot = (typeof SUBSPACE_MEDIA_SLOTS)[number];
@@ -7,6 +8,39 @@ export const subspaceMediaUrl = (doc: any, slot: SubspaceMediaSlot): string | nu
   typeof doc?.[`${slot}AttachmentId`] === 'string' && doc[`${slot}AttachmentId`]
     ? attachmentContentPath(doc[`${slot}AttachmentId`])
     : doc?.crystal?.branding?.[`${slot}Url`] ?? null;
+
+export type SubspaceMediaPresentation = Partial<Record<SubspaceMediaSlot, ImagePresentation | null>>;
+export type SubspaceMediaPresentationSources = Partial<Record<SubspaceMediaSlot, string>>;
+
+export const subspaceMediaPresentation = (doc: any, slot: SubspaceMediaSlot): ImagePresentation | undefined =>
+  subspaceMediaUrl(doc, slot) ? normalizeImagePresentation(doc?.crystal?.branding?.[`${slot}Presentation`]) ?? undefined : undefined;
+
+export const parseSubspaceMediaPresentation = (value: unknown): SubspaceMediaPresentation => {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('mediaPresentation must be an object');
+  const result: SubspaceMediaPresentation = {};
+  for (const [slot, raw] of Object.entries(value)) {
+    if (slot !== 'icon' && slot !== 'banner') throw new Error('Invalid subspace image presentation slot');
+    const presentation = normalizeImagePresentation(raw);
+    if (presentation === undefined) throw new Error(`Invalid ${slot} image presentation`);
+    result[slot] = presentation;
+  }
+  return result;
+};
+
+export const parseSubspaceMediaPresentationSources = (value: unknown): SubspaceMediaPresentationSources => {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('mediaPresentationSources must be an object');
+  const result: SubspaceMediaPresentationSources = {};
+  for (const [slot, source] of Object.entries(value)) {
+    if (slot !== 'icon' && slot !== 'banner') throw new Error('Invalid subspace image presentation source slot');
+    if (typeof source !== 'string' || source !== source.trim() || (!isManagedProfileMediaUrl(source) && !isExternalProfileImageUrl(source))) {
+      throw new Error(`Invalid expected ${slot} image source`);
+    }
+    result[slot] = source;
+  }
+  return result;
+};
 
 export const parseSubspaceMedia = (value: unknown): Partial<Record<SubspaceMediaSlot, ProfileMediaMutation>> => {
   if (value === undefined) return {};

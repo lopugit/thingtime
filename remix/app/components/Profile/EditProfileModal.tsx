@@ -57,8 +57,8 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     const current = userRef.current;
     setDisplayName(current?.displayName || '');
     setBio(current?.bio || '');
-		setAvatarMedia(preservedProfileMediaSnapshot(current?.avatarUrl || null));
-		setBannerMedia(preservedProfileMediaSnapshot(current?.bannerUrl || null));
+		setAvatarMedia(preservedProfileMediaSnapshot(current?.avatarUrl || null, current?.avatarPresentation));
+		setBannerMedia(preservedProfileMediaSnapshot(current?.bannerUrl || null, current?.bannerPresentation));
     setSaving(false);
   }, [open]);
 
@@ -84,7 +84,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-			if (event.code === 'Escape' && !saving) {
+			if (event.code === 'Escape' && !saving && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('[data-image-editor]'))) {
         onClose();
       }
     };
@@ -125,12 +125,12 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 			const response = await api.v1.profile.update({
         displayName: displayName.trim() || null,
         bio: bio.trim() ? bio.trim() : null,
-				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
-				...profileMediaUpdateFields('banner', bannerMedia.mutation)
+				...profileMediaUpdateFields('avatar', avatarMedia.mutation, avatarMedia.presentationUpdate, avatarMedia.presentationSource),
+				...profileMediaUpdateFields('banner', bannerMedia.mutation, bannerMedia.presentationUpdate, bannerMedia.presentationSource)
       });
 			if (!response?.user) throw new Error('invalid profile response');
-			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
-			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null);
+			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null, response.user.avatarPresentation);
+			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null, response.user.bannerPresentation);
       lopu({ title: 'Profile updated ✨', status: 'success' });
       onClose();
 		} catch (error: unknown) {
@@ -189,10 +189,11 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 
       {/* live preview */}
       <Box position="relative" paddingBottom="24px">
-				<ProfileBanner bannerUrl={bannerMedia.previewUrl} height="72px" radius="var(--tt-radius-md, 12px)" />
+				<ProfileBanner bannerUrl={bannerMedia.previewUrl} presentation={bannerMedia.previewPresentation} height="72px" radius="var(--tt-radius-md, 12px)" />
         <Box position="absolute" left="16px" bottom={0}>
           <ProfileAvatarCircle
 						avatarUrl={avatarMedia.previewUrl}
+						presentation={avatarMedia.previewPresentation}
             name={displayName || user?.displayName || user?.username || '?'}
             size="48px"
             fontSize="md"
@@ -239,6 +240,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.avatarUrl}
 					savedLinkedUrl={user.avatarLinkedUrl}
+					savedPresentation={user.avatarPresentation}
 					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}
@@ -254,6 +256,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.bannerUrl}
 					savedLinkedUrl={user.bannerLinkedUrl}
+					savedPresentation={user.bannerPresentation}
 					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}

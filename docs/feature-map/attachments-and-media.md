@@ -8,6 +8,18 @@ still authorize the attachment before resolving physical content. See
 [device sync configs](../device-sync-configs.md) and the matching `TESTING.md`
 checklist for quota, concurrent reference/deletion and installed-app acceptance.
 
+**Image presentation.** The shared upload-first `ProfileMediaField` opens
+`ImagePresentationDialog` for profile avatar/banner and subspace icon/banner.
+It uses Builder's `ElementInspector` for CSS declarations and HTML image
+attributes. `imagePresentation.ts` validates the same data on write and before
+`PresentedImage` renders it. Layout stays inside the image slot; styles and
+attributes cannot replace the validated source or start new network requests.
+Profile 1.2 and subspace update 1.6 persist presentation independently in the
+same authorized transaction as the original source. A replacement clears stale
+presentation unless the new presentation is saved with it. Signup/invite photo
+thumbnails remain a transient image suggestion. See TESTING's profile media
+checklist and the disposable browser acceptance script.
+
 Paired-device background staging uses the existing private file reservation and
 multipart provider. `files/transferAdmissions.ts` verifies the browser session,
 exact pairing, saved configuration and private destination. It authorizes signing and

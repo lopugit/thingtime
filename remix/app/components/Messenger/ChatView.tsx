@@ -289,7 +289,8 @@ export const ChatView = (props: ChatViewProps) => {
             username: user.username,
             displayName: user.displayName,
             temporary: user.temporary,
-            avatarUrl: user.avatarUrl
+            avatarUrl: user.avatarUrl,
+            avatarPresentation: user.avatarPresentation
           }
         : null,
       text,

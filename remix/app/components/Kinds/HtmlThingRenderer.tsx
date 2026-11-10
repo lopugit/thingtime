@@ -32,6 +32,7 @@ import {
 } from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
+import { allowsAuthoredHtmlAttribute, authoredHtmlPropValue } from './htmlRenderPolicy';
 
 
 
@@ -79,129 +80,7 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 // Exported so the allowlist itself carries a regression test: every entry is a
 // decision about what untrusted markup may hand the browser, and a prop added
 // back by habit should fail a test rather than ship.
-export const ALLOWED_PROPS = new Set([
-	'style',
-	'id',
-	'accept',
-	'hidden',
-	'download',
-	'preload',
-	'playsInline',
-	'className',
-	'class',
-	'href',
-	'target',
-	'rel',
-	'src',
-	'alt',
-	'title',
-	'width',
-	'height',
-	'type',
-	'placeholder',
-	'value',
-	'checked',
-	'disabled',
-	// form-field props: a NAMED field inside a component root is what the
-	// trusted ttAction click wrapper reads into the run inputs
-	// (useTtActionClicks) — inert markup otherwise, no URL or JS sink
-	'name',
-	'min',
-	'max',
-	'step',
-	'maxLength',
-	'required',
-	'multiple',
-	'readOnly',
-	'htmlFor',
-	'selected',
-	'autoComplete',
-	'inputMode',
-	// accessibility labelling: inert strings the browser only ever exposes to
-	// assistive tech — no URL, no JS sink, no validation engine
-	'role',
-	'aria-label',
-	'aria-live',
-	'aria-atomic',
-	'aria-valuenow',
-	'aria-valuemin',
-	'aria-valuemax',
-	'aria-valuetext',
-	'aria-hidden',
-	'aria-pressed',
-	'aria-checked',
-	'aria-busy',
-	'aria-disabled',
-	'aria-expanded',
-	'aria-selected',
-	'aria-current',
-	'open',
-	// NOT `pattern`. Every other constraint-validation prop above is a cheap
-	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
-	// and runs from untrusted markup, on the main thread, with no timeout.
-	// Constraint validation runs as soon as a field has a non-empty value —
-	// and `fieldProps` below turns a template's `value` into `defaultValue`,
-	// so a component thing can ship both halves — which makes
-	// `<input value="aaaaaaaaaaaaaaaaaaaaaaaaaaX" pattern="(a+)+$">` a wedged
-	// tab for anyone who merely renders that component. Nothing in the
-	// library uses it, the run inputs are validated server-side by the action
-	// input descriptors (type/min/max/maxLength/enum) rather than by the
-	// field's own validity, and a client-side hint is not worth an
-	// author-supplied regex engine.
-	'rows',
-	'cols',
-	'controls',
-	'loop',
-	'muted',
-	'poster',
-	'viewBox',
-	'fill',
-	'stroke',
-	'strokeWidth',
-	'strokeLinecap',
-	'strokeLinejoin',
-	'd',
-	'cx',
-	'cy',
-	'r',
-	'x',
-	'y',
-	'x1',
-	'y1',
-	'x2',
-	'y2',
-	'rx',
-	'ry',
-	'points',
-	'xmlns',
-	'transform',
-	'opacity',
-	'fillOpacity',
-	'strokeOpacity',
-	'strokeDasharray',
-	'textAnchor',
-	'dominantBaseline',
-	'fontSize',
-	'fontWeight',
-	'fontFamily',
-	'letterSpacing',
-	'dx',
-	'dy',
-	// the ONLY data-* attributes allowed through: the component ttAction
-	// binding (componentTemplate.ts) — inert markup that a trusted-surface
-	// click wrapper reads to run an action AS the viewer. Values are plain
-	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
-	'data-tt-action',
-	'data-tt-action-inputs',
-	MODIFIER_ACTION_INPUTS,
-	ACTION_BATCH_ATTRIBUTE,
-	// Inert composition slots adopted only by the trusted authored menu.
-	'data-tt-menu-slot',
-	'data-tt-menu-trigger',
-	'data-tt-input-type',
-	// Inert editor address, validated against the authored template before editing.
-	'data-tt-label-key'
-]);
+export { ALLOWED_PROPS } from './htmlRenderPolicy';
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	if (!style || typeof style !== 'object' || Array.isArray(style)) return undefined;
@@ -220,15 +99,19 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 	if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
 
 	const out: Record<string, unknown> = {};
-	Object.entries(props as Record<string, unknown>).forEach(([key, value]) => {
+	const attributes = props as Record<string, unknown>;
+	const multiple = tag === 'select' && (attributes.multiple === true ||
+		(typeof attributes.multiple === 'string' && authoredHtmlPropValue('multiple', attributes.multiple) === true));
+	Object.entries(attributes).forEach(([key, value]) => {
 		// no event handlers, no dangerouslySetInnerHTML, whitelist only
 		if (isEventHandlerProp(key)) return;
-		if (!ALLOWED_PROPS.has(key)) return;
-
+		// Structured Action descriptors use a button-only serializer, separate
+		// from the ordinary HTML attribute policy and free-form inspector.
 		if (key === MODIFIER_ACTION_INPUTS || key === ACTION_BATCH_ATTRIBUTE) {
 			if (tag === 'button' && value && typeof value === 'object' && !Array.isArray(value)) out[key] = JSON.stringify(value);
 			return;
 		}
+		if (!allowsAuthoredHtmlAttribute(key, tag)) return;
 		if (key === 'style') {
 			const style = sanitizeStyle(value);
 			if (style) out.style = style;
@@ -238,20 +121,14 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 			if (typeof value === 'string') out.className = value;
 			return;
 		}
-		if (key === 'multiple') {
-			if (tag === 'select' && (value === true || value === 'true' || value === '')) out.multiple = true;
-			return;
-		}
-		if (key === 'value' && tag === 'select' && Array.isArray(value)) {
-			if (value.every(entry => typeof entry === 'string')) out.value = value;
-			return;
-		}
 		if ((key === 'href' || key === 'src' || key === 'poster') && typeof value === 'string') {
 			if (!isSafeUrl(value) && !(tag === 'img' && key === 'src' && isPngThumbnail(value))) return;
 			out[key] = value;
 			return;
 		}
 		if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+			out[key] = typeof value === 'string' ? authoredHtmlPropValue(key, value) : value;
+		} else if (multiple && key === 'value' && Array.isArray(value) && value.every((entry) => typeof entry === 'string')) {
 			out[key] = value;
 		}
 	});
@@ -272,8 +149,15 @@ const FIELD_TAGS = new Set(['input', 'textarea', 'select']);
 const fieldProps = (tag: string, props: Record<string, unknown>): Record<string, unknown> => {
 	if (!FIELD_TAGS.has(tag)) return props;
 	const out: Record<string, unknown> = { ...props };
-	if (tag === 'select' && out.multiple) return out;
-	if (Array.isArray(out.value)) delete out.value;
+	if (tag === 'select' && out.multiple === true) {
+		// A typed array is an authored default. String query bindings stay
+		// authoritative and can explicitly clear an edited filter.
+		if (Array.isArray(out.value)) {
+			out.defaultValue = out.value;
+			delete out.value;
+		}
+		return out;
+	}
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
 	if (out.type === 'file') { delete out.value; delete out.defaultValue; return out; }
@@ -453,7 +337,9 @@ function HtmlBlockImage({ elementProps, fallback }: { elementProps: Record<strin
  const [ready, setReady] = React.useState(false);
  const [failed, setFailed] = React.useState(false);
  const src = !failed && typeof elementProps.src === 'string' ? elementProps.src : undefined;
- return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer" loading="lazy" decoding="async"
+ return <img {...elementProps} src={src || fallback} alt={typeof elementProps.alt === 'string' ? elementProps.alt : ''} referrerPolicy="no-referrer"
+  loading={elementProps.loading === 'eager' ? 'eager' : 'lazy'}
+  decoding={elementProps.decoding === 'sync' || elementProps.decoding === 'auto' ? elementProps.decoding : 'async'}
   style={{ ...elementProps.style, ...(!ready && src && { background: `center / contain no-repeat url("${fallback}")`, color: 'transparent' }) }}
   onLoad={() => setReady(true)} onError={() => setFailed(true)} />;
 }

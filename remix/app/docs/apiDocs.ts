@@ -870,9 +870,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
-    id: 'auth-characters', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    id: 'auth-characters', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
     summary: 'Create private proxy identities and select a session Character.',
-    detail: 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
     methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
     steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
     requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
@@ -2301,11 +2302,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-owned',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Owned accounts',
     endpoint: '/api/v1/auth/accounts/owned',
     summary: 'The accounts you own via admin-assigned links — each can be signed into without credentials.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Lists the accounts (usually service accounts) an admin has assigned to you with an "account" ownership ' +
       'link. The account switcher shows these under "Owned accounts"; POST /api/v1/auth/accounts/assume signs ' +
       "into one. Unlike /api/v1/auth/accounts (this browser's roster), this list follows your links — it is " +
@@ -2329,11 +2333,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-assume',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Assume an owned account',
     endpoint: '/api/v1/auth/accounts/assume',
     summary: 'Sign into an account you own (via an admin-assigned link) without its credentials.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'POST { accountId } — if you hold an "account" ownership link to it, a fresh browser session is minted ' +
       "for the target, folded into this browser's roster (the switcher lists it immediately), and made the " +
       "active account. The authorization is the server-side link, never the roster cookie, so the roster's " +
@@ -2461,13 +2468,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-sso-session',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Redeem a sign-in code',
     endpoint: '/api/v1/auth/sso-session',
     summary: 'Exchange a handoff code for a first-class session on THIS deployment.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'POST { code } — verifies the signature (deployments share JWT key material), requires the code\'s aud ' +
       'to equal this deployment\'s public origin, claims it atomically exactly once (a second redemption ' +
       'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
@@ -2759,13 +2767,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.2.0',
+    contractVersion: '1.3.0',
     group: 'auth',
-    featureVersion: '1.2.0',
+    featureVersion: '1.3.0',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'POST { response, clientId? } where response is the JSON result of navigator.credentials.get. The ' +
       'credential is looked up by id, revocation is checked BEFORE any cryptography, the assertion is ' +
       'verified (user verification required) against the challenge cookie, and the login then finishes ' +
@@ -3622,11 +3631,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Account switcher roster',
     endpoint: '/api/v1/auth/accounts',
     summary: 'Lists every account signed in to this browser, marking the active one.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'The account switcher roster is a Mongo document (rosters collection) referenced by an opaque id in the httpOnly tt_accounts cookie; its entries reference sessions by id, so there is no account limit and raw JWTs are never stored or returned. This route resolves each entry to its public user, prunes dead entries (expired, revoked, deleted), and updates the roster + cookie when anything changed.',
     auth: {
       mode: 'optional',
@@ -3668,11 +3680,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-remove',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Remove account from switcher',
     endpoint: '/api/v1/auth/accounts/remove',
     summary: 'Signs one roster account out: revokes its session and drops it from the switcher.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'Use this to remove a single account from the browser without touching the others. Removing the active account promotes the next roster account to active; removing the last account clears both auth cookies, signing the browser out entirely.',
     auth: {
       mode: 'optional',
@@ -3712,11 +3727,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-switch',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Switch active account',
     endpoint: '/api/v1/auth/accounts/switch',
     summary: 'Makes a signed-in roster account the active one without re-entering a password.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Mints a fresh JWT for the chosen roster account live session into tt_auth. Authorization is possession of the httpOnly roster-id cookie, so switching never needs credentials.',
     auth: {
       mode: 'optional',
@@ -3853,13 +3871,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
     summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token. Revoking a live active session records a quiet sign-out notification for that account; expired or repeated calls do not.',
     auth: {
       mode: 'optional',
@@ -3906,13 +3925,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-me',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'auth',
     title: 'Current user',
     endpoint: '/api/v1/auth/me',
     summary: 'Returns the authenticated public user or null.',
-    detail: 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
     auth: {
       mode: 'optional',
       description: 'Cookie or Authorization: Bearer token optional. Anonymous callers receive user: null.'
@@ -3968,11 +3988,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-temporary',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Temporary browser user',
     endpoint: '/api/v1/auth/temporary',
     summary: 'Creates or reuses a recoverable temporary browser session user.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'This is the first-session bootstrap used by /things. A genuinely anonymous browser receives a normal, private user Thing, bounded storage subscription, browser session, and account-switcher roster entry. Repeating the request with that live session is idempotent and returns the same user; the endpoint never bypasses ordinary Thing ownership or ACL checks.',
     auth: {
       mode: 'optional',
@@ -4731,13 +4754,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
-    detail: 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
@@ -7005,13 +7029,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'messenger',
     title: 'Chats',
     endpoint: '/api/v1/chats',
     summary: 'Lists every conversation the caller is in, or creates a channel, group, or DM.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Subspace general channels are reconciled for active subspace members on Messenger entry. All linked chat previews and unread counters are filtered by current subspace membership and live parent existence. ' +
       'GET returns every conversation the caller belongs to — community channels, groups, and DMs — each with an ' +
       'unread count, a lastMessage preview, and the caller membership entry (role, nickname, state, muted, read ' +
@@ -7091,13 +7116,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-get',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'messenger',
     title: 'Chat detail',
     endpoint: '/api/v1/chats/get',
     summary: 'Reads one chat with its full member list.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Returns a single chat by id along with every member — profile, role, nickname, and per-member read ' +
       'receipt — plus communityName for channels. Read receipts follow the privacy parity rule: a member who ' +
@@ -7206,13 +7232,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-members',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Chat members',
     endpoint: '/api/v1/chats/members',
     summary: 'Manages chat membership with one verb per call: join, add, remove, role, nickname, or mute.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Linked spaces manage member additions, removals and roles through subspace controls. Per-chat nickname and mute preferences remain editable. ' +
       'POST the chatId plus exactly one verb. join: true joins a public channel of a community you belong to. ' +
       'add lists user ids to bring in (any member may add to a group; private channels need an admin, and everyone ' +
@@ -7326,13 +7353,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Version 1.5 adds lopu.deviceTranscript:true for an unverified device-reported assistant transcript, without hosted provider, model, billing or tool metadata. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
@@ -7423,14 +7451,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages-edit',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     notes: ['Version 1.2.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', 'Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
     endpoint: '/api/v1/chats/messages/edit',
     summary: 'Edits the text of a message the caller sent.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
 			'editedAt so clients can show an edited marker. No product character limit is imposed, as on send. Text may be empty only while at least one existing attachment remains.',
     auth: {
@@ -9696,8 +9725,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.60.0',
-    contractVersion: '1.60.0',
+    featureVersion: '1.61.0',
+    contractVersion: '1.61.0',
 
 
     group: 'things',
@@ -9709,6 +9738,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
       'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
+      'Version 1.61 accepts Webpage CSS declarations without the former per-block count, name and value lengths, accepts vendor names and literal case-sensitive custom property identifiers, and stores complete raw/rich HTML source. Existing CSS security, rendering, sharing, authorization and storage checks remain. ' +
       'Version 1.58 validates passive cursor-backed webpage collection descriptors and opt-in Action ownedFolderId predicates. ' +
       'Version 1.57 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources. Execution requires api.actions-run 1.45.0. ' +
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
@@ -10152,14 +10183,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    // 1.6.0: optional presentation metadata follows existing avatar projections.
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
@@ -10297,13 +10330,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.11.0',
-    contractVersion: '1.11.0',
+    featureVersion: '1.12.0',
+    contractVersion: '1.12.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Rich Thingtime comments accept the same bounded thing-collection reference envelope as posts, and comment/feed/profile projections carry permission-checked linkedThings. Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root ACL through the complete reply and media-parent chain, so private or circle-limited content stays private.',
     auth: {
@@ -10526,13 +10560,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
     // non-members, every other fence intact); the response echoes scope; an
     // unknown scope answers 400 (S6, additive)
-    featureVersion: '1.9.0',
-    contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'algorithm also accepts hot, new, top, rising, controversial, local, global and political. Vote rankings use the newest 400 matching candidates; rising restricts to 24 hours. Local uses lat/lng with radiusKm (default 50, max 1000), otherwise localTag; no location means an empty feed. Political matches politics/political tags; Global ranks public posts. Existing filters remain conjunctive. The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
@@ -10895,13 +10930,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
+      'Branding may include iconPresentation and bannerPresentation for existing media. ' +
       'Every newly created subspace atomically receives a linked Messenger space and general channel. Projections include stable messagesCommunityId and messagesChatId. The idempotent admin subspace-messaging-spaces migration provisions all existing live subspaces. ' +
       'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
       'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
@@ -11006,13 +11042,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // additive)
     // 1.4.0: moderators get openReportCount — open reports waiting in the
     // Reports queue (S5, additive)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
+      'Branding may include iconPresentation and bannerPresentation for existing media. ' +
       'Returns stable messagesCommunityId and messagesChatId for the subspace Messages view. Active subspace membership is required for Messenger history; pending, left and banned members cannot read it. ' +
       'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
       'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
@@ -11078,13 +11115,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
     summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes the URL, access and the 18+ flag.',
     detail:
+      'Optional mediaPresentation: { icon?, banner? } sets framing, local CSS declarations and passive HTML image attributes independently of image bytes. Send null to reset a slot. Replacements clear stale presentation unless the same request supplies a new presentation. For presentation-only edits or resets, mediaPresentationSources: { icon?, banner? } can name the expected effective URLs; a different current source returns 409. ' +
       'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
       'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
@@ -11134,13 +11172,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
     // 1.3.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
     summary: 'Joins a public or restricted subspace, or files a join request with the moderators of a private one.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug }. Public and restricted subspaces: creates the caller’s relational subspace-member doc (or ' +
       'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
       'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
@@ -11172,13 +11211,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
     // 1.3.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Leave subspace',
     endpoint: '/api/v1/subspaces/leave',
     summary: 'Leaves a subspace — or cancels a pending join request (owners can’t leave their own).',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug }. Removes the caller’s member doc — an active membership ends, a pending join request to a ' +
       'private subspace is cancelled (its row goes, the moderators’ queue no longer lists it); a banned member’s ' +
       'doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
@@ -11496,13 +11536,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the subspace block carries removalReasons (S4, additive)
     // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
     // against the post (S5, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
     summary: 'The posts of one subspace with hot/new/top/rising/controversial sorts.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'GET ?slug=&sort=hot|new|top|rising|controversial&range=hour|day|week|month|year|all&cursor=&limit=. ' +
       '`new` pages by (createdAt, id) cursor with pinned posts leading the first page; the ranked sorts score a ' +
       'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
@@ -11532,13 +11573,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.2.2',
-    contractVersion: '1.2.2',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
     summary: 'The owner hands the subspace and its linked messages space to an active member; the previous owner becomes a moderator.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
       'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
       'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
@@ -11727,13 +11769,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
     summary: 'Creates a share post that points back to a visible root post. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+    detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' + 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
     auth: {
       mode: 'session-or-bearer',
@@ -11807,8 +11850,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.25.0',
-    contractVersion: '1.25.0',
+    featureVersion: '1.26.0',
+    contractVersion: '1.26.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11817,6 +11860,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
+      'Version 1.26 accepts expanded Webpage CSS and HTML authoring under the same validation as api.things 1.61.0 and existing revision checks. ' +
       'Version 1.25 preserves and validates saved Component and Webpage source input references under the same revision checks. ' +
       'Version 1.24 preserves validated passive cursor-backed webpage collection descriptors and Action ownedFolderId predicates. ' +
       'Version 1.23 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources under revision checks. ' +
@@ -11891,13 +11936,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
     summary: 'Returns posts for a public profile, filtered by viewer visibility. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
+    detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' + 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
@@ -12158,13 +12204,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'users-profile',
 		// 1.1.0: private hideEmailOnProfile preference for the owner's own profile UI.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
     group: 'profile',
     title: 'User profile',
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
+      'Optional avatarPresentation and bannerPresentation change framing, local CSS declarations and passive HTML image attributes without changing the image source. Send null to reset. A replacement or removal clears stale presentation unless the same request specifies a replacement presentation. For a presentation-only edit/reset, send avatarPresentationSource or bannerPresentationSource equal to the effective URL read by the editor; a different current source returns 409. ' +
 		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
       'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
       'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
@@ -13691,14 +13738,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.17.0',
-    featureVersion: '1.17.0',
+    contractVersion: '1.18.0',
+    featureVersion: '1.18.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
       'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +
       'Version 1.16 resolves named passive cursor-backed collections alongside authored selection and keyed repetition. ' +
       'Version 1.15 includes private activationSchedule { cutoffTime, revision } for the eligible owning account when the binding uses an exact private settings Thing. An unavailable source returns null and cannot activate. Passive webpage sources provide data scope and preserve descendant form controls. ' +
