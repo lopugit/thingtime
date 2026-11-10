@@ -66,19 +66,54 @@ export async function findPendingReview({ repo, prNumber = "", branch = "", even
   return "";
 }
 
-export function readGitHub(path, { paginate = false } = {}) {
+// GitHub answers `actions/runs/{id}` and `.../jobs` with transient 502/503 and
+// occasional transport resets. A single blip used to fail this reader outright,
+// and because `findPendingReview` is deliberately fail-closed on an unknown
+// queue state the enclosing step then reddened `Hand off one Lopu repository
+// review session` on whichever PR was pushed -- a shared condition no PR caused
+// and none can clear -- while also dropping the review dispatch it was about to
+// make. Retry the same bounded ladder the shell `gh_read_retry` readers in
+// resolve-pr-conflicts.yml already use. A definite answer is never retried, so
+// an inactive group (404) still resolves instantly and a bare 401/403 stays
+// fatal rather than sleeping on a real permission failure.
+const retryableStatus = new Set([408, 425, 429, 500, 502, 503, 504]);
+// One ladder shared by every read in a process, not one per read: the handoff
+// job allows five minutes and already spends minutes inside its own reads, so a
+// per-read budget could trade this red check for a red timeout.
+const backoff = [2000, 4000, 8000];
+
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+export function readGitHub(path, { paginate = false, wait = pause, ladder = backoff } = {}) {
   const args = ["api", path];
   if (paginate) args.push("--paginate", "--slurp");
-  try {
-    return JSON.parse(execFileSync("gh", args, {
-      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
-    }));
-  } catch (cause) {
-    // Do not echo API response bodies, command environments, or credentials.
-    const status = /HTTP (\d{3})/.exec(String(cause.stderr || ""))?.[1];
-    const error = new Error(`Lopu queue read failed${status ? ` (HTTP ${status})` : ""}`);
-    error.status = Number(status) || undefined;
-    throw error;
+  for (;;) {
+    try {
+      return JSON.parse(execFileSync("gh", args, {
+        encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
+      }));
+    } catch (cause) {
+      // Do not echo API response bodies, command environments, or credentials.
+      // The failure *class* carries no private value and is the only diagnosable
+      // signal the control-plane log keeps, so name it: an unlabelled read
+      // failure is why the first instance of this defect could not be
+      // classified from its own job log after the fact.
+      const status = /HTTP (\d{3})/.exec(String(cause.stderr || ""))?.[1];
+      // `code` names a transport or timeout failure, `signal` the 30s kill, and
+      // `status` a gh exit that printed no status line. A SyntaxError carries
+      // none of them, which is itself the answer: the body was not JSON.
+      const detail = status ? `HTTP ${status}`
+        : String(cause.code ?? cause.signal ?? (cause.status != null ? `exit ${cause.status}` : "unreadable response"));
+      const error = new Error(`Lopu queue read failed (${detail})`);
+      error.status = Number(status) || undefined;
+      // No status means a transport reset, a 30s kill, or a truncated body;
+      // every one of those is worth one more read before giving a verdict.
+      if (error.status && !retryableStatus.has(error.status)) throw error;
+      if (!ladder.length) throw error;
+      wait(ladder.shift());
+    }
   }
 }
 
