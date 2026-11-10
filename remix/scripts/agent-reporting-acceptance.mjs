@@ -14,12 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { MongoClient } from 'mongodb';
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
+const reconnectOnly = process.argv.includes('--scoped-reconnect');
 const fixturePath = process.env.AGENT_REPORTING_AUTHORED_THINGS;
-assert(fixturePath, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture');
-assert(!resolve(fixturePath).startsWith(resolve(cwd, '..') + '/'), 'Authored workspace definitions must remain outside the repository');
-const authored = JSON.parse(await readFile(fixturePath, 'utf8'));
+assert(fixturePath || reconnectOnly, 'Set AGENT_REPORTING_AUTHORED_THINGS to an external synthetic saved-workspace JSON fixture, or use --scoped-reconnect');
+assert(!fixturePath || !resolve(fixturePath).startsWith(resolve(cwd, '..') + '/'), 'Authored workspace definitions must remain outside the repository');
+const authored = fixturePath ? JSON.parse(await readFile(fixturePath, 'utf8')) : null;
 const roles = ['project', 'task', 'agent', 'todo', 'progress', 'question'];
-assert(roles.every(role => authored.schemas?.[role]) && authored.pages?.overview && authored.pages?.taskDetail && authored.actions, 'External fixture must include all private workspace references');
+assert(reconnectOnly || roles.every(role => authored.schemas?.[role]) && authored.pages?.overview && authored.pages?.taskDetail && authored.actions, 'External fixture must include all private workspace references');
 const dir = await mkdtemp(join(tmpdir(), 'tt-agent-reporting-'));
 const evidenceDir = process.env.AGENT_REPORTING_EVIDENCE_DIR || join(tmpdir(), 'thingtime-agent-reporting-evidence');
 const checks = [];
@@ -45,31 +46,40 @@ async function waitFor(fn, label, timeout = 30000) {
   while (Date.now() < deadline) { if (await fn()) return; await delay(200); }
   throw Error(`Timed out: ${label}`);
 }
-async function request(path, { body, cookie, token, form, method = body === undefined && !form ? 'GET' : 'POST', status = 200 } = {}) {
-  const response = await fetch(origin + path, { method, redirect: 'manual', headers: { Origin: origin,
+async function request(path, { body, cookie, token, form, requestOrigin = origin, method = body === undefined && !form ? 'GET' : 'POST', status = 200 } = {}) {
+  const response = await fetch(origin + path, { method, redirect: 'manual', headers: { Origin: requestOrigin,
     'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json',
     ...(cookie ? { Cookie: cookie } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     ...(form ? { body: form.toString() } : body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(45000) });
   const text = await response.text(); let data; try { data = JSON.parse(text); } catch { data = null; }
   // Never place raw response bodies into errors: OAuth/token responses carry secrets.
-  if (status !== null) assert.equal(response.status, status, `${method} ${path.split('?')[0]} unexpected HTTP status (${data?.error ? String(data.error).slice(0, 180) : 'non-JSON or no error'})`);
+  if (status !== null) assert.equal(response.status, status, `${method} ${path.split('?')[0]} returned ${response.status}, expected ${status} (${data?.error ? String(data.error).slice(0, 160) : 'non-JSON or no error'})`);
   return { response, data, text, cookie: (response.headers.getSetCookie?.() || []).map(c => c.split(';')[0]).join('; ') };
 }
-async function oauth(cookie, scopes) {
-  const callback = `http://127.0.0.1:${await port()}/callback`;
-  const registered = (await request('/api/v1/integrations/chatgpt/oauth/register', { body: { redirect_uris: [callback], token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], client_name: 'Synthetic private reporting acceptance' }, status: 201 })).data;
+const oauthBase = '/api/v1/integrations/chatgpt/oauth';
+const resource = origin + '/api/v1/integrations/chatgpt/mcp';
+async function oauthAttempt(cookie, scope = 'thingtime offline_access', prior) {
+  const callback = prior?.callback || `http://127.0.0.1:${await port()}/callback`;
+  const clientId = prior?.clientId || (await request(`${oauthBase}/register`, { body: { redirect_uris: [callback], token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], client_name: 'Synthetic private reporting acceptance' }, status: 201 })).data.client_id;
   const verifier = randomBytes(48).toString('base64url');
-  const params = new URLSearchParams({ response_type: 'code', client_id: registered.client_id, redirect_uri: callback,
-    state: randomBytes(32).toString('base64url'), code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', resource: origin + '/api/v1/integrations/chatgpt/mcp' });
-  const page = await request('/api/v1/integrations/chatgpt/oauth/authorize?' + params, { cookie });
+  const params = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: callback, scope,
+    state: randomBytes(32).toString('base64url'), code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', resource });
+  const path = `${oauthBase}/authorize?` + params;
+  const page = await request(path, { cookie });
   const signed = /name="request" value="([^"]+)"/.exec(page.text)?.[1]; assert(signed, 'OAuth form must contain a signed request');
+  const exchange = async (code, overrides = {}, status = 200) => (await request(`${oauthBase}/token`, { form: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: callback, code, code_verifier: verifier, resource, ...overrides }), status })).data;
+  return { signed, callback, clientId, authorizeUrl: origin + path, exchange, state: params.get('state'), page: page.text };
+}
+async function oauth(cookie, scopes) {
+  const attempt = await oauthAttempt(cookie);
+  const { signed } = attempt;
   const form = new URLSearchParams({ request: signed, intent: 'prepare', endpoint: origin }); scopes.forEach(scope => form.append('scope', scope));
   const prepared = (await request('/api/v1/integrations/chatgpt/oauth/authorize', { cookie, form })).data;
   const complete = (await request('/api/v1/integrations/chatgpt/oauth/authorize', { cookie, form: new URLSearchParams({ request: signed, intent: 'complete', label: 'Synthetic reporting owner', endpoint: origin, token: prepared.token }) })).data;
   const code = new URL(complete.redirectUri).searchParams.get('code');
-  const exchange = (await request('/api/v1/integrations/chatgpt/oauth/token', { form: new URLSearchParams({ grant_type: 'authorization_code', client_id: registered.client_id, redirect_uri: callback, code, code_verifier: verifier, resource: origin + '/api/v1/integrations/chatgpt/mcp' }) })).data;
+  const exchange = await attempt.exchange(code);
   assert(exchange.access_token, 'Real PKCE exchange must return an MCP bearer');
-  return { bridge: exchange.access_token, pat: prepared.token, patId: prepared.tokenId, authorizeUrl: origin + '/api/v1/integrations/chatgpt/oauth/authorize?' + params };
+  return { ...attempt, bridge: exchange.access_token, refresh: exchange.refresh_token, pat: prepared.token, patId: prepared.tokenId };
 }
 async function browserQa(cookie, authorizeUrl) {
   const modulePath = process.env.AGENT_REPORTING_PLAYWRIGHT_MODULE;
@@ -100,15 +110,129 @@ async function browserQa(cookie, authorizeUrl) {
   } finally { await browser.close(); }
   checks.push('isolated Chromium OAuth Advanced permission label, description and checkbox verified at desktop/mobile; full scroll, no horizontal overflow, credential fields masked');
 }
+async function browserScopedConsent(cookie, attempt, username) {
+  const modulePath = process.env.AGENT_REPORTING_PLAYWRIGHT_MODULE;
+  const executablePath = process.env.AGENT_REPORTING_CHROMIUM_EXECUTABLE;
+  if (!modulePath && !executablePath) return null;
+  assert(modulePath && executablePath, 'Set both isolated Playwright and Chromium executable paths');
+  const { chromium } = await import(modulePath);
+  const browser = await chromium.launch({ executablePath, headless: true, chromiumSandbox: true });
+  try {
+    const context = await browser.newContext();
+    await context.addCookies(cookie.split('; ').map(pair => { const index = pair.indexOf('='); return { name: pair.slice(0,index), value: pair.slice(index+1), url: origin }; }));
+    const page = await context.newPage();
+    await page.route(`${attempt.callback}?**`, route => route.fulfill({ status: 200, body: 'Synthetic OAuth callback received' }));
+    for (const [name, width, height] of [['desktop',1440,960],['mobile',390,844]]) {
+      await page.setViewportSize({ width, height });
+      await page.goto(attempt.authorizeUrl, { waitUntil: 'domcontentloaded' });
+      await page.getByText(`Signed in as @${username}`, { exact: false }).waitFor();
+      assert(await page.getByText('Private agent reporting', { exact: true }).isVisible());
+      assert.equal(await page.locator('input[type="password"]').count(), 0);
+      await page.getByText('Optional access rules').click();
+      assert.equal(await page.locator('input[value="things"]').isChecked(), false);
+      await page.evaluate(async () => { for(let y=0;y<document.documentElement.scrollHeight;y+=Math.max(200,innerHeight-80)){scrollTo(0,y);await new Promise(r=>setTimeout(r,20));}scrollTo(0,document.documentElement.scrollHeight); });
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Consent page must have no horizontal overflow');
+      await page.screenshot({ path: join(evidenceDir, `scoped-consent-${name}.png`), fullPage: true });
+    }
+    const callback = page.waitForURL(`${attempt.callback}?**`);
+    await page.getByRole('button', { name: 'Connect Thingtime' }).click();
+    await callback;
+    checks.push('isolated Chromium consent at desktop/mobile: identity, requested permission, optional Things unchecked, expanded content and one real approval click');
+    return new URL(page.url());
+  } finally { await browser.close(); }
+}
 let rpcId = 0;
 async function mcp(token, name, args) {
   const { data } = await request('/api/v1/integrations/chatgpt/mcp', { token, body: { jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } } });
   assert(data?.result, 'MCP must return a JSON-RPC tool result');
   const result = data.result;
   const value = result.structuredContent || (() => { try { return JSON.parse(result.content?.find(c => c.type === 'text')?.text || '{}'); } catch { return {}; } })();
-  return { error: result.isError || !!value.error, value };
+  return { error: result.isError || !!value.error, value, challenge: result._meta?.['mcp/www_authenticate']?.[0] };
 }
 async function tool(token, name, args) { const result = await mcp(token, name, args); assert(!result.error, `${name} refused (${String(result.value.error || 'tool error').slice(0, 180)})`); return result.value.result || result.value; }
+
+async function scopedReconnect(owner, stranger, plain) {
+  const old = await tool(plain.bridge, 'list_thingtime_accounts', {});
+  const accountId = old.defaultAccountId;
+  const requestArgs = { accountId, externalTaskId: 'scoped-oauth-acceptance' };
+  const refusal = await mcp(plain.bridge, 'get_thingtime_agent_task', requestArgs);
+  assert(refusal.error); assert.equal(refusal.value.status, 403);
+  assert.match(refusal.challenge, /error="insufficient_scope"/);
+  assert.equal((await mcp(plain.bridge, 'login_thingtime', { accountId, requiredScopes: ['agents.report'] })).challenge, refusal.challenge);
+  const scope = /scope="([^"]+)"/.exec(refusal.challenge)?.[1];
+  assert.equal(scope, 'thingtime offline_access agents.report');
+  const metadata = (await request('/.well-known/oauth-authorization-server')).data;
+  assert.equal(metadata.issuer, origin); assert(metadata.scopes_supported.includes('agents.report'));
+  assert(!(await request('/.well-known/oauth-protected-resource')).data.scopes_supported.includes('agents.report'));
+  const refresh = async (token, override, status = 200) => (await request(`${oauthBase}/token`, { form: new URLSearchParams({ grant_type: 'refresh_token', client_id: plain.clientId, refresh_token: token, resource, ...override }), status })).data;
+  assert.equal((await refresh(plain.refresh, { scope }, 400)).error, 'invalid_scope');
+  const baseRefresh = await refresh(plain.refresh, {});
+  assert.equal(baseRefresh.scope, 'thingtime offline_access');
+  const listPatIds = async () => (await request('/api/v1/tokens', { cookie: owner.cookie })).data.tokens.map(token => token.id).sort();
+  const before = await listPatIds();
+  const consent = (signed, intent, cookie = owner.cookie, status = 200, requestOrigin = origin) => request(`${oauthBase}/authorize`, { cookie, status, requestOrigin, form: new URLSearchParams({ request: signed, intent }) });
+  const cancelled = await oauthAttempt(owner.cookie, scope, plain);
+  const preCancel = (await consent(cancelled.signed, 'prepare')).data;
+  assert(!('token' in preCancel));
+  const cancelledCallback = new URL((await consent(preCancel.request, 'cancel')).data.redirectUri);
+  assert.equal(cancelledCallback.searchParams.get('error'), 'access_denied');
+  assert.equal(cancelledCallback.searchParams.get('state'), cancelled.state);
+  assert.equal(cancelledCallback.searchParams.has('code'), false);
+  await consent(preCancel.request, 'complete', owner.cookie, 409);
+  assert.deepEqual(await listPatIds(), before);
+
+  const signedOut = await oauthAttempt(owner.cookie, scope, plain);
+  const rejected = new URL((await consent(signedOut.signed, 'cancel', '')).data.redirectUri);
+  assert.equal(rejected.searchParams.get('error'), 'access_denied');
+  await consent(signedOut.signed, 'prepare', owner.cookie, 409);
+
+  const upgrade = await oauthAttempt(owner.cookie, scope, plain);
+  assert.match(upgrade.page, /Requested permissions[\s\S]*Private agent reporting/);
+  const prepared = (await consent(upgrade.signed, 'prepare')).data;
+  assert(!('token' in prepared));
+  assert.equal(prepared.username, owner.data.user.username);
+  await consent(upgrade.signed, 'complete', owner.cookie, 400);
+  await consent(prepared.request, 'complete', stranger.cookie, 409);
+  const crossOrigin = await consent(prepared.request, 'complete', owner.cookie, null, 'https://other.invalid');
+  assert([400, 403].includes(crossOrigin.response.status), 'Cross-origin approval is refused by ingress or the handler');
+  assert.deepEqual(await listPatIds(), before);
+  const callback = await browserScopedConsent(owner.cookie, upgrade, prepared.username) || new URL((await consent(prepared.request, 'complete')).data.redirectUri);
+  assert.equal(callback.searchParams.get('state'), upgrade.state);
+  assert.equal(callback.searchParams.get('iss'), origin);
+  const code = callback.searchParams.get('code'); assert(code);
+  await consent(prepared.request, 'complete', owner.cookie, 409);
+  await consent(upgrade.signed, 'prepare', owner.cookie, 409);
+  const spentPage = new URL(upgrade.authorizeUrl);
+  spentPage.searchParams.set('scope', 'offline_access agents.report thingtime');
+  await request(spentPage.pathname + spentPage.search, { cookie: owner.cookie, status: 409 });
+  assert.equal((await upgrade.exchange(code, { code_verifier: randomBytes(48).toString('base64url') }, 400)).error, 'invalid_grant');
+  assert.equal((await upgrade.exchange(code, { resource: 'https://other.invalid/api/v1/integrations/chatgpt/mcp' }, 400)).error, 'invalid_grant');
+  assert.deepEqual(await listPatIds(), before);
+  const exchanged = await upgrade.exchange(code);
+  assert.equal(exchanged.scope, scope); assert(exchanged.access_token && exchanged.refresh_token);
+  assert.equal((await upgrade.exchange(code, {}, 400)).error, 'invalid_grant');
+  const minted = (await listPatIds()).filter(id => !before.includes(id));
+  assert.equal(minted.length, 1);
+  const rotated = await refresh(exchanged.refresh_token, { scope });
+  assert.equal(rotated.scope, scope);
+  assert.equal((await refresh(exchanged.refresh_token, {}, 400)).error, 'invalid_grant');
+  assert.deepEqual(await tool(baseRefresh.access_token, 'list_thingtime_accounts', {}), old, 'New authorization must preserve the old grant');
+  assert((await mcp(baseRefresh.access_token, 'get_thingtime_agent_task', requestArgs)).error);
+  const linked = await tool(rotated.access_token, 'list_thingtime_accounts', {});
+  assert.notEqual(linked.defaultAccountId, accountId);
+  assert.equal(linked.accounts.length, 1);
+  const profile = await tool(rotated.access_token, 'get_thingtime_profile', { accountId: linked.defaultAccountId });
+  assert.equal(profile.user.id, owner.data.user.id);
+  assert.deepEqual(profile.token.scopes, ['agents.report']);
+  assert.equal(linked.accounts[0].endpoint, origin);
+  assert((await mcp(rotated.access_token, 'get_thingtime_agent_task', requestArgs)).error, 'Old account id must not silently fall back to the new account');
+  const refusedWrite = await mcp(rotated.access_token, 'prepare_thingtime_agent_task', { externalTaskId: 'wrong-implicit-default' });
+  assert.match(refusedWrite.value.error, /verified connected accountId/);
+  const missing = await mcp(rotated.access_token, 'get_thingtime_agent_task', { ...requestArgs, accountId: linked.defaultAccountId });
+  assert.match(missing.value.error, /Prepare this stable task identity first/);
+  checks.push('real native-style scope challenge, explicit consent, cancel and wrong browser/origin refusal, PKCE/replay fencing, single PAT, rotation, least privilege and unchanged old grant');
+  return { bridge: rotated.access_token, refresh: rotated.refresh_token, patId: minted[0], accountId: linked.defaultAccountId, refreshGrant: refresh };
+}
 let client;
 try {
   await access(join(cwd, '.output/server/index.mjs')); await mkdir(join(dir, 'db')); await mkdir(evidenceDir, { recursive: true });
@@ -121,11 +245,45 @@ try {
   const server = start(process.execPath, ['.output/server/index.mjs']);
   await waitFor(async () => { assert(server.exitCode === null, 'Disposable Nitro server exited'); try { return (await fetch(origin + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(800) })).ok; } catch { return false; } }, 'built Nitro HTTP server');
   const manifest = (await request('/.well-known/thingtime-capabilities.json')).data;
-  for (const [feature, version] of Object.entries({ 'api.agent-reporting': '1.0.0', 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0' })) assert.equal(manifest.features?.[feature]?.version, version);
+  for (const [feature, minimum] of Object.entries({ 'api.agent-reporting': '1.0.0', 'api.agent-overview': '2.0.0', 'api.auth-characters': '1.0.0', 'api.chatgpt-mcp': '2.2.0', 'api.chatgpt-oauth-authorize': '1.3.0', 'api.chatgpt-oauth-token': '1.1.0' })) {
+    const version = manifest.features?.[feature]?.version;
+    const [major, minor, patch] = (version || '').split('.').map(Number);
+    const [expectedMajor, minMinor, minPatch] = minimum.split('.').map(Number);
+    assert(major === expectedMajor && (minor > minMinor || (minor === minMinor && patch >= minPatch)), `Built manifest ${feature}: got ${version}, expected compatible ${minimum}`);
+  }
+  const pluginManifest = (await request('/.well-known/thingtime-chatgpt-capabilities.json')).data;
+  assert.equal(pluginManifest.origin, origin); assert.equal(pluginManifest.features['chatgpt.oauth'], '1.12.0');
   checks.push('built Nitro origin advertises reporting, overview and Character contracts');
   const register = async prefix => request('/api/v1/auth/register', { body: { username: prefix + randomBytes(6).toString('hex'), email: `${prefix}${randomUUID()}@example.invalid`, password: randomBytes(32).toString('hex') } });
   const owner = await register('reportowner'); const stranger = await register('reportstranger');
   const create = async (kind, crystal) => { const data = (await request('/api/v1/things', { cookie: owner.cookie, body: { thingtime: [kind], acl: ['tt:user'], crystal } })).data; assert(data.thing?.id || data.id, `Saved ${kind} returned an ID`); return data.thing?.id || data.id; };
+  const plain = await oauth(owner.cookie, ['things']);
+  const upgraded = await scopedReconnect(owner, stranger, plain);
+  if (reconnectOnly) {
+    const syntheticWorkspace = { pages: {}, schemas: {}, actions: {} };
+    for (const role of ['overview', 'taskDetail']) syntheticWorkspace.pages[role] = await create('webpage', { name: `OAuth test ${role}`, blocks: [{ id: 'label', type: 'text', text: 'Synthetic OAuth acceptance' }] });
+    for (const role of roles) syntheticWorkspace.schemas[role] = await create('schema', { name: `oauth-acceptance-${role}`, fields: [{ name: 'title', type: 'string' }] });
+    syntheticWorkspace.actions.createTask = await create('action', { name: 'Create synthetic task', inputs: [{ name: 'title', type: 'string', required: true }], steps: [
+      { op: 'things.create', schema: syntheticWorkspace.schemas.task, values: { title: '$input.title' } }, { op: 'return', value: '$step.1' }
+    ], capabilities: [{ capability: 'things.create', schemas: [syntheticWorkspace.schemas.task] }] });
+    const space = (await request('/api/v1/subspaces', { cookie: owner.cookie, body: { name: 'OAuth test space', slug: `oauth-test-${randomBytes(6).toString('hex')}`, access: 'private' }, status: 201 })).data;
+    syntheticWorkspace.subspaceId = space.subspace?.id; assert(syntheticWorkspace.subspaceId);
+    const identity = { externalTaskId: 'scoped-oauth-acceptance', accountId: upgraded.accountId };
+    const prepared = await tool(upgraded.bridge, 'prepare_thingtime_agent_task', { ...identity, displayName: 'Synthetic OAuth reporter', workspace: syntheticWorkspace });
+    assert(prepared.binding?.characterId && prepared.binding.characterId !== owner.data.user.id);
+    const created = await tool(upgraded.bridge, 'report_thingtime_agent_task', { ...identity, requestId: randomUUID(), actionName: 'createTask', inputs: { title: 'Created after scoped OAuth' } });
+    const id = created.binding.records.taskId; assert(id);
+    const read = await tool(upgraded.bridge, 'get_thingtime_agent_task', { ...identity, recordIds: [id] });
+    assert.equal(read.records[0]?.crystal?.title, 'Created after scoped OAuth');
+    assert.equal(read.records[0]?.author?.id, prepared.binding.characterId);
+    assert((await mcp(upgraded.bridge, 'get_thingtime_thing', { accountId: upgraded.accountId, id })).error);
+    const legacy = await oauth(owner.cookie, ['agents.report']);
+    assert.equal((await tool(legacy.bridge, 'get_thingtime_agent_task', { externalTaskId: identity.externalTaskId })).binding.id, prepared.binding.id);
+    await request('/api/v1/tokens/revoke', { cookie: owner.cookie, body: { id: upgraded.patId } });
+    assert.equal((await upgraded.refreshGrant(upgraded.refresh, {}, 400)).error, 'invalid_grant');
+    assert((await mcp(upgraded.bridge, 'get_thingtime_agent_task', identity)).error);
+    checks.push('the upgraded grant runs a saved Action as the private task Character, exact record readback works, legacy reporting can resume it, and revoked backing access cannot refresh');
+  } else {
   const workspace = { pages: {}, schemas: {}, actions: {} };
   for (const [key, crystal] of Object.entries(authored.schemas)) workspace.schemas[key] = await create('schema', crystal);
   for (const [key, crystal] of Object.entries(authored.pages)) workspace.pages[key] = await create('webpage', crystal);
@@ -133,7 +291,7 @@ try {
   for (const [key, crystal] of Object.entries(authored.actions)) workspace.actions[key] = await create('action', bindFixtureSchemaIds(crystal));
   const subspace = (await request('/api/v1/subspaces', { cookie: owner.cookie, body: { name: 'Thingtime Agents', slug: `reporting-${randomBytes(5).toString('hex')}`, access: 'private' }, status: 201 })).data;
   workspace.subspaceId = subspace.subspace?.id; assert(workspace.subspaceId, 'Private subspace returned ID');
-  const plain = await oauth(owner.cookie, ['things']); const grant = await oauth(owner.cookie, ['agents.report']);
+  const grant = await oauth(owner.cookie, ['agents.report']);
   const args = { externalTaskId: 'isolated-http-mcp-reporting-acceptance', displayName: 'Synthetic Reporting Character', workspace };
   const denied = await request('/api/v1/agents/reporting', { token: plain.pat, body: { ...args, origin, operation: 'prepare' }, status: null }); assert.equal(denied.response.status, 403);
   assert((await mcp(plain.bridge, 'prepare_thingtime_agent_task', args)).error, 'Generic things bridge must refuse independent reporting');
@@ -220,7 +378,8 @@ try {
   await request('/api/v1/tokens/revoke', { cookie: owner.cookie, body: { id: grant.patId } });
   assert((await mcp(grant.bridge, 'get_thingtime_agent_task', { externalTaskId: args.externalTaskId })).error, 'Revoked upstream grant refuses bridge reads');
   checks.push('upstream token revocation stops private reporting through the real bridge');
-  await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: true, checks, fixtureSha256: createHash('sha256').update(await readFile(fixturePath)).digest('hex'), source: 'real isolated HTTP + OAuth PKCE + MCP built Nitro', completedAt: new Date().toISOString(), isolation: 'fresh replica set; throwaway accounts and memory-only generated credentials; normal networking; no inherited app env', ports }, null, 2));
+  }
+  await writeFile(join(evidenceDir, 'agent-reporting-acceptance.json'), JSON.stringify({ passed: true, checks, fixtureSha256: fixturePath ? createHash('sha256').update(await readFile(fixturePath)).digest('hex') : null, source: 'real isolated HTTP + OAuth PKCE + MCP built Nitro', completedAt: new Date().toISOString(), isolation: 'fresh replica set; throwaway accounts and memory-only generated credentials; normal networking; no inherited app env', ports }, null, 2));
   console.log(JSON.stringify({ passed: true, checks, evidence: join(evidenceDir, 'agent-reporting-acceptance.json') }));
 } catch (error) {
   await mkdir(evidenceDir, { recursive: true });
