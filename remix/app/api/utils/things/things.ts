@@ -79,12 +79,8 @@ import {
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
-  DEVICE_CONTROL_THINGTIME,
-	EXTERNAL_RESERVED_ID_PREFIX,
+  MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
-	MIGRATION_DIAGNOSTIC_ID_PREFIX,
-  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME, MONGODB_CONNECTION_SNAPSHOT_ID_PREFIX, MONGODB_CONNECTION_SNAPSHOT_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
   REACTION_EMOJIS,
@@ -3521,28 +3517,11 @@ export const listThings = async (
     // up as inert, non-editable entries (edit/delete 403) in the data browser.
     // Messenger plumbing (chats, memberships, messages…) stays out for the
     // same reason — /messages is its browser.
-    const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
-    const hiddenKinds = folder
-      ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
-      : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
-    match = withMatch(
-      // Legacy post compatibility can also match kind:'post' on a differently
-      // stamped row, so only prune when the filter really requires a kind.
-      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive(), thingtime.includes('post') ? undefined : thingtime),
-      await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
-    );
-    if (folder === 'root') {
-      // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
-      match = withMatch(match, ownerLibraryRootMatch());
-    } else if (folder) {
-      const assignment = await resolveFolderAssignment(viewer.id, folder, []);
-      if (isFail(assignment)) return assignment;
-      match.folderId = assignment.folderId;
-    }
-    // narrow to one app's namespace (session-auth data browser)
-    if (typeof query.appId === 'string' && query.appId.trim()) {
-      match = withMatch(match, { appId: query.appId.trim() });
-    }
+    match = {
+      ownerId: viewer.id,
+      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
+      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+    };
   }
   if (thingtime.length) {
     match = withMatch(match, await thingtimeInClause(thingtime));
@@ -4987,118 +4966,22 @@ export const deleteThing = async (
   // dedicated endpoints (themes, algorithms) own deletion. Messenger kinds are
   // excluded too: a chat/community doc is one doc standing in for every
   // MEMBER's data, so owner-may-delete does not apply — their family owns the
-  // whole lifecycle (leave, decline, soft delete, emoji retire). Under the app
-  // lens the filter additionally carries the namespace stamp, so an app can
-  // only ever delete what it stored; sandboxed tokens add their grant stamp to
-  // the same atomic filter — no check-then-delete race either way.
-  const sandboxTokenId = patSandboxOf(viewer);
-	const deleteFilter = {
+  // whole lifecycle (leave, decline, soft delete, emoji retire).
+  const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
-    ...(app ? { appId: app.appId } : {}),
-    ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
-	};
-
-	const initial = (await things.findOne(deleteFilter as any)) as any as ThingDoc | null;
-	if (!initial) {
-    if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
-      return patSandboxFail();
-    }
-    return fail(404, 'Thing not found');
-  }
-	if (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) {
-		if (typeof hooks.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(hooks.expectedUpdatedAt).getTime())) {
-			return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
-		}
-		const currentUpdatedAt = new Date(initial.updatedAt);
-		if (Number.isNaN(currentUpdatedAt.getTime()) || currentUpdatedAt.getTime() !== new Date(hooks.expectedUpdatedAt).getTime()) {
-			return fail(409, 'Thing changed after the preview — build a new preview before deleting');
-		}
-	}
-  // visibility fence — same judgement the update path makes: out-of-audience
-  // things are untouchable (inherit acls resolve through the target chain)
-  if (await patVisibilityBlocksDoc(viewer, initial)) return patVisibilityFail(viewer);
-	// Pin the physical root identity across the multi-transaction drain. If a
-	// competing deleter wins and a caller later reuses the same public shareId,
-	// this in-flight request must never delete that replacement Thing (ABA).
-	const anchoredDeleteFilter = {
-		...deleteFilter,
-		_id: (initial as any)._id,
-		...(isFolderThing(initial) || (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) ? { updatedAt: initial.updatedAt } : {})
-	};
-	const deleteCapture = hooks.timelineCapture ?? newThingMutationCapture(viewer.id);
-
-	try {
-		await hooks.beforeDelete?.(initial);
-		if (hooks.beforeCascade) {
-			const prepared = await hooks.beforeCascade(initial);
-			if (prepared.ok === false) return prepared;
-		} else {
-			// Defense in depth for future/internal callers: generic cascade deletion
-			// must never refund a protected attachment Thing before its external S3
-			// version is permanently deleted. Home routes provide beforeCascade;
-			// custom data planes cannot own private attachments.
-			const attachmentChild = await things.findOne(
-				{
-					ownerId: initial.ownerId,
-					thingtime: 'attachment',
-					attachmentState: { $in: ['pending', 'finalizing', 'ready', 'deleting'] },
-					targetId: { $in: cascadeLinkIdsOf(initial) }
-				} as any,
-				{ projection: { _id: 1 } }
-			);
-			if (attachmentChild) return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
-		}
-		// the comments deleted along the way (a reported comment takes the rows
-		// that flagged it — clearSubspaceReportsFor below)
-		const deletedCommentIds = new Set<string>();
-		// Descendants commit leaf-first in deterministic <=100-row transactions;
-		// the root remains as a durable retry anchor until the closure is empty.
-		// Each batch uses exact findOneAndDelete before-images, so Mongo callback
-		// retries, competing deleters, and caller retries debit transactional
-		// account/app ledgers at most once. Sandbox refunds happen immediately
-		// after each commit; an ambiguous sandbox failure stays conservatively
-		// over-counted for its existing reconciliation path to repair.
-		for (let pass = 0; pass < MAX_CASCADE_DRAIN_PASSES; pass += 1) {
-			const anchoredRoot = (await things.findOne(anchoredDeleteFilter as any)) as any as ThingDoc | null;
-			if (!anchoredRoot) {
-				const oldRootStillExists = await things.findOne({ _id: (initial as any)._id } as any);
-				return oldRootStillExists ? fail(409, 'Thing changed while it was being deleted — try again') : { ok: true };
-			}
-			const descendants = await discoverCascadeDescendants(anchoredRoot);
-			const attachmentTargets = attachmentCascadeCleanupTargets(descendants);
-			if (attachmentTargets.length) {
-				if (!hooks.beforeCascade) {
-					return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
-				}
-				// Comment/reply attachments can be deeper than the requested root. Remove
-				// every exact S3 version before allowing Mongo cascade accounting to see
-				// its protected attachment row, then re-walk the now-changed closure.
-				for (const target of attachmentTargets) {
-					const prepared = await hooks.beforeCascade(target as ThingDoc);
-					if (prepared.ok === false) return prepared;
-				}
-				continue;
-			}
-			let rewalk = false;
-			for (const batch of cascadeDeletionBatches(descendants)) {
-				const result = await deleteCascadeBatchAtomically(batch, (initial as any)._id, viewer.id);
-				if (result.blocked) {
-					rewalk = true;
-					break;
-				}
-				await refundDeletedNamespaceDocs(result.deleted);
-				for (const gone of result.deleted) if (thingtimeOf(gone).includes('comment') && gone.shareId) deletedCommentIds.add(gone.shareId);
-			}
-			if (rewalk) continue;
-
-			if (isFolderThing(anchoredRoot)) await drainFolderPlacement(anchoredDeleteFilter, deleteCapture);
-			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture, hooks);
-			if (rootResult.state === 'blocked') continue;
-			if (rootResult.state === 'deleted') {
-				await refundDeletedNamespaceDocs([rootResult.doc]);
-				await clearSubspaceReportsFor(rootResult.doc, deletedCommentIds);
+    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] }
+  } as any)) as any as ThingDoc | null;
+  if (!deleted) return fail(404, 'Thing not found');
+  // comments/reactions/saves attached to the deleted thing go with it (v2
+  // things AND interim kind docs); share things survive so they can render
+  // their 'original unavailable' placeholder
+  await things.deleteMany({
+    $or: [
+      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction', 'save'] } },
+      { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
+    ]
+  } as any);
   return { ok: true };
 			}
 
