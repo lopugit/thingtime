@@ -44,10 +44,20 @@ test('selection patches are atomic and typing can clear related draft fields', (
 test('query navigation encodes values and stays on the current page', async () => {
 	const { localQueryHref } = await import('./localUiAction');
 	assert.equal(localQueryHref('page-1', { q: 'A&B #?', page: 2 }), '/p/page-1?q=A%26B+%23%3F&page=2');
-	for (const params of [{ mode: 'edit' }, { key: 'secret' }, { x: {} }, { x: 'a'.repeat(201) }, JSON.parse('{"__proto__":"x"}')])
+	for (const params of [{ mode: 'edit' }, { key: 'secret' }, { x: {} }, { x: [false] }, JSON.parse('{"__proto__":"x"}')])
 		assert.equal(localQueryHref('page-1', params), null);
 	assert.equal(localQueryHref('https://evil.example', {}), null);
 	assert.equal(localQueryHref(null, {}), null);
+});
+
+test('query forms carry exact selections and explicit clears', async () => {
+	const { localQueryFormInput, localQueryParams } = await import('./localUiAction');
+	const projectIds = Array.from({ length: 8 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+	const { params } = localQueryFormInput({ op: 'query', form: true, params: { projectIds: '', statuses: 'active' } }, { projectIds, statuses: [] });
+	const query = localQueryParams(params);
+	assert.equal(query?.get('projectIds'), JSON.stringify(projectIds));
+	assert.equal(query?.get('statuses'), '[]');
+	assert.equal(localQueryParams({ statuses: [' In review, external ', 'active'] })?.get('statuses'), '[" In review, external ","active"]');
 });
 
 
