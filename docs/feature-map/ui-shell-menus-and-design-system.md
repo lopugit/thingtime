@@ -52,6 +52,14 @@ bounded settling, while the Builder blocks remain individually editable.
 
 ## Editable map markers and connector settings
 
+Authored buttons can opt in to Ctrl/Cmd primary selection and use ordinary
+touch and keyboard selection controls. `webpageRuntime.tsx` keeps a transient
+contextual list at `page.selection`; the owner-only delegated click handler
+captures the complete selection for sequential Action batches. Named passive
+cursor sources expose grouped rows at `page.collections`. The same keyed
+repetition works in any authored subtree, including map markers.
+See [Builder browser Actions](../builder-browser-actions.md).
+
 Saved `tt-rich-text` fields/read views reuse `LongTextEditor`/`RichTextBlocks`.
 `componentFormFields.ts` captures native fields at activation and awaits trusted
 editor adapters before confirmation/dispatch; JSON plus optional plain text share

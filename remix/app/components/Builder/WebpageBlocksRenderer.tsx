@@ -1,3 +1,5 @@
+import { collectionSource, indexCollectionRows } from './collectionSource';
+import { PAGE_COLLECTION_REQUIREMENTS } from '~/schemas/authoredControls';
 import { useFormatClock } from './useFormatClock';
 import { resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
@@ -695,8 +697,12 @@ for (const [key, style] of Object.entries(TEXT_STYLES)) {
 // (liveComponent.tsx useThingSource) keyed by the block id. Kept as a thin
 // alias so the block view and every dedicated thing page fetch, cache, and
 // gate on exactly the same code.
-const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean, executionHeld = false): { scope: Record<string, unknown> } =>
-	useThingSource({ source: block.source, cacheId: block.id, argValues, interactive, executionHeld });
+const useBlockSource = (block: WebpageBlock, argValues: Record<string, unknown>, interactive: boolean, executionHeld = false): { scope: Record<string, unknown> } => {
+	const collection = block.source?.collection;
+	const cursorPages = collection && block.source ? collectionSource({ ...collection, action: block.source.action }) : null;
+	return useThingSource({ source: block.source, cacheId: block.id, argValues, interactive, executionHeld,
+		cursorPages: cursorPages ?? undefined, collectionMinimum: collection ? PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve'] : undefined });
+};
 
 const ComponentBlockView = ({
 	block,
@@ -801,7 +807,7 @@ const ComponentBlockView = ({
 		<LiveTemplate
 			executionHeld={held}
 			render={resolved}
-			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope }}
+			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope, ...(inheritedScope.page ? { page: inheritedScope.page } : {}) }}
 			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
 			onUnowned={onUnowned}
 			confirm={confirm}
@@ -892,8 +898,12 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
  const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
  const block = { ...props.block, source: undefined, args: undefined };
  const scope = { ...props.block.args, ...source.scope };
+ const binding = props.block.source?.collection;
+ const data = React.useMemo(() => binding && Array.isArray(source.scope.result) ? indexCollectionRows(source.scope.result, binding.groupBy) : undefined, [binding, source.scope.result]);
+ const parentPage = inheritedScope.page as { collections?: Record<string, unknown> } | undefined;
+ const collections = React.useMemo(() => binding ? { ...parentPage?.collections, [binding.as]: data } : undefined, [binding, data, parentPage?.collections]);
  if (props.block.source?.passive === true) return (
-  <ComponentDataScope.Provider value={{ ...inheritedScope, ...scope }}>
+  <ComponentDataScope.Provider value={{ ...inheritedScope, ...scope, ...(collections ? { page: { ...parentPage, collections } } : {}) }}>
    <BlockView {...props} block={block} />
   </ComponentDataScope.Provider>
  );

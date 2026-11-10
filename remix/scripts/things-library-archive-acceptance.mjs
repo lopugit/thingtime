@@ -71,7 +71,7 @@ try {
   await waitFor(async () => (await fetch(origin + manifestPath, { signal: AbortSignal.timeout(1000) })).ok, 'built Nitro', nitro);
   const manifest = (await api(manifestPath)).data;
   assert.equal(manifest.origin, origin);
-  for (const [key, version] of [['api.things', '1.58.0'], ['api.things-search', '1.5.0'], ['api.things-bulk', '1.8.0']]) assert.equal(manifest.features[key].version, version);
+  for (const [key, version] of [['api.things', '1.59.0'], ['api.things-search', '1.5.0'], ['api.things-bulk', '1.8.0']]) assert.equal(manifest.features[key].version, version);
   const { cookie } = await register('archiveowner');
   const { cookie: other } = await register('archiveother');
   assert(cookie && other);

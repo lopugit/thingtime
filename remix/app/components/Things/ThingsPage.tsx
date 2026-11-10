@@ -208,7 +208,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     let current = true;
     const origin = window.location.origin;
     void Promise.all([
-      requireThingtimeCapability('api.things', '1.58.0', origin),
+      requireThingtimeCapability('api.things', '1.59.0', origin),
       requireThingtimeCapability('api.things-search', '1.5.0', origin),
       requireThingtimeCapability('api.things-bulk', '1.8.0', origin)
     ]).then(

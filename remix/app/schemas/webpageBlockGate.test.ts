@@ -204,3 +204,16 @@ test('live sources preserve registered adapter contracts and reject arbitrary au
   assert.equal(valid[0].source.refresh, 'live');
   for (const candidate of [undefined, {}, { ...stream, path: '/api/v1/auth/me' }, { ...stream, path: 'https://example.invalid/' }, { ...stream, feature: 'api.things' }, { ...stream, minimumVersion: '3.0.0' }]) assert.equal(make(candidate).ok, false);
 });
+
+test('named cursor collections require a passive ordinary source and validate all paths', () => {
+	const collection = { as: 'details', groupBy: 'target.id', cursorPath: 'meta.next', cursorInput: 'after', itemKey: 'id' };
+	const source = { action: 'load-details', passive: true, collection };
+	const block = { id: 'scope', type: 'element', tag: 'div' };
+	assert.deepEqual(okBlocks(page([{ ...block, source }]))[0].source, source);
+	for (const invalid of [
+		{ ...source, passive: false }, { ...source, refresh: 'live' },
+		{ ...source, collection: { ...collection, as: 'constructor' } },
+		{ ...source, collection: { ...collection, groupBy: 'target.__proto__' } },
+		{ ...source, collection: { ...collection, cursorInput: 'nested.after' } }
+	]) assert.equal(page([{ ...block, source: invalid }]).ok, false);
+});
