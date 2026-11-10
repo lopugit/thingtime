@@ -318,58 +318,38 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 				}}
       ></Box>
 
-      {isMobile ? (
+      {/* Keep the same form mounted while its dialog switches layouts. */}
+      <Center
+        className={isMobile ? 'editProfileSheet' : 'editProfileModal'}
+        position="fixed"
+        zIndex={DRAWER_MODAL_Z}
+        inset={0}
+        alignItems={isMobile ? 'flex-end' : 'center'}
+        padding={isMobile ? 0 : 6}
+        pointerEvents="none"
+      >
         <Box
-          className="editProfileSheet"
-          position="fixed"
-          zIndex={DRAWER_MODAL_Z}
-          right={0}
-          bottom={0}
-          left={0}
-          height="88vh"
-          sx={{
+          width={isMobile ? '100%' : '560px'}
+          maxWidth="100%"
+          height={isMobile ? '88vh' : undefined}
+          maxHeight={isMobile ? undefined : '86vh'}
+          sx={isMobile ? {
             '@supports (height: 100dvh)': {
               height: '88dvh'
             }
-          }}
+          } : undefined}
           background="var(--tt-card, white)"
-          borderTopRadius="var(--tt-radius-xl, 20px)"
-          boxShadow="0px -8px 30px rgba(0,0,0,0.18)"
-          transform={visible ? 'translateY(0)' : 'translateY(100%)'}
-          transition="transform 0.28s ease-out"
+          borderRadius={isMobile ? 'var(--tt-radius-xl, 20px) var(--tt-radius-xl, 20px) 0 0' : 'var(--tt-radius-lg, 16px)'}
+          boxShadow={isMobile ? '0px -8px 30px rgba(0,0,0,0.18)' : 'var(--tt-shadow-panel, 0px 18px 60px rgba(0,0,0,0.22))'}
+          transform={isMobile ? (visible ? 'translateY(0)' : 'translateY(100%)') : (visible ? 'scale(1)' : 'scale(0.96)')}
+          opacity={isMobile || visible ? 1 : 0}
+          transition={isMobile ? 'transform 0.28s ease-out' : 'transform 0.22s ease-out, opacity 0.22s ease-out'}
           overflowY="auto"
+          pointerEvents="all"
         >
           {content}
         </Box>
-      ) : (
-        <Center
-          className="editProfileModal"
-          position="fixed"
-          zIndex={DRAWER_MODAL_Z}
-          top={0}
-          right={0}
-          bottom={0}
-          left={0}
-          pointerEvents="none"
-          padding={6}
-        >
-          <Box
-            width="560px"
-            maxWidth="100%"
-            maxHeight="86vh"
-            background="var(--tt-card, white)"
-            borderRadius="var(--tt-radius-lg, 16px)"
-            boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0,0,0,0.22))"
-            transform={visible ? 'scale(1)' : 'scale(0.96)'}
-            opacity={visible ? 1 : 0}
-            transition="transform 0.22s ease-out, opacity 0.22s ease-out"
-            overflowY="auto"
-            pointerEvents="all"
-          >
-            {content}
-          </Box>
-        </Center>
-      )}
+      </Center>
     </>
   );
 };

@@ -3565,6 +3565,11 @@ email whose link points at the attacker.
 
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
 
+- [ ] With Edit profile open, edit image framing, CSS or HTML and resize across
+      the desktop/phone breakpoint in both directions without closing the
+      image editor. Check its active tab and draft, then Apply, resize again
+      and save the profile. Verify the image settings, source and profile text
+      after reload. Repeat with an uploaded image that is ready to save.
 - [ ] In Edit profile, Settings → Profile, and subspace moderation settings,
       open **Edit image** on a saved image or completed draft. Verify contain,
       crop, anchor, offsets, padding and zoom against the original at desktop

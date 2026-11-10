@@ -139,9 +139,13 @@ try {
   const openProfileEditor = async () => {
     await page.goto(origin + '/profile', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: /Edit profile/ }).click({ timeout: 120000 });
-    await page.getByRole('button', { name: 'Edit banner image' }).click({ timeout: 30000 });
     return page.locator('[data-image-editor]');
   };
+  const resizeProfile = async (mobile) => {
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1350, height: 950 });
+    await page.locator(mobile ? '.editProfileSheet' : '.editProfileModal').waitFor({ state: 'attached', timeout: 5000 });
+  };
+  const openBannerEditor = () => page.getByRole('button', { name: 'Edit banner image' }).click({ timeout: 30000 });
   const verifyLayout = async (dialog, filename) => {
     const body = dialog.locator('.chakra-modal__body');
     await body.evaluate(element => { element.scrollTop = element.scrollHeight; });
@@ -150,6 +154,9 @@ try {
     await page.screenshot({ path: join(evidence, filename), animations: 'disabled' });
   };
   let dialog = await openProfileEditor();
+  const displayName = page.getByPlaceholder('How you appear around Thingtime');
+  await displayName.fill('Image draft resize fixture');
+  await openBannerEditor();
   await dialog.getByLabel('Image fit').selectOption('contain');
   await dialog.getByLabel('Zoom (%)', { exact: true }).fill('75');
   await dialog.getByLabel('Horizontal anchor (%)', { exact: true }).fill('35');
@@ -168,20 +175,36 @@ try {
   assert.equal(await preview.evaluate(image => image.style.objectFit), 'contain');
   assert.equal(await preview.evaluate(image => image.style.opacity), '0.75');
   await verifyLayout(dialog, 'desktop-html.png');
+  for (const mobile of [true, false]) {
+    await resizeProfile(mobile);
+    assert(await dialog.isVisible(), 'Resizing must leave the open image editor mounted');
+    assert.equal(await dialog.getByRole('tab', { name: 'HTML' }).getAttribute('aria-selected'), 'true');
+    assert.equal(await preview.getAttribute('alt'), 'Two colored circles');
+    assert.equal(await preview.evaluate(image => image.style.opacity), '0.75');
+    assert.equal(await displayName.inputValue(), 'Image draft resize fixture');
+    await verifyLayout(dialog, mobile ? 'mobile-resized-html.png' : 'desktop-resized-html.png');
+  }
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await resizeProfile(true);
+  await openBannerEditor();
+  assert.equal(await dialog.getByLabel('Zoom (%)', { exact: true }).inputValue(), '75');
+  assert.equal(await preview.getAttribute('alt'), 'Two colored circles');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await dialog.waitFor({ state: 'detached' });
   assert.equal((await readProfile()).bannerPresentation, undefined, 'Apply keeps outer profile save pending');
   const profileWrite = page.waitForResponse(response => response.url().endsWith('/api/v1/users/profile') && response.request().method() === 'POST');
   await page.getByRole('button', { name: /Save/ }).last().click();
   assert((await profileWrite).ok());
   const saved = await readProfile();
+  assert.equal(saved.displayName, 'Image draft resize fixture');
   assert.equal(saved.bannerUrl, linkedImage);
   assert.equal(saved.bannerPresentation.zoom, 75);
   assert.equal(saved.bannerPresentation.anchorX, 35);
   assert.equal(saved.bannerPresentation.paddingX, 12);
   assert.equal(saved.bannerPresentation.css.opacity, '0.75');
   assert.equal(saved.bannerPresentation.attributes.alt, 'Two colored circles');
-  recordCheck('desktop profile editor, real save and public readback');
+  recordCheck('open and applied image drafts survive both viewport directions and exact profile save');
 
   const visitor = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, deviceScaleFactor: 1, hasTouch: true });
   await visitor.goto(origin + '/profile/' + username, { waitUntil: 'domcontentloaded' });
@@ -196,6 +219,7 @@ try {
 
   await page.setViewportSize({ width: 390, height: 844 });
   dialog = await openProfileEditor();
+  await openBannerEditor();
   assert.equal(await dialog.getByLabel('Zoom (%)', { exact: true }).inputValue(), '75');
   await dialog.getByLabel('Horizontal padding (px)').focus();
   await verifyLayout(dialog, 'mobile-framing.png');
@@ -229,10 +253,15 @@ try {
   await page.getByRole('button', { name: /Edit profile/ }).click();
   await page.getByLabel('Choose banner image').setInputFiles({ name: 'image.png', mimeType: 'image/png', buffer: imageBytes });
   await page.getByText(/Ready to save/).waitFor({ timeout: 90000 });
-  await page.getByRole('button', { name: 'Edit banner image' }).click();
+  await openBannerEditor();
   dialog = page.locator('[data-image-editor]');
   await dialog.getByLabel('Zoom (%)', { exact: true }).fill('140');
+  await resizeProfile(false);
+  assert.equal(await dialog.getByLabel('Zoom (%)', { exact: true }).inputValue(), '140');
   await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+  await dialog.waitFor({ state: 'detached' });
+  await resizeProfile(true);
+  await page.getByText(/Ready to save/).waitFor();
   const uploadWrite = page.waitForResponse(response => response.url().endsWith('/api/v1/users/profile') && response.request().method() === 'POST');
   await page.getByRole('button', { name: /Save/ }).last().click();
   assert((await uploadWrite).ok());
@@ -242,7 +271,7 @@ try {
   const content = await fetch(apiOrigin + uploaded.bannerUrl, { headers: { Cookie: cookie } });
   assert(content.ok);
   assert(Buffer.from(await content.arrayBuffer()).equals(imageBytes), 'Presentation leaves the original uploaded PNG bytes intact');
-  recordCheck('managed upload, exact attachment binding, original PNG bytes and saved presentation');
+  recordCheck('managed upload survives resize with exact attachment binding, original PNG bytes and saved presentation');
   // Settings uses the same modal. Commit raw CSS while its textarea still has
   // focus; the save may not reuse the value from before that last keystroke.
   await page.goto(origin + '/settings?tab=profile', { waitUntil: 'domcontentloaded' });
