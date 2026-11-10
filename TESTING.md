@@ -13331,6 +13331,10 @@ separate from deterministic discovery/lease tests.
 
 ## Automatic iOS TestFlight and vault delivery
 
+- [ ] Inspect an exact pending or failed TestFlight delivery with the `status`
+  operation. If Builds has no matching record, verify the iOS upload state and
+  diagnostic codes against Build Uploads. Ensure provider descriptions and
+  unrelated builds stay out of the result, and no archive or upload starts.
 - [ ] Before merging an iOS change, require the exact TestFlight Xcode
   `native-pr-compile` job. It compiles the app and tests without signing;
   passing a newer local Swift compiler does not cover this gate.
