@@ -132,7 +132,7 @@ test('photo queue counts are distinct editable blocks and only render observed p
 test('Photos activity exposes individual editable fields and preserves custom card blocks', () => {
  const original = [{ id: 'custom-summary', type: 'element' as const, tag: 'p', text: 'Keep my custom summary' }];
  const blocks = withSyncFolderQuickBlocks(original);
- for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time'])
+ for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time', 'indexing-count', 'live-indexed', 'latest-found'])
   assert.ok(findBlock(blocks, 'folder-card-activity-' + id));
  assert.equal(findBlock(blocks, 'custom-summary'), original[0]);
  assert.deepEqual(withSyncFolderQuickBlocks(blocks), blocks);

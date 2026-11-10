@@ -1200,7 +1200,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		now: () => now,
 		customMongoActive: () => false,
 		store: {
-			listUnboundOwned: async (...args: unknown[]) => {
+			listBrowserDrafts: async (...args: unknown[]) => {
 				listArgs = args;
 				return [pending, ready];
 			},
@@ -1230,7 +1230,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		hasMore: false
 	});
 	assert.deepEqual(listArgs, ['user-1', 26]);
-	assert.deepEqual(scopes, [{ kind: 'draft' }, { kind: 'draft' }]);
+	assert.deepEqual(scopes, [{ kind: 'draft', browserOnly: true }, { kind: 'draft', browserOnly: true }]);
 	assert.deepEqual(deleted, ['objects/attachment-2']);
 });
 
@@ -1478,6 +1478,9 @@ test('explicit edit deletion requires and claims the exact bound target', async 
 
 test('delete claim fences distinguish unattached drafts, expired drafts, and one exact target', () => {
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft' }), { targetId: { $exists: false } });
+	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', browserOnly: true }), {
+		targetId: { $exists: false }, attachmentFileSyncOrigin: { $exists: false }
+	});
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', expiredAtOrBefore: now }), {
 		targetId: { $exists: false },
 		attachmentExpiresAt: { $lte: now }

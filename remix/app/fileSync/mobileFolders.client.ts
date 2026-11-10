@@ -62,7 +62,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true; continueInBackground?: true }
 	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
-	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string }
+	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string; explicitPause?: true }
 	| { action: 'upload-file'; rootId: string; continueInBackground?: true; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' | 'pause-photo-runs' }

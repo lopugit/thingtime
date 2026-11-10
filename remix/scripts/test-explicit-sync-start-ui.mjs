@@ -47,6 +47,22 @@ try {
      const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
      await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
      assert.equal((await state()).nativeCalls.filter(call => call.continueInBackground).length, 0);
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoDiscovery(0));
+     const liveDiscovery = card.locator('[data-block-id="folder-card-activity-indexing"]');
+     await liveDiscovery.getByText('0 of 6 assets found', { exact: true }).waitFor();
+     assert.equal(await liveDiscovery.getByText(/ files?$/).count(), 0, 'unmeasured inventory stays unknown');
+     const captureLabel = (kind, date) => page.evaluate(({ kind, date }) =>
+      `Found 1 ${kind} taken at ${new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' }).format(new Date(date))}`, { kind, date });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoDiscovery(1));
+     await liveDiscovery.getByText('1 of 6 assets found', { exact: true }).waitFor();
+     await liveDiscovery.getByText('0 photos · 1 video · 1 file', { exact: true }).waitFor();
+     await liveDiscovery.getByText(await captureLabel('video', '2026-11-08T01:02:03.000Z'), { exact: true }).waitFor();
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoDiscovery(2));
+     await liveDiscovery.getByText('2 of 6 assets found', { exact: true }).waitFor();
+     await liveDiscovery.getByText('1 photo · 1 video · 2 files', { exact: true }).waitFor();
+     await liveDiscovery.getByText(await captureLabel('photo', '2026-11-08T00:04:05.000Z'), { exact: true }).waitFor();
+     await page.screenshot({ path: join(evidence, `${label}-native-index-discovery.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoDiscovery());
      await card.getByRole('button', { name: 'Back up now', exact: true }).click();
      const disclosure = card.locator('summary').filter({ hasText: 'Backup activity' });
      await disclosure.getByText('Downloading an original from iCloud', { exact: true }).waitFor();
@@ -63,6 +79,12 @@ try {
      assert.deepEqual(await card.locator('[data-block-id="folder-card-activity-event-time"]').evaluateAll(elements => elements.map(element => element.title)),
       ['2026-11-08T00:00:02.000Z', '2026-11-08T00:00:00.000Z']);
      await page.screenshot({ path: join(evidence, `${label}-native-activity-open.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoCloudPreparation(0.42));
+     await disclosure.getByText('Uploading originals', { exact: true }).waitFor();
+     await card.locator('progress[value="42"]').and(card.getByRole('progressbar', { name: 'Current iCloud download' })).waitFor();
+     await page.screenshot({ path: join(evidence, `${label}-native-activity-concurrent.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoCloudPreparation());
+     await disclosure.getByText('Downloading an original from iCloud', { exact: true }).waitFor();
      const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
      await enableCurrentPageBuilder(page);
      await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();

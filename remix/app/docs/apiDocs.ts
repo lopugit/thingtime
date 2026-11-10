@@ -2333,8 +2333,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-assume',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Assume an owned account',
     endpoint: '/api/v1/auth/accounts/assume',
@@ -2349,6 +2349,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires a signed-in session holding the ownership link.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'GET /api/v1/auth/accounts/owned to find assumable accounts.',
       'POST { accountId } — the response sets tt_auth + tt_accounts cookies.',
       'The assumed account is now active; switch back via /api/v1/auth/accounts/switch.'
@@ -2767,9 +2768,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.3.0',
+    contractVersion: '1.3.1',
     group: 'auth',
-    featureVersion: '1.3.0',
+    featureVersion: '1.3.1',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
@@ -2785,6 +2786,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'The signed challenge is bound to this origin; a verified ceremony is consumed atomically and cannot be replayed, even with its saved cookie.',
       'Run startAuthentication(options) in the browser.',
       'POST { response } with credentials; include clientId when the login serves an SSO/app flow.',
@@ -3680,8 +3682,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-remove',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Remove account from switcher',
     endpoint: '/api/v1/auth/accounts/remove',
@@ -3695,6 +3697,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of the roster account to remove.',
       'The account session jti is revoked in MongoDB — the removed token is dead everywhere, not just in this browser.',
       'Read user for the account that is active after the removal (null when none remain).',
@@ -3727,8 +3730,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-switch',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Switch active account',
     endpoint: '/api/v1/auth/accounts/switch',
@@ -3742,6 +3745,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of a roster account (from /api/v1/auth/accounts).',
       'Store the returned Set-Cookie headers — tt_auth now carries the chosen account token.',
       'Refresh user-scoped state client-side; the active user changed for every subsequent request.',
@@ -3871,8 +3875,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
@@ -3886,6 +3890,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST an empty JSON object, or { "all": true } to sign out every switcher account.',
       'If a token is present, Thingtime verifies it and revokes the session jti in MongoDB.',
       'Read user for the account active after logout — null means the browser is fully signed out.',
@@ -4148,8 +4153,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    featureVersion: '1.3.2',
+    contractVersion: '1.3.2',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
@@ -4161,6 +4166,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username, password, and email; displayName is optional. With a valid inviteToken, email is optional and omitted profile fields inherit editable invite suggestions. avatarUrl may replace/clear the suggested thumbnail; PNG/JPEG/WebP input data URLs (max 112,000 characters) normalize to a lossless 128px PNG of at most 80 KiB. JSON requests are bounded to 128 KiB. Invites are consumed with account creation and gift credit transfer in one transaction; no extra starter credits or upload/admin privileges are granted. meta is never accepted from public signup.',
       'Store the returned Set-Cookie header for browser clients.',
       'If verificationLink is present, it is a local/preview helper only; production sends email instead.',
@@ -4754,8 +4760,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.3.1',
+    contractVersion: '1.3.1',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
@@ -4768,6 +4774,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username and password.',
       'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',

@@ -346,10 +346,11 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
 test('both manifests publish passkey concurrency and Apple association contracts', () => {
   const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
   const apiManifest = createApiCapabilitiesManifest();
-  for (const operation of ['login-options', 'login', 'register-options', 'register']) {
+  for (const operation of ['login-options', 'login', 'register-options', 'register'] as const) {
     const feature = `api.auth-passkeys-${operation}`;
-    assert.equal(originManifest.features[feature]?.version, operation === 'login-options' ? '1.1.0' : operation === 'login' ? '1.3.0' : '1.2.0');
-    assert.equal(apiManifest.features[feature], operation === 'login-options' ? '1.1.0' : operation === 'login' ? '1.3.0' : '1.2.0');
+    const expected = operation === 'login-options' ? '1.1.0' : operation === 'login' ? '1.3.1' : '1.2.0';
+    assert.equal(originManifest.features[feature]?.version, expected);
+    assert.equal(apiManifest.features[feature], expected);
   }
   assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
   assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');
@@ -787,6 +788,25 @@ test('Photos automation settings and exact publication are additive origin-scope
  }
 });
 
+test('session replacement reports compatible protection for scoped file-sync reservations', () => {
+  const versions = {
+    'api.auth-accounts-assume': ['1.1.0', '1.1.1'],
+    'api.auth-accounts-remove': ['1.1.0', '1.1.1'],
+    'api.auth-accounts-switch': ['1.1.0', '1.1.1'],
+    'api.auth-logout': ['1.2.0', '1.2.1'],
+    'api.auth-passkeys-login': ['1.3.0', '1.3.1'],
+    'api.auth-register': ['1.3.1', '1.3.2'],
+    'api.login': ['1.3.0', '1.3.1']
+  };
+  const manifest = thingtimeCapabilityManifest('https://sessions.test');
+  const docs = createApiCapabilitiesManifest();
+  for (const [feature, [previous, current]] of Object.entries(versions)) {
+    assert.equal(manifest.features[feature]?.version, current);
+    assert.equal(docs.features[feature], current);
+    assert.equal(capabilitySatisfies(current, previous), true);
+  }
+});
+
 test('expanded Webpage authoring negotiates compatible writes and preview on the selected origin', () => {
  const source = createApiCapabilitiesManifest();
  const origin = 'https://builder.example';
@@ -809,13 +829,13 @@ test('auth sessions and public profiles advertise optional saved image presentat
   const runtime = thingtimeCapabilityManifest('https://profile.test');
   for (const [feature, version] of Object.entries({
     'api.auth-me': '1.2.0',
-    'api.login': '1.3.0',
-    'api.auth-passkeys-login': '1.3.0',
+    'api.login': '1.3.1',
+    'api.auth-passkeys-login': '1.3.1',
     'api.auth-sso-session': '1.2.0',
     'api.auth-characters': '1.2.0',
     'api.auth-temporary': '1.1.0',
-    'api.auth-logout': '1.2.0',
-    'api.auth-accounts-remove': '1.1.0',
+    'api.auth-logout': '1.2.1',
+    'api.auth-accounts-remove': '1.1.1',
     'api.users-profile': '1.2.0',
     'api.auth-accounts': '1.1.0',
     'api.auth-accounts-owned': '1.1.0',

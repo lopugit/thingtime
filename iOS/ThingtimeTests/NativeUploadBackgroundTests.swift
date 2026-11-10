@@ -103,6 +103,28 @@ final class NativeUploadBackgroundTests: XCTestCase {
         expire?();XCTAssertTrue(next?.canContinue ?? false);XCTAssertEqual(expirations,1)
         next?.finish(success:true)
     }
+    func testPhotosIndexingReportsMeasuredWorkBeforeKnowingTheUploadTotal() async throws {
+        let scheduler = BackgroundSchedulerFixture()
+        let coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate()
+        let system = BackgroundTaskFixture()
+        scheduler.delivered = system
+        let granted = await coordinator.begin(presentation: .init(title: "Photos backup", subtitle: "Indexing",
+            completedSubtitle: "Finished", bytes: nil), expired: {})
+        let lease = try XCTUnwrap(granted)
+        lease.work(completed: 10_000, total: nil, subtitle: "Found 1 photo")
+        XCTAssertEqual(system.progress.completedUnitCount, 10_000)
+        XCTAssertTrue(system.progress.isIndeterminate)
+        XCTAssertEqual(system.subtitles.last, "Found 1 photo")
+        lease.work(completed: 20_000, total: 90_000, subtitle: "2 assets found")
+        XCTAssertEqual(system.progress.completedUnitCount, 20_000)
+        XCTAssertEqual(system.progress.totalUnitCount, 90_000)
+        XCTAssertFalse(system.progress.isFinished)
+        lease.finish(success: false)
+        lease.work(completed: 90_000, total: 90_000, subtitle: "Stale worker")
+        XCTAssertEqual(system.progress.completedUnitCount, 20_000)
+    }
+
     func testPendingTimeoutQuarantinesIdentifierUntilLateLaunchIsRejected() async throws {
         let scheduler=BackgroundSchedulerFixture(), coordinator=NativeUploadBackgroundCoordinator(scheduler:scheduler)
         coordinator.activate()

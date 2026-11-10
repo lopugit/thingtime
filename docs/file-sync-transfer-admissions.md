@@ -106,5 +106,9 @@ synthetic accounts and local attachment storage. It verifies two queued files,
 including multipart checksum mismatch and retry, wrong origin/device/account,
 private placement, v4 policy readback, staged-only refusal, matching
 foreground/device publication, six paired-only original refills across the initial
-batch boundary, a guarded native update retaining its prior version, wrong-grant and unproven path refusals, pause and run rotation, expiry, logout, disconnect and replacement. Physical iPhone scheduling and automatic PhotoKit discovery need
+batch boundary, a guarded native update retaining its prior version, wrong-grant and unproven path refusals, pause and run rotation, expiry, logout, disconnect and replacement. The fixture removes a separate browser
+session for the same owner between Photos reservation and part signing. It
+verifies that the still-authorized exact admission can publish and replay.
+Ordinary session draft cleanup excludes protected file-sync provenance.
+Explicit cancellation and expiry still clean those reservations. Physical iPhone scheduling and automatic PhotoKit discovery need
 separate acceptance.

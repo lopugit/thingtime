@@ -27,7 +27,10 @@ completing that one reservation. An explicit Photos publication descriptor can
 also bind the verified attachment through the canonical Files transaction. A
 revocable 1.2 Photos run can replenish original reservations under the same
 private destination and current settings. Version 1.3 supports guarded same-grant original updates with retained Files history. See the [transfer admission
-contract and fixture](../file-sync-transfer-admissions.md).
+contract and fixture](../file-sync-transfer-admissions.md). Browser session
+replacement cleans unbound browser drafts. Exact file-sync provenance fences
+both the cleanup query and deletion claim. Explicit abort, expiry and live
+admission checks still apply.
 
 The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
 explicit supported backup mode for persisted paging/integrity assertions.

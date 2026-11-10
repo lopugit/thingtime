@@ -137,7 +137,7 @@ type LinkedReadyInput = {
 };
 
 export type AttachmentDeleteClaimScope =
-	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date }
+	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; browserOnly?: true }
 	| { kind: 'target'; targetId: string };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
 
@@ -145,6 +145,7 @@ export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): R
 	if (scope.kind === 'target') return { targetId: scope.targetId };
 	return {
 		targetId: { $exists: false },
+		...(scope.browserOnly ? { attachmentFileSyncOrigin: { $exists: false } } : {}),
 		...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
 	};
 };
@@ -229,7 +230,7 @@ export type AttachmentStore = {
 	removeDeleting(ownerId: string, id: string): Promise<boolean>;
 	recordMpuCleanupVerification(ownerId: string, id: string, emptyVerifiedAt: Date | null, retryAt: Date, partsIssuedAt?: Date): Promise<void>;
 	deferDeletingRetry(ownerId: string, id: string, retryAt: Date): Promise<void>;
-	listUnboundOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
+	listBrowserDrafts(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpiredOwned(ownerId: string, limit: number): Promise<AttachmentDoc[]>;
 	listExpired(limit: number, expiredAtOrBefore: Date): Promise<AttachmentDoc[]>;
 	listReadyUndetected(limit: number, afterId?: string): Promise<AttachmentDoc[]>;
@@ -977,14 +978,14 @@ export const attachmentStore: AttachmentStore = {
 		).updateOne({ ...attachmentMatch(id), ownerId, attachmentState: 'deleting' } as any, attachmentDeletingRetryUpdate(retryAt));
 	},
 
-	async listUnboundOwned(ownerId, limit) {
+	async listBrowserDrafts(ownerId, limit) {
 		return (await (
 			await getHomeThingsCollection()
 		)
 			.find({
 				ownerId,
 				thingtime: ATTACHMENT_THINGTIME,
-				targetId: { $exists: false },
+				...attachmentDeleteClaimFence({ kind: 'draft', browserOnly: true }),
 				attachmentState: { $in: ['pending', 'ready', 'deleting'] }
 			} as any)
 			.sort({ createdAt: 1, shareId: 1 })

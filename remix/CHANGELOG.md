@@ -145,11 +145,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Continue date-ordered iPhone Photos backup while an iCloud
+  original downloads. Retain deferred originals across interruptions and show
+  measured iCloud retrieval alongside the active upload stage.
+  [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
+
+- 2026-11-11: Keep scoped file-sync reservations out of browser-session draft
+  cleanup. A separate browser sign-out no longer interrupts a still-authorized
+  native upload. Explicit cancellation and expiry still apply.
+  [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
+
 - 2026-11-11: Keep unsaved profile image edits and uploads when Edit profile
   switches between the desktop dialog and mobile sheet. **Codex (AI)**
+
 - 2026-11-10: Edit profile and subspace images in the shared picker with
   reversible framing, CSS and image attributes. Builder and image editing use
   the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
+
 - 2026-11-10: Add task-level, status and project multi-selection to the Agent
   overview read adapter, with pagination-safe filtering and reusable editable
   Builder multiple-select controls. **Codex (AI)**
@@ -157,6 +169,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-10: Add authored page selection, cursor-backed keyed collections
   and bounded Action batches. Check exact owner-folder placement in opted-in
   Action reads. **Codex (AI)**
+
+- 2026-11-10: Discover and upload iPhone Photos originals in newest-first
+  batches, with live counts and capture times. An interrupted iOS background
+  session leaves the saved backup eligible for automatic retry. **Codex (AI)**
 
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
