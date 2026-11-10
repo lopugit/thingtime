@@ -141,7 +141,9 @@ inner visual scales; data sources and SDK markers do not restart per zoom/base
 change. Authored scope includes `map.zoom`, `map.markerScale` and
 `map.markerBaseScale`. Use `var(--tt-map-marker-min-target,44px)` as actual marker
 button minimum dimensions to retain screen touch targets. Native top-layer menus
-and dialogs retain viewport positioning.
+and dialogs retain viewport positioning. Empty marker-anchor space leaves neighbouring controls and the map
+surface available for pointer input. Use native or authored action targets for
+marker interactions.
 
 Optional `markerGroupPath` reads an explicit key from `{point,item}`. Equal
 nonempty string/finite-number keys associate visuals; missing keys and unrelated
