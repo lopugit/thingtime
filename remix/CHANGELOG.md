@@ -145,6 +145,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Keep unsaved profile image edits and uploads when Edit profile
+  switches between the desktop dialog and mobile sheet. **Codex (AI)**
 - 2026-11-10: Edit profile and subspace images in the shared picker with
   reversible framing, CSS and image attributes. Builder and image editing use
   the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
