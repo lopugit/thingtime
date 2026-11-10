@@ -1,7 +1,7 @@
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import React from 'react';
-import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
@@ -108,12 +108,11 @@ export const FeedPage = () => {
     activeAlgorithmId: isDefaultAlgorithm(algorithmId) ? null : algorithmId
   });
 
-  // both URL-param features below — ?algorithm= branch invitations and ?tag=
-  // topic feeds — read and clear through this one hook instance
   // "try my feed brain 🧠" (claude-todo/10): /feed?algorithm=<shareId> shows a
   // branch invitation. The preview endpoint only resolves explicitly shared
   // algorithms and never returns weights — branching copies them into the
   // visitor's OWN private algorithm.
+  const [searchParams, setSearchParams] = useSearchParams();
   const sharedAlgorithmParam = searchParams.get('algorithm');
   const getSharedAlgorithm = api.v1.algorithms.getShared;
   const [sharedPreview, setSharedPreview] = React.useState<{
@@ -134,41 +133,19 @@ export const FeedPage = () => {
     getSharedAlgorithm({ id: sharedAlgorithmParam })
       .then((resp: any) => {
         if (cancelled) return;
-        setSharedPreview(resp?.ok && resp?.algorithm ? resp.algorithm : null);
-      })
-      .catch((err: any) => {
-        if (cancelled) return;
-        setSharedPreview(null);
-        // getJson REJECTS on a non-2xx, so the revoked/unknown/private link —
-        // the one case worth explaining — arrives here as a 404, never as a
-        // resolved { ok: false } body. Stay quiet on anything else: a transient
-        // network blip must not accuse the owner of unsharing.
-        if (err?.status === 404) {
+        if (resp?.ok && resp?.algorithm) {
+          setSharedPreview(resp.algorithm);
+        } else {
+          setSharedPreview(null);
           lopuRef.current({
             title: 'That feed brain is no longer shared 🌫️',
             description: 'The link may have been turned off by its owner.',
             status: 'info'
           });
-          return;
         }
-        // 429 is the other knowable state, and it is the one this feature
-        // invites: the preview limiter keys off the hashed IP, so a link that
-        // actually travels can throttle visitors who merely share an egress
-        // (office NAT, carrier CGNAT) without any of them doing anything wrong.
-        // Silence would read as "this link is broken" — say it's temporary, and
-        // don't imply the owner unshared. Retry-After is already on the 429, so
-        // ThingtimeApiError.retryAfterSeconds carries the real wait.
-        if (err?.status === 429) {
-          const retryAfterSeconds = err?.retryAfterSeconds;
-          lopuRef.current({
-            title: 'Too many feed-brain lookups from your network 🌸',
-            description:
-              typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0
-                ? `The link still works — reload in about ${retryAfterSeconds} seconds.`
-                : 'The link still works — reload in a moment.',
-            status: 'info'
-          });
-        }
+      })
+      .catch(() => {
+        if (!cancelled) setSharedPreview(null);
       });
     return () => {
       cancelled = true;
@@ -205,25 +182,14 @@ export const FeedPage = () => {
         branchFrom: sharedPreview.id
       });
       if (!created?.algorithm) throw created;
-      // The copy exists from here on. Activation is a second call that can fail
-      // on its own, so retire the invitation either way — reporting "Branch
-      // failed" for a branch that landed would invite a retry that silently
-      // creates a duplicate algorithm.
+      await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
+      setAlgorithmId(created.algorithm.id);
       setSharedPreview(null);
       clearSharedParam();
-      let activated = true;
-      try {
-        await api.v1.algorithms.setActive({ algorithmId: created.algorithm.id });
-        setAlgorithmId(created.algorithm.id);
-      } catch {
-        activated = false;
-      }
       lopuRef.current({
         title: `Branched "${created.algorithm.name}" ${created.algorithm.emoji} 🌿`,
-        description: activated
-          ? 'It is now your active algorithm — it trains as you scroll and is yours alone.'
-          : 'Your copy is saved and yours alone — activate it from Settings ▸ Algorithms.',
-        status: activated ? 'success' : 'info',
+        description: 'It is now your active algorithm — it trains as you scroll and is yours alone.',
+        status: 'success',
         duration: 8000
       });
     } catch (err: any) {
@@ -558,38 +524,6 @@ export const FeedPage = () => {
               </Flex>
             </Flex>
           </Box>
-        )}
-
-        {tagParam && (
-          <Flex
-            alignItems="center"
-            columnGap={2}
-            padding="8px 12px"
-            borderRadius="var(--tt-radius-md, 12px)"
-            border="1px solid var(--tt-border, #ececef)"
-            background="var(--tt-card, #fff)"
-          >
-            <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
-              {tagApplied ? 'Posts tagged' : 'Advanced search tags override'}{' '}
-              <Text as="span" fontFamily="mono" fontWeight={700} color="var(--tt-ink, #16161a)">
-                #{tagParam}
-              </Text>
-            </Text>
-            <Box
-              as="button"
-              type="button"
-              marginLeft="auto"
-              onClick={clearTagParam}
-              fontSize="13px"
-              fontWeight={600}
-              color="var(--tt-muted, #9a9aa6)"
-              cursor="pointer"
-              _hover={{ color: 'var(--tt-ink, #16161a)' }}
-              title="Back to the full feed"
-            >
-              Clear ✕
-            </Box>
-          </Flex>
         )}
 
         {/* controls */}
