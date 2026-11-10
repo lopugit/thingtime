@@ -21,7 +21,7 @@ export const loader = async ({ request }: { request: Request }) => withVaultRequ
   }
   const result = await listFeedFilters(user.id);
   return json({ ok: true, ownerId: user.id, filters: result.filters }, { headers: { 'Cache-Control': 'private, no-store' } });
-});
+};
 
 export const action = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
   const user = await getCurrentUser(request);

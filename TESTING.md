@@ -5805,6 +5805,12 @@ halves.
 
 ## Environment gateway and index lifecycle
 
+- [ ] After develop integration, use a verified free ten-port acceptance range
+  (`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`). Cover proxy followers, the canonical
+  owner, explicit dedicated handlers with an independent replica, and synthetic
+  Connections2 OAuth in the same enforced network boundary. Keep the branch
+  default proxy; no runtime-mode change may stand in for rollout compatibility.
+
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
@@ -5839,6 +5845,21 @@ halves.
       develop use the development cluster, separate from production; verify
       `master.previews.thingtime.com` before treating it as operational. Treat
       old-preview credential retirement as optional; leave the Atlas tier unchanged.
+  Also run `test:environment-gateway:connections` against a Connections2 build;
+  verify one exchange and one rotating refresh across concurrent requests with
+  real sessions/encrypted storage and only synthetic provider/vault adapters.
+- [ ] For PR992 Connections requests, refuse absent/major1/breaking-major contracts,
+  missing paths and unsupported methods before forwarding; accept matching
+  2.0.0 and compatible later major2 versions without downgrading the branch requirement.
+
+- [ ] Run `test:connections` under denied networking. The synthetic H3 relay
+  must preserve frontend callback URL and select the exact actual data-environment
+  vault key; gateway-only origins and the gateway environment label fail closed.
+  Verify one-use state, wrong account/session/origin, revoked sessions, concurrent
+  rotating refresh and account independence through the real OAuth/request handlers.
+- [ ] Promote an accepted Connections2 backend before testing follower-dependent
+  actions. Current preview Connections1 refusal is a compatibility safety gate;
+  separately verify real provider consent/callback/refresh and native acceptance.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -8553,14 +8574,30 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
-Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+- [ ] Through normal Builder inspector/context controls, style/reorder a
+  repeated account label and the Lopu credential label, duplicate each, then
+  delete only the duplicate. Save/reload; confirm service add/reconnect/remove
+  still preserve the other account and its Check action, and the original
+  credential selector still works. Compare each service callback's new event
+  slice, not previously recorded events. Read back the stored Lopu preference
+  before/after selecting credits, reload to confirm credits persists, and verify
+  the saved chat's independent API choice is unchanged. Saved layouts must contain no live account
+  identities or secrets. Both credential browser harnesses cover this path with
+  synthetic boundaries; inspect desktop/mobile scrolling and the open inspector.
+
+- [ ] After merging independently advanced capability branches, verify uncapped data writes require `api.things` 1.42.0, `api.things-update` 1.13.0 and `api.actions-run` 1.39.0; earlier versions used for unrelated features must not authorize these writes. Both manifests must retain the current media/sync contracts. Exercise a long-data write against the immediately preceding origin and verify refusal before transmission.
+- [ ] Follow a saved-service continuation token through the browser API helper, not only the HTTP route, and verify `pageToken` reaches the next request unchanged. The hostile-feed parser timing test must stub DNS and prove the response reached the parser, so network delay/refusal cannot change its result.
+- [ ] Edit a service icon, repeated account label and credential field independently in Builder, save and reload. Live account names and synthetic credential values must not enter the saved document or Action history; attempts to save a private field's value/default must fail before persistence even when its type is dynamic or changed to text. Verify empty required fields block both click and Enter, valid mobile Enter submits once, and switching accounts or entering edit mode cancels pending transient work.
+- [ ] Submit a synthetic provider credential under a field name without `token`, `secret` or `password`. The DevKit request log must retain status/timing without any request body, and copied curl must omit the field value. Removing one of two saved accounts must preserve the other account and its actions.
+
+Automated first: `pnpm --dir remix run verify:connections` (real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 - [ ] `/connections` renders the provider catalog signed-out with a quiet
       sign-in card; signed in, connecting the Demo provider adds it under
-      "Your connections" with Feed + Unlink working, and reconnecting the
+      its service card with Feed + Disconnect working, and reconnecting the
       same handle reports "Already connected".
-- [ ] Connecting the same external identity from a SECOND Thingtime account
+- [ ] Connecting the same PUBLIC source from a SECOND Thingtime account
       converges on the same external account (many-to-many): both accounts
       read the same posts through their own links, and each earns its own
       acl grant even when the other account's sync fired first (the shared
@@ -8576,7 +8613,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       stops matching; verdicts stay stable across reads (cached) and editing
       the prompt re-classifies.
 - [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
-      configured ones show "Sign in with <name>" and redirect to the
+      configured ones show "Add account" and open a new tab at the
       provider's own login; the callback lands on /connections with the
       "Account linked" toast (or the oauthError toast on decline/forged
       state); the fields-based POST /api/v1/connections always refuses SSO
@@ -8612,6 +8649,110 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       membership rows + rewrites the acl + unsets `sourceIds`, a legacy
       `tt:extacct/` post stays visible to its linked member both BEFORE and
       AFTER the run, and a second run is a no-op.
+
+- [ ] Run `node remix/scripts/verify-service-accounts.mjs http://127.0.0.1:<api-port>`
+      against a disposable local replica set. It registers two synthetic users,
+      checks private vault projections, stale-owner refusal, API registration,
+      concurrent reconnect/disconnect, and removes its test links/credentials.
+- [ ] ChatGPT: validate signature, issuer, audience, expiry and nonce; never
+      use the hosted identity token for inference. Facebook account linking
+      requests public profile only; posts access is a separate card/grant.
+- [ ] Count regression: retain more than 50 connections and more than 500
+      AI vault entries without rejecting new accounts or hiding old ones.
+      Remove one and verify every other account remains independently usable.
+- [ ] Password/session vault migration gate: run the envelope tests for wrong
+      passwords, exact Unicode/long passwords, owner/record/purpose swaps,
+      tampered metadata, expiry boundaries, and key rewrapping. These are
+      cryptographic primitive tests only. Before enabling the migration, also
+      exercise real login/2FA/passkeys, password change/reset, session
+      revocation, background actions, interrupted migration, and legacy reads
+      against the agreed recovery policy; failed unlock must never replace
+      the only key capable of decrypting saved credentials.
+- [ ] Multi-account OAuth: add two Google identities under the same service;
+      reconnect one without duplicating it or replacing the other. Connect
+      the same provider identity from another Thingtime user and verify the
+      two credentials remain independent. Legacy shared grants must request
+      reconnect and preserve the reconnecting owner's existing link ID.
+- [ ] Callback fencing: forged/expired/replayed state, another Thingtime
+      account/session, changed redirect env, and declined consent must fail
+      without exchanging/writing a grant twice or echoing provider errors.
+      A JSON form POST with `text/plain` must be rejected (CSRF regression).
+- [ ] Origin capability regression: both OAuth and manual credential forms
+      refuse servers without `expectedOwnerId` support before sending a grant
+      or credential. Sign out or switch account while capability negotiation
+      is pending; the abandoned form must not submit afterward.
+- [ ] Concurrent rotating refresh: one exchange at a time per saved grant;
+      reconnect/disconnect during refresh must win over the older response.
+      Token ciphertext must reject another owner/id or modified ciphertext.
+- [ ] Owner-scoped cache regression: switch Thingtime accounts and sign out
+      while account/feed/vault reads are pending. Never display or cache the
+      previous user's identities, feed posts, forms, or saved AI accounts.
+- [ ] Check the service cards at desktop and 390px widths: title hierarchy,
+      account-name wrapping, permission disclosures, inline forms and buttons
+      stay inside their cards. Popup blocking gives an actionable message;
+      returning focus refreshes the original tab without discarding old state.
+- [ ] Saved AI account mobile regression: add two OpenAI and two Claude
+      credentials through Thingtime Passwords-backed test fixtures. At 390px,
+      each account name gets the full row and its badge/actions sit below it;
+      desktop keeps the compact row. Open/cancel the Add account form, scroll
+      top to bottom, remove one account, log out, sign into a different user,
+      and sign back into the first user. Compare the visible three retained
+      accounts with the private API; reject foreign vault reads/stale-owner
+      writes. Use disposable accounts under enforced browser/backend isolation.
+- [ ] Google reuse API: exercise a permitted read, missing-scope denial,
+      wrong-provider operation, another owner's link, and arbitrary-URL input.
+      Result, error, logs, and client caches must not contain credentials.
+- [ ] Saved-result pagination and preservation: follow `data.nextPageToken`
+      for Drive, Gmail, Calendar and Contacts using the same connection and
+      operation, ending when the token is absent. Preserve long opaque cursors
+      containing query delimiters without changing the fixed URL. Reject
+      non-string cursors, pagination on a profile/document operation, wrong
+      owners and missing scopes before provider access. Verify large text,
+      more than 100 records/properties, deep objects and ordinary key/value
+      fields survive unchanged while credential fields/known tokens redact.
+      Refuse cross-origin redirects before fetching the next hop, release
+      abandoned response bodies and propagate cancellation. Both manifests
+      must advertise `api.connections-request` 1.1.1; distinguish mocked
+      provider coverage from real additional-scope consent and list acceptance.
+- [ ] Saved-response redaction regression: with synthetic grants, use tokens
+      matching a JSON keyword, number, delimiter, or escaped text and echo them
+      in string values and property names. Responses stay valid and preserve
+      typed scalars. Overlapping access/refresh tokens redact completely; a
+      token matching replacement text does not rewrite generated markers.
+      Known credential fields remain redacted, and pagination clients requiring
+      1.1.0 accept the 1.1.1 patch on both capability manifests.
+- [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
+      JSON must fail rather than report a successful empty result. Non-JSON
+      401/403 responses still request reconnect; valid empty JSON stays valid.
+      Never include the rejected response body in the error.
+- [ ] Add separate OpenAI API and Claude Code OAuth connections from their cards, reload,
+      and find the same entries in Secure Vault and Lopu's provider picker.
+      No duplicate credential store; cancelled forms erase typed secrets.
+      Subscription sign-in availability must remain explicit.
+- [ ] Provider credential replacement: a supplied null or non-string token must return an error without changing the account name,
+      endpoint, group, model, timestamps or encrypted credential. A missing or
+      empty token intentionally preserves the credential; a valid replacement
+      must decrypt exactly, including whitespace and Unicode. Verify using the
+      selected local test entry and fresh password confirmation, never logs.
+      Both manifests expose `api.lopu-vault` 1.4.0; save clients reject
+      older contracts and accept compatible patch/minor versions.
+
+- [ ] Saved credential sizes: save/reload/replace a synthetic credential over
+      768 KiB through local Thingtime Passwords-backed fixtures; reveal it with
+      fresh verification and compare the complete Unicode/whitespace value.
+      Names/keys over 5,000 characters, endpoints over 2,048 and model IDs over
+      200 must survive exactly. Confirm malformed-token requests make no writes.
+- [ ] At desktop and 390px mobile widths, scroll the account cards and Secure
+      Vault fully. Exercise long environment badges, unbroken entry names,
+      environment selectors and verification modals without horizontal overflow.
+      Modal headers and controls must remain above navigation and floating Lopu
+      controls; hit-test their visible edges after the opening animation.
+      Keep values masked in screenshots. Check independent account removal,
+      logout, second-owner denial and recovery after a fresh first-owner login.
+- [ ] Create and update a data Thing over 768 KiB, then compare an independent
+      authenticated read byte-for-byte. Both capability manifests must advertise
+      the new contracts; older selected origins must be refused before writes.
+      Physical host/database capacity is a separate constraint, not a product cap.
 
 ## Commander emoji paste recovery
 
@@ -10863,6 +11004,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+
+### Account vault encryption and recovery
+
+- Register on a disposable local stack; save two independently named provider
+  credentials. Normal list/account/profile responses must contain neither
+  tokens nor password/session/recovery wrappers.
+- Reveal one credential with fresh password verification, then reset that
+  account's password via its one-use reset link. Both saved credentials must
+  remain usable with the new password; the previous password, old session and
+  reset-link replay must fail. Delete one account and verify the other still
+  works. Log out and confirm the old session immediately fails.
+- Verify a legacy owner-private entry upgrades on read without changing its
+  value; a concurrent edit/reconnect/disconnect must win over a stale migration.
+  Corrupted user key material must fail without generating a replacement key.
+- Test passkey/OTP/account-switch sessions against existing credentials; each
+  live session gets its own grant. Revoked/expired/foreign/scoped sessions must
+  never fall back to server recovery. Background actions remain possible after
+  browser logout under their existing owner/capability authorization.
+- Passwords are exact UTF-8 input, limited to 4096 bytes before account creation
+  or reset-token consumption. A password that only matches bcrypt's first
+  72 bytes must not unlock an existing password wrapper.
+- Run `npm --prefix remix run test:connections`, `test:sensitive-reveal`,
+  `test:collections`; on a disposable loopback stack run
+  `node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>`.
+- Real provider acceptance additionally requires callback → encrypted save →
+  authenticated provider API request for each connected account; mocked grants
+  and a success toast do not establish this. Keep provider approval gaps explicit.
 
 ## No-login draft preview and agent export
 
@@ -13447,6 +13616,9 @@ separate from deterministic discovery/lease tests.
   Known failures before dispatch leave the composer editable. Use synthetic
   transport for sending unless the user authorizes specific real recipients.
 
+- Credential form clearance: at desktop and 390px widths, open/cancel an Add account form. The floating Lopu launcher must step aside while the form is present, input edges remain clickable, the navbar opener remains available, and cancellation restores the launcher without changing saved preferences.
+
+- OpenAI import manifest regression: the built server must advertise `api.admin-ci-credentials` 3.1.1 on both `/api/v1/capabilities` and `/.well-known/thingtime-capabilities.json`. Import clients reject older/missing/breaking contracts before mutation and accept compatible patches/minors.
 
 ### Claude public catalogue and workflow save regression — 2026-10-18
 
@@ -14362,1492 +14534,12 @@ separate from deterministic discovery/lease tests.
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
 
-### Noninteractive Mac adapter transfer regression — 2026-10-29
 
-- Run the three-test command in `docs/installed-sync-acceptance.md#noninteractive-native-regression-lane` without opening the installed app or approving a pairing popup. Require independent SHA-256 equality for native reads and published writes, staging offset preserved across adapter restart, one injected test approval, idempotent publication, exact saved-approval fences and explicit backup cancellation/restart.
-- Keep synthetic cloud-byte fixture evidence separate from `test:files:mac-paged` real HTTP transfers and signed installed pairing/permission/window-close acceptance. Never add a shipped autoapproval switch or modify the user's pairing store to make this lane pass.
+### Connections OAuth vault configuration (26 October 2026)
 
-## Editable Mapbox maps and route planning
+Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `test:admin-integrations`, `test:mail`; after the canonical Vercel build, `npm --prefix remix run smoke:built-connections` checks both compiled manifests on macOS with all network access denied and synthetic bootstrap only.
 
-- [ ] Zoom out until an unscaled marker anchor overlaps a neighbouring marker.
-  Click or tap the visible underlying button through the foreground marker's
-  empty area. Verify both markers' own controls and context menus still work,
-  and that empty overlap leaves the map surface available to pan.
-
-- [ ] On an authored marker with modifier selection enabled, exercise
-  Cmd-primary, Ctrl-primary, macOS Ctrl-primary context and click pairing,
-  ordinary pointer activation, secondary menu, and a keyboard/touch selection
-  button. Verify one toggle per gesture, changing groups, preserved selections
-  during source refresh, and reset after real navigation or a database switch.
-  Drain two cursor pages of keyed metadata, verify each marker gets only its
-  own rows, then fail the second page and confirm the projection is unavailable.
-  Run a selection larger than one Action chunk and check exact ordered inputs,
-  one pending indicator, a partial-failure receipt and preservation of any
-  selection made while the bulk Action was running.
-
-- [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
-  untouched default without opening, refuse a required empty value, and verify
-  open/type/collapse/source-refresh retains the same dirty editor. Cover both
-  the page and Builder iframe at desktop/mobile, including an immediate Save.
-  Dismiss the asserted validation toast through its ordinary Close control before
-  tapping the next nearby action; use owner/parent-document hit testing if a
-  native touch never reaches target capture.
-- [ ] Compose `tt-menu` target/content/ordinary trigger children and a named
-  `tt-rich-text` field inside a normal form. Type/format and immediately Save;
-  compare JSON and plainTextName with exact API readback. A menu hiding during
-  submission must retain its DOM and submit once. Cover no-editor menu forms,
-  native-input snapshot timing, failed editor saves, identity/unmount, disabled
-  fields, same-account source refresh before asynchronous editor delivery, literal
-  legacy `<...>`, empty documents and unsafe rich links. Repeat in the actual
-  Builder iframe/owner document with selection, toolbar, Escape and focus checks.
-- [ ] Open a selected marker menu, reconcile the same source/point scope, then
-  activate a delayed command. Preserve the same native popup and keyboard focus,
-  discover newly conditional triggers/items, and retain distinct member IDs.
-  Disable, replace the actual content slot or remove its owner: close the old
-  popup. Repeat desktop/mobile and Builder iframe; Action capture stopping
-  propagation must still dismiss after native form/input snapshot capture. Native
-  required-field refusal and rich-adapter refusal must keep the popup visible;
-  preserve native validation focus, repair the fields and verify one exact save.
-- [ ] Verify right-click and ContextMenu/Shift+F10 never fire the primary marker
-  action; ordinary touch trigger opens the same menu. Authored grid display must
-  not expose closed popovers. Test viewport corners, desktop/mobile bottom scroll,
-  menu forms, native fields, Editor.js typing/toolbars, dismissal and focus restore.
-- [ ] Change markerScale and actual SDK zoom: all default/authored/grouped visuals
-  update while SDK transforms, marker/portal identity and data requests remain
-  stable. Check inherited inline rich-text color, accessible touch targets and
-  unscaled top-layer popovers. Explicit grouping keys share one visual anchor;
-  unrelated colocated points stay independent. Retain multiple original members'
-  actions, selected state, route geometry and full-itinerary ordinals (including
-  unresolved middle stops and nonconsecutive/fractional rank values).
-
-- [ ] Batch complete-address lookups with stored coordinates, precise matches,
-  ambiguous results and absent quality metadata. Preserve every input ID/order,
-  do not silently choose an ambiguous pin, and keep temporary coordinates out of
-  saved Things and persistent browser caches. Compare visible map coverage to
-  independent favourite/stop readback. Invalid queries must fail before Vault
-  access; changed permanent selections, incomplete batches and cancellation in
-  the final chunk must refuse success. Run `test:maps` and built HTTP coverage.
-- [ ] Publish successive valid map pages while later pages are pending. On a
-  permission refusal clear protected results; on an ordinary network failure
-  retain useful same-account points with one inline retry. A pin selection must
-  reveal its actual list row, including another page, without resetting the map.
-
-- Select a favourite and a stop from the map, including an item outside the first list page. The exact detail panel opens without changing the URL or rebuilding the map. Test pointer and keyboard activation, focus retention, switching tabs, searching while a background refresh runs, errors/retry and identity changes. In local query mode, searches and saved actions update visible data without page navigation.
-- Delay address-search A, type B, then complete A last. Retire A's suggestions on typing and show only B; page-local tabs still work during an unrelated Action. Manual next-order defaults stay pinned after a failed save, with an explicit retry for a failed summary and a fresh default after successful form reset.
-- Create and edit favourite/stop marker icons, title/custom/both/hidden labels, and optional icon lists; upload a photo, choose Use file, save and reload. Compare the circular marker image and saved attachment ID with exact readback. Verify replacement, removal, inherited stop styling, missing/revoked media, long labels and desktop/mobile overflow. Edit the upload and nested fields separately in Builder, save and reload.
-- Switch to a Character: photo URLs and map configuration must use that selected identity, and a record pointing at an owner-only attachment must not display it. Returning to the owner resets the map and protected form state before new data appears.
-- Add a first stop (order 1), then add after existing and archived stops spanning multiple pages. A missing order uses the greatest active numeric rank plus one, never a partial-page count. Verify explicit order, empty/negative/nonfinite data, failed later pages, malformed/repeated cursors, cancellation, and owner/PAT isolation of numeric summaries. Summary reads do not reserve ranks atomically across simultaneous clients.
-
-- Load favourite and route sources with multiple cursor pages. Compare every
-  valid favourite and route stop with Action readback, including records after
-  the first page. Favourite pins remain visible when selecting a route; the
-  selected route's stop order uses numbered pins and controls map fitting.
-  Toggle favourites through both boolean and query-string false, click pins,
-  focus a place, pan the map and switch selection without recreating the SDK
-  or resetting the camera on a highlight-only change. Refused/repeated-cursor
-  pages stop cleanly; account/Character changes cannot publish late data.
-  Optimize route A, then select route B: A's geometry and optimization order
-  must disappear immediately. Selection alone makes no Navigation request.
-  Resize the map-first layout and open drawers on desktop and narrow mobile;
-  the canvas, attribution and controls must stay within the available bounds.
-- On the deployed origin, open a saved map after a successful public-token
-  `browser-config` response. Confirm the Mapbox JS and CSS load from same-origin
-  Vite assets, the style/tiles load from approved Mapbox service hosts, the
-  browser reports no CSP violations, and the map visibly renders with
-  attribution. A CSP-blocked SDK must show an error, not a claimed map success.
-- Open and close the Thingtime drawer while the map is visible, then resize the
-  viewport at desktop and mobile widths. The Mapbox canvas and tiles must fill
-  the changed map container, without a blank strip or horizontal overflow.
-- Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
-  Vault references cannot read a token or make provider requests. A secret sk
-  token cannot become browser configuration. Invalid provider replies and
-  failures never expose tokens, upstream bodies or request URLs.
-- Type an address, choose one explicit suggestion, then save using permanent
-  geocoding with the exact selected ID. A changed match must refuse saving;
-  temporary search results must not survive reload in Things or localStorage.
-- Optimize two or more known points; compare displayed order, line, distance
-  and duration with the provider response. Non-roundtrip keeps endpoints fixed.
-  Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
-- Open the saved page at desktop/mobile widths, scroll fully, open all controls,
-  and individually edit nested labels, inputs, buttons, row fields and map props.
-  After expanding source-backed Components into editable blocks and saving,
-  reload the live page and verify existing Favorites, Contacts, Groups and
-  Routes still populate from their saved Actions. Builder editing must leave
-  those Actions inert, without presenting an empty live catalogue as success.
-  In an expanded repeated row, activate a saved Action button by pointer and
-  Enter, then submit a row form with an edited named field by click and input
-  Enter. Select an item with a `$ui` row picker and verify the selected value
-  appears in a sibling field without running a saved Action. Each gesture must
-  run exactly once with that row's ID and revision and persist the intended
-  change. A nested saved Component must also run once, while Builder edit
-  clicks must run nothing.
-  Switch query-selected views and reload each URL: page-level condition blocks
-  must receive the current query, and inactive views must leave no empty gap.
-  Save/reload user data. Provider navigation results remain transient. Verify
-  account switches and unmount remove the map and its old token; attribution
-  stays visible. A fixture or passing build is not a live provider result.
-
-### MongoDB connection inventory
-
-- Build the client and Nitro node server, then run
-  `MONGODB_CONNECTIONS_EVIDENCE_DIR=<private-output-directory> node remix/scripts/mongodb-connections-acceptance.mjs`.
-  `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE` and `THINGTIME_TEST_MONGOD` may select
-  installed test tools. Ports 19431–19435 must be free. The runner owns a fresh
-  replica, synthetic accounts, two API runtimes and an isolated browser profile.
-  It loads no production configuration; all product data goes through the API.
-- Verify both manifest generators and the built endpoint advertise 1.1.0.
-  Run `test:schemas` as well: the protected snapshot kind must remain in the
-  built-in projection table with a required JSON source and generic writes denied.
-  Anonymous, ordinary-account and mismatched actor/origin reads must fail with
-  private/no-store responses. Generic Things routes must refuse telemetry reads,
-  forgeries and reserved IDs. Check home/custom isolation and credential redaction.
-- Compare real runtime source IDs, deployment labels, pools and observations
-  with the rendered cards. Handshakes are pending until ready; pool closure and
-  failed connection cleanup must not double count. Refresh, pagination and
-  filters must preserve correct loaded-source totals. Stale observations must
-  never be presented as a complete live database inventory; unavailable
-  aggregate counters stay unknown.
-- Group only identical deployment IDs; missing IDs must remain separate. Check
-  a deployment with multiple runtimes and clients, partial pagination, and stale,
-  closed and failed sources. Headline counts must include only ready current/recent
-  observations. Verify open = in-use + idle and the modeled upper end = open +
-  pending handshakes + monitoring allowance. Cover auto/stream, poll, load-balanced
-  and unknown/legacy evidence; no model may masquerade as a measured Atlas total.
-  Explain all-server versus selected-node scope and capacity versus current use.
-  Open Coverage and measurement details: its headline explanation must exclude
-  stale/closed/failed historical sources while separately retaining the raw
-  loaded-snapshot summary scope; custom coverage text and saved layouts survive.
-- Generate real requests through multiple registered feature domains and compare
-  the API evidence with human-readable feature labels. Count once per request per
-  shared client, including concurrent requests, and show lifetime scope/last-use
-  times. Never attribute an exclusive socket count to a feature or retain request
-  identities, paths, command bodies or custom hosts. Preserve custom saved layouts;
-  upgrade only normalized exact defaults and reopen disclosures after reload.
-- At desktop and 390px, scroll every affected page top to bottom, open source
-  details, exercise freshness/search, empty and error states, and verify keyboard
-  focus and no overflow. Edit a nested text, control and repeated-card field
-  independently in Builder, save, compare the private Thing and reload both Admin
-  and Settings placements. Switch accounts/origins during a delayed read and
-  ensure no earlier protected data paints.
-- On mobile, every Refresh hit target must remain unobscured. The duplicate
-  floating Lopu launcher hides only while the inventory workspace is visible;
-  the navigation opener remains keyboard accessible, and collapsing Settings
-  restores the launcher.
-- Production acceptance is separate: verify the exact deployed source, selected
-  gateway capability, authenticated live cards and actual aggregate availability.
-  Atlas email percentages, Vercel deployment counts and local fixtures do not
-  establish a current cluster-wide socket count or historical incident cause.
-
-### Preview retention and PR liveliness
-
-- For retained native development, prepare a named workspace and verify its
-  development name/bundle identity, executable path, private ports, managed
-  database and synthetic account independently from the stable installed app.
-  Save/read back/reload a real retention change, quit/relaunch the named app and
-  confirm both session and policy survive. A second launcher or preparation must
-  refuse while its app or detached child group remains active. Failed replacement
-  must preserve the last working snapshot. Retained dependencies must resolve
-  within the snapshot rather than the source worktree; stop only the verified
-  workspace group and preserve its app/data for ongoing testing. Never refresh
-  another app's Keychain permissions to make the development namespace work.
-
-- Use Edit layout → Builder inspector to select a nested label and a separate
-  input/control, change the label and a control attribute independently, and save
-  the layout. Compare its exact private webpage Thing through the API, reload both
-  placements, and confirm both edits and the live policy path still work at 1440
-  and 390 pixels. Exercise the opened inspector and page scrolling for overflow.
-  In development StrictMode, opening/closing the inspector must not leave layout
-  readiness permanently aborted or Save layout disabled after an edit. For a
-  desktop UI whose selected API origin differs, verify private layout requests
-  use the supported same-origin session proxy and refuse stale actor/plane/origin.
-  In the actual native bundled UI, select a different API origin and verify
-  capability discovery reaches that selected public origin without account
-  cookies or redirects, then exercise policy and private layout save/readback/
-  reload. A bundled local manifest must never satisfy a remote-origin check.
-  Cancel discovery and immediately remount before the old rejection settles;
-  the new request must succeed and its cache survive the late old failure.
-  Check actual elementFromPoint targets at inspector title/type/placeholder inputs
-  (including near their right edge) while floating launchers would overlap. The
-  shared overlay contract suppresses launcher buttons only while the inspector
-  exists; closing it must restore them without changing settings or panel state.
-  JSON/source editing alone or a single outer selection is insufficient. Do the
-  same on the intended production account after sign-in; local fixtures cannot
-  establish production saved-layout acceptance.
-
-- In an isolated API/database with a synthetic admin, open `/admin/preview-retention`
-  at desktop and mobile widths. Scroll top to bottom, expand/collapse both
-  sections, exercise all switches and conditional numeric fields. Check keyboard
-  labels, focus, wrapping and absence of horizontal overflow. The same controls
-  appear in Settings → Admin.
-- Save cleanup paused, a nonzero orphan grace, superseded pruning/grace and an
-  optional inactivity duration. Independently GET the admin endpoint, reload the
-  page and confirm the exact saved revision/policy. Disable inactivity again and
-  confirm null persists. A stale revision must return 409 and preserve the newer
-  values; anonymous and ordinary accounts must be refused.
-- Verify admin retention 1.0.1 and controller retention 1.0.0 in both manifest
-  generators and the built/runtime manifest. The route/manifest test must assert
-  each independent feature version when only one contract receives a PATCH.
-  A stored policy this server cannot
-  validate must GET as 503 unavailable; malformed submitted policy stays 400. Signed
-  controller reads require the exact repository/ref and a fresh timestamp,
-  return only the policy and no revision/audit data. Wrong signatures, stale
-  requests and DB failure must refuse cleanup. Check both manifest generators.
-- Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
-  active current-head protection, opt-in inactive open-PR expiry, failed policy
-  reads and stable/production/gateway/alias protection. Real Vercel deletion is
-  separate provider acceptance and must never run from this disposable fixture.
-- Deployment order: product gateway API first, signed read and admin save/readback
-  second, protected controller consumer last. A UI preview using the older
-  gateway cannot establish the new backend's acceptance.
-
-### Builder provenance and shared media
-
-Create a public saved Webpage referencing a saved Component with a managed
-image. Confirm both returned content kinds include `builder-thing`, then open
-its `/p/<id>` page anonymously: the image must load through
-`attachments/content?id=<id>&sharedRoot=<page-id>` for both original and
-`width=640` reads. Repeat with the Component as sharedRoot. Private roots,
-marker-only/control/unknown kinds and target-attached roots must remain refused;
-removing provenance or widening ACLs is not a workaround.
-
-
-### Passkey registration exclusion recovery (2026-11-02)
-
-- [ ] In the signed provider, a matching site's excluded saved credential shows
-  the specific already-saved explanation, no Retry and **Return to website**.
-  Expand Registration request details: requested RP, hash/handle byte lengths,
-  ES256, catalog/site/exclusion counts must match independent request evidence;
-  no IDs, handles, keys or session/account values appear. Cancel/new request clears
-  details. Test long RP and large counts in a narrow window with the return control reachable.
-- [ ] Return sends `matchedExcludedCredential` natively / `InvalidStateError` in
-  the browser to the original request; no automatic native fallback, new save or
-  password re-verification loop occurs. Browser non-exclusion network errors
-  retain retry, and a delayed old failure cannot terminate a new request.
-- [ ] Keep existing passkeys working. An absent/nonmatching exclusion does not
-  invent account-wide uniqueness; a foreign RP with the same bytes does not block.
-  Verify independent vault record IDs/readback separately from any site's support
-  for multiple discoverable credentials in one authenticator.
-- Run `swift test --package-path apple/Passwords`, focused browser passkey/ceremony
-  tests, and `pnpm --dir remix run test:passwords:record-storage` (owned disposable
-  replica, real API handlers). No existing Mongo or personal profile may be reused.
-- Compile/render the real native view with
-  `bash apple/PasswordProvider/tests/render-preview.sh --excluded --details --long-site --large-counts --width 300 --height 380`.
-  This is a synthetic view, not a credential operation. On macOS the harness
-  captures the laid-out NSHostingView; inspect the actual owned preview window
-  from top to bottom too. ImageRenderer alone omits NSScrollView contents.
-
-### Password manager tree branding (2026-11-02)
-
-- [ ] Verify the official decorative tree beside the accessible Thingtime heading in extension workspace tabs, browser approval/idle/sign-in/terminal states, vault/import/export, generator, icon picker, passkey guide, native connection, settings and native host/provider. Inspect desktop and 375px layouts, long labels, expanded details and bottom controls.
-- [ ] Existing saved default layouts gain branding without replacing edited headings, styles, IDs or custom content. Deleting the migrated mark stays deleted; authored layouts without the known heading remain unchanged. Legacy provider retry/fallback controls obey terminal conditions without restoring deleted controls.
-- Run extension unit tests (including real ZIP icon inventory) and `test:passwords`; metadata tests validate host/extension ICNS and PNG packaging. Inspect native bundle icons independently of website-controlled account/passkey icons.
-- The isolated `browser-extension/test/workspace-browser.mjs --provider-ui-origin=<fixture-origin>` path uses `remix/scripts/password-provider.browser.html`: the actual provider component, content bridge, background routing, ceremony and transient actions run against explicitly synthetic in-memory API responses. Verify excluded create hides approval/refresh/fallback and clears password input, then explicit Return delivers bound InvalidStateError and focuses the original requester. This proves that action path, not real vault/site/OS acceptance. `password-branding.browser.html` is a separate renderer-only document gallery.
-
-### Password confirmation preferences and device trust — 2026-11-03
-
-- Run `pnpm --dir remix run test:passwords` and `test:passkeys`; run
-  `pnpm --dir remix run test:passwords:verification` explicitly. The latter starts
-  its own disposable replica, uses real registration/login/password handlers,
-  synthetic credentials, and cleans up its database/processes. Verify Never
-  across logout/new login, off→on invalidation, entry Always over global Never,
-  exact selected item/origin/purpose, device Forget, and account-passkey final
-  registration versus a lock during the ceremony. Unit tests additionally pause
-  cross-session Forget, final reads/expiry and pre-insert revocation.
-- `test:passwords:verification-ui` adds the actual manager/provider components in
-  a separate Chrome process against that disposable API. Set
-  `THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-playwright>/index.mjs` and, when
-  reusing binaries, `PLAYWRIGHT_BROWSERS_PATH=<browser-binary-cache>`. It reserves
-  loopback 18090 only while running and closes its browser/server afterward.
-  Verify desktop/narrow, long and missing legacy username subtitles, complete
-  scrolling, saved preference reload, explicit Never enrollment, then a new
-  approval without another account password. This is isolated API/UI evidence,
-  not Google, production or signed OS-provider acceptance.
-- Click an entry title at 375px and check the exact entry opens in view. Open
-  again by keyboard at desktop width and check Close restores the card's focus.
-  Verify a legacy import with a hidden form field and an explicit login email
-  shows the email in the preview and catalog. Confirm protected fill agrees,
-  alternate origins still fail, and notes and descriptions are never projected.
-  Use an entry saved for `https://aws.amazon.com` on
-  `https://signin.aws.amazon.com`: the catalog should suggest it and protected
-  fill should use the same approved origin. Confirm the same explicit pair for
-  the AWS console and portal, and reject alternate ports, unrelated AWS hosts,
-  Amazon retail and lookalike domains.
-- Stall a provider catalog request, cancel its exact ID, then select a saved
-  login. A wrong ID cannot cancel; the old result cannot complete the newer
-  selection. Loading a selected login stops scanning after its entry is found.
-- In Builder, edit the global checkbox/label/dropdown independently and the saved
-  card's title/username/type/icon independently. Save/reload the layout; authored
-  text/styles/deleted controls must survive migrations. Inspect per-entry Use
-  global/Always and Security's shared control. No password/proof may enter saved
-  blocks, Action history, local settings cache or screenshots.
-- In the final signed native app, inspect the actual OS picker tree icon and
-  localized Thingtime name. Valid .icns/asset-catalog structure alone does not
-  prove picker rendering. Preserve the physical host filename and raw/localized
-  bundle-name contract. At small provider heights, scroll the full excluded
-  message and collapsed/expanded Registration request details while Return stays
-  reachable. OS user verification must still run when reuse is off, unsupported
-  or unavailable.
-
-- Password card account identification contrast: check username/email, missing-value
-  fallback and type subtitles at desktop and 375px widths in light/dark themes.
-  Measure computed foreground against the card background (normal text >=4.5:1),
-  including an existing saved default layout after reload. Long usernames must wrap
-  without overflow. Confirm each subtitle stays separately editable; exact old
-  default muted colors upgrade, while authored colors/text/styles and deleted
-  subtitle blocks survive save/reload. Extension account subtitles must also meet
-  AA on their actual light/dark card backgrounds.
-
-
-### Social OAuth vault and owner isolation
-
-- Named connections: create two profiles to the same Google account with
-  different operations and two named profiles with the same operation. Verify
-  distinct IDs and exact-provider response, no feed admission, replay refusal,
-  partial consent rejection, wrong-subject reconnect refusal, cross-owner
-  denial, selected-grant refresh and local sibling-independent removal.
-  Verify separate provider-scope and allowed-operation selection and deny a
-  scope borrowed from another provider card. Exercise declined Meta permissions
-  and an in-flight provider result released after its scope is reduced. Confirm
-  that refreshing to a different authorization snapshot and back never restores
-  an old operation result, and reconnect clears a visible result.
-  Verify named and canonical private IDs have no generic Things read path.
-  Verify the name and access blocks can be selected separately in Builder.
-  Keep provider consent and installed native acceptance separate.
-
-- Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
-  viewports. The fixture renders the real Connections page with synthetic
-  transport. Verify the original URL and page remain in place, the provider has
-  no opener, a blocked tab starts no OAuth request, and decline or completion
-  lets the original page retry or reload its authorized saved connections.
-  Close the provider tab without consenting and use **Stop waiting** to retry.
-  An unacknowledged callback tab remains available as a normal Connections
-  page. Switch accounts while the previous owner's Connections read is held,
-  then deliver the late response and sign out. Confirm no previous-owner
-  accounts or filters remain and a same-owner reload keeps its cached paint.
-  Edit the pending status and Stop waiting blocks separately in Builder,
-  save and reload, then exercise the customized control. Keep real provider
-  consent and native browser handoff acceptance separate from this fixture.
-  With a mocked desktop bridge, hold or omit the selected API origin and
-  verify no Connections API reads or sign-in control appear. Switch origins
-  and confirm the old provider readiness and saved accounts do not carry over.
-
-- Run `pnpm --dir remix run test:connections`, `test:connections:oauth` and `test:api-capabilities`.
-  `test:connections:oauth` boots its own disposable replica with clean environment,
-  real registration/admin-vault/connection Request handlers and only a synthetic
-  external Google transport. It proves real transactions and wrong-origin feed
-  refusal; it does not prove built-server routing or live Google consent.
-  After the canonical build, run `test:connections:built` to fetch both compiled
-  Vercel manifest handlers and verify JSON, origin and all seven 2.0.0 contracts.
-  Configuration tests cover missing/malformed/duplicate secrets, exact environment
-  and origin, callback changes and compatible secret rotation. Account tests
-  cover two Google identities, separate Thingtime owners, encrypted envelopes,
-  legacy-link ID preservation, reconnect/refresh races and disconnect.
-- On the intended deployed origin, connect the Google identity and Facebook
-  account cards using eligible test users. Check actual callback completion,
-  independent provider identity against the saved connection, reload, a second
-  identity, reconnect and removal. Confirm only minimal identity scopes are
-  requested; service/feed grants are separate. Check desktop/mobile catalog and
-  account states through the existing UI. Keep unconfigured and inaccessible
-  provider outcomes distinct from provider consent success.
-- Verify preview/local origin does not reuse production configuration or grants.
-  Never reuse real-account credentials in isolated fixture browsers. Passing the
-  synthetic tests does not establish real Google/Meta or installed-app acceptance.
-
-- Connections provider marks: at desktop and narrow mobile widths, scroll the
-  catalog through its last card. Compare Google, Gmail, Drive, Docs, Sheets,
-  Calendar and Facebook to their official sites. Confirm identical card icon
-  dimensions while loading and when an icon response fails, with no horizontal
-  overflow or duplicate accessible name. Check that the credential form repeats
-  the provider's mark and sign-in buttons still select the same providers. Demo
-  and generic RSS should use the local mark. No browser request should reach a
-  third-party icon host. In **Edit provider cards**, select the image, title,
-  description and Connect button separately. Verify Upload appears first and
-  that a URL override, title and button edits persist across save and reload.
-
-### Mac symlinks and collapsed connection progress — 2026-11-03
-
-- [x] Preserve opaque relative, absolute, broken, looping and non-UTF8 link targets through native scan/read and cloud metadata; distinguish an ordinary file containing the same bytes. Do not follow a link or a symlink ancestor outside the selected grant.
-- [x] Run AppleFileSync with the freshly built real Commander indexer and an explicitly selected disposable FAT volume: 133 tests passed, no skips. Exercise native links, target-encoding fallback, ordinary-file/link replacement, lost final replies, restart, interruption after displacement, concurrent writers and Trash/restore. Dispose only the owned image after checks.
-- [x] Verify actual atomic-exchange semantics using owned probe inodes before replacement. macOS msdosfs can report success for RENAME_SWAP while discarding the displaced entry. Unsupported or incorrect exchange uses a durable, exclusive two-step replacement that can temporarily leave the destination name absent; it retains the prior inode and refuses an intervening writer.
-- [x] A fallback is inert `thingtime-symbolic-link-fallback-v1` JSON with `originalKind`, exact `symbolicLink` metadata and `former-symbolic-link` tags. Automatic recognition requires a matching native receipt; an arbitrary same-shaped user file is not activated. Permission, disk-full and generic I/O errors do not silently trigger fallback.
-- [x] Desktop History Save As preserves raw link targets or an explicit portable fallback. Run `node --test electron/test/file-export.test.cjs electron/test/file-export-link-publisher.test.cjs`; the optional `THINGTIME_FILE_EXPORT_FAT_TEST_DIRECTORY` must name an owned mounted test volume. All 18 checks passed with the actual FAT fixture enabled, including full Save As, non-UTF8 encoding refusal, a renamed ancestor, immutable metadata/bytes, existing names, cancellation, account/origin changes, child disconnect and concurrent-writer preservation. On FAT, an interrupted fallback copy retains its verified private candidate and reports that the folder must be checked before retry; it never deletes an uncertain final name. The short-lived publisher pins the chosen directory as its working directory. Normal v1.0 exports remain compatible; tagged exports require fileExportVersion 1.1 and api.files 1.9.
-- [x] A real HTTP/native round trip preserves symbolic-link metadata through durable inventory and run-journal reopen, regular/link transitions with identical bytes, lost replies, process restart and Timeline restore. Links use scalar file writes; current bulk digest contracts must not admit tagged links.
-- [x] Per-connection progress uses separate exact upload/download byte totals and confirmed operation counts. Normal read-only legacy journal calls do not initiate migration. Resume migration is coalesced, paged, cancellable and fenced by revision/instance; stale file callbacks cannot increase the durable percentage or reduce unconfirmed bytes.
-- [ ] Final installed acceptance: compare native link target bytes, per-folder directions/rates, device aggregate measurements and Timeline restore with independent local/cloud evidence. Keep Home paused and DJ DODA automatic sync off. Production must advertise the required link/device-control capabilities before dependent work starts.
-
-- Signed Mac build prerequisites: verify a missing or incomplete `electron-builder` is repaired once with the exact pinned pnpm and frozen lockfile before web/native resource builds begin. A healthy install must not reinstall; failed or ineffective repair must stop immediately. `electron/test/build-dependencies.test.cjs` covers the boundary.
-### Password preview Website icons
-
-- Save two Website/URL fields: first missing/broken icon, second usable public
-  icon. Verify the second supplies the actual decoded image at desktop/narrow,
-  reload without resaving, and compare displayed bytes with the owner API image
-  response. Reorder Website fields and save; the new first usable site wins.
-- Keep an uploaded/manual icon as override; remove it and save to return to
-  automatic lookup. With no usable site, keep the tree. Edit the icon block
-  independently; deleting it must stop automatic lookups. Preserve custom help
-  text/styles through exact-old-default copy migration.
-- Concealed/secret/structured fields never participate. Preview JSON exposes only
-  the boolean hint, not Website values. Probe requests strip saved paths/queries;
-  credential-bearing URLs, private/mixed DNS, DNS failures and unsafe redirects
-  must not cause outbound private requests. Verify the socket lookup uses the
-  checked address with normal TLS identity and sends no cookies/auth/referrer.
-- Test a MIME-mislabelled SVG behind whitespace/XML/comments with external
-  file/network references. Only sanitized self-contained vectors may reach SVG
-  rendering; only admitted raster signatures may reach the raster decoder.
-- Hold a lookup, change entry revision/account/session or revoke while the
-  initial decrypted read waits: refuse stale image delivery and do not start any
-  next lookup after observed revocation. Shared same-entry requests must dedupe,
-  independent consumers must survive a peer cancellation, and old owner/origin/
-  revision caches must never paint into the new account. Ordinary1.5 operations
-  still work when automatic1.6 icon negotiation fails.
-- `test:passwords:verification-ui` adds an anonymous public-site icon case to its
-  disposable real API/isolated Chrome runner (no personal profile). Its public
-  HTTPS fixture requires normal network access; unit suites independently cover
-  deterministic failure order, safe decode and transport/session fences.
-
-- Loaded password card images must use the existing bounded PNG thumbnail wire
-  format through the ordinary editable HTML image block. Assert actual img src,
-  decoded dimensions and response-byte hash (not merely API success). Arbitrary
-  blob/data schemes remain rejected by generic saved markup; malformed signatures/dimensions and non-PNG
-  thumbnail sources are refused, and the adapter decoder rejects corrupt bytes. Browser decoding/cancellation and
-  account/origin/revision cleanup still fence transient image state.
-- In dark 375px and desktop/light views, inspect a transparent dark favicon on
-  the default light backplate. Its padded/radiused image stays 32px wide/high.
-  Reload an older saved default style, then save a custom background/padding:
-  migrate the unchanged default only and preserve the custom style on reload.
-
-### Browser extension account connection
-
-See [the account connection contract](docs/browser-extension-accounts.md) for
-the isolated real-API/browser command and the metadata-only session boundary.
-
-- Open the workspace with an existing Thingtime sign-in and no selected website.
-  Show its profile and saved accounts automatically; enable browsing and refresh
-  while leaving Autofill unavailable until a matching website is selected.
-- Start signed out, use Sign in and Add account through the inline canonical
-  account surface, then switch between two accounts and sign out of all accounts.
-  Keep the owned account route and explain that switching also changes the
-  browser's Thingtime web account. Never copy cookies or session tokens.
-- Delay account-change notifications and fail the new account's catalog request.
-  Clear the old owner's entries before showing the new profile; a same-owner
-  refresh failure may preserve its existing entries with a visible retry state.
-  Failed cold discovery must not leave a permanent loading state.
-- Lock, change the configured origin and restart the extension service worker.
-  Keep discovery, suggestions and approval admission locked until explicit Unlock.
-  Account changes must terminate pending website requests with a retryable message.
-- Use Return to Thingtime workspace from its owned popup. Focus the recorded
-  extension window only; do not select a guessed website tab. Retain the popup
-  when it is the only verified live catalog bridge, or when edits/password input
-  would be discarded. Repeat after service-worker restoration.
-- At desktop and narrow widths, scroll through all content and open the account
-  controls. In Builder, edit the heading and session notice independently, save
-  and reload. Preserve account controls, responsive layout and existing workspace
-  size/font preferences. Installed personal-profile acceptance is a separate check.
-
-### Mac strict inventory job
-
-- [ ] Electron bootstrap VM fixtures must model `process.argv` as an array,
-  even when testing ordinary startup without CLI arguments. Run
-  `node --test electron/test/dev-workspace.test.cjs`; parallel development
-  must keep its own name/profile, and packaged startup must keep the stable app.
-- [ ] Development process-group cleanup must wait through macOS zombie `EPERM`
-  only after a successful SIGKILL and require eventual ESRCH within the existing
-  deadline. Run `node --test electron/test/local-runtime.test.cjs`; exercise the
-  real owned-child zombie transition, reject nonfinite deadlines before signalling,
-  and reject persistent, initial, SIGTERM and
-  SIGKILL permission failures. Preserve the original assertion if cleanup also fails.
-- [ ] Native upload-batch peers must verify only the submitted receipt subset.
-  Force the first admission window to expire after accepted bodies begin, then
-  complete all 256 files through fresh request identities with the same original
-  descriptor/operation IDs and stored receipts. Assert exactly one PUT per file,
-  both identity checks per window, retryable deadline rows, and no PUT admission
-  after expiry. Run the six `MacUploadBatchOperationTests` and canonical upload
-  batch journal recovery tests; never widen production deadlines to make a
-  host-dependent test pass. These synthetic checks do not establish live server
-  grant acceptance or identify an uninstrumented CI cancellation's cause.
-- [ ] With a legacy saved connection draft, Add connection remains available.
-  Create multiple drafts, switch saved/new folder cards, collapse/reopen and
-  reload. Preserve every draft and incomplete resource input separately; save
-  or discard only the selected draft. Switching account, API origin, storage
-  plane or device must isolate the journal. Run
-  `node remix/scripts/test-sync-drafts-ui.mjs` for desktop/narrow synthetic
-  browser coverage, then verify the installed app without touching existing
-  user drafts or starting a transfer.
-- [ ] On desktop and narrow mobile, expand a folder, open a connection draft,
-  type without saving and keep input focus while an automatic check starts and
-  finishes. The same input, expansion, scroll anchor and unsaved text must stay
-  mounted. Save remains disabled during an active run and the saved connection
-  stays unchanged. Retry automatic sync must also retain the settings subtree.
-- [ ] With an existing resource measurement, refresh policy/status without a
-  new sample: retain readings with an explicit last-measured label. Idle CPU
-  and memory must never pretend to be current. A cold start stays unknown;
-  account/origin/device authority changes clear prior protected measurements.
-  Run `node remix/scripts/test-sync-continuity-ui.mjs` and
-  `node remix/scripts/test-device-sync-resources-ui.mjs` for isolated browser
-  regressions; verify the installed native path separately.
-- [ ] Before publishing a signed Mac release, build the disposable Rust indexer
-  fixture with `cargo build --locked --manifest-path filesystem-indexer/Cargo.toml
-  -p commander-indexer`, set `THINGTIME_TEST_COMMANDER_INDEXER` to that exact
-  executable, then run `swift test --package-path macos/ThingtimeNode` from a
-  clean SwiftPM scratch directory. The executable target must compile when
-  imported by its tests; its `@main` entry cannot live in Swift's special
-  `main.swift` file. The photo-original tests must use the isolated fixture
-  index database rather than depend on an installed app helper.
-- [ ] During a signed Mac transfer long enough to sample, open **Total Sync &
-  Backup usage**. Verify positive directional throughput while a file is still
-  running, that the configured limits do not change during refresh, and that
-  paused or completed measurements expire. Confirm Activity Manager shows one
-  **Local Sync resource usage** sampler across open placements and that hiding
-  the app or disabling the entry stops it. Keep the inputs focused while values
-  refresh, then switch account or device and check that prior values disappear.
-  A verified idle local device should describe the lack of a current
-  observation. An unavailable remote device should show its connection state.
-- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncDialogTests`.
-  Verify the folder chooser opens as a sheet, leaves the main actor responsive,
-  dismisses its own sheet on cancellation, and permits a second chooser.
-- [ ] In the signed Mac app, open the local folder chooser, select **Existing
-  folder**, and choose a disposable fixture. Verify the native downloads
-  approval prompt opens for that exact folder. Repeat and cancel the chooser,
-  then verify device status and folder listing still respond and the chooser
-  opens again.
-- [ ] Run `swift test --package-path macos/ThingtimeNode --filter MacFolderSyncTests`
-  and `npm --prefix remix run test:file-sync`. The native regression advances the
-  job clock beyond 270 seconds while the inventory remains private, then checks
-  that only a sealed generation can be paged. The browser protocol rejects
-  interruption, generation substitution, and partial backup coverage.
-- [ ] In the signed Mac app, run two-way sync on an isolated test folder whose
-  first scan takes longer than the previous request deadline at the configured
-  scan rate. Confirm that indexing continues, that the first verified entries
-  reconcile, and that stopping a second scan preserves both sides. Change a
-  file during the private scan and verify that no deletion is inferred from an
-  incomplete inventory.
-
-### Files browser and synced files
-
-- In an isolated account, upload a small file to a saved sync folder and a nested folder. Verify the canonical file appears in Files, has a creation event in History, and is enumerated by the sync inventory. Verify an ordinary Files upload outside a sync folder still uses the existing attachment path.
-- Download a canonical file, compare its bytes, and move it within the cloud. Verify the file ID and History survive the move. A stale selected revision or a destination name collision must leave the source intact. Verify a cross-device move trashes the cloud source only after the destination write is confirmed.
-- On desktop and mobile, open Files at the exact sync folder and verify both an existing synced file and a new upload display and open from the existing row and menu controls. A rendered row and a canonical inventory result do not establish a native cloud-to-local transfer.
-
-### Browser password autofill on multi-step sign-in pages
-
-- [ ] Run `node browser-extension/test/vault-target-browser.mjs /absolute/path/to/playwright/index.mjs`
-  with an isolated Chromium runtime. Fill the username step and the form-less
-  password step with synthetic data. Confirm Thingtime dispatches no submit.
-- [ ] While approval is pending, replace the password node with an identical
-  field or change an associated form's action to another origin. The new field
-  remains blank. Disabled, read-only, new-password and one-time-code controls
-  stay ineligible even when autocomplete has multiple tokens.
-- [ ] Open the chooser over a modal at desktop, 375px and 320px. Confirm it fits,
-  Escape closes it, and focus returns to its button. A real site sign-in and a
-  native-provider operation require separate acceptance.
-
-## Agent provider-credential import
-
-- On an isolated replica-set API, exercise the real browser approval plus Node
-  file handoff and the direct file/paste importer. Verify the exact root admin,
-  origin, environment, label, format and create/replace revision, then reload
-  metadata and compare the receipt. Use synthetic credentials only.
-- Import Google web JSON with the exact callback; refuse installed-client,
-  wrong callback and malformed files. Replace one environment/origin entry and
-  independently verify other scopes remain unchanged. Refuse stale revisions,
-  duplicate labels and foreign account/Character/bearer approvals.
-- Run the CLI's read-only preflight for `oauth-client`. Version 1.0 accepts
-  the existing Google format and refuses the scoped format before a handoff or
-  input read. Approve a synthetic Facebook scoped replacement, verify the
-  callback and exact vault revision in the browser, then read the receipt and
-  verify the other origin survived.
-- Cancel, expire, revoke/logout and switch account during work; protected drafts
-  must clear and stale completions must not save. Test proof mismatch, replay
-  with different bytes, concurrent save/revoke, and lost initial/retry responses.
-  A committed receipt must not turn into duplicate creation or false failure.
-- Switch the approving session to a Character and back without polling in
-  between; the previous approval must remain revoked. An owner header must not
-  override persisted Character selection. Load approval inside a same-origin
-  iframe: headers and client guards must refuse its controls and requests.
-- Reconcile a lost write, intermediary HTTP 500, partial receipt and JSON-null
-  status without duplicate saves or false success. Replacement receipts must
-  match the approved credential ID, including when their other fields match.
-- CLI stdout/errors must contain only allowlisted status/metadata, including
-  base64url IDs with underscores and canonical dates; raw remote errors, bytes
-  and verifier headers never appear. Ctrl-C must close a stalled local pipe.
-- At desktop/mobile sizes, scroll fully, use keyboard file selection/review,
-  open paste/replace/approval states and verify one inline loading indicator,
-  no overflow, focus preservation and retry. Edit nested heading/control blocks
-  separately, save and reload without persisting transient secret input.
-- Verify capability discovery, all executable registrations, signed gateway
-  header integrity and refused cross-origin fallback. Run `test:credentials-import`,
-  `test:credentials-import:browser`, and after building the real
-  `test:credentials-import:acceptance`. A passed fixture does not establish a
-  real provider credential or installed device acceptance; test the consuming
-  provider operation separately on the authorized deployed account.
-## Device sync live and historical resources — 2026-11-04
-
-- [ ] Hold a native upload longer than two recorder intervals. The live and
-  historical rates come from native period measurements, never zero-at-dispatch
-  followed by all receipt bytes in one bucket. Rootless resource reads include
-  the existing scoped Electron governor without changing targets. Worker exit
-  or an old transport snapshot cannot be restamped as fresh traffic or CPU.
-- [ ] Read a long range while collecting samples and send Pause concurrently.
-  Journal writes and device controls remain responsive; cancellation/deadline
-  ends only the history read. Test viewer/device clocks both ahead and behind:
-  freshness follows receipt age, and recent windows include source-time data.
-- [ ] On a paired local Mac with no active sync, the resource panel identifies
-  local idle/paused state and never reports that remote resources are unavailable.
-  Resume an authorized test connection and compare rates with acknowledged bytes
-  over an independently timed interval; distinguish sync CPU/indexer memory from
-  whole-device readings. Pause and confirm the old nonzero rate is no longer live.
-- [ ] In a second authenticated browser, select the same device. Keep the panel
-  open across multiple ten-second status intervals: values must not disappear
-  after 2.5 seconds, saved policy must not renew a measurement's timestamp, and
-  measured CPU responses including `cpuScopes` must survive strict projection.
-- [ ] Exercise Live, 1m, 5m, 1h, 24h and custom ranges, including a window before
-  collection, sparse samples, unavailable metrics, error/retry and a paused gap.
-  Verify sample means/counts against independently recorded observations; do not
-  label sparse samples as full-period averages or interpolate missing intervals.
-- [ ] Close the dashboard during an admitted run, reopen it, then restart the
-  app and reopen the same range. Retained observations survive; no pre-update
-  history or stopped interval is fabricated. Remote history is read-only and
-  refuses an incompatible origin capability or wrong owner/device/data plane.
-- [ ] At 1440px desktop and 375px mobile, scroll top to bottom, open resource
-  targets and custom dates, use keyboard controls, and verify no clipping or
-  horizontal overflow. Background refresh and window changes preserve target
-  drafts, focus and scroll. Cold start has one accessible inline indicator;
-  cached refresh remains usable; failure offers one clear retry action.
-- [ ] In Edit layout, select nested range controls, labels and metric fields
-  independently, save and reload. Account/origin/access changes immediately clear
-  protected values and fence stale async completions, including history reads.
-
-## Shared Rust filesystem index and sync — 2026-11-04
-
-- Scan pacing regression (2026-11-06): run
-  `cargo test --locked --manifest-path filesystem-indexer/Cargo.toml -p commander-indexer`.
-  Fake-clock checks must show hashing/metadata work and sleep overshoot count
-  toward the next chunk, concurrent reservations share one schedule, idle credit
-  never exceeds 100 ms of aggregate bytes, and cancellation interrupts waiting.
-  Compare identical disposable mixed-file trees with fresh observation databases
-  and the same release binary/policy; separate scan, seal and verification time.
-  Warm captures must read zero unchanged content bytes. Preserve the selected
-  scan/transfer rate and CPU target; no saved policy change is part of this fix.
-
-- iOS embedded inventory regression (2026-11-06): run the real simulator
-  `ThingtimeTests/MobileFolderInventoryTests` and the full native suite. Assert
-  capabilities report `strictCoverage: false` and every strict entry point
-  refuses with `strict_watcher_unavailable`; do not substitute polling coverage.
-  Shared paging, Unicode/policy binding, DB corruption, scope, restart and
-  cancellation checks use explicit `backup-supported` / `per-entry` captures
-  on iOS. Verify unsupported files remain explicit partial-coverage gaps.
-  Run the same Swift suite on macOS plus Rust workspace tests to retain real
-  strict FSEvents mutation, watcher-loss, sealing and cancellation coverage.
-  No runtime capability gate, skip or mock replaces either platform contract.
-
-- Build from the top-level `filesystem-indexer/Cargo.toml`; run its workspace
-  tests and `apple/FileSync/test-embedded-rust.sh`. Commander, Mac Node and iOS
-  must reference this workspace directly, with no second engine source tree or
-  registry package. Verify both default and isolated `CARGO_TARGET_DIR` outputs.
-- Use disposable roots to compare a cold scan, unchanged warm scan and one-file
-  edit. Confirm unchanged content avoids hashing, new versions invalidate only
-  relevant observations, and private sync paths never appear in Commander search.
-- Interrupt before seal, mutate an early file while later files are checked,
-  revoke a grant, replace/remount the root, lose watcher coverage and restart.
-  Incomplete coverage must never become a successful empty inventory or authorize
-  propagated deletion. Restore legacy journal jobs without splicing old cursors
-  into a new Rust generation.
-- Reject a Swift output callback during a Rust write and cancel during hashing.
-  The embedded producer must terminate, release its DB/operation lease and join
-  before the native handle is destroyed; `Interrupted` must not cause an endless
-  `write_all` retry. Verify another operation can start afterward.
-- Browse early and late pages of a broad folder. Confirm pagination does not
-  replay all preceding directory walks, cancellation remains responsive, cached
-  pages remain root-authorized and a changed directory invalidates its cursor.
-- Check PhotoKit cold and warm captures, persisted original metadata reuse,
-  permission revocation and a library edit before the final page. Native Photos
-  permission still controls access; a cached digest never grants file reads.
-- Final signed Commander and Thingtime installs must embed the rebuilt helper,
-  preserve stable identity/preferences, and use the canonical shared DB. Verify
-  Desktop and `~/Thingtime` two-way synthetic byte/path/Timeline round trips,
-  Pause/Resume, restart and window-close continuation. Keep Home paused and its
-  removed grant absent. Record resource readings against OS measurements and
-  distinguish a configured target from a measured hard limit.
-- iOS archive compilation, simulator execution and physical Files/Photos grants
-  are separate evidence. Exercise only watcher guarantees the platform actually
-  provides; unavailable coverage must fail closed, not silently claim sealing.
-
-- Run the Commander daemon inventory integration with the native invalidation
-  watcher enabled. Hold the Rust search writer after it has staged 500 paths; committed
-  counts and live file, directory and app changes must remain readable. Start a
-  private backup on the same SQLite database and verify it publishes a complete
-  provisional generation while the search walk is still held. Resume search and
-  verify its final catalog publishes atomically.
-
-### Two-way transfers during initial indexing
-
-- Run `pnpm --dir remix run test:files:mac-fixture-transport`. Hold a native
-  `scan-changes` response while inspect/read complete through their independent
-  lane; verify out-of-order result/chunk IDs, atomic stage frames, cancellation
-  acknowledgements, EOF rejection of active and queued requests exactly once, and
-  identity duration accumulation across native restarts and out-of-order samples.
-  Hold a post-receipt proof observer and verify the next transfer claim continues;
-  drain every observation before resume/success and propagate its failure. Keep
-  repeated path observations distinct by immutable operation ID. Verify closed
-  per-request timing fields and one end event across cancellation/EOF. After
-  building the Swift fixture, run its `--self-test-timing` to retain the original
-  request across another TaskLocal context and represent partial clocks honestly.
-  Attribute native admission/HTTP intervals per request/session; never add
-  overlapping poll/global sums or call residual service time CPU time.
-  The same command checks canonical host capability negotiation, fresh composite
-  authorization, absence of a custom mutation hook, refusal of missing native
-  prerequisites, and non-interfering digest observation. The early proof must
-  use the real host manager/transfer worker and confirm equal renderer/native
-  byte and CPU policies before timing; observe worker PUTs at the fixture server.
-  Exercise `mac-fixture-http-observer.test.mjs` against the actual native HTTP
-  uploader: normalize origin/absolute/slash request targets, exclude earlier
-  seed PUTs by append position, retain only closed diagnostic fields, and keep
-  failed host construction from leaking a digest observer. This does not replace
-  a later full native timestamp/receipt acceptance run.
-  Before timing, require an owned signed HTTPS download target from the selected
-  storage provider. The disposable local provider uses HTTPS port 28313 with an
-  ephemeral private CA; API/native identity stay on HTTP port 28311. Require the
-  TLS regression to accept the exact canonical child and reject wrong/no CA,
-  and verify unrelated forks receive no extra trust. Cleanup all task keys,
-  certificates and listeners; never modify OS trust, disable verification or
-  relax shipping child environment filters. Missing prerequisites remain a
-  failure, never a reason to downgrade the native path.
-  The separate `--upload-start-diagnostic` mode keeps a canonical two-way
-  connection with an initially empty synthetic cloud folder; require exact
-  upload hash/receipt, unsealed capture and strict no-replay resume. Its explicit
-  `twoWayAcceptance: false` result must be rejected by the original two-way proof
-  validator. Downloads are deliberately unexercised in that diagnostic. Fixture framing must retain the
-  canonical NodeWireCodec sorted-key encoding across context refreshes.
-  Record per-call native identity admission/HTTP, host account/native service,
-  source/configuration checks and digest-worker elapsed time separately.
-  Receipt observers must share a fresh production feed result without adding a
-  second native poll. Preserve the production iterator's 25-second indexing /
-  2-second indexed waits; never inject a faster fixture-only polling cadence.
-  Build `MacFolderSyncFixture` and run the normal-budget before-seal proof below.
-  Retain per-action enqueue/start/end and queue/service aggregates separately
-  from summed native identity-verification time (which includes admission and
-  HTTP and can overlap across concurrent requests). Preserve all native
-  authorization, cancellation, session checks and strict hash/resume assertions.
-
-- Run `node --import tsx --test app/fileSync/cloudIndexChanges.client.test.ts`
-  from `remix`. A Timeline delta for a canonical zero-byte cloud file must
-  pass even though its sync entry has no multipart fingerprint. Nonempty files
-  without a fingerprint and malformed empty hashes must still fail. On the
-  signed installed app, retry an isolated two-way connection with a cloud-only
-  empty file and verify the exact local zero-byte path exists after transfer.
-- Run `npm --prefix remix run test:file-sync`. The two-way streaming regression
-  holds both source feeds open while uploads and staged downloads confirm,
-  repeats the check for one-sided edits from a sealed baseline, and exercises
-  stale hints, conflicting edits, lost replies, cancellation, authority loss,
-  and a deletion between strict planning and checkpoint capture.
-- Run `node --test remix/scripts/mac-fixture-capabilities.test.mjs`. The real
-  native HTTP fixture must accept compatible additive/patch API releases, while
-  refusing a foreign manifest origin and missing, malformed, older or breaking
-  required capabilities before creating its disposable account.
-- Run the guarded folder-echo regressions in `twoWayStreaming.test.ts`: only an
-  opposite-feed exact stamp from a freshly checked no-op folder pair may avoid
-  duplicate reads. Changed/missing folders, legacy hosts, eviction and restart
-  must use current checks. Test pause/account change, a stale/deleted parent and
-  its child, and fresh strict capture; no observation may authorize a copy or
-  publish a completion checkpoint. Keep the processing window bounded without
-  limiting accepted feed size. Compare the same real mixed/fault fixture's
-  first confirmed file, first payload, identity/admission counts and total time.
-- For initial-folder startup, queue both replicas' positive folder hints before
-  planning. A guarded host may defer that folder without current point reads,
-  but must not borrow the hint for a child or completion checkpoint. Consumed,
-  foreign-generation and bounded-out peers must fall back; legacy hosts retain
-  current preparation. Verify no cursor changes during peer lookup, fresh strict
-  inventory after a stale pair, and the mixed fixture's actual queued-peer hits
-  before first confirmation. A positive hint is never current-state authority.
-- Guarded dual-feed hints with no usable journal ancestor must defer without
-  policy RPCs or protected point reads. Follow one with an executable hint after
-  pause, configuration removal or destination change: the original fresh policy
-  gate must still refuse it before either replica is observed. Legacy hosts keep
-  their existing ordering; deferral cannot create receipts or seal a checkpoint.
-  Capture the guard decision before awaits: changing host negotiation during
-  ancestor lookup cannot skip policy before a surviving point read.
-- Separate healthy startup from accepted-loss recovery with `--healthy` added
-  to `test:files:mac-paged -- --wide --wide-mixed --canonical-worker --streaming-two-way`.
-  This explicit lane disables accepted-loss/restart injections only; retain real
-  host/worker/API/Rust paths, exact hashes, full byte counts, strict checkpoints
-  and unchanged no-PUT checks. Native publication negotiation accepts compatible
-  minor updates and refuses missing/breaking contracts. Compare identical
-  `--wide-count` values and source
-  certificates; a small tree does not explain an older wide fault-run timing.
-- For mixed-file current-worker acceptance, add `--canonical-worker` to
-  `test:files:mac-paged -- --wide --wide-mixed`; add `--streaming-two-way`
-  to exercise production-style deletes-off dual feeds and strict async capture. Keep the default mixed mode
-  explicitly as legacy fallback coverage. The modern lane must negotiate native
-  context/compound/batch capabilities through the canonical desktop manager,
-  use scoped fixture TLS, preserve accepted-stage/commit/publication loss and
-  restart assertions, and verify actual HTTP byte/PUT counts plus exact hashes.
-  Retain per-check admission/HTTP and per-operation native timing; do not treat
-  overlapping sums as wall time or legacy fallback timing as installed speed.
-- For an isolated native+HTTP timing diagnostic, run
-  `pnpm --dir remix run test:files:mac-paged -- --two-way-early --normal-early-budget`.
-  Record first local change, admitted operation, first body byte, durable file
-  confirmation and post-resume strict reconciliation separately. Run
-  `node --test remix/scripts/mac-fixture-http-observer.test.mjs`: observing
-  request enqueue must retain every byte while API body consumption is delayed,
-  report the complete payload length, and omit signed URLs/body contents. This calibration uses 5,000,000 B/s
-  scan and transfer, CPU 15%, and a 2,500,000 B/s Rust scan reservation;
-  require exact upload/download receipts while the same capture is still
-  running and unsealed, then one strict checkpoint with no duplicate transfer.
-  The default `--two-way-early` proof deliberately uses a slower 400,000 B/s
-  scan ceiling to hold its late file open. The `--wide` fixture has no change
-  feeds, so its first PUT measures full paged capture rather than early start.
-- Run `npm --prefix remix run test:files:two-way-progress-ui` with the MCP
-  workspace's Playwright and its Chromium installed. The isolated desktop and
-  narrow viewport checks use the real progress viewer and journal, including a
-  download still active during another index frame, provisional discovery,
-  confirmed nested totals after strict planning, and the final direction label.
-- In the signed Mac app, use a disposable connection with deletion propagation
-  off and a late large file to keep the Rust scanner active. Create a small
-  local-only file and a small cloud-only file in already covered paths or new
-  source folders. Record a canonical cloud publication receipt and the native
-  download's matching bytes while the same initial scan is still unsealed.
-  Verify final strict reconciliation converges and preserves operation history.
-  Repeat Stop/resume with the same capture and operation identities. Preserve
-  existing scheduled connections, resource limits, folder grants, and user data.
-
-### Mac native download recovery
-
-- [ ] Interrupt a signed range after an earlier range has staged. Resume the same
-  operation after temporary HTTP or socket failure and verify the retained offset,
-  exact final bytes and one published file. Wrong owner, cloud revision or range
-  must remain terminal. Check the phase-only `folder-sync.log` diagnostic
-  without logging request URLs, credentials, paths, or payload bytes.
-- [ ] Close the dedicated transfer worker as a saved folder job dispatches a
-  request or reuses an idle worker. Verify the app stays open, interrupted work
-  can resume through a replacement worker, and the file publishes once.
-
-
-### Share preview themes and customiser
-
-- [ ] Share a multiline text post with an opening headline paragraph and links
-  in its body. The card title uses the opening paragraph; the description still
-  reflects the body. Structured titles and poll questions retain precedence.
-- [ ] On a real public text/photo/gallery/page link, open **Share link and customise
-  preview**, compare the auto-filled title and photos with its anonymous API
-  projection, then select Editorial/Colour Blocks and every layout. Copy/open
-  the URL and verify raw HTML, JSON metadata and 1200×630 PNG agree.
-- [ ] On `/invite`, select Editorial White, Pink Invitation and Night Garden.
-  The token fragment survives copying but never reaches metadata requests or
-  card pixels; opening the customiser does not consume the invite.
-- [ ] Verify homepage and missing/private content use the new generated safe
-  card. Invalid/duplicate theme/layout values do not inject content or URLs.
-- [ ] At desktop and mobile widths, scroll the whole dialog, use keyboard
-  choices/copy/close, check live refresh, failure/Retry and stale-request fencing.
-  Edit nested title/choice blocks separately, save and reload their document.
-- [ ] After deployment, fetch the exact raw `og:image` for the requested public
-  post and inspect its actual PNG; mocked data/build output is not live proof.
-
-### Authorized Things counts and visible offset windows
-
-- Run `node remix/scripts/things-counts-acceptance.mjs` after a node-server Nitro
-  build. It creates a disposable replica and separate API accounts, compares
-  the exact count against ordinary cursor traversal, exercises literal archive,
-  schema, parent, namespace and public/private PAT filters, and verifies distant
-  offset windows without exposing another account's rows or totals.
-- Compare explicit data-only and mixed data/protected-kind counts/pages with the
-  unfiltered owner library. Prune impossible managed-kind OR exceptions without
-  admitting mixed protected rows; preserve legacy post/folder aliases and the
-  retained managed-kind guards.
-- Confirm `count=true` rejects cursor/limit/offset/exact-ID/discussion parameters,
-  duplicate filters, unsupported query keys and anonymous reads. Errors and
-  cancellation must never return a partial total. Counts carry private/no-store.
-- Confirm offset pages skip **visible** rows, including when blocked or denied
-  inherited rows occur before a requested page. The returned total is separate
-  from loaded rows; failed/unavailable totals remain unknown. Count and offset
-  are current observations rather than transactional snapshots.
-- Review the acceptance report's request count, actual response byte totals and
-  elapsed HTTP timings separately. A native safe-row count and metadata-only
-  fallback avoid transferring/projecting every crystal, but do not prove a
-  production index plan or constant-time offset access.
-
-- Exact-ID batch regression: request mixed accessible/missing/private/protected
-  IDs with duplicates and more than one internal processing chunk. Compare
-  each returned generic Thing to an ordinary exact read, retain input order,
-  and ensure invisible positions are null without an existence distinction.
-  Exercise PAT/app boundaries, malformed IDs, cancellation and mixed selectors.
-- Collection renderer regression: run
-  `node remix/scripts/collections-performance.browser.mjs` with the documented
-  fixture build/server setup in that script. It covers desktop/mobile page
-  transitions, search, selection reveal, identity changes and 403 behavior.
-  Synthetic Action transport timings are renderer evidence; real API timing
-  requires the disposable replica acceptance fixture separately.
-
-### Large editable Webpage Timeline capture — 2026-11-05
-
-- Run `npm --prefix remix run test:timeline:large-pages:acceptance` after a
-  node-server build. The fixture starts its own disposable replica/server and
-  API-created identities; it never uses production data or inherited credentials.
-- Save more than 1,200 individually editable blocks and more than 24 nested
-  containers through the ordinary update alias. Verify exact block identities,
-  successful readback, retained revisions and a working version preview.
-- Include an owned Component and another account's private Component. The owned
-  definition is captured; the inaccessible one remains explicitly unavailable.
-  Large/deep trees must not bypass Component ACLs, CAS or transactional history.
-- Compare/restore Components nested inside containers, elements, collections and
-  inactive conditions. Match stable block IDs, preserve duplicate-ID refusal,
-  reject ancestor cycles and permit reused objects/lists in separate positions.
-
-
-## Incoming sharing: post, message and save
-
-- Create and update broad Data through the real API, read exact values and
-  reconstruct the recorded revision. Snapshot processing must use relational
-  parts without a total node ceiling; check retained-byte equality, stable
-  operation IDs, rollback on failure and canonical depth/envelope guards.
-
-- Create and exact-read a valid broad Data value (for example, 200,000 array
-  entries). Authored-control classification and rich-text presence checks must
-  avoid JavaScript argument-spread ceilings, preserve order/count and handle
-  cycles without replacing complete input with a truncated success.
-
-- Run `npm --prefix remix run test:shared-content`. In an isolated real-API
-  fixture, run `remix/scripts/shared-body-acceptance.mjs` above the former
-  768/256/64/32/16 KiB body thresholds and compare exact readback for all nine
-  changed route contracts. Check anonymous/scoped denial before consuming a
-  body, malformed UTF-8 and cancellation; unrelated control budgets must remain.
-
-- From the real iOS system share sheet, select Thingtime for a link, text, photo,
-  Live Photo, PDF, video, audio, ZIP, custom UTI and mixed files/folders. The first
-  screen is New post with the content prefilled; no Saved locally dead end.
-- Verify image previews separately from original upload bytes. Live Photo
-  resources, unknown binary bytes, names, nested paths and empty folders survive.
-  Repeat with more than 25 items and identical names in different folders.
-- Share zero-byte files and whitespace-only text to Post, Message and Save.
-  Compare original bytes after download; retry the same request after lost
-  replies without creating another object. Missing empty-upload capabilities,
-  expired/bound drafts and changed metadata must refuse safely.
-- Share more than 5,000 characters, many rich blocks, long filenames and
-  annotations, long tags/URLs and large reference selections. Compare exact
-  stored/read values and every authorized attachment; no silent trimming or
-  old metadata limit may reject valid shared content. Keep processing chunk
-  sizes distinct from total selection size.
-- Edit the post text, switch destinations and return; preserve the edit and
-  attachment order. Publish once and compare the exact server Thing and files.
-- Choose Message, select/search/create a conversation through ordinary Messenger,
-  see the original link and an Add message cursor at the end, append a caption,
-  send once and read the exact recipient/message/attachments back.
-- Choose Save, browse all Things, create nested folders, enter them and use the
-  permanently reachable Save here button. Verify actual folder placement, exact
-  binary content and separately rendered/editable saved text.
-- Interrupt before/after upload and before/after publication; reopen in both the
-  extension and main app. Recover the same operation without duplicate content.
-  Block changing destinations after a submission has an unknown outcome.
-- Test sign-in, account/origin change, missing upload approval, cancelled source,
-  failed upload, retry and unavailable capability. Never show success before
-  exact result verification. Preserve recoverable originals.
-- Inspect desktop and phone layouts, full scroll to the bottom, keyboard-open
-  composer, menus, folder dialog and toolbar customisation. No hidden Send/Save,
-  clipped labels or overlap. Edit a toolbar icon, label, action and pixel block
-  individually, save/reload, then restore the task fixture.
-- On the actual iOS keyboard, check the existing Post button's center hit target
-  and all three destination buttons against the native keyboard frame, including
-  visual-viewport panning. Inspect the full native screenshot: DOM hit testing
-  alone can pass for a control obscured by the keyboard. Persist a non-secret
-  exact-result receipt before test cleanup; DOM innerText line wrapping is not
-  a stored-text equality check.
-- Create more than 500 comments through supported APIs in an isolated fixture.
-  Verify exact direct/thread counts, bounded default/new/old/top preview windows,
-  tie ordering and complete cursor access. Include large comment bodies, nested
-  replies, overlapping selected roots, reactions and moderation/ACL refusals.
-  A processing page size must never become a total comment limit.
-- Record web fixture, simulator, signed build, TestFlight processing and physical
-  device evidence separately. A fake native bridge proves the web adapter only.
-
-### Device location history and locate actions — 2026-11-06
-
-- [ ] Run `test:devices` and `test:api-capabilities`; smoke the built manifest
-      and real owner/node routes. Verify other-owner, revoked and stale
-      collection refusal, duplicate immutable samples and late-arrival ordering.
-- [ ] On desktop and phone, compare current/history timestamps, coordinates,
-      accuracy and age colours with exact API samples. Exercise empty history,
-      pagination, date filters, unknown model fallback, retries and identity
-      changes. Scroll fully and open every changed control without overflow.
-- [ ] Change Never to a duration and back, including custom days. Read policy
-      back, verify expiry and accounted cleanup, and disable collection while
-      preserving retained history. Delay/fail checkbox saves: optimistic state
-      must reconcile or roll back without a second click or lost history.
-- [ ] In Builder, edit nested marker image, label, age colour, input and button
-      individually; save/reload and verify the live device composition still
-      operates. A standalone layout preview is not device-action acceptance.
-- [ ] Exercise explicit native location/notification consent, denial, revocation,
-      approximate/precise readings, background/foreground, offline outbox and
-      relaunch. Compare physical readings independently on each claimed host.
-      Missing optional capabilities must leave pairing/heartbeats operational.
-      StrictMode cleanup or identity suspension must withdraw background
-      authority without forgetting explicit collection consent; only verified
-      same-owner/device/origin activation may resume it. Ordinary backgrounding
-      preserves an already authorized location session. With Mobile device
-      connection activity disabled, explicitly start location collection, then
-      log out/switch origin or account: pending status callbacks must not restore
-      the old authority. Sign back into the same account with activity still off:
-      one read-only verified status must resume retained opt-in without another
-      enable/permission prompt. Hide/show the app without withdrawing authority.
-      Restore connectivity before a failed foreground check settles: retry the
-      scoped read once, without another opt-in or repeated network requests.
-- [ ] With native location bridge 1.2+, explicitly authorize Always and enable
-      location history on a paired iPhone. Drive for at least 20 minutes with
-      the screen locked; verify intermediate measured fixes about five minutes
-      apart when iOS has fixes. Stop and resume driving, lose and regain
-      connectivity, and compare observed versus received times. The outbox
-      must keep original times and IDs. Downgrade to While Using the App and
-      repeat with the screen locked; no background fixes may be collected.
-      Force quit and poor reception can leave gaps; no synthetic points.
-- [ ] Send a target-device message/default tone and an approved uploaded MP3.
-      Verify original bytes, exact prepared derivative, target isolation,
-      cancellation and lease expiry. Lose replies and retry the same request:
-      no second command/effect. A definite admission refusal may be corrected;
-      conflict/network/unknown outcomes retain the original operation identity.
-- [ ] Check APNs provider acceptance separately from actual displayed/sounded
-      notification. Native crash-after-effect becomes needs-review, never
-      automatic replay. Record simulator, real API, signed installed app,
-      TestFlight and physical-device evidence separately.
-- [ ] Expire the previous latest location, then receive a fresh sample: cleanup
-      must preserve the fresh pointer. Approve an APNs command and retry the
-      same approval after a lost reply: dispatch once, with canonical terminal
-      status and cleanup expiry. Revoke/replace audio during native download:
-      the final authorization check must prevent playback and cache commits.
-
-### Builder app launch and scope regression
-
-- [ ] Create two independent private apps with identically named pages and data.
-      Set the first app's entry point, save/reload, then activate its card/title
-      on desktop/mobile: the live page opens. Browse and Edit app remain explicit.
-- [ ] Browse into each app; type a query, change every kind/view/display/sort/group
-      chip, then Back/Forward/reload. The folder and query persist; no other app's
-      records appear. All apps is the explicit route back to the global catalogue.
-- [ ] Remove entry metadata: primary activation browses contents. Missing,
-      inaccessible, invalid and cyclic/folder targets show a clear recoverable
-      error; access to the app never grants target access. No navigation runs an
-      Action or changes data, membership, audiences or grants.
-- [ ] Open Edit app, choose a saved page or exact Thing ID, test load-more,
-      unavailable target refusal, keyboard navigation and narrow modal scrolling.
-      Scroll each view top to bottom and verify no overflow/clipping.
-- Authored rich/menu integration: run `npm --prefix remix run test:authored-controls:browser`
-  after the client + node-server build. The fixture starts its own disposable
-  replica and API, registers a synthetic account, then checks desktop/mobile
-  outer-page and actual BuilderViewport iframe menus. Type and format text,
-  immediately Save, and independently read the exact persisted Editor.js and
-  plain-text values; verify the ordinary named fields and one write per click.
-  Repeat with no rich fields. Check native menu keyboard/Escape/focus and opened
-  bounds, scroll to the bottom, then ensure all owned test resources close.
-  Set `MONGOD_PATH`, `TT_PLAYWRIGHT_MODULE`, `TT_CHROMIUM_EXECUTABLE`, and optional
-  `AUTHORED_CONTROLS_REPORT_DIR` to local test resources only. No production
-  account, database, private app definition or provider is used by this fixture.
-- Builder iframe editors: select words and use Bold, collapse selection with an
-  arrow key, continue typing, and immediately Save. Toolbar/selection and the
-  parent scroll must stay in the correct document. Reframe/reopen and exercise
-  two fields; failed/slow editor-module loading must allow a fresh open without
-  stale editor initialization or a second app runtime.
-
-### Mac compound single-part upload regression
-
-- Run `node --test electron/test/folder-upload-single.test.cjs` and the existing
-  folder upload/batch/duplex suites; run the file-sync suite and Swift
-  `MacSingleUploadOperationTests` plus `MacFolderSyncTests` with the canonical
-  Rust fixture helper built. Exercise regular-source replacement, truncation
-  and growth at emission, PUT and stored-proof boundaries; ready attachments
-  still require final strong source verification.
-- Verify missing/older/breaking `fileSingleUploadVersion`, empty/large/multipart
-  sources, symbolic links and custom mutation policies use the existing path.
-  Revoke the account, grant, configuration or active frame during a held PUT;
-  require cancellation and no file publication. Lose a PUT reply and recover the
-  original attachment/request. Reject malformed or foreign stored content.
-- Keep the single-file reservation and exact guarded destination revision.
-  Create or revise a destination before publication; retain the conflict. The
-  publication hook runs exactly once for a successful guarded commit, and an
-  accepted receipt replay neither reads nor uploads the source again.
-- Compare one canonical warm `test:files:mac-paged -- --two-way-early
-  --normal-early-budget` run with the retained baseline using identical shared
-  identity admission, global 5,000,000 B/s transfer/scan and CPU 15% policies.
-  Keep one persistent fixture process and record native callback boundaries;
-  a compound request spans PUT, so its whole duration is not pre-PUT latency.
-
-- Native Release packaging regression: run
-  `node --test electron/test/native-bundle-build.test.cjs`, then the canonical
-  signed local build with its isolated native cache. Explicit shipped-product
-  compilation must exclude test-only `@testable` fixtures; a failed product or
-  missing shipped executable must stop before staging/replacement. Verify all
-  three Swift binaries and the Rust helper through the signed-bundle verifier.
-
-
-### Account restore admission plans
-
-- Run `pnpm --dir remix run test:backups:worker` for original-session/lease
-  fencing, encrypted hash/CAS recovery, bounded snapshot engine interoperability
-  with canonical v1 seals, corrupt-byte/revocation refusal and the actual internal
-  transport outer-guard cancellation regression. Collection/transport doubles
-  here are unit evidence only.
-- Run `pnpm --dir remix run test:backups:workflow` on its task-owned replica set.
-  Require generic backup-job/event exact/batch/inherited/export and bulk refusal
-  for owner/other/anonymous, unchanged ordinary CRUD, paused/revoked canonical
-  writes rolled back, accepted encrypted checkpoint reply-loss recovery and
-  killed-process continuation. Do not replace this gate with unit doubles.
-- A transient `snapshot-unavailable` continuation retains its exact BSON timestamp;
-  `snapshot-expired` requires a newly reviewed backup operation. Neither may
-  silently select a newer timestamp. Producer/reference receipts must replay
-  after uncertain replies without widening source scope.
-- Guard calls must freshly reject revoked/scoped/Character/replaced/expired
-  authority without writing a healthy lease on every immutable object read.
-  Near-expiry renewal alone may write, with the unchanged original-session/job
-  transaction fence. Measure census at the same timestamp with the synthetic
-  1,000-item API profile; history expiry remains refusal, never a wider capture.
-- Workflow registration, deployed scheduling, independent destination readiness,
-  real snapshot/selected restore execution and editable desktop/mobile UI remain
-  distinct acceptance gates. A snapshot unit seal or configured destination does
-  not establish the complete product flow or whole-account readiness.
-
-- Run `node --import tsx --test app/api/utils/backups/backupDestinations.test.ts`
-  from `remix/` for exact-origin/environment vault registration, primary-bucket
-  refusal, safe projections, revoked-session/configuration-change refusal,
-  full-account/home-plane route guards and both manifest contracts. Negotiate
-  `api.backup-destinations` 1.0.0. A configured-unverified destination must never
-  enable execution or be reported as provider/independent-byte acceptance.
-- After building Nitro `node_middleware`, run
-  `node remix/scripts/smoke-built-backup-destinations.mjs --bundle remix/.output`
-  for compiled JSON manifests/docs and the anonymous private/no-store 401.
-  This fixture uses no private vault or reachable DB/provider.
-
-- Run `pnpm --dir remix run test:backups` for independent sealed mixed-graph
-  recovery after live-source/first-vault loss, bounded metadata pages, cyclic
-  executable references, structural-cycle refusal, alias/dependency admission,
-  canonical file/attachment closure and immutable accepted-page resume.
-- Change a review destination, revision, capability contract or source seal and
-  verify the old plan refuses reuse. Change a page between validation and record
-  iteration and verify no unreviewed record is yielded.
-- Keep `planIntegrity: verified` distinct from source completeness and writer
-  availability. Legacy prose-only coverage must remain unknown; no plan may
-  report whole-account restoration ready or complete while writers are absent.
-- This phase has no product UI or destination mutation. Full managed/security
-  coverage, canonical writer/history recovery, installed acceptance and measured
-  100 GB–100 TB transfers remain separate required gates.
-
-- `accountInventory.test.ts` retains valid ordinary content beyond 100,000 nodes.
-  `thingStream.test.ts` checks fixed v1 bytes/hash/reader compatibility, v2 deep and
-  wide content, a scalar beyond 128 MiB, multiple range pages, independent-copy
-  source loss, immutable lost-acknowledgement retry and unknown codec/version
-  refusal. `canonicalJsonStream.test.ts` checks integer-key order, exact Unicode
-  across byte/escape boundaries, inert tags and accessors/cycle refusal; a fresh
-  128 MiB-heap worker reports measured heap/RSS for 500,000 values including the
-  input-width property-reflection allocation. Do not call chunk size total RAM.
-- `test:backups:account-profile` also creates/reads/deletes a 150,001-value ordinary
-  Thing through production handlers in its disposable replica, retains a v2 copy,
-  removes its source and first vault, then checks exact offline content. The
-  selected-record capture interval does not claim whole-account readiness or a
-  physical 100 GB/100 TB backup.
-
-### Reviewed ordinary graph execution and execution holds
-
-- Build Remix, then run `pnpm --dir remix run test:content-execution:built`.
-  Both compiled manifest handlers must return origin-scoped JSON with the four
-  current execution/read contracts; all four compiled docs routes must agree.
-  This clean synthetic runtime uses only an unreachable loopback database URI
-  and does not establish installed-app acceptance.
-- Run `pnpm --dir remix run test:backups:ordinary-restore`. Its owned replica
-  uses real signup/Action Request handlers and canonical Things utilities;
-  no fixture content is inserted through Mongo. Confirm source content and
-  first vault loss and original-session revocation, exact independent
-  content/geo/schema/hierarchy readback through the owned local vault,
-  cyclic Action remapping, immutable intent resume, child-process death after
-  a committed effect, and retry without duplicate writes or overwritten edits.
-- Require null/missing/outside-owned/non-folder parents, unsupported media or
-  managed families, unresolved references, unmapped same-key destination aliases,
-  HTTP payload references, outside Data parent links, changed review/capabilities, stale
-  destination, wrong actor and revoked-session replay to refuse safely.
-- Interrupt after intents and after all effects but before completion. Read
-  durable planning/restoring counts; verify every restored executable surface
-  remains held. Exercise ID, key, child, shared and real browser preparation.
-  A user mutation after current-state verification must advance the epoch and
-  refuse completion; a later retry preserves that user change and activates
-  only after the new exact completion effect.
-- Run `pnpm --dir remix run test:content-execution:browser`. At desktop/mobile
-  sizes inspect the actual held/released render, scroll to the end, and exercise
-  nested pseudo/local/server actions, source loads, native/upload controls,
-  pending confirmation, delayed callbacks, release and retained draft state.
-  Synthetic browser APIs are not the real-replica or installed-app proof. The
-  full GenericThingPage selected-origin route and cached read-refresh path still
-  need installed/real-app acceptance.
-- Keep whole-account readiness false. This phase has no public restore endpoint,
-  complete account restore workflow/folder badge, managed/file writers, live
-  provider durability, installed-app acceptance or measured large-volume proof.
-
-
-### Generic Thing Schema refresh and revoked dependencies
-
-- Run `test:content-execution:browser` for actual restoring inheritance plus quiet
-  verification: draft DOM/value/focus survive; links, Enter, form submission,
-  saved/pseudo/native controls and captured callbacks remain fenced. Quiet
-  verification must not claim restoration or relax an actual ancestor hold.
-- Build the client and a compiled middleware API (`pnpm --dir remix run
-  build:client`, then `NITRO_PRESET=node_middleware pnpm --dir remix run
-  build:server`), then run `pnpm --dir remix run test:content-execution:route`.
-  Prerequisites are `mongod`, `mongosh`, `npm --prefix MCP ci`, and the
-  Playwright Chromium runtime (`npm --prefix MCP exec -- playwright install
-  chromium`), running as a regular OS user with Chromium sandbox support. The
-  fixture owns Mongo 28166 and HTTP 28167 with normal browser networking.
-  An explicit `THINGTIME_ROUTE_TEST_SERVER_BUNDLE` may select a verified compiled
-  middleware artifact. The harness copies artifacts, owns a fresh replica and
-  browser profile, and creates synthetic accounts through the real API. It
-  never uses personal app settings, mock API responses or direct DB content.
-- On full `/thing/:id`, restore real held content, complete its receipt, and use
-  the normal Rename control to trigger a fresh Schema read. Also cover the
-  existing Timeline-applied event path. Completion alone is not an automatic
-  refresh workflow. Check 390px top/bottom, menu and Rename dialog plus desktop.
-- Interrupt a Schema read; retain the existing template/draft inertly. A newer
-  read must supersede delayed success/error. Revoke a foreign Schema's ACL while
-  the outer Data remains readable: clear its protected template immediately,
-  including after an old authorized response arrives. Current authoritative
-  success may release controls; 401/403/404 and invalid/incompatible discovery
-  may not. Manifest transport/HTTP/deadline failure includes body interruption.
-
-### Reviewed account file bytes, paths and history (6 November 2026)
-
-- Run `pnpm --dir remix run test:backups:file-restore` against its owned synthetic
-  replica and local object store. The runner performs the documented index
-  migration/cache drain. No personal account, files, installed app or sync jobs
-  are used. Capture through real upload/file/Timeline handlers; current normalized
-  links must be reconstructed, never replaced with aggregate-only fixtures.
-- Restore over canonical ordinary-created folder metadata. Require exact mapped
-  revisions and protected completed provenance; refuse unrelated/active folders,
-  stale roots/capabilities, incomplete history, missing/cross-file parents and
-  unsupported snapshots before dependent byte publication.
-- Remove source object bytes and the first vault, revoke the source session and
-  retain an independently copied sealed vault. Compare exact API hierarchy and
-  current/historical content, exact-version ETags/range bytes, renamed/moved
-  metadata, shared/named branch heads and same-file parents. Check empty files
-  and inert symlink target bytes without resolving their targets.
-- Interrupt after a committed retained-version effect and retry the original
-  immutable operation. Audit receipts and imported source events must not
-  duplicate. Completed replay after vault loss preserves later owner edits.
-- Inject a current owner edit after bounded verification and revoke the current
-  destination session before completion. Both must refuse stale release while
-  preserving the owner edit. Do not confuse source-session revocation with
-  destination-session authority.
-- Run `test:backups`, `test:files`, focused cloud transport/content-gate/managed
-  placement tests and `test:api-capabilities`. Cover final-fingerprint failure
-  before upload admission, account switches between staging calls, signed PUT
-  stalls, cancellation and errored response-body cleanup. Include real-shaped
-  moderation Dates/provider diagnostics without exporting them.
-- This internal worker phase is not a complete account restore/jobs/UI workflow.
-  Live object-provider durability, History audit grouping, final signed/installed
-  acceptance and measured large-volume behavior remain independent gates.
-
-### First-party backup workspace and durable dispatch
-
-- The builtin schema projection contract must pin `backup-job` and
-  `backup-job-event` to empty public fields while preserving protected generic
-  read/write/export refusals. Run `builtinSchemaProjection.test.ts` and the
-  protected coordinator cases in `backupJobs.test.mts`.
-
-- Run the catalog/path and dispatch regressions: duplicate basenames in distinct
-  nested folders, 75-level retained ancestry across fresh units, corrupt sidecars,
-  revocation, stale first-page jobs, transient authority outages across two
-  scheduler drains, and late scheduling receipts with the original attempt ID.
-- Run `corepack pnpm --dir remix run test:backups:workspace` (builds the compiled
-  middleware first) for
-  disposable real HTTP/API/replica/Chrome acceptance at Mongo28175/HTTP28176.
-  It owns its account, independent local store, browser profile and cleanup;
-  networking remains normal. Desktop/mobile use the actual adapter, shared folder
-  picker and account Builder transport. Compare restored current/historical
-  bytes and ordinary content independently, then save/reload nested Builder
-  text and controls. Do not substitute synthetic composition for this gate.
-- Keep source, isolated local provider, deployed Workflow/cron and actual S3
-  acceptance distinct. An SDK scheduling receipt is not an executed first step;
-  an executed first step is not provider recovery proof. An unavailable worker
-  blocks admission, while configured/unverified execution can confirm itself
-  through the first ordinary snapshot, review or reviewed restore admission.
-
-- Embedded `ThingsPage.locationPicker` must ignore the containing URL's device
-  selection/view query while preserving that URL and its sync drafts. Open the
-  picker from a normal device Sync & Backup entry, select an owned folder, confirm
-  exact timeline revision, then cancel/reopen and reload the outer device page.
-  The embedded slot must never recursively render device details.
-
-- Compiled Nitro H3 requests must be reconstructed from public URL/method/headers
-  and body stream when adding a deadline signal; native `new Request(h3Request)`
-  fails Undici private-state branding. Smoke the built workspace GET refusal and
-  normal authenticated POST body path, retaining abort/deadline semantics.
-
-### Native indexed feed idle wake — 2026-11-07
-
-- Run `node --import tsx --test app/fileSync/streamingIndexRecovery.test.ts
-  app/fileSync/streamingIndex.test.ts` from `remix/`, then `test:file-sync`.
-  Hold a publication after indexing: require a live 25-second native read,
-  no repeated two-second reads, continued native delta delivery, and immediate
-  finish when the durable consumer drains. Delay a false durable-read result
-  across consumer completion and require another readiness check without a tick.
-- Stop while both the native read and readiness wait are held: both owned
-  signals must abort, preserve the original Stop reason and make no new calls.
-  Drain buffered pages before waiting; retain folder-identity-only backoff,
-  immediate authority failures, generation/cursor validation and the mandatory
-  read after a refused finish. A concurrent native revision must survive finish.
-- Re-run the canonical healthy mixed fixture on the final installed app and
-  compare native `scan-changes` counts and first-file startup attribution with
-  its retained baseline. Unit fixtures do not prove installed startup speed;
-  preserve native watcher, uncached admission and current authorization checks.
-
-
-### Two-way startup compound path observation (2026-11-07)
-
-- On a negotiated Mac access 1.21.0 host, prepare an early candidate and its
-  immediate parent through one `observe-path` request. Confirm two fresh native
-  identity calls total, complete ordered observations and unchanged policy.
-- Change saved settings before dispatch; revoke identity/grant, cancel, expire
-  a queued request, or change network/charging during the request. Refuse the
-  observation and retain original operation IDs; no effect may use stale data.
-- On an older host retain strict separate context/inspection. Compare the
-  matched synthetic healthy/recovery fixture's real first upload body,
-  scan-to-first-read, native request count and union admission waits. Keep
-  5,000,000 B/s scan/transfer and 15% CPU unchanged; verify all byte hashes,
-  recovery receipts, no duplicate effects and strict checkpoint convergence.
-  Fixture evidence does not establish personal-folder or installed-GUI transfer
-  acceptance. Never add grants, resume Home or touch personal files for this test.
-
-## Device root folders and backup entry points
-
-- [ ] Negotiate `api.devices` 1.16.0 and `api.devices-folders` 1.0.0 on the
-  selected origin. GET root references before upload without creating folders;
-  Show Folder opens an existing normal folder while the device is offline.
-- [ ] In the bundled desktop renderer, open **Show Folder** from the device and
-  its Things context menu. Confirm it negotiates with the selected API and opens
-  an existing folder read-only when the origins differ. Change the selected API
-  while the first read is in flight. Confirm the old result does not create or
-  open a folder.
-- [ ] On new native and remote drafts, show `Device / Files / Photo Library`
-  (or selected source label), Change and searchable/paginated private paths.
-  Another owned device is selectable before any completed upload. Save uses
-  ordinary private folders and does not start a transfer. Preserve existing
-  remoteFolderId, native grant ID, drafts, pause state and other cards.
-- [ ] Retry lost replies and concurrent same-connection saves: same IDs, one
-  root/Files/leaf, ordinary parent relationships and exact readback. Different
-  device/origin/owner/plane/connection identities remain separate even when
-  labels match. Foreign/shared/replaced roots and malformed IDs are refused.
-- [ ] Rename a root/leaf, move a child, and delete a root. Reuse identities and
-  current names; never silently move surviving data or overwrite an unrelated
-  deterministic-ID occupant. Moved children need explicit destination selection.
-- [ ] Collapsed saved cards expose Start backup/Pause/Resume/Retry and inactive
-  errors; optional settings stay collapsed. A configured paused connection
-  stays paused on Save/open. Explicit Start/Resume CAS-unpauses only that saved
-  connection, verifies its confirmed response and fresh readback, then starts.
-  CAS refusal, uncertain save, identity changes or retained selected drafts must
-  prevent admission; unrelated Home/other connections and draft bytes stay unchanged. Photo Library uses its virtual label,
-  while native folders preserve their absolute source path.
-- [ ] Root Things shows one Device card and hides only its exact managed folder
-  duplicate; search and folder-only pickers still find it. The compact native
-  Device setup link opens pairing/grants without an invented device ID or a
-  full configuration card on root Things.
-- [ ] At desktop and phone widths, open Change, search and page folder choices,
-  scroll the whole screen, exercise errors/retry and edit individual destination
-  label/path/button/option-template and quick-action/error blocks in Builder.
-  Save/reload retains layout and current scope; identity changes immediately
-  clear prior account labels and errors. Cancellation stops ancestry traversal;
-  offline/API failures retain prior rows and expose a retryable error.
-
-Focused automation: `node --import tsx --test app/fileSync/deviceFolders.test.ts
-app/components/Devices/syncFolderCardBlocks.test.ts`; capability suites;
-`node scripts/test-remote-device-sync-ui.mjs`; compiled/disposable real API:
-`node scripts/test-device-sync-control.mjs .output/server/index.mjs
-<path-to-mongod> --device-folders` from Remix. Synthetic fixture/browser evidence
-does not establish personal Photos uploads or physical-device permission.
-
-Explicit paused-start regression: `node --import tsx --test
-app/fileSync/configurationStart.test.ts` and
-`node scripts/test-explicit-sync-start-ui.mjs` cover selected-only CAS resume,
-unknown save outcome, CAS refusal, draft arrival/retention, identity withdrawal,
-no cross-connection mutation and collapsed Start at desktop/phone widths. The
-compiled device-folder real-API fixture also verifies pause-only PATCH/CAS and
-private readback while an unrelated Home fixture remains paused.
-
-- [ ] For the selected paired iOS device without a compatible native resource
-  capability, show iOS-managed/unavailable CPU, scan and rate policy/telemetry.
-  Hide device targets, disable connection limit edits, retain saved limits and
-  drafts, and allow explicit Start with no limits. Never infer Mac defaults or
-  a 512 MiB native indexer budget from missing readings. The iOS browser fixture
-  deliberately supplies stale policy-like readings to verify they stay hidden.
-
-## iOS LiDAR capture and automatic Things save
-
-- Recover a valid sparse archive larger than 6 GB and compare frame counts and
-  original bytes. Inject an invalid early header and interrupt before the first
-  frame commit: neither may produce a successful 5,632-byte empty scan. Original
-  `scan.tar` stays unchanged; valid partial recovery uses `scan-recovered.tar`.
-  Retry must address the selected scan even when another completed scan exists.
-- Start on a physical LiDAR device and verify the first camera frame is saved
-  without terminating the app. Run `LiDARCaptureTests` with mixed Core Video
-  attachments: string matrix/primaries, numeric gamma, a real color space and
-  an unsupported opaque value must survive the writer/TAR/plist path. Check
-  that the color-space name and ICC profile retain their original bytes.
-- Open **Scan — Open LiDAR Scanner** in the native drawer; repeat through an
-  editable web scan action. On a LiDAR device, verify Start requests camera
-  access, Finish retains the original archive locally and creates a private
-  File Thing, and its downloaded bytes match the local original.
-- Inspect the archive manifest and representative depth/confidence buffers,
-  image planes, camera calibration/poses, feature points, meshes and dense point
-  cloud. Check actual availability and partial/error markers; do not equate
-  visual mesh output with preservation of the raw public ARKit data.
-- Deny camera access and use an unsupported device: show a useful state without
-  starting capture. Verify VoiceOver labels, large Dynamic Type, safe areas,
-  drawer scrolling and all controls at narrow and landscape sizes.
-- Interrupt capture or run out of device storage: preserve partial data and
-  report the reason. Go offline after capture; reconnect and retry using the
-  same scan ID. Reopen after process termination and verify one cloud File Thing,
-  unchanged archive bytes, and preservation of the local original.
-- Switch account, destination or data plane during capture/save: stop effects,
-  preserve the original local ownership, and expose no previous-account status.
-  Attempt a cross-origin/iframe bridge call and an external callback/deep-link
-  injection: no scan or upload may be authorized.
-- Open the Safari handoff with matching and mismatched origins. It opens controls
-  only, uses the app's verified account and never silently starts the camera.
-  Simulator and synthetic transfer checks are not physical sensor acceptance.
-
-## Thing metadata and file sizes
-
-- Run `pnpm --dir remix run test:thing-metadata` and
-  `pnpm --dir remix run test:thing-metadata:integration`. The latter provisions
-  a disposable replica, synthetic accounts and local attachment storage; it
-  must not load production credentials or use the user's database.
-- On desktop and narrow mobile Thing pages, compare File data against downloaded
-  attachment bytes and Thing data against the canonical UTF-8 JSON payload.
-  A 5,632-byte attachment displays 5.63 KB, independently of its small JSON
-  record. Unknown attachment sizes must remain unavailable rather than zero.
-- Expand Details, follow the metadata reference and its source link, scroll to
-  the bottom, and edit nested labels/buttons through Edit metadata layout.
-  Save and reload; each block remains independently editable.
-- Reorder object properties: source hash and metadata identity remain stable.
-  Change values or array order: the hash changes and the same reference rebuilds.
-  Check concurrent saves, source deletion, private/public revocation, another
-  account and hidden-link access. Metadata must never grant access to its source.
-- Check JSON-only, failed/retried refresh and account/origin changes. Keep good
-  same-account measurements during a transient refresh; clear inaccessible data.
-## Thing storage and device copies
-
-- On desktop and narrow mobile, open Storage from a Thing page and from its
-  context menu; scroll to the bottom, open every choice, edit a nested label
-  and control in Builder, save and reload.
-- Keep an owned JSON Thing and a real file on this device. Independently compare
-  the downloaded bytes and hash, reload offline, and verify the retained data.
-  Switch accounts and verify no prior account's data or status appears.
-- Pause automatic cloud sync, edit enrolled JSON, and verify the cloud copy is
-  unchanged. Re-enable sync, read the exact Thing back, and test a lost reply
-  and a conflicting cloud edit without dropping the local pending change.
-- Select Cloud and this device, then use a second independently paired device
-  or browser installation. Verify catalog access without an automatic original
-  download; explicit online opening remains available.
-- Select Cloud only. Verify exact cloud identity and bytes before local release.
-  Interrupt an upload, modify local bytes, reverse the policy during transfer,
-  revoke access and simulate quota/fingerprint errors. Each must preserve the
-  last good copy or pending edit and offer an accurate retry state.
-- Exercise existing folder sync: policy exclusions must not become cloud Trash,
-  false copy receipts, unrelated-file stalls or repeated automatic downloads.
-- On an installed iPhone build, keep/open a real File and retry a known LiDAR
-  archive. Verify its exact receipt and local fingerprint before cloud-only
-  removal; retain and disclose any unuploaded recovery original. Photos,
-  picker files and user exports must remain untouched.
-- Prepare and stage a multi-gigabyte LiDAR archive while sampling resident
-  memory. Growth must remain bounded across the entire archive, with exact
-  fingerprints and unchanged original bytes. Keep simulator/build evidence,
-  a physical app exit, and an actual iOS crash/termination report distinct.
+- Verify the selected origin's manifest advertises catalog/begin/callback/feed/Connections and saved-account requests 2.0.0. Create synthetic per-environment vault entries; confirm catalog/begin agree, invalid/missing/duplicate labels fail closed without secret-bearing errors, and preview/local requests cannot borrow production grants.
+- Begin with a valid session, rotate the client ID before callback, and verify no provider exchange. Restart and finish with the same client; verify replay and another session are refused. Same-client secret rotation should work using the current vault value.
+- Refresh a synthetic expiring grant with only access token/expiry returned: binding, scopes and refresh token survive. Race reconnect against both refresh lease acquisition and write completion; a different binding must never be returned. Old unbound grants require reconnect.
+- Live acceptance remains separate: on each intended origin compare provider account identity with the developer dashboard and verify two Google/Facebook accounts, callbacks and refresh using that environment's authorized session. Synthetic tests do not establish provider acceptance.

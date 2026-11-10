@@ -1,43 +1,23 @@
 import React from 'react';
-import { Box, Button, Flex, Image, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { useDataPlane } from '~/hooks/useDataPlane';
-import { rootIdentity } from '~/utils/rootIdentity';
-import { getElectronBridge } from '~/utils/electronBridge';
-import { isNativeBridgeAvailable } from '~/utils/nativeBridge';
-import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
-import { TransientBlockHost } from '../Builder/TransientBlockHost';
-import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { ConnectionProviderIcon } from './ConnectionProviderIcon';
-import { connectionIconUrl, CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION } from '~/connections/providerIcons';
-import { NamedConnectionPanel } from './NamedConnectionPanel';
+import { PageShell } from '~/components/Layout/PageShell';
+import { AIServiceAccounts } from './AIServiceAccounts';
+import { ConnectionsDocument } from './ConnectionsDocument';
+import { connectionsOverviewBlocks, connectionToolsBlocks } from './connectionToolsBlocks';
+import type { TransientBlockActions } from '../Builder/TransientBlockHost';
+import { ServiceCatalog, type Provider } from './ServiceCatalog';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
-import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
-import { linkedConnectionBlocks, providerCatalogBlocks } from './providerCatalogBlocks';
-import { oauthPendingBlocks } from './oauthPendingBlocks';
-import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
-import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
 // RSS, …), manage the linked accounts, and manage AI feed filters. The feeds
 // themselves render at /connections/feed with the native Thingtime
 // comment/reaction overlay.
-
-type Provider = {
-  id: string;
-  name: string;
-  icon: string;
-  auth: 'none' | 'oauth2' | 'credential';
-  contentVisibility: 'public' | 'personal';
-  about: string;
-  configured: boolean;
-  fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean; secret?: boolean }[];
-};
 
 type FeedFilter = {
   id: string;
@@ -49,33 +29,28 @@ type FeedFilter = {
 
 export const ConnectionsPage = () => {
   const user = useCurrentUser();
-  const dataPlane = useDataPlane();
-  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
-  const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  const desktop = getElectronBridge();
-  const native = !!desktop || isNativeBridgeAvailable();
-  const [desktopScope, setDesktopScope] = React.useState<{ generation: number; origin: string }>();
-  React.useEffect(() => {
-    if (!desktop?.getInfo || identity.pending) return;
-    let current = true;
-    void desktop.getInfo().then(info => {
-      if (!current || !info.apiOrigin) return;
-      const selected = new URL(info.apiOrigin);
-      if (['https:', 'http:'].includes(selected.protocol) && !selected.username && !selected.password)
-        setDesktopScope({ generation: identity.generation, origin: selected.origin });
-    }).catch(() => {});
-    return () => { current = false; };
-  }, [desktop, identity.generation, identity.pending]);
-  const apiOrigin = desktop ? (desktopScope?.generation === identity.generation ? desktopScope.origin : '') : origin;
-  const ownerId = !identity.pending && user?.accountKind !== 'service' ? user?.id : undefined;
-  const scopeKey = JSON.stringify([apiOrigin, ownerId, dataPlane]);
-  return <ConnectionsSession key={JSON.stringify([scopeKey, identity.generation, identity.pending])}
-    origin={origin} apiOrigin={apiOrigin} native={native} ownerId={ownerId} dataPlane={dataPlane} scopeKey={scopeKey} generation={identity.generation} />;
+  // Account-keyed remount clears forms and fences every pending async result.
+  return (
+    <ConnectionsContent
+      key={`${typeof window === 'undefined' ? '' : window.location.origin}:${user?.id || 'guest'}`}
+      ownerId={user?.accountKind === 'service' ? null : user?.id || null}
+    />
+  );
 };
 
-function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, scopeKey, generation }: {
-  origin: string; apiOrigin: string; native: boolean; ownerId?: string; dataPlane: string | null; scopeKey: string; generation: number;
-}) {
+const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
+  const cacheScope = `${typeof window === 'undefined' ? '' : window.location.origin}:${ownerId || 'guest'}`;
+  const PROVIDERS_CACHE = `tt-connections-providers:v2:${cacheScope}`;
+  const CONNECTIONS_CACHE = `tt-connections-list:v2:${cacheScope}`;
+  const FILTERS_CACHE = `tt-connections-filters:v2:${cacheScope}`;
+  const active = React.useRef(true);
+  const refreshGeneration = React.useRef(0);
+  React.useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const api = useApi();
   const [providerIconOrigin, setProviderIconOrigin] = React.useState('');
   React.useEffect(() => {
@@ -125,15 +100,14 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
 
   // optimistic first paint from the synchronous cache tier (house rule:
   // never flash a loading state when prior state exists)
-  const [providers, setProviders] = React.useState<Provider[]>(() => apiOrigin ? readLocalCache<Provider[]>(providersCache) || [] : []);
-  const [connections, setConnections] = React.useState<Connection[]>(() => ownerId && apiOrigin ? readLocalCache<Connection[]>(connectionsCache) || [] : []);
-  const [filters, setFilters] = React.useState<FeedFilter[]>(() => ownerId && apiOrigin ? readLocalCache<FeedFilter[]>(filtersCache) || [] : []);
+  const [providers, setProviders] = React.useState<Provider[]>(() => readLocalCache<Provider[]>(PROVIDERS_CACHE) || []);
+  const [connections, setConnections] = React.useState<Connection[]>(() => readLocalCache<Connection[]>(CONNECTIONS_CACHE) || []);
+  const [filters, setFilters] = React.useState<FeedFilter[]>(() => readLocalCache<FeedFilter[]>(FILTERS_CACHE) || []);
   const [signedOut, setSignedOut] = React.useState(!ownerId);
 
   const [namedAvailable, setNamedAvailable] = React.useState(false);
   const [namedCredential, setNamedCredential] = React.useState<NamedConnectionInput>();
   const [connecting, setConnecting] = React.useState<Provider | null>(null);
-  const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
 
   const [filterName, setFilterName] = React.useState('');
@@ -141,61 +115,52 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
   const [filterAction, setFilterAction] = React.useState<'warn' | 'hide'>('warn');
 
   const refresh = React.useCallback(async () => {
-    if (!apiOrigin || !isCurrent()) return;
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    const { signal } = controller;
-    const active = () => isCurrent() && !signal.aborted && request.current === controller;
-    const denied = (error: { status?: number }) => [401, 403, 409].includes(error?.status ?? 0);
-    const report = (error: { error?: string }) => {
-      if (active()) notify.current({ title: error?.error || 'Could not load your connections 😞', status: 'error' });
-    };
-    const privateFailure = (error: { status?: number; error?: string }) => {
-      if (!active()) return;
-      if (!denied(error)) return report(error);
-      setSignedOut(true);
-      cancelOAuth();
-      setOAuthProvider(null);
-      setConnections([]);
-      setFilters([]);
-      clearLocalCache(connectionsCache);
-      clearLocalCache(filtersCache);
-      controller.abort();
-    };
-    const pending: Promise<unknown>[] = [
-      loadProviders({ signal, expectedApiOrigin: apiOrigin }).then(response => {
-        if (!active()) return;
-        const providers = response.providers || [];
-        setProviders(providers);
-        writeLocalCache(providersCache, providers);
-      }).catch(report)
-    ];
-    if (ownerId) {
-      const options = { signal, expectedActor: ownerId, expectedApiOrigin: apiOrigin, expectedDataPlane: dataPlane };
-      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION)
-        .then(() => true, () => false).then(includeNamed => {
-          if (!active()) return null;
-          setNamedAvailable(includeNamed);
-          return loadConnections(options, includeNamed);
-        }).then(response => {
-        if (!active() || !response) return;
-        const connections = response.connections || [];
+    const generation = ++refreshGeneration.current;
+    try {
+      await requireThingtimeCapability('api.connections-providers', '2.0.0');
+      const [providersResp, connectionsResp, filtersResp] = await Promise.all([
+        api.v1.connections.providers(),
+        (ownerId ? api.v1.connections.list() : Promise.resolve({ connections: null })).catch((err: any) => {
+          if (err?.status === 401) return { connections: null };
+          throw err;
+        }),
+        (ownerId ? api.v1.connections.filters() : Promise.resolve({ filters: null })).catch(() => ({ filters: null }))
+      ]);
+      if (!active.current || generation !== refreshGeneration.current) return;
+      setProviders(providersResp.providers || []);
+      writeLocalCache(PROVIDERS_CACHE, providersResp.providers || []);
+      if (connectionsResp.connections === null || connectionsResp.ownerId !== ownerId) {
+        setSignedOut(true);
+        setConnections([]);
+        setFilters([]);
+      } else {
         setSignedOut(false);
-        setConnections(connections);
-        if (apiOrigin) writeLocalCache(connectionsCache, connections);
-      }).catch(privateFailure));
-      pending.push(loadFilters(options).then(response => {
-        if (!active()) return;
-        const filters = response.filters || [];
-        setFilters(filters);
-        if (apiOrigin) writeLocalCache(filtersCache, filters);
-      }).catch(privateFailure));
+        setConnections(connectionsResp.connections || []);
+        writeLocalCache(CONNECTIONS_CACHE, connectionsResp.connections || []);
+      }
+      if (connectionsResp.ownerId === ownerId && filtersResp.ownerId === ownerId && filtersResp.filters !== null) {
+        setFilters(filtersResp.filters || []);
+        writeLocalCache(FILTERS_CACHE, filtersResp.filters || []);
+      }
+    } catch (err: any) {
+      if (!active.current || generation !== refreshGeneration.current) return;
+      lopu({ title: err?.error || 'Could not load your connections 😞', status: 'error' });
     }
     await Promise.all(pending);
   }, [apiOrigin, cancelOAuth, connectionsCache, dataPlane, filtersCache, isCurrent, loadConnections, loadFilters, loadProviders, ownerId, providersCache]);
 
-  React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => {
+    refresh();
+    const focus = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', focus);
+    return () => {
+      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', focus);
+    };
+  }, [refresh]);
 
   // OAuth callback landing: /connections?connected=<provider id> or
   // ?oauthError=<code>. Neither is rendered verbatim — both are untrusted URL
@@ -220,78 +185,47 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const openConnect = async (provider: Provider, named?: NamedConnectionInput) => {
-    if (!apiOrigin || !isCurrent()) return;
+  const openConnect = async (provider: Provider, signal?: AbortSignal) => {
+    // SSO providers hand the browser to their own sign-in — no form here
     if (provider.auth === 'oauth2') {
-      if (oauthAttempt.current || !ownerId || !isCurrent()) return;
-      // Electron delegates external navigation to the system browser and
-      // denies window.open handles. Preserve the original host handoff.
-      if (native || getElectronBridge() || isNativeBridgeAvailable()) {
-        setBusy(true);
-        try {
-          const response = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
-          if (isCurrent() && response?.authorizeUrl) window.location.href = response.authorizeUrl;
-        } catch (error: any) {
-          if (isCurrent()) lopu({ title: error?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
-        } finally {
-          if (isCurrent()) setBusy(false);
-        }
+      const tab = window.open('about:blank', '_blank');
+      if (!tab) {
+        lopu({ title: 'Allow pop-ups to open the sign-in tab.', status: 'info' });
         return;
       }
-      let tab: ReturnType<typeof openConnectionOAuthTab> = null;
+      tab.opener = null;
+      setBusy(true);
       try {
-        tab = openConnectionOAuthTab(provider.id, (result) => {
-          const attempt = oauthAttempt.current;
-          if (!attempt || attempt.tab !== tab || !isCurrent()) return false;
-          oauthAttempt.current = null;
-          window.clearTimeout(attempt.deadline);
-          setOAuthProvider(null);
-          if (result.status === 'failed') {
-            lopu({ title: oauthErrorMessage(result.code) || 'Could not finish sign-in', status: 'error' });
-          } else {
-            void refresh();
-          }
-          return true;
-        });
-        if (!tab) {
-          lopu({ title: 'Allow pop-ups for Thingtime, then try signing in again', status: 'info' });
+        await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0');
+        if (!active.current || signal?.aborted) { tab.close(); return; }
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, signal });
+        if (!active.current || signal?.aborted) {
+          tab.close();
           return;
         }
-        const deadline = window.setTimeout(() => {
-          if (oauthAttempt.current?.tab !== tab) return;
-          cancelOAuth();
-          setOAuthProvider(null);
-          lopu({ title: 'Sign-in timed out. You can try again.', status: 'info' });
-          void refresh();
-        }, 15 * 60 * 1000);
-        oauthAttempt.current = { tab, deadline };
-        setOAuthProvider(provider.name);
-
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin, named });
-        if (oauthAttempt.current?.tab !== tab || !isCurrent()) return;
-        if (!resp?.authorizeUrl || !tab.navigate(resp.authorizeUrl)) {
-          cancelOAuth();
-          setOAuthProvider(null);
-          lopu({ title: 'Sign-in tab closed. You can try again.', status: 'info' });
-        }
+        if (!resp?.authorizeUrl || new URL(resp.authorizeUrl).protocol !== 'https:') throw new Error('Invalid sign-in URL');
+        tab.location.replace(resp.authorizeUrl);
       } catch (err: any) {
-        if (tab && oauthAttempt.current?.tab !== tab) return;
-        cancelOAuth();
-        setOAuthProvider(null);
-        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in`, status: 'error' });
+        tab.close();
+        if (!active.current || signal?.aborted) return;
+        lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
+      } finally {
+        if (active.current) setBusy(false);
       }
       return;
     }
     setNamedCredential(named);
     setConnecting(provider);
-    setFieldValues({});
   };
 
-  const submitConnect = async () => {
+  const submitConnect = async (fieldValues: Record<string, string>, signal?: AbortSignal) => {
     if (!connecting) return;
     setBusy(true);
     try {
-      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, named: namedCredential, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+      await requireThingtimeCapability('api.connections', '2.0.0');
+      if (!active.current || signal?.aborted) return;
+      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId, signal });
+      if (!active.current || signal?.aborted) return;
       lopu({
         title: resp.alreadyLinked
           ? `Already connected to ${resp.connection?.account?.displayName} ✨`
@@ -303,28 +237,33 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       setNamedCredential(undefined);
       await refresh();
     } catch (err: any) {
+      if (!active.current || signal?.aborted) return;
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 
   const unlink = async (connection: Connection) => {
-    // optimistic remove, restore on failure
+    // Fence any older read before the optimistic removal.
+    refreshGeneration.current++;
+    setBusy(true);
+    const previous = connections;
     setConnections((current) => current.filter((entry) => entry.id !== connection.id));
     try {
-      await api.v1.connections.unlink({ id: connection.id, named: !!connection.named, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
-      if (!isCurrent() || !apiOrigin) return;
-      setConnections(current => {
-        const next = current.filter(entry => entry.id !== connection.id);
-        writeLocalCache(connectionsCache, next);
-        return next;
-      });
+      await api.v1.connections.unlink({ id: connection.id });
+      if (!active.current) return;
+      writeLocalCache(
+        CONNECTIONS_CACHE,
+        previous.filter((entry) => entry.id !== connection.id)
+      );
       lopu({ title: `Unlinked ${connection.account.displayName} 👋`, status: 'success', duration: 5000 });
     } catch (err: any) {
-      if (!isCurrent()) return;
-      setConnections(current => current.some(entry => entry.id === connection.id) ? current : [...current, connection]);
+      if (!active.current) return;
+      setConnections(previous);
       lopu({ title: err?.error || 'Could not unlink that connection 😞', status: 'error' });
+    } finally {
+      if (active.current) setBusy(false);
     }
   };
 
@@ -340,15 +279,17 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     setYtBusy(true);
     try {
       const resp = await api.v1.connections.youtubeSearch({ q: ytQuery });
+      if (!active.current) return;
       setYtResults(resp.channels || []);
       setYtSearchConfigured(resp.searchConfigured !== false);
       if (!(resp.channels || []).length) {
         lopu({ title: 'No channels matched that — try a channel ID or URL 🔍', status: 'info', duration: 5000 });
       }
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || 'Channel search failed 😞', status: 'error' });
     } finally {
-      setYtBusy(false);
+      if (active.current) setYtBusy(false);
     }
   };
 
@@ -356,6 +297,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     setYtBusy(true);
     try {
       const resp = await api.v1.connections.youtubeChannels({ add: channel });
+      if (!active.current) return;
       lopu({ title: `Subscribed to ${channel.title} 📺`, status: 'success', duration: 5000 });
       setYtResults((current) => current.filter((entry) => entry.id !== channel.id));
       setConnections((current) => {
@@ -364,17 +306,20 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       });
       await refresh();
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || `Could not subscribe to ${channel.title} 😞`, status: 'error' });
     } finally {
-      setYtBusy(false);
+      if (active.current) setYtBusy(false);
     }
   };
 
   const unsubscribeChannel = async (channel: ChannelRef) => {
     try {
       await api.v1.connections.youtubeChannels({ remove: channel.id });
+      if (!active.current) return;
       await refresh();
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || `Could not remove ${channel.title} 😞`, status: 'error' });
     }
   };
@@ -386,6 +331,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     }
     try {
       const resp = await api.v1.connections.saveFilter({ name: filterName, prompt: filterPrompt, action: filterAction });
+      if (!active.current) return;
       // functional update + cache written from the SAME next array — the
       // render-time closure may be stale under interleaved mutations
       setFilters((current) => {
@@ -397,6 +343,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
       setFilterPrompt('');
       lopu({ title: `Filter “${resp.filter?.name}” is on 🛡️`, status: 'success', duration: 5000 });
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || 'Could not save that filter 😞', status: 'error' });
     }
   };
@@ -410,6 +357,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     try {
       await api.v1.connections.saveFilter({ id: filter.id, enabled: !filter.enabled });
     } catch (err: any) {
+      if (!active.current) return;
       // revert only THIS filter's toggle — a snapshot restore would discard
       // concurrent changes to other filters
       setFilters((current) => {
@@ -430,6 +378,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     try {
       await api.v1.connections.removeFilter({ id: filter.id });
     } catch (err: any) {
+      if (!active.current) return;
       // restore only the removed entry
       setFilters((current) => {
         const next = current.some((entry) => entry.id === filter.id) ? current : [...current, filter];
@@ -440,263 +389,73 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     }
   };
 
-  const canConnect = (provider: Provider) => provider.configured && !signedOut && !busy &&
-    (provider.auth !== 'oauth2' || (!!ownerId && !oauthProvider));
-  const providerRows = providers.map(provider => ({
-    id: provider.id, name: provider.name, about: provider.about,
-    iconUrl: connectionIconUrl(provider.id, providerIconsEnabled),
-    disabled: !canConnect(provider), buttonOpacity: canConnect(provider) ? 1 : 0.55,
-    buttonBackground: connecting?.id === provider.id ? 'var(--tt-border, #e2e8f0)' : 'transparent',
-    buttonLabel: !provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Default sign-in with ${provider.name}` :
-      provider.auth === 'credential' ? 'Connect default account' : 'Connect',
-  }));
-  const legacyConnections = connections.filter(connection => !connection.named);
-  const linkedRows = legacyConnections.map(connection => ({
-    id: connection.id, displayName: connection.account.displayName,
-    providerLabel: `${connection.providerName}${connection.contentVisibility === 'personal' ? ' · personal feed' : ''}`,
-    subtitle: `${connection.account.handle}${connection.lastSyncError ? ' · Feed sync needs attention' : ''}`,
-    iconUrl: connectionIconUrl(connection.provider, providerIconsEnabled),
-    feedHref: `/connections/feed?connection=${encodeURIComponent(connection.id)}`,
-  }));
+  const verifyConnection = async (connection: Connection) => {
+    setBusy(true);
+    try {
+      await requireThingtimeCapability('api.connections-request', '2.0.0');
+      if (!active.current) return;
+      await api.v1.connections.request({ connectionId: connection.id, operation: 'account.profile' });
+      if (active.current) lopu({ title: `${connection.account.displayName} is connected`, status: 'success' });
+    } catch (error: any) {
+      if (active.current) lopu({ title: error?.error || 'Reconnect this account to restore access.', status: 'error' });
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  };
+
+
+  const toolActions: TransientBlockActions = {
+    'channels.query': ({ value }) => { if (typeof value === 'string') setYtQuery(value); },
+    'channels.search': ({ signal }) => { signal.throwIfAborted(); if (!signedOut && !ytBusy) return searchChannels(); },
+    'channels.subscribe': ({ inputs, signal }) => { signal.throwIfAborted(); const channel = ytResults.find(item => item.id === inputs.id); if (!signedOut && !ytBusy && channel) return subscribeChannel(channel); },
+    'channels.unsubscribe': ({ inputs, signal }) => { signal.throwIfAborted(); const channel = youtubeConnection?.channels?.find(item => item.id === inputs.id); if (!signedOut && !ytBusy && channel) return unsubscribeChannel(channel); },
+    'filters.name': ({ value }) => { if (typeof value === 'string') setFilterName(value); },
+    'filters.prompt': ({ value }) => { if (typeof value === 'string') setFilterPrompt(value); },
+    'filters.action': ({ value }) => { if (value === 'warn' || value === 'hide') setFilterAction(value); },
+    'filters.create': ({ signal }) => { signal.throwIfAborted(); if (!signedOut) return createFilter(); },
+    'filters.toggle': ({ inputs, signal }) => { signal.throwIfAborted(); const filter = filters.find(item => item.id === inputs.id); if (!signedOut && filter) return toggleFilter(filter); },
+    'filters.remove': ({ inputs, signal }) => { signal.throwIfAborted(); const filter = filters.find(item => item.id === inputs.id); if (!signedOut && filter) return removeFilter(filter); }
+  };
+
   return (
-    <Box
-      maxWidth="860px"
-      marginX="auto"
-      paddingX={[4, 6]}
-      paddingBottom={[6, 8]}
-      paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
-      display="flex"
-      flexDirection="column"
-      rowGap={8}
-    >
-      <Flex alignItems="baseline" justifyContent="space-between" flexWrap="wrap" rowGap={2}>
-        <Box>
-          <Text as="h1" fontSize="2xl" fontWeight="700">
-            Connections 🔗
-          </Text>
-          <Text color="var(--tt-muted, #6b7280)" marginTop={1}>
-            Link your third-party apps and browse their feeds inside Thingtime — with Thingtime comments, reactions, and AI
-            filters layered on top.
-          </Text>
-        </Box>
-        <Button as={Link} to="/connections/feed" size="sm" variant="outline" borderRadius="999px">
-          Open connected feed 📡
-        </Button>
-      </Flex>
+    <PageShell width={1100} columnProps={{ rowGap: 8 }}>
+      <ConnectionsDocument documentKey="connections-overview" blocks={connectionsOverviewBlocks} scopeKey={cacheScope} scope={{ page: { signedOut } }} />
 
-      {signedOut ? (
-        <Box {...cardStyle} padding={6} textAlign="center">
-          <Text fontWeight="600">Sign in to link your apps</Text>
-          <Text color="var(--tt-muted, #6b7280)" marginTop={1}>
-            Connections belong to your account — log in or register to start linking.
-          </Text>
-          <Flex justifyContent="center" columnGap={3} marginTop={4}>
-            <Button as={Link} to="/login" size="sm" borderRadius="999px">
-              Log in 🗝️
-            </Button>
-            <Button as={Link} to="/register" size="sm" variant="outline" borderRadius="999px">
-              Register ➕
-            </Button>
-          </Flex>
-        </Box>
-      ) : null}
+      <ServiceCatalog
+        documentKey="services-chatgpt"
+        providers={providers.filter((provider) => provider.id === 'chatgpt')}
+        connections={connections}
+        signedOut={signedOut}
+        busy={busy}
+        openConnect={openConnect}
+        unlink={unlink}
+        verify={verifyConnection}
+        submitConnect={submitConnect}
+        cancelConnect={() => setConnecting(null)}
+        connectingId={connecting?.id}
+      />
+      <AIServiceAccounts key={ownerId || 'guest'} ownerId={ownerId} />
+      <ServiceCatalog
+        documentKey="services-catalog"
+        providers={providers.filter((provider) => provider.id !== 'chatgpt')}
+        connections={connections}
+        signedOut={signedOut}
+        busy={busy}
+        openConnect={openConnect}
+        unlink={unlink}
+        verify={verifyConnection}
+        submitConnect={submitConnect}
+        cancelConnect={() => setConnecting(null)}
+        connectingId={connecting?.id}
+      />
 
-      {/* linked accounts */}
-      {!signedOut && legacyConnections.length ? (
-        <Box display="flex" flexDirection="column" rowGap={3}>
-          <Text fontWeight="600">Your connections</Text>
-          <SettingsDocumentHost documentKey="connections-linked-accounts" title="Linked connection cards" editLayoutLabel="Edit linked accounts"
-            defaultDocument={linkedConnectionBlocks} scopeKey={scopeKey} allowMediaUploads>
-            {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
-              scope={{ linked: { rows: linkedRows }, ...(editing && { item: linkedRows[0] }) }} actions={{ unlink: ({ inputs }) => {
-                const connection = legacyConnections.find(candidate => candidate.id === inputs.connectionId);
-                if (connection && isCurrent()) return unlink(connection);
-              } }}>
-              <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
-            </TransientBlockHost>}
-          </SettingsDocumentHost>
-        </Box>
-      ) : null}
-
-      {ownerId && !signedOut && namedAvailable ? (
-        <NamedConnectionPanel scopeKey={scopeKey} providers={providers} connections={connections} busy={busy || !!oauthProvider}
-          start={(providerId, named) => {
-            const provider = providers.find(item => item.id === providerId && item.configured);
-            if (provider) void openConnect(provider, named);
-          }}
-          remove={unlink}
-          use={async (id, operation) => {
-            const response = await api.v1.connections.useNamed({ id, operation, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
-            return isCurrent() ? response?.result : undefined;
-          }}
-          onError={(error: any) => lopu({ title: error?.error || error?.message || 'Could not use the connection.', status: 'error' })}
-        />
-      ) : null}
-
-      {/* provider catalog */}
-      <Box display="flex" flexDirection="column" rowGap={3}>
-        <Text fontWeight="600">Connect a 3rd party app</Text>
-        {ownerId && !signedOut && !native ? (
-          <SettingsDocumentHost documentKey="connections-oauth-pending" title="Connection sign-in layout" editLayoutLabel="Edit sign-in status" defaultDocument={oauthPendingBlocks} scopeKey={scopeKey}>
-            {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing} scope={{ oauth: { pending: !!oauthProvider || editing, provider: oauthProvider || 'your provider' } }}
-              actions={{ stop: () => {
-                cancelOAuth();
-                setOAuthProvider(null);
-                void refresh();
-              } }}>
-              <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
-            </TransientBlockHost>}
-          </SettingsDocumentHost>
-        ) : null}
-        <SettingsDocumentHost documentKey="connections-provider-catalog" title="Connection provider cards" editLayoutLabel="Edit provider cards" defaultDocument={providerCatalogBlocks}
-          scopeKey={scopeKey} showLayoutControls={!!ownerId && !signedOut} allowMediaUploads>
-          {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
-            scope={{ catalog: { providers: providerRows }, ...(editing && { item: providerRows[0] }) }} actions={{ connect: ({ inputs }) => {
-              const provider = providers.find(candidate => candidate.id === inputs.provider);
-              if (provider && canConnect(provider)) return openConnect(provider);
-            } }}>
-            <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
-          </TransientBlockHost>}
-        </SettingsDocumentHost>
-      </Box>
-
-      {/* connect form */}
-      {connecting ? (
-        <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
-          <Flex alignItems="center" columnGap={2}>
-            <ConnectionProviderIcon provider={connecting.id} enabled={providerIconsEnabled} />
-            <Text fontWeight="600">Connect {connecting.name}</Text>
-          </Flex>
-          {connecting.fields.map((field) => (
-            <Box key={field.key}>
-              <Text fontSize="sm" fontWeight="500" marginBottom={1}>
-                {field.label}
-                {field.required ? ' *' : ''}
-              </Text>
-              <Input
-                value={fieldValues[field.key] || ''}
-                placeholder={field.placeholder}
-                type={field.secret ? 'password' : 'text'}
-                autoComplete={field.secret ? 'off' : undefined}
-                onChange={(event) => setFieldValues((current) => ({ ...current, [field.key]: event.target.value }))}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') submitConnect();
-                }}
-              />
-              {field.help ? (
-                <Text fontSize="xs" color="var(--tt-muted, #6b7280)" marginTop={1}>
-                  {field.help}
-                </Text>
-              ) : null}
-            </Box>
-          ))}
-          <Flex columnGap={2}>
-            <Button size="sm" borderRadius="999px" onClick={submitConnect} isLoading={busy}>
-              Link account
-            </Button>
-            <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => setConnecting(null)}>
-              Cancel
-            </Button>
-          </Flex>
-        </Box>
-      ) : null}
-
-      {/* virtual YouTube subscription list */}
-      {!signedOut ? (
-        <Box display="flex" flexDirection="column" rowGap={3}>
-          <Box>
-            <Text fontWeight="600">YouTube channels 📺</Text>
-            <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-              Your Thingtime-managed subscription list — every channel you add merges into one uploads feed.
-              {ytSearchConfigured === false ? ' Name search needs a YouTube API key; channel IDs, URLs, and @handles work now.' : ''}
-            </Text>
-          </Box>
-          {(youtubeConnection?.channels || []).map((channel) => (
-            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
-              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
-              <Text flex="1" fontWeight="500">
-                {channel.title}
-              </Text>
-              <Button size="xs" variant="ghost" borderRadius="999px" onClick={() => unsubscribeChannel(channel)}>
-                Unsubscribe
-              </Button>
-            </Flex>
-          ))}
-          <Flex {...cardStyle} padding={3} columnGap={2} alignItems="center" flexWrap="wrap" rowGap={2}>
-            <Input
-              flex="1"
-              minWidth="200px"
-              placeholder="Search channels, or paste a channel ID / URL / @handle"
-              value={ytQuery}
-              onChange={(event) => setYtQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') searchChannels();
-              }}
-            />
-            <Button size="sm" borderRadius="999px" onClick={searchChannels} isLoading={ytBusy}>
-              Search
-            </Button>
-          </Flex>
-          {ytResults.map((channel) => (
-            <Flex key={channel.id} {...cardStyle} padding={3} alignItems="center" columnGap={3}>
-              {channel.thumbnail ? <Image src={channel.thumbnail} alt="" boxSize="28px" borderRadius="full" /> : <Text fontSize="lg">📺</Text>}
-              <Text flex="1">{channel.title}</Text>
-              <Button size="xs" borderRadius="999px" onClick={() => subscribeChannel(channel)} isLoading={ytBusy}>
-                Subscribe ➕
-              </Button>
-            </Flex>
-          ))}
-        </Box>
-      ) : null}
-
-      {/* AI feed filters */}
-      <Box display="flex" flexDirection="column" rowGap={3}>
-        <Box>
-          <Text fontWeight="600">AI feed filters 🛡️</Text>
-          <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-            Describe what to catch in plain language — “warn” veils matched posts behind a Show button, “hide” drops them.
-          </Text>
-        </Box>
-        {filters.map((filter) => (
-          <Flex key={filter.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
-            <Switch isChecked={filter.enabled} onChange={() => toggleFilter(filter)} />
-            <Box flex="1" minWidth="200px">
-              <Text fontWeight="600">
-                {filter.name}
-                <Text as="span" color="var(--tt-muted, #6b7280)" fontWeight="400" marginLeft={2} fontSize="sm">
-                  {filter.action === 'warn' ? 'warn + Show button' : 'hide'}
-                </Text>
-              </Text>
-              <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-                {filter.prompt}
-              </Text>
-            </Box>
-            <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => removeFilter(filter)}>
-              Remove
-            </Button>
-          </Flex>
-        ))}
-        {!signedOut ? (
-          <Box {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
-            <Flex columnGap={2} flexWrap="wrap" rowGap={2}>
-              <Input flex="1" minWidth="160px" placeholder="Filter name (e.g. Sad news)" value={filterName} onChange={(event) => setFilterName(event.target.value)} />
-              <Select width="auto" value={filterAction} onChange={(event) => setFilterAction(event.target.value === 'hide' ? 'hide' : 'warn')}>
-                <option value="warn">Warn (Show button)</option>
-                <option value="hide">Hide</option>
-              </Select>
-            </Flex>
-            <Textarea
-              placeholder="What should this filter catch? e.g. warn for sad news"
-              value={filterPrompt}
-              onChange={(event) => setFilterPrompt(event.target.value)}
-              rows={2}
-            />
-            <Button size="sm" borderRadius="999px" alignSelf="flex-start" onClick={createFilter}>
-              Add filter
-            </Button>
-          </Box>
-        ) : null}
-      </Box>
-    </Box>
+      <ConnectionsDocument documentKey="connections-tools" blocks={connectionToolsBlocks} scopeKey={cacheScope} actions={toolActions}
+        scope={{ page: { signedOut, signedIn: !signedOut },
+          channels: { busy: ytBusy, query: ytQuery, needsSetup: ytSearchConfigured === false,
+            saved: (youtubeConnection?.channels || []).map(({ id, title, thumbnail }) => ({ id, title, thumbnail })),
+            results: ytResults.map(({ id, title, thumbnail }) => ({ id, title, thumbnail })) },
+          filters: { name: filterName, prompt: filterPrompt, action: filterAction,
+            items: filters.map(({ id, name, prompt, action, enabled }) => ({ id, name, prompt, enabled, actionLabel: action === 'warn' ? 'warn + Show button' : 'hide' })) } }} />
+    </PageShell>
   );
 };

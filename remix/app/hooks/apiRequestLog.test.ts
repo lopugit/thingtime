@@ -23,6 +23,23 @@ test('Timeline snapshots and scope queries never enter the request log or copied
 	assert.equal(getApiCalls()[0].body, undefined);
 });
 
+test('provider credential submissions retain request metadata without storing arbitrary fields or copying them as curl', () => {
+	const credentialValue = ['synthetic', 'provider', 'field'].join('-');
+	for (const url of ['/api/v1/connections', '/api/v1/connections/', 'https://thingtime.com/api/v1/connections?mode=link']) {
+		clearApiCalls();
+		recordApiCall({ ...baseEntry, method: 'POST', url, body: { provider: 'synthetic-provider', credentialValue } });
+		const [logged] = getApiCalls();
+		assert.equal(logged.url, url);
+		assert.equal(logged.status, 200);
+		assert.equal(logged.body, undefined);
+		assert.ok(!JSON.stringify(logged).includes(credentialValue));
+		assert.ok(!buildCurlForEntry(logged, 'https://thingtime.com').includes('--data'));
+	}
+	// Non-credential operations still retain useful, redacted diagnostics.
+	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/connections/sync', body: { id: 'synthetic-link' } });
+	assert.deepEqual(getApiCalls()[0].body, { id: 'synthetic-link' });
+});
+
 // A fixture for the position a credential occupies in a URI (`user:HERE@host`).
 // Deliberately not credential-shaped: every assertion below only checks that
 // whatever sits in that position is gone afterwards, so a self-describing

@@ -1,4 +1,3 @@
-import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -28,7 +27,7 @@ export const action = async ({ request }: { request: Request }) => withVaultRequ
     );
   const result = await beginOAuth(
     { ...user, sessionBinding: (await oauthSessionBinding(request)) || undefined },
-    { provider: body?.provider, named: body?.named },
+    { provider: body?.provider },
     requestOrigin(request)
   );
   if (result.ok === false) {
@@ -38,4 +37,4 @@ export const action = async ({ request }: { request: Request }) => withVaultRequ
     { ok: true, provider: result.provider, authorizeUrl: result.authorizeUrl },
     { headers: { 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' } }
   );
-});
+};

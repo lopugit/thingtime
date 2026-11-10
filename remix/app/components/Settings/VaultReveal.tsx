@@ -20,6 +20,7 @@ import { startAuthentication } from '@simplewebauthn/browser';
 import { useLocation } from 'react-router';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
 type Props = { vault: 'ci' | 'admin' | 'personal' | 'deployment'; id: string; label: string };
 const HIDE_EVENT = 'thingtime:hide-vault-values';
@@ -145,9 +146,9 @@ const VaultRevealScope = ({ vault, id, label }: Props) => {
 			>
 				Show
 			</Button>
-			<Modal isOpen={open} onClose={clear} initialFocusRef={passwordRef} isCentered size="md">
-				<ModalOverlay />
-				<ModalContent mx={4} maxH="calc(100dvh - 32px)" overflowY="auto">
+			<Modal isOpen={open} onClose={clear} initialFocusRef={passwordRef} isCentered size="md" portalProps={{ appendToParentPortal: false }}>
+				<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
+				<ModalContent containerProps={{ zIndex: DRAWER_MODAL_Z }} mx={4} maxH="calc(100dvh - 32px)" overflowY="auto">
 					<ModalHeader pr={12} wordBreak="break-word">
 						{value === null ? 'Verify to show' : 'Private credential'}: {label}
 					</ModalHeader>

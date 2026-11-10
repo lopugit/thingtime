@@ -80,7 +80,125 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 // Exported so the allowlist itself carries a regression test: every entry is a
 // decision about what untrusted markup may hand the browser, and a prop added
 // back by habit should fail a test rather than ship.
-export { ALLOWED_PROPS } from './htmlRenderPolicy';
+export const ALLOWED_PROPS = new Set([
+	'style',
+	'id',
+	'accept',
+	'hidden',
+	'download',
+	'preload',
+	'playsInline',
+	'className',
+	'class',
+	'href',
+	'target',
+	'rel',
+	'src',
+	'referrerPolicy',
+	'alt',
+	'title',
+	'width',
+	'height',
+	'type',
+	'placeholder',
+	'value',
+	'checked',
+	'disabled',
+	// form-field props: a NAMED field inside a component root is what the
+	// trusted ttAction click wrapper reads into the run inputs
+	// (useTtActionClicks) — inert markup otherwise, no URL or JS sink
+	'name',
+	'min',
+	'max',
+	'step',
+	'maxLength',
+	'required',
+	'readOnly',
+	'htmlFor',
+	'selected',
+	'autoComplete',
+	'inputMode',
+	// accessibility labelling: inert strings the browser only ever exposes to
+	// assistive tech — no URL, no JS sink, no validation engine
+	'role',
+	'aria-label',
+	'aria-live',
+	'aria-atomic',
+	'aria-valuenow',
+	'aria-valuemin',
+	'aria-valuemax',
+	'aria-valuetext',
+	'aria-hidden',
+	'aria-pressed',
+	'aria-expanded',
+	'aria-selected',
+	'aria-current',
+	'open',
+	// NOT `pattern`. Every other constraint-validation prop above is a cheap
+	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
+	// and runs from untrusted markup, on the main thread, with no timeout.
+	// Constraint validation runs as soon as a field has a non-empty value —
+	// and `fieldProps` below turns a template's `value` into `defaultValue`,
+	// so a component thing can ship both halves — which makes
+	// `<input value="aaaaaaaaaaaaaaaaaaaaaaaaaaX" pattern="(a+)+$">` a wedged
+	// tab for anyone who merely renders that component. Nothing in the
+	// library uses it, the run inputs are validated server-side by the action
+	// input descriptors (type/min/max/maxLength/enum) rather than by the
+	// field's own validity, and a client-side hint is not worth an
+	// author-supplied regex engine.
+	'rows',
+	'cols',
+	'controls',
+	'loop',
+	'muted',
+	'poster',
+	'viewBox',
+	'fill',
+	'stroke',
+	'strokeWidth',
+	'strokeLinecap',
+	'strokeLinejoin',
+	'd',
+	'cx',
+	'cy',
+	'r',
+	'x',
+	'y',
+	'x1',
+	'y1',
+	'x2',
+	'y2',
+	'rx',
+	'ry',
+	'points',
+	'xmlns',
+	'transform',
+	'opacity',
+	'fillOpacity',
+	'strokeOpacity',
+	'strokeDasharray',
+	'textAnchor',
+	'dominantBaseline',
+	'fontSize',
+	'fontWeight',
+	'fontFamily',
+	'letterSpacing',
+	'dx',
+	'dy',
+	// the ONLY data-* attributes allowed through: the component ttAction
+	// binding (componentTemplate.ts) — inert markup that a trusted-surface
+	// click wrapper reads to run an action AS the viewer. Values are plain
+	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
+	'data-tt-action',
+	'data-tt-action-inputs',
+	// Inert transient-host hints. They cannot submit a native form or choose an
+	// endpoint; the current host validates its own fields and adapter binding.
+	'data-tt-submit',
+	'data-tt-credential-form',
+	'data-tt-private-control',
+	// Inert editor address, validated against the authored template before editing.
+	'data-tt-label-key'
+]);
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	if (!style || typeof style !== 'object' || Array.isArray(style)) return undefined;

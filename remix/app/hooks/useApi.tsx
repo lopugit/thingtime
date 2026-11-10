@@ -52,8 +52,8 @@ import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStr
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
-import { createApiFailure, readApiResponsePayload, ThingtimeApiError } from './apiFailure';
-import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
+import { createApiFailure, readApiResponsePayload } from './apiFailure';
+import { buildThingCommentRequestPayload, buildThingCreateRequestPayload, requiresUncappedDataStrings } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
 const refreshRootData = () => {
@@ -1182,7 +1182,7 @@ export function useApi() {
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireSharedContentCapability('api.things-import');
+        await requireThingtimeCapability('api.things-import', requiresUncappedDataStrings(args.manifest) ? '1.12.0' : '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1310,50 +1310,7 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          const storageOwner = expectedActor ?? actionActor.current, generation = rootIdentity.read().generation;
-          const origin = typeof window === 'undefined' ? null : window.location.origin;
-          const guard = () => {
-            options?.signal?.throwIfAborted();
-            const current = rootIdentity.read();
-            if (current.pending || current.generation !== generation || actionActor.current !== storageOwner ||
-                planeRef.current !== expectedDataPlane || window.location.origin !== origin)
-              throw new DOMException('Storage scope changed', 'AbortError');
-          };
-          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks)) {
-            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-            await requireThingtimeCapability('api.things-update', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-          }
-          let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
-          if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
-            expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
-            (!options?.expectedApiOrigin || options.expectedApiOrigin === origin)) {
-            const replicas = await import('../storage/thingReplicas.client');
-            const storageScope = { apiOrigin: origin, ownerId: storageOwner, dataPlane: expectedDataPlane };
-            if (typeof window.indexedDB !== 'undefined') {
-              try {
-                const local = await replicas.queueStoredThingUpdate(storageScope, args, guard);
-                if (local) return local;
-              } catch (error) {
-                if (!(error instanceof replicas.ReplicaLookupUnavailable)) throw error;
-              }
-            }
-            confirmStorageCloudWrite = () => replicas.checkGenericCloudThingUpdate(storageScope, args.id, guard, () => {
-              rootIdentity.changed(); refreshRootData();
-            }, options?.signal);
-          }
-          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
-          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things-update', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
-            : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
-          if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
-          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things-update', PAGE_COLLECTION_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
-
-          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
-          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
-          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
-          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.42.0');
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1433,18 +1390,7 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
-          if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
-          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
-            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
-          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
-          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
-            : actionActivationWriteMinimum(args?.crystal, 'api.things');
-          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
-          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
-          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things']);
-          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
-          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
-          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.42.0');
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1466,20 +1412,7 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
-          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-          if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
-            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-          const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
-            : actionActivationWriteMinimum(args?.crystal, 'api.things');
-          if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
-          if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
-
-          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
-          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
-          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.42.0');
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1583,15 +1516,17 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
-      providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
-      list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
-        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
-        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
-      }, [getJson]),
+      request: useCallback(async (args) => {
+        await requireThingtimeCapability('api.connections-request', '2.0.0');
+        return asyncFetcher.submit({ connectionId: args?.connectionId, operation: args?.operation, resourceId: args?.resourceId, pageToken: args?.pageToken }, { action: '/api/v1/connections/request' });
+      }, [asyncFetcher]),
+      providers: useCallback(async () => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers'); }, []),
+      list: useCallback(async () => { await requireThingtimeCapability('api.connections', '2.0.0'); return getJson('/api/v1/connections'); }, []),
       connect: useCallback(
-        async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({
-          provider: args?.provider, fields: args?.fields, named: args?.named, expectedOwnerId: args?.expectedOwnerId
-        }, { action: '/api/v1/connections', expectedApiOrigin: args?.expectedApiOrigin }); },
+        async (args) => {
+          await requireThingtimeCapability('api.connections', '2.0.0');
+          return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections', signal: args?.signal });
+        },
         [asyncFetcher]
       ),
       unlink: useCallback(async (args) => {
@@ -1608,10 +1543,8 @@ export function useApi() {
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.connections-oauth-begin', args?.named ? '2.1.0' : '2.0.0');
-          if (args?.named) await requireThingtimeCapability('api.connections-oauth-callback', '2.1.0');
-          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId, named: args?.named },
-            { action: '/api/v1/connections/oauth/begin', expectedApiOrigin: args?.expectedApiOrigin });
+          await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0');
+          return asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin', signal: args?.signal });
         },
         [asyncFetcher]
       ),
@@ -1636,7 +1569,8 @@ export function useApi() {
               sync: args?.sync,
               deepen: args?.deepen
             })}`
-          ); },
+          );
+        },
         []
       ),
       filters: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-filters', '2.0.0'); return getJson('/api/v1/connections/filters', options); }, [getJson]),
@@ -1900,7 +1834,7 @@ export function useApi() {
         const actor = actionActor.current;
         const expectedPlane = planeRef.current;
         const origin = window.location.origin;
-        await requireSharedContentCapability('api.actions-run', { expectedApiOrigin: origin });
+        await requireThingtimeCapability('api.actions-run', requiresUncappedDataStrings(args) ? '1.39.0' : '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane, signal: options?.signal });
         const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));

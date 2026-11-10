@@ -157,46 +157,15 @@ a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
 
+## Gateway runtime and Mongo admission
 
-## Commander native background indexing
-
-`Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
-`filesystem-indexer/crates/indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
-`Commander/script/dev-parallel.sh` runs an isolated native development bundle beside the installed app;
-`Commander/script/verify-background-index.mjs` verifies its real bundled daemon against disposable filesystem events.
-Run Commander typecheck/tests, both Rust crates and the native checks in `Commander/docs/TESTING.md`. Index status
-changes negotiate the daemon's `commander.index-status` capability; no Thingtime data API is added by this lane.
-
-## Shared Rust filesystem workspace
-
-`filesystem-indexer/Cargo.toml` owns the local `core`, `indexer` and `ffi` crates
-and one lockfile. Native build scripts reference these paths directly; no
-registry release is required. `filesystem-indexer/README.md` documents consumers,
-iOS toolchains and isolated build outputs. Run workspace Cargo tests, the linked
-Swift/Rust fixture (`apple/FileSync/test-embedded-rust.sh`) and affected native
-host suites before signing and installing. Release listeners include changes in
-this directory for every consuming app.
-
-The iOS TestFlight workflow resolves the stable Cargo executable through rustup,
-preserves custom toolchain homes and installs device plus arm64/x86_64 simulator
-targets before its pre-credential native tests. Its executable setup regression
-is `node --test iOS/scripts/tests/rust-release-toolchain.test.mjs`; the fixture
-runs the actual workflow step without downloading a toolchain or using secrets.
-
-The early Mac sync fixture uses `scripts/mac-fixture-tls.mjs` and the test-only
-`mac-fixture-worker-trust.cjs` preload for ephemeral HTTPS byte storage on 28313.
-API/native identity remain on 28311; only the exact canonical transfer-worker
-child receives the public test CA. `mac-fixture-tls.test.mjs` covers correct,
-wrong and missing CA trust plus unrelated-child isolation. No OS trust changes.
-
-Native Release packaging uses the explicit shipping-product set in
-`macos/ThingtimeNode/scripts/build-bundle.sh`, shared by build, executable checks
-and copying. Test-only Swift fixtures remain in the debug lane. Run
-`electron/test/native-bundle-build.test.cjs` for required-product failure/missing
-executable refusal before staging, then the canonical signed bundle verification.
-
-Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
-`mac-fixture-transport.mjs`; native clock provenance lives only in the
-`Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
-must drain before success/resume while leaving the consumer unblocked. Shipping
-Swift sources, authorization, rates and native active-slot policy are unchanged.
+`app/api/utils/deployment/environmentGateway.ts` guards driver and cached-collection
+access; configured followers skip `server/plugins/mongo-warmup.ts`. Owner streams
+and detached work retain their admission during promotion, then drain pools and
+readiness caches. `mongodb/indexLifecycle.ts` coordinates the canonical index plan
+with a durable fingerprint and renewable lease; normal writes require readiness,
+while authenticated admin migrations use the scoped recovery path.
+`test:collections` covers lifecycle/admission/recovery; `test:environment-gateway`
+covers forwarding and ownership. The built acceptance runner creates isolated
+synthetic API identities under a verified OS network boundary. See
+[the gateway runbook](../environment-api-gateway.md).

@@ -281,6 +281,9 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (preflight) return preflight;
 
+  // Body before auth: the PAT scope a mutation needs depends on what the body
+  // says it is (a POST carrying thingtime ['reaction'] is a react, not a
+  // create), and a missing scope must 403 BEFORE a use is consumed.
   const method = request.method.toUpperCase();
   const candidates = method === 'POST' ? ['things.create', 'things.comment', 'things.react'] : [patScopeFor(method, {})];
   const ingressActor = await inspectActorForBody(request, candidates);

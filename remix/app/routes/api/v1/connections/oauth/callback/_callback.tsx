@@ -1,4 +1,3 @@
-import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { redirect as httpRedirect } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';

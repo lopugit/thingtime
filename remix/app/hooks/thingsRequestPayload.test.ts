@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload.ts';
+import { buildThingCommentRequestPayload, buildThingCreateRequestPayload, requiresUncappedDataStrings } from './thingsRequestPayload.ts';
+
+test('large-data capability detection preserves content and handles nested aliases or cycles', () => {
+	assert.equal(requiresUncappedDataStrings({ text: 'x'.repeat(5000) }), false);
+	const nested = { text: '🦊'.repeat(3000) };
+	const value: any = { nested: [nested, nested] }; value.self = value;
+	assert.equal(requiresUncappedDataStrings(value), true);
+	assert.equal(value.nested[0], nested);
+	const cycle: any = {}; cycle.self = cycle;
+	assert.equal(requiresUncappedDataStrings(cycle), false);
+});
 
 const richText = {
 	kind: 'rich-text',

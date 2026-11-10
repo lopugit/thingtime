@@ -109,12 +109,16 @@ export const redactUrl = (url: string): string => {
 
 export const recordApiCall = (entry: Omit<ApiLogEntry, 'id' | 'body'> & { body?: unknown }): void => {
 	try {
-		const history = new URL(entry.url, 'https://thingtime.invalid').pathname === '/api/v1/timeline';
+		const pathname = new URL(entry.url, 'https://thingtime.invalid').pathname;
+		const history = pathname === '/api/v1/timeline';
+		// Provider-declared secret fields may use any name, so key-based redaction
+		// cannot safely retain a credential-submission body for copy-as-curl.
+		const connectionCredentials = /^\/api\/v1\/connections\/?$/.test(pathname);
 		const stored: ApiLogEntry = {
 			...entry,
 			id: nextId++,
 			url: history ? '/api/v1/timeline' : redactUrl(entry.url),
-			body: history || entry.body === undefined ? undefined : redactSensitive(entry.body)
+			body: history || connectionCredentials || entry.body === undefined ? undefined : redactSensitive(entry.body)
 		};
 		entries = [stored, ...entries].slice(0, MAX_API_LOG_ENTRIES);
 		listeners.forEach((listener) => {

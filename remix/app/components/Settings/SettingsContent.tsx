@@ -861,6 +861,9 @@ export const SettingsContent = ({
 				)}
 				{tab === 'connections' && (
 					<Flex direction="column" gap={4} minW={0}>
+                <SettingsSection eyebrow="Third-party services" description="Connect multiple accounts and reuse private authorizations across Thingtime.">
+                  <Button size="sm" variant="outline" onClick={() => navigate('/connections')}>Manage service accounts</Button>
+                </SettingsSection>
 						{/* connected apps — grants + everything each app stores */}
 						{user && <ConnectedAppsSection userId={user.id} />}
 						{user && !user.temporary && user.accountKind !== 'service' && <ConnectorProtectionsSettings key={`${user.id}:${dataPlane}`} accountId={user.id} />}
