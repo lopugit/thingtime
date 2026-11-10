@@ -12355,6 +12355,14 @@ transfer, whole-account snapshots or production deployment.
   reports a partial index. Check the discovery hint before the first upload,
   the sample capture timestamps and indexed counts,
   the saved original hashes and bytes, and no duplicate revisions after reopen.
+- [ ] Keep the newest iCloud original slowly progressing while at least three
+  groups of local originals are backed up in date order. Compare the editable
+  iCloud indicator and current upload stage with the real native status.
+  Interrupt and reopen the exact run, verify the deferred original is still
+  pending, then confirm its bytes when available. Give a second cloud original
+  and an available Live Photo companion a turn even when the first original
+  keeps failing. Confirm a Wi-Fi-only retry reads a newly resident original
+  locally and completion waits for the remaining originals.
 - [ ] On the mounted iPhone card, verify the first photo or video discovery
   appears while indexing, with the captured time when available. Verify the
   subsequent indexed asset and file counts, and that unknown counts are absent.

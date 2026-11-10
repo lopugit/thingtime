@@ -79,6 +79,12 @@ try {
      assert.deepEqual(await card.locator('[data-block-id="folder-card-activity-event-time"]').evaluateAll(elements => elements.map(element => element.title)),
       ['2026-11-08T00:00:02.000Z', '2026-11-08T00:00:00.000Z']);
      await page.screenshot({ path: join(evidence, `${label}-native-activity-open.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoCloudPreparation(0.42));
+     await disclosure.getByText('Uploading originals', { exact: true }).waitFor();
+     await card.locator('progress[value="42"]').and(card.getByRole('progressbar', { name: 'Current iCloud download' })).waitFor();
+     await page.screenshot({ path: join(evidence, `${label}-native-activity-concurrent.png`), fullPage: true });
+     await page.evaluate(() => window.remoteSyncFixture.setNativePhotoCloudPreparation());
+     await disclosure.getByText('Downloading an original from iCloud', { exact: true }).waitFor();
      const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
      await enableCurrentPageBuilder(page);
      await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();

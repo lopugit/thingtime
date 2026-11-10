@@ -689,6 +689,9 @@ test('optional native Photos activity exposes only measured progress and known, 
 	});
 	assert.deepEqual(parse({ phase: 'waiting', downloadFraction: 0.5, backlogOriginals: -1, reason: 'secret',
 		prepared: { completed: 3, total: 2 }, backgroundRequest: 'secret' })?.activity, { phase: 'waiting' });
+	assert.deepEqual(parse({ phase: 'uploading', cloudPreparationFraction: 0.25, downloadFraction: 0.9 })?.activity,
+		{ phase: 'uploading', cloudPreparationFraction: 0.25 });
+	assert.deepEqual(parse({ phase: 'uploading', cloudPreparationFraction: -0.1 })?.activity, { phase: 'uploading' });
 	assert.equal(parse({ phase: 'unknown' })?.activity, undefined);
 	assert.deepEqual(parse({ phase: 'unknown' })?.confirmed, progress.confirmed);
 	assert.equal(parse({ phase: 'indexing', events: Array.from({ length: 30 }, () => ({ phase: 'indexing', at: revision })) })?.activity?.events?.length, 12);

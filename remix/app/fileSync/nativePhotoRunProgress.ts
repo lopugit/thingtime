@@ -15,6 +15,7 @@ export type NativePhotoRunActivity = {
 	prepared?: { completed: number; total: number };
 	backlogOriginals?: number;
 	downloadFraction?: number;
+	cloudPreparationFraction?: number;
 	reason?: (typeof activityReasons)[number];
 	events?: { phase: NativePhotoActivityPhase; at: string; discovered?: number; item?: DiscoveredPhoto }[];
 	backgroundRequest?: NativePhotoContinuation['status'];
@@ -59,6 +60,9 @@ function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 	if (whole(backlogOriginals)) activity.backlogOriginals = backlogOriginals;
 	if (phase === 'downloading' && typeof downloadFraction === 'number' && downloadFraction >= 0 && downloadFraction <= 1)
 		activity.downloadFraction = downloadFraction;
+	const cloudFraction = value.cloudPreparationFraction;
+	if (typeof cloudFraction === 'number' && Number.isFinite(cloudFraction) && cloudFraction >= 0 && cloudFraction <= 1)
+		activity.cloudPreparationFraction = cloudFraction;
 	const reason = activityReasons.find(candidate => candidate === value.reason);
 	if (reason) activity.reason = reason;
 	const backgroundRequest = backgroundStatuses.find(candidate => candidate === value.backgroundRequest);

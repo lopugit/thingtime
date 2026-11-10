@@ -548,6 +548,16 @@ PhotoKit’s order for that fetch. If the library changed or the cursor cannot b
 verified, discovery rechecks the ordered library against those receipts. Reported network traffic can include retry bytes.
 Measure saved data from verified current Files in the exact destination.
 
+Photos automation 1.5.0 records an unavailable original against its exact asset
+revision. While one authorized iCloud original is fetching, the same backup
+continues preparing and uploading available originals in date-ordered groups.
+The activity panel can show measured iCloud progress alongside the upload
+stage. A deferred original remains pending across interruption. Retries give
+untried originals and older attempts a turn, with newest asset dates first
+among equally eligible items. Wi-Fi-only policy permits a local recheck after
+Photos has made an original available. Completion requires resolving all
+deferred originals visible to the current Photos grant.
+
 Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
 by default. An optional hourly budget uses the measured payload bytes from all
 managed Photos transfers on that account/origin/device, including failed

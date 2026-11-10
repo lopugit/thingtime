@@ -1120,6 +1120,12 @@ that same worker while it prepares the first newest asset group. Subsequent
 selections retain their normal batching. Verify stage reporting, alias-safe
 reopen and signed physical behavior with the Photos launch checklist.
 
+Native Photos automation 1.5.0 uses the same ordered queue's per-asset outcomes
+to retain exact deferred originals and their retry timing. One authorized
+PhotoKit preparation can run alongside date-ordered local selections. Every
+prepared original rejoins the same verified upload and receipt path. Use the
+editable activity panel for measured concurrent iCloud progress.
+
 Explicit iOS Start/Retry recovers changed Photos backup settings for the same
 authorized grant and device with cloud copies retained. It verifies the current
 saved revision, native grant and destination, disarms the prior native queue

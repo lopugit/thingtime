@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.4.0"
+    static let photoAutomationVersion = "1.5.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
         return nil

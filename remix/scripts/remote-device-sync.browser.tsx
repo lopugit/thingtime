@@ -340,6 +340,13 @@ Object.assign(window, { remoteSyncFixture: {
  photoRecovery: async () => ({ events: photoEvents, job: await readPhotoJob(), oldPhotoEpoch, uploaded: [...photoUploads.values()].filter(row => row.bytes), files: [...photoFiles.values()] }),
  photoScanCount: () => photoEvents.filter(event => event.type === 'scan-capture').length,
  nativeOnlyState: () => structuredClone({ nativeRun, nativeCalls, webTransfers, nativeFolderContentions }),
+ setNativePhotoCloudPreparation(fraction?: number) {
+  if (!nativeActivity || !nativeRun?.progress.activity) throw Error('Photos activity fixture missing');
+  nativeRun.progress.stage = fraction === undefined ? 'preparing' : 'uploading';
+  nativeRun.progress.activity = { ...nativeRun.progress.activity, phase: fraction === undefined ? 'downloading' : 'uploading',
+   downloadFraction: fraction === undefined ? 0 : undefined, cloudPreparationFraction: fraction };
+  persistNativeRun();
+ },
  setNativePhotoDiscovery(completed?: number) {
   if (!nativeActivity || !nativeRun) throw Error('Photos activity fixture missing');
   if (completed === undefined) {

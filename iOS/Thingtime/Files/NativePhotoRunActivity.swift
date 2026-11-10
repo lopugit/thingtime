@@ -35,6 +35,7 @@ final class NativePhotoRunActivity: @unchecked Sendable {
         var prepared: Preparation?
         var backlogOriginals: Int?
         var downloadFraction: Double?
+        var cloudPreparationFraction: Double?
         var reason: Reason?
         var events: [Event] = []
         var backgroundRequest: BackgroundRequest?
@@ -124,6 +125,12 @@ final class NativePhotoRunActivity: @unchecked Sendable {
             } else if value.phase == .downloading {
                 setPhase(beforeDownload ?? .checkingOriginals); beforeDownload = nil
             }
+        }
+    }
+
+    func cloudPreparation(_ fraction: Double?) -> Bool {
+        update {
+            value.cloudPreparationFraction = fraction.flatMap { $0.isFinite && (0...1).contains($0) ? $0 : nil }
         }
     }
 

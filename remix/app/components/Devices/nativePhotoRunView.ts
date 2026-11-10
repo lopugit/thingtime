@@ -185,7 +185,7 @@ export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = f
 	const { continuation } = view.progress;
 	const phase = paused ? 'Paused' : continuation === 'held' ? 'Background processing stopped' : phaseLabels[activity.phase];
 	const { indexed, indexing, latestFound, prepared, backlogOriginals: backlog } = activity;
-	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction : undefined;
+	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction ?? activity.cloudPreparationFraction : undefined;
 	return {
 		phase: view.stale ? `Last reported · ${phase}` : phase,
 		reason: activity.reason ? reasonLabels[activity.reason] : '',
