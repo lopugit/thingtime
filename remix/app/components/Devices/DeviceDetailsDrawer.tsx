@@ -415,10 +415,10 @@ export const DeviceDetailsDrawer = memo(
 									</Notice>
 								) : null}
 
-								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="File sync & backup" section="sync">
+								<Section deviceId={state.deviceId} key={`sync:${state.deviceId}`} label="Folders & sync configs" section="sync">
 									<Flex gap={2} wrap="wrap">
 										<Button as={RouterLink} to={deviceSyncPageHref(state.deviceId)} variant="outline" minHeight="44px" whiteSpace="normal">
-											Open device sync &amp; backup
+											Manage folders &amp; sync configs
 										</Button>
 										<Button as={RouterLink} to="/things?activity=1" variant="ghost" minHeight="44px">Activity manager</Button>
 									</Flex>

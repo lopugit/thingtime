@@ -140,3 +140,21 @@ test('history command is read-only, lease-bound, and accepts only its requested 
  f.credentials[0].jti = 'new-pairing';
  assert.equal((await f.call({ action: 'read', requestId: 'history' }) as any).status, 409);
 });
+
+test('sync config activity completes only the claimed config, exact cursor and owner pairing', async () => {
+ const f = fixture(), connectionId = 'config';
+ const command = { action: 'connection-activity', connectionId, limit: 1, before: { endedAt: 100, id: 'older-than' } };
+ assert.equal((await f.enqueue('forged', { ...command, ownerId: 'foreign' }) as any).status, 400);
+ assert.equal((await f.enqueue('activity', command) as any).status, 'pending');
+ const claimed = (await f.call({ action: 'poll' }) as any).command;
+ const complete = { action: 'complete', requestId: 'activity', leaseId: claimed.leaseId };
+ const record = { id: 'attempt', startedAt: 50, endedAt: 75, lastActivityAt: 75, status: 'complete', sentBytes: 0, receivedBytes: null };
+ const result = { connectionId, records: [record], next: { endedAt: record.endedAt, id: record.id } };
+ assert.equal((await f.call({ ...complete, result: { ...result, connectionId: 'another-config' } }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, result: { ...result, records: [{ ...record, sourcePath: '/private' }] } }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, result: { ...result, records: [{ ...record, endedAt: 101 }] } }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, result: { ...result, next: { endedAt: 42, id: 'other' } } }) as any).status, 400);
+ assert.equal((await f.call({ ...complete, leaseId: 'foreign', result }) as any).status, 409);
+ assert.deepEqual((await f.call({ ...complete, result }) as any).result, result);
+ assert.equal((await f.call({ action: 'read', requestId: 'activity' }, 'foreign') as any).status, 404);
+});

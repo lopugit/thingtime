@@ -1,7 +1,7 @@
 import React from 'react';
 import { syncJobFailure, syncJobFailureMessage, syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
 import { openSyncJournal } from '~/fileSync/journal.client';
-import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask } from '~/fileSync/nativeSyncTasks.client';
+import { nativeSyncTasks, pauseNativeSyncJob, enrollNativeFolderSync } from '~/fileSync/nativeSyncTasks.client';
 import { SYNC_INTERVALS, SYNC_JOBS_CHANGED_EVENT, syncJobCanPause, syncJobEnabled, type SyncJob } from '~/fileSync/syncJobJournal';
 import { syncScopeKey, type SyncScope } from '~/fileSync/reconcile';
 import type { SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
@@ -72,7 +72,7 @@ export function DesktopSyncAutomation({ saved, scope, generation, disabled, acco
 				start: ({ readField }) => {
 					check(); if (startDisabled) return; const n = Number(readField('interval'));
 					if (!SYNC_INTERVALS.some(ms => ms === n)) throw Error('Choose a supported sync interval.');
-					setError(''); void startNativeSyncTask(saved, scope, generation, undefined, n).catch(report);
+					setError(''); void enrollNativeFolderSync(saved, scope, generation, n).catch(report);
 				},
 				stop: async () => { check(); if (stopDisabled) return; setPausing(true); setError('');
 					try { await pauseNativeSyncJob(scope, generation); setJob(value => value ? { ...value, state: 'paused' } : value); }

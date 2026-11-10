@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { rootIdentity } from '../utils/rootIdentity';
-import { negotiateRemoteDirectionalProgress, createRemoteSyncClient, type RemoteSyncClient } from './remoteSyncClient.client';
-import { parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncStatus, type RemoteSyncResources } from './remoteSyncProtocol';
+import { negotiateRemoteDirectionalProgress, negotiateRemoteConnectionActivity, createRemoteSyncClient, type RemoteSyncClient } from './remoteSyncClient.client';
+import { parseRemoteSyncResources, supportsRemoteResourceControls, validateRemoteSyncStatusActivity, type RemoteSyncStatus, type RemoteSyncResources } from './remoteSyncProtocol';
 import { validNativeSourcePath, type MobileFolder } from './mobileFolders.client';
 import { parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseDeviceSyncResourcePolicy, type DeviceSyncResourcePolicy } from './deviceResourcePolicy';
@@ -14,7 +14,7 @@ const empty: State = { status: null, online: false, checking: false, error: '' }
  * connection manager. It never persists measurements or viewer-local policy. */
 export function createRemoteDeviceStatusSession(input: Scope & {
  assertCurrent(): void; createClient(signal: AbortSignal): Pick<RemoteSyncClient, 'send'>;
- visible(): boolean; onIdle?(): void; subscribeVisibility?(listener: () => void): () => void; pollMs?: number; negotiateDirections?(): Promise<boolean>;
+ visible(): boolean; onIdle?(): void; subscribeVisibility?(listener: () => void): () => void; pollMs?: number; negotiateDirections?(): Promise<boolean>; negotiateActivity?(): Promise<boolean>;
 }) {
  let state = empty, consumers = 0, controller = new AbortController(), client = input.createClient(controller.signal);
  let timer: ReturnType<typeof setTimeout> | undefined, reading: Promise<void> | undefined, readAbort: AbortController | undefined, unsubscribe: (() => void) | undefined;
@@ -30,7 +30,10 @@ export function createRemoteDeviceStatusSession(input: Scope & {
   publish({ ...state, checking: true });
   reading = (async () => {
    try {
-    const directionsReady = input.negotiateDirections ? await input.negotiateDirections().catch(() => false) : false;
+    const [directionsReady, activityReady] = input.negotiateDirections || input.negotiateActivity ? await Promise.all([
+     input.negotiateDirections?.().catch(() => false) ?? false,
+     input.negotiateActivity?.().catch(() => false) ?? false
+    ]) : [false, false];
     check(); let cursor: string | undefined, snapshot: RemoteSyncStatus | undefined, heartbeat: RemoteSyncStatus | undefined, resourceUsage: RemoteSyncResources | undefined;
     let receivedAt: number | undefined;
     const cursors = new Set<string>(), roots = new Map<string, MobileFolder>(), jobs = new Map<string, RemoteSyncStatus['jobs'][number]>();
@@ -46,6 +49,12 @@ export function createRemoteDeviceStatusSession(input: Scope & {
      if (!directionsReady || value.directionalProgressVersion !== '1.0.0') {
       value.jobs = value.jobs.map(({ progress: _progress, ...job }) => job);
       if (value.task) { const { directions: _directions, ...legacy } = value.task.progress; value.task = { ...value.task, progress: legacy }; }
+     }
+     if (activityReady && value.connectionActivityVersion === '1.0.0') validateRemoteSyncStatusActivity(value);
+     else {
+      delete value.connectionActivityVersion;
+      value.jobs = value.jobs.map(({ activity: _activity, ...job }) => job);
+      if (value.task) { const { activity: _activity, ...legacy } = value.task; value.task = legacy; }
      }
      for (const root of value.roots) roots.set(root.id, root); for (const job of value.jobs) jobs.set(job.connectionId, job);
      heartbeat ??= value; snapshot = value; cursor = value.nextCursor; if (cursor) cursors.add(cursor);
@@ -86,7 +95,7 @@ function sessionFor(scope: Scope, generation: number) {
  if (!session) {
   const check = () => { const identity = rootIdentity.read(); if (identity.pending || identity.generation !== generation || window.location.origin !== scope.origin) throw Error('The account or device changed.'); };
   session = createRemoteDeviceStatusSession({ ...scope, assertCurrent: check, createClient: signal => createRemoteSyncClient({ ...scope, signal, assertCurrent: check }),
-   negotiateDirections: () => negotiateRemoteDirectionalProgress(),
+   negotiateDirections: () => negotiateRemoteDirectionalProgress(), negotiateActivity: () => negotiateRemoteConnectionActivity(),
    onIdle: () => queueMicrotask(() => { if (!session!.retained() && sessions.get(key) === session) sessions.delete(key); }),
    visible: () => document.visibilityState === 'visible', subscribeVisibility: listener => { document.addEventListener('visibilitychange', listener); return () => document.removeEventListener('visibilitychange', listener); } });
   sessions.set(key, session);

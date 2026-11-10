@@ -1,7 +1,8 @@
+import { parseSyncActivityPage, type SyncActivityQuery } from './syncActivity';
 import { deviceSyncHistoryScopeKey, type DeviceSyncHistoryScope } from './deviceSyncHistory';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
-import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
+import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_ACTIVITY_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
 
 /** Optional display contract: older origins keep ordinary controls and explicit
  * destination selection. Callers recheck their identity after awaiting this. */
@@ -14,6 +15,18 @@ export async function negotiateRemoteSourcePaths(requireCapability = requireThin
 
 export async function negotiateRemoteDirectionalProgress(requireCapability = requireThingtimeCapability): Promise<boolean> {
  try { await requireCapability('api.devices-sync-control', REMOTE_SYNC_DIRECTION_REQUIREMENTS['api.devices-sync-control']); return true; } catch { return false; }
+}
+
+export async function negotiateRemoteConnectionActivity(requireCapability = requireThingtimeCapability): Promise<boolean> {
+ try { await requireCapability('api.devices-sync-control', REMOTE_SYNC_ACTIVITY_REQUIREMENTS['api.devices-sync-control']); return true; } catch { return false; }
+}
+
+export async function readRemoteSyncActivity(client: Pick<RemoteSyncClient, 'send'>, connectionId: string,
+ { before, limit, signal }: SyncActivityQuery & { signal?: AbortSignal } = {}) {
+ const command = { action: 'connection-activity' as const, connectionId, ...(before ? { before } : {}), ...(limit === undefined ? {} : { limit }) };
+ const value = await client.send(command, { signal, timeoutMs: 30_000 });
+ signal?.throwIfAborted();
+ return parseSyncActivityPage(value, connectionId, command);
 }
 
 type Reply = { ok: boolean; status: 'pending' | 'processing' | 'complete' | 'error' | 'expired'; result?: unknown; error?: string };
@@ -77,7 +90,11 @@ export function createRemoteSyncClient(input: {
 			const signal = AbortSignal.any([input.signal, timeout, ...(options.signal ? [options.signal] : [])]);
 			try {
 				check(signal);
-				try { await (input.requireCapability ?? requireThingtimeCapability)('api.devices-sync-control', command.action === 'resources' ? REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control'] : command.action === 'history' ? REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control'] : '1.0.0'); }
+				const minimum = command.action === 'connection-activity' ? REMOTE_SYNC_ACTIVITY_REQUIREMENTS['api.devices-sync-control'] :
+					command.action === 'start' && command.intervalMs !== undefined ? REMOTE_SYNC_ENROLLMENT_REQUIREMENTS['api.devices-sync-control'] :
+					command.action === 'resources' ? REMOTE_SYNC_RESOURCE_REQUIREMENTS['api.devices-sync-control'] :
+					command.action === 'history' ? REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control'] : '1.0.0';
+				try { await (input.requireCapability ?? requireThingtimeCapability)('api.devices-sync-control', minimum); }
 				catch { throw Error('Remote sync needs an updated, reachable Thingtime server. Saved settings are still available.'); }
 				check(signal);
 				if (mutating(command)) {
@@ -127,7 +144,7 @@ export function createRemoteSyncClient(input: {
 				return reply.result as T;
 			} catch (cause) {
 				if (timeout.aborted && !input.signal.aborted && !options.signal?.aborted)
-					throw Error(command.action === 'status' || command.action === 'history'
+					throw Error(['status', 'history', 'connection-activity'].includes(command.action)
 						? 'Device unavailable. Open the updated Thingtime app on this device to connect. You can still edit saved settings.'
 						: 'The device has not confirmed this request yet. Refresh its status before retrying; an accepted request may still finish.');
 				if (dispatched && mutating(command) && !signal.aborted && pending(receiptSlot)?.requestId === requestId)

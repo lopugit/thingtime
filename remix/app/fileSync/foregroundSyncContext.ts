@@ -45,10 +45,11 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 		check();
 		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
 		check();
-		if (observe) {
-				assertConfiguredSyncApproval(current, approved, scope, configuration.localRootId, configuration.remoteFolderId);
-				if (current.configuration.paused) throw new SyncConditionsWait('paused');
-			}
+		// A verified current pause can only deny work, including when a remote
+		// settings edit changed the approved revision. Never reuse that revision.
+		if (current.id === reviewed.id && current.configuration.deviceId === scope.deviceId && current.configuration.paused)
+			throw new SyncConditionsWait('paused');
+		if (observe) assertConfiguredSyncApproval(current, approved, scope, configuration.localRootId, configuration.remoteFolderId);
 			const conditions = observe ? await observe() : input.authorizeContext ? await input.authorizeContext() : await (async () => {
 			await input.authorizeDevice(); check(); return input.conditions();
 		})();

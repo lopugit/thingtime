@@ -44,3 +44,20 @@ test('directional cached status is used only after negotiating the additive cont
   assert.equal(!!session.read().status?.jobs[0].progress, ready && version === '1.0.0'); release();
  }
 });
+
+test('the shared remote heartbeat projects activity only from a negotiated source without losing null or zero', async () => {
+ const record = { id: 'attempt', startedAt: 10, lastActivityAt: 20, endedAt: 20, status: 'complete', sentBytes: 0, receivedBytes: null };
+ const activity = { startedAt: 30, lastActivityAt: 40, sentBytes: null, receivedBytes: 5 };
+ for (const [ready, version] of [[false, '1.0.0'], [true, undefined], [true, '1.0.0']] as const) {
+  const session = createRemoteDeviceStatusSession({ origin: 'https://device.test', ownerId: 'owner', deviceId: 'device', visible: () => true, assertCurrent() {},
+   negotiateActivity: async () => ready,
+   createClient: () => ({ send: async () => ({ ...status, connectionActivityVersion: version,
+    jobs: [{ connectionId: 'config', state: 'scheduled', activity: record }],
+    task: { connectionId: 'config', active: true, activity, progress: { stage: 'transferring', confirmed: 0, total: 1 } } }) }) as any });
+  const release = session.retain(); await session.refresh();
+  const projected = ready && version === '1.0.0';
+  assert.deepEqual(session.read().status?.jobs[0].activity, projected ? record : undefined);
+  assert.deepEqual(session.read().status?.task?.activity, projected ? activity : undefined);
+  release();
+ }
+});

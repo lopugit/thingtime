@@ -51,7 +51,7 @@ import {
 	ATTACHMENT_PROFILE_SLOTS,
 	ATTACHMENT_PURPOSES,
 	ATTACHMENT_STATES,
-	ATTACHMENT_THINGTIME,
+	ATTACHMENT_THINGTIME, ATTACHMENT_BLOB_THINGTIME,
 	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
@@ -4293,7 +4293,7 @@ export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant
 export const PROTECTED_THINGTIME = [
   THING_METADATA_KIND,
   THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
-  'backup-job', 'backup-job-event',
+  'backup-job', 'backup-job-event', ATTACHMENT_BLOB_THINGTIME,
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',

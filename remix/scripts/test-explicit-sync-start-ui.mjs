@@ -132,7 +132,7 @@ try {
      await card.getByText('5 Mbps live', { exact: true }).waitFor();
      await card.getByText('Current original: 2 B of 3 B sent', { exact: true }).waitFor();
      await card.getByText('2 photos · 1 video confirmed', { exact: true }).waitFor();
-     assert.equal(await page.getByRole('button', { name: 'Choose folder', exact: true }).isDisabled(), true);
+     assert.equal(await page.getByRole('button', { name: 'Add folder', exact: true }).isDisabled(), true);
      assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 0);
      const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
      await enableCurrentPageBuilder(page);
@@ -287,7 +287,7 @@ try {
       await card.locator('summary').filter({ hasText: /^Resource limits$/ }).click();
       await card.getByRole('combobox', { name: 'Hourly data unit', exact: true }).selectOption('GB');
       await card.getByRole('textbox', { name: 'Upload data per hour', exact: true }).fill('1');
-      await card.getByRole('button', { name: 'Save connection', exact: true }).click();
+      await card.getByRole('button', { name: 'Save sync config', exact: true }).click();
       const done = await assertPublished();
       assert.equal(done.job.reviewed.configuration.photoAutomation.uploadBytesPerHour, 1_000_000_000);
      } else if (scenario === 'auto-charging') {
@@ -338,7 +338,7 @@ try {
       await card.getByRole('combobox', { name: 'Hourly data unit', exact: true }).selectOption('GB');
       const budget = card.getByRole('textbox', { name: 'Upload data per hour', exact: true });
       await budget.fill('-');
-      assert.equal(await card.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+      assert.equal(await card.getByRole('button', { name: 'Save sync config', exact: true }).isDisabled(), true);
       await card.getByRole('button', { name: 'Collapse folder', exact: true }).click();
       await page.reload();
       await expand.click();
@@ -347,8 +347,8 @@ try {
       await budget.fill('1');
       await notifications.fill('0');
       await page.screenshot({ path: join(evidence, `${label}-auto-settings-open.png`), fullPage: true });
-      await card.getByRole('button', { name: 'Save connection', exact: true }).click();
-      await card.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+      await card.getByRole('button', { name: 'Save sync config', exact: true }).click();
+      await card.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
       const row = await page.evaluate(() => window.remoteSyncFixture.state().rows.find(row => row.id === 'documents-sync'));
       assert.equal(row.crystal.configurationVersion, 4);
       assert.deepEqual(row.crystal.photoAutomation, { uploadBytesPerSecond: 625_000, uploadBytesPerHour: 1_000_000_000, notificationIntervalMs: 0 });
@@ -373,8 +373,8 @@ try {
       await accountCard.getByRole('combobox', { name: 'Network', exact: true }).selectOption('any');
       await accountCard.getByText('Only while charging', { exact: true }).click();
       assert.equal(await accountCard.getByRole('checkbox', { name: 'Only while charging', exact: true }).isChecked(), true);
-      await accountCard.getByRole('button', { name: 'Save connection', exact: true }).click();
-      await accountCard.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+      await accountCard.getByRole('button', { name: 'Save sync config', exact: true }).click();
+      await accountCard.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
       const state = await page.evaluate(() => window.remoteSyncFixture.state());
       assert.equal(state.writes, 1);
       assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.remoteFolderId, 'fixture-folder-0');
@@ -422,13 +422,11 @@ try {
     }
     if (scenario === 'remote-iphone' || scenario === 'paired-iphone') {
      await page.goto(origin + (scenario === 'paired-iphone' ? '/?mobilePanel=1&folderAccessInactive=1' : '/?remoteMobile=1'));
-     await page.locator('summary').filter({ hasText: 'Manage sync connections' }).click();
+     await page.locator('summary').filter({ hasText: 'Manage folders & sync configs' }).click();
      if (scenario === 'paired-iphone') {
       await page.waitForFunction(() => window.remoteSyncFixture.pairing().pending);
       await page.evaluate(() => { window.dispatchEvent(new Event('focus')); window.remoteSyncFixture.deliverPause(); });
-      const jump = page.getByRole('link', { name: 'Go to this device’s sync controls', exact: true });
-      await jump.click();
-      await page.waitForFunction(() => document.activeElement?.id === 'local-mobile-sync');
+      await page.getByRole('heading', { name: 'Folders & sync configs', exact: true }).waitFor();
       await page.getByText('Folder access will refresh when Thingtime is active.', { exact: true }).waitFor();
       await page.evaluate(() => window.remoteSyncFixture.returnToApp());
       await page.getByText('Folder access will refresh when Thingtime is active.', { exact: true }).waitFor({ state: 'hidden' });
@@ -442,13 +440,13 @@ try {
       await page.getByText('Edit saved settings here. To start, pause, or check a transfer, open Thingtime on the device.', { exact: true }).waitFor();
       await card.getByRole('button', { name: 'Expand folder', exact: true }).click();
       await card.getByRole('button', { name: 'Edit', exact: true }).click();
-      const draft = card.getByRole('textbox', { name: 'Connection name', exact: true });
+      const draft = card.getByRole('textbox', { name: 'Sync config name', exact: true });
       await draft.fill('Unsaved iPhone draft');
       const reads = await page.evaluate(() => window.remoteSyncFixture.state().connectionLists);
       await page.getByRole('button', { name: 'Refresh settings', exact: true }).click();
       await page.waitForFunction(reads => window.remoteSyncFixture.state().connectionLists > reads, reads);
       assert.equal(await draft.inputValue(), 'Unsaved iPhone draft');
-      assert.equal(await page.getByRole('button', { name: /^(Refresh device|Start backup|Pause sync|Choose device folder)$/ }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: /^(Refresh device|Start backup|Pause sync|Add folder)$/ }).count(), 0);
       assert.equal(await page.getByText('Device offline', { exact: true }).count(), 0);
       await finish();
       await page.evaluate(() => window.remoteSyncFixture.changeIdentity());
@@ -461,7 +459,7 @@ try {
      continue;
     }
     await page.goto(origin + '/?paused=1' + (scenario === 'ios-managed' ? '&iosResources=1' : ''));
-    await page.locator('summary').filter({ hasText: 'Manage sync connections' }).click();
+    await page.locator('summary').filter({ hasText: 'Manage folders & sync configs' }).click();
     await page.getByRole('button', { name: 'Refresh device', exact: true }).waitFor();
     await page.evaluate(() => window.remoteSyncFixture.setOnline(true));
     await page.getByRole('button', { name: 'Refresh device', exact: true }).click();
@@ -476,7 +474,7 @@ try {
      const card = scenario === 'draft' ? target : home;
      await card.getByRole('button', { name: 'Expand folder', exact: true }).click();
      await card.getByRole('button', { name: 'Edit', exact: true }).click();
-     await card.getByRole('textbox', { name: 'Connection name', exact: true }).fill('Unfinished retained draft');
+     await card.getByRole('textbox', { name: 'Sync config name', exact: true }).fill('Unfinished retained draft');
      await card.getByRole('button', { name: 'Collapse folder', exact: true }).click();
     }
     if (scenario === 'ios-managed') {

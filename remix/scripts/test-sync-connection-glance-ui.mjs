@@ -70,7 +70,7 @@ try {
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:join(evidence,label+'-complete-collapsed.png'),fullPage:true});
   await page.evaluate(() => window.glanceFixture.mode('photos-preparing'));
   await page.getByRole('status').filter({ hasText: 'Preparing Photos backup…' }).waitFor();
-  await page.getByText('Off for this connection', { exact: true }).waitFor();
+  await page.getByText('Off for this sync config', { exact: true }).waitFor();
   assert.equal(await page.getByText('Measuring live speed…', { exact: true }).count(), 0);
   assert.doesNotMatch(await page.locator('article').innerText(), /0 of 0|0 \/ 0/);
   await page.evaluate(() => window.glanceFixture.mode('photos-background-refused'));

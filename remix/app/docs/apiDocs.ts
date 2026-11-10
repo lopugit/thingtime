@@ -396,10 +396,10 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'No independent destination configured', body: { ok: true, destinations: [], availability: 'unavailable', reason: 'not-configured', executionAvailable: false } }]
   }),
   endpoint({
-    id: 'devices-sync-control', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'devices',
+    id: 'devices-sync-control', contractVersion: '1.5.0', featureVersion: '1.5.0', group: 'devices',
     title: 'Device folder sync control', endpoint: '/api/v1/devices/sync-control',
     summary: 'Manage an owned device’s installed folder sync jobs from a logged-in browser.',
-    detail: 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. Version 1.1.0 adds optional owner-private roots[].sourcePath absolute POSIX location metadata in status and folder responses when the native Mac fileAccessVersion is at least 1.15.0. Missing paths require explicit destination selection; paths grant no ancestor access and are never relative file-operation inputs. Version 1.2.0 adds rootless resources read/save commands and optional resourceUsage in status. Device policy contains positive transferBytesPerSecond and scanBytesPerSecond plus integer cpuPercent 1–100. Current CPU, memory, upload/download/scan measurements come from the selected device; unavailable fields stay absent/null. Commands require Mac fileAccessVersion 1.16.0 and fileResourceLimitsVersion 1.1.0, never grant folder access or start jobs, and use the same owner/device/current-pairing/lease fences and immutable retry identities. Version 1.3.0 adds optional per-job directional progress to the same status heartbeat; unavailable measurements remain absent and older status/resource contracts retain their minimum versions. Version 1.4.0 adds the read-only history command with an inclusive start, exclusive end (Unix milliseconds), and 1–240 display buckets. The paired source device aggregates its locally retained observations; gaps and unavailable metrics stay null, and counts identify measured coverage. The source can indicate a current recording storage failure without discarding previously saved observations. No folders, paths, or file bytes cross this command. All responses are private/no-store.',
+    detail: "Version 1.5 acknowledges timed Start after durable enrollment; an untimed Start still requests a one-shot run. Timed folder Start accepts optional queueOnly:true to recover an exact saved revision without prompting for native consent, while respecting prior Pause. The durable receipt binds config, revision and interval. Status may include connectionActivityVersion 1.0.0, latest jobs[].activity and live task.activity. The owning account can read a configuration's attempts using connection-activity with connectionId, optional before:{endedAt,id} and limit; returns records and next. " + 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. Version 1.1.0 adds optional owner-private roots[].sourcePath absolute POSIX location metadata in status and folder responses when the native Mac fileAccessVersion is at least 1.15.0. Missing paths require explicit destination selection; paths grant no ancestor access and are never relative file-operation inputs. Version 1.2.0 adds rootless resources read/save commands and optional resourceUsage in status. Device policy contains positive transferBytesPerSecond and scanBytesPerSecond plus integer cpuPercent 1–100. Current CPU, memory, upload/download/scan measurements come from the selected device; unavailable fields stay absent/null. Commands require Mac fileAccessVersion 1.16.0 and fileResourceLimitsVersion 1.1.0, never grant folder access or start jobs, and use the same owner/device/current-pairing/lease fences and immutable retry identities. Version 1.3.0 adds optional per-job directional progress to the same status heartbeat; unavailable measurements remain absent and older status/resource contracts retain their minimum versions. Version 1.4.0 adds the read-only history command with an inclusive start, exclusive end (Unix milliseconds), and 1–240 display buckets. The paired source device aggregates its locally retained observations; gaps and unavailable metrics stay null, and counts identify measured coverage. The source can indicate a current recording storage failure without discarding previously saved observations. No folders, paths, or file bytes cross this command. All responses are private/no-store.',
     auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; home storage only.' }, methods: ['GET', 'POST'],
     steps: ['Keep the installed app running on the selected device.', 'Enqueue a status, folder-management, start, pause or review command.', 'Read its result with the same deviceId and requestId.'],
     requestExamples: [{ name: 'Read device sync state', description: 'Ask the installed app for its current folders, jobs and transfer progress.', method: 'POST', body: { action: 'enqueue', deviceId: 'device-id', requestId: 'status-1', command: { action: 'status' } } }],
@@ -5999,14 +5999,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.10.0',
-		featureVersion: '1.10.0',
+		contractVersion: '1.11.0',
+		featureVersion: '1.11.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
-			'Version 1.9 preserves original filenames without a product character ceiling and plans objects up to the selected S3 multipart protocol capacity (10,000 parts of at most 5 GiB). Processing parts remain bounded; account storage admission and integrity checks still apply. ' +
+			'Version 1.11 accepts optional canonical contentFingerprint only with exact fileSyncOrigin, requestId and purpose=file. After the home database is explicitly activated, a verified same-account match reserves a distinct ready logical attachment without PUT; a concurrent first writer returns a retryable conflict and the caller reuses the original request. ' +
+      'Version 1.9 preserves original filenames without a product character ceiling and plans objects up to the selected S3 multipart protocol capacity (10,000 parts of at most 5 GiB). Processing parts remain bounded; account storage admission and integrity checks still apply. ' +
 			'Version 1.8 extends verified zero-byte originals to post, comment and message attachments. They use the same conditional object creation, exact-version empty SHA-256 verification and owner/request fencing as files, return partCount=0 with ready state, and retain normal draft expiry until committed. Image-only and recording purposes still require nonempty content. ' +
 			'Version 1.7 adds optional private fileSyncOrigin version 1 for purpose=file with an exact requestId and filename: deviceId, localRootId, optional cloudRootId, fileId, folderId and root-relative path. It is persisted before byte authority and immutable on retries, including explicitly supplied provenance on an exact old queued reservation. It is a client-reported original source/destination hint, never a native grant, current folder path or write authority. Standalone uploads remain unchanged. ' +
 			'Version 1.6.2 creates empty files with a conditional PUT before object verification, so the object-only storage role does not require ListBucket to distinguish missing keys. Existing objects and ambiguous replies still require exact identity, version, size and empty SHA-256 verification under the finalization lease. ' +
@@ -6079,13 +6080,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
 		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
-		detail:
+		detail: 'Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
@@ -6132,14 +6133,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
-		contractVersion: '1.7.0',
-		featureVersion: '1.7.0',
+		contractVersion: '1.8.0',
+		featureVersion: '1.8.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
-			'Version 1.7 preserves original filename metadata without a product character ceiling. ' +
+			'Version 1.8 verifies a reserved sync fingerprint against checksummed parts and the immutable object HEAD, then shares the physical allocation among independent owner references. ' +
+      'Version 1.7 preserves original filename metadata without a product character ceiling. ' +
 			'Version 1.6 extends the verified empty-object completion contract to post, comment and message purposes while preserving their draft retention and exact owner/request identity. Nonempty objects still pass normal quarantine and analysis. ' +
 			'Version 1.5.1 conditionally creates empty objects before HEAD verification; a missing object never requires a ListBucket grant. Conditional conflicts and lost replies reconcile only through the original identity, exact immutable version and empty checksum. Read/write denials are never treated as proof of absence. ' +
 			'Version 1.5 supports idempotent zero-byte file completion through a single-object PUT under the existing finalization lease. It never submits an empty multipart completion. Only server-verified empty file content is stamped moderation-skipped; other objects preserve quarantine and analysis. ' +
@@ -6196,14 +6198,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
 		summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
 		detail:
-			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
+			'Version 1.3 removes only the requested logical sync reference, deleting and refunding the shared exact object version only after the final eligible reference and retention hold expire. ' +
+      'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
@@ -6347,14 +6350,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
 		summary: 'Deletes an owned attachment object before refunding its storage.',
 		detail:
-			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
+			'Version 1.3 preserves bytes still referenced by another attachment in the same account and applies the shared byte refund only after final exact-version deletion. ' +
+      'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
@@ -6377,10 +6381,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-		id: 'file-sync-transfer-admissions', contractVersion: '1.3.1', featureVersion: '1.3.1', group: 'attachments',
+		id: 'file-sync-transfer-admissions', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'attachments',
 		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
 		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
-		detail: 'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
+		detail: 'Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
+      'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
 		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete, publish when explicitly admitted, or revoke only its own admission.' },
 		methods: ['POST'],
 		steps: [
@@ -6401,9 +6406,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
     // 1.2: config3 resource ceilings bind distinct v2 digest domains; legacy digests remain unchanged.
-    id: 'file-sync-batches', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments', title: 'Upload bounded small-file batches',
+    id: 'file-sync-batches', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'attachments', title: 'Upload bounded small-file batches',
     endpoint: '/api/v1/files/batches', summary: 'Prepare, verify and commit independent original file operations with fresh session authority.',
-    detail: 'Version 1.3.0 preserves optional symbolicLink metadata in observed CloudFile values. Symbolic-link writes use individual canonical file operations under api.files 1.9.0 and are excluded from bulk descriptors, whose existing cross-language digest does not bind link metadata. Link attachments contain only raw POSIX readlink target bytes, never dereferenced. Version 1.2.1 preserves immutable private upload provenance from the authorized descriptor before new byte grants and exact ready/finalizing retry recovery. It is not a native folder grant or a current path assertion. Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
+    detail: 'A verified same-account sync fingerprint can return a distinct ready reference without a PUT. A competing first upload returns a retryable member result. ' +
+      'Version 1.3.0 preserves optional symbolicLink metadata in observed CloudFile values. Symbolic-link writes use individual canonical file operations under api.files 1.9.0 and are excluded from bulk descriptors, whose existing cross-language digest does not bind link metadata. Link attachments contain only raw POSIX readlink target bytes, never dereferenced. Version 1.2.1 preserves immutable private upload provenance from the authorized descriptor before new byte grants and exact ready/finalizing retry recovery. It is not a native folder grant or a current path assertion. Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user session only; no device, PAT, app or service upload authority.' }, methods: ['POST'],
     steps: [
       'In 1.1.0 POST phase=folder-probe with a separate kind:folders v1 descriptor and domain-separated digest. At most256 original local folder-copy operations,320 KiB descriptor and512 KiB request/response. Parents are reviewed root, explicit existing actual ID or an earlier member ordinal whose original operation ID is already pinned as folderId. Aggregate owner-bound canonical Timeline receipts in chunks of128; exact accepted history is returned before source IO. No S3, payload, alternate receipt store or delete authority.',
@@ -6449,14 +6455,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.18.0',
-		featureVersion: '1.18.0',
+		contractVersion: '1.19.0',
+		featureVersion: '1.19.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Version 1.17.2 serves exact-version verified zero-byte cache reads after a successful backing object GET even when the storage response has no stream. Version 1.17.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
+			'Version 1.19 authorizes each logical sync attachment independently and resolves the verified shared bytes while preserving the attachment-specific version, disposition and retention. ' +
+      'Version 1.17.2 serves exact-version verified zero-byte cache reads after a successful backing object GET even when the storage response has no stream. Version 1.17.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused. Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
             'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
@@ -6620,14 +6627,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-cleanup',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Reap expired attachment drafts',
 		endpoint: '/api/v1/attachments/cleanup',
 		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
 		detail:
-			'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
+			'Version 1.3 retains shared exact bytes while an eligible sync reference exists; only final-reference cleanup can purge and refund those bytes. ' +
+      'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
       'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
 			'There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
@@ -14433,13 +14441,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
+      'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
       'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +

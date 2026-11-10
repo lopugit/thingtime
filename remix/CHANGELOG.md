@@ -155,6 +155,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   native upload. Explicit cancellation and expiry still apply.
   [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
 
+- 2026-11-11: Keep unsaved profile image edits and uploads when Edit profile
+  switches between the desktop dialog and mobile sheet. **Codex (AI)**
+
 - 2026-11-10: Edit profile and subspace images in the shared picker with
   reversible framing, CSS and image attributes. Builder and image editing use
   the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
@@ -174,6 +177,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
   resuming reporting; code exchange and refresh preserve the consented scopes.
+  **Codex (AI)**
+
+- 2026-11-10: Group device folders and their sync configs in one editable
+  management flow, prepare the first backup config on folder selection, and
+  enroll saved configs for background recovery. Add measured per-config activity
+  and same-account shared file content with reference-safe deletion and unique
+  payload accounting. Historical consolidation and shared-data-plane activation
+  retain explicit rollout gates. See [the contract and acceptance checklist](../docs/device-sync-configs.md).
+  [PR 1449 validation and rollout notes](../PRs/1449-codex-device-sync-configs--unify-device-folder-sync-configs-and-share-identical-file-content.md).
+  **Codex (AI)**
+
+- 2026-11-10: Document the production attachment-writer fence and rollback
+  boundary. A tested broad host rule also blocked Vercel Cron and was restored
+  to monitoring; activation remains gated on compatible writers and a narrower
+  retired-host fence. See [deployment notes](../VERCEL_DEPLOYMENTS.md).
   **Codex (AI)**
 
 - 2026-11-10: Show editable iPhone Photos backup activity with indexed counts,

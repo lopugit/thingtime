@@ -1,3 +1,6 @@
+import { attachmentBlobId, sameAttachmentBlobFingerprint, type AttachmentBlobData } from './attachmentBlobs';
+import { randomUUID } from 'node:crypto';
+import { validContentFingerprint, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { MAX_POST_ATTACHMENTS, attachmentCountLimit } from '../../../schemas/attachmentLimits';
@@ -11,6 +14,7 @@ import { applyUserStorageDelta, markUserStorageNeedsReconcile } from '../storage
 import { ACL_INHERIT, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
 import {
 	ATTACHMENT_ENVELOPE_VERSION,
+  ATTACHMENT_BLOB_THINGTIME,
   EMPTY_ATTACHMENT_PURPOSES,
   attachmentPurposeAllowsEmpty,
 	ATTACHMENT_THINGTIME,
@@ -24,6 +28,7 @@ import {
 	LINKED_ATTACHMENT_OBJECT_KEY_PREFIX,
 	type AttachmentAnnotationPatch,
 	type AttachmentCrystal,
+	type AttachmentBlobRef,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
 	type AttachmentState
@@ -68,6 +73,10 @@ export type AttachmentDoc = {
 	objectSizeBytes: number;
 	objectKey: string;
 	objectVersionId?: string;
+	attachmentExpectedFingerprint?: ContentFingerprint;
+	attachmentBlob?: AttachmentBlobRef;
+	// Null retains the billed old generation until a postcommit pass starts its URL drain.
+	attachmentRedundantDeleteAfter?: Date | null;
 	attachmentRequestFingerprint?: string;
 	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	// Canonical scoped publication records the verified native source separately from reservation input.
@@ -107,6 +116,7 @@ export type AttachmentDoc = {
 
 type PendingInput = {
 	fileSyncOrigin?: FileSyncUploadOrigin;
+	expectedFingerprint?: ContentFingerprint;
 	id: string;
 	ownerId: string;
 	crystal: AttachmentCrystal;
@@ -162,7 +172,11 @@ export class AttachmentBindingError extends StorageMutationError {
 	}
 }
 
-const canonicalStoredBytes = (doc: AttachmentDoc): number => {
+export class AttachmentBlobBusyError extends Error {
+  constructor() { super('Identical file bytes are still being stored or released. Retry the same request.'); this.name = 'AttachmentBlobBusyError'; }
+}
+
+const canonicalStoredBytes = (doc: Parameters<typeof currentContentStorageSizeBytes>[0]): number => {
 	const bytes = currentContentStorageSizeBytes(doc);
 	if (bytes === null) {
 		throw new StorageMutationError(409, 'storage_conflict', 'This attachment requires the current storage migration before it can be changed');
@@ -171,6 +185,20 @@ const canonicalStoredBytes = (doc: AttachmentDoc): number => {
 };
 
 const attachmentMatch = (id: string) => ({ shareId: id, thingtime: ATTACHMENT_THINGTIME });
+
+const blobMatch = (ownerId: string, id: string) => ({ ownerId, shareId: id, thingtime: [ATTACHMENT_BLOB_THINGTIME] });
+type BlobDoc = ReturnType<typeof blobMatch> & {
+  _id?: unknown; objectSizeBytes: number; attachmentBlobData: AttachmentBlobData;
+  schemaVersion: number; storageClass: 'content'; storageAccountingVersion: number; sizeBytes: number;
+  crystal: Record<string, never>; extended: null; tags: []; acl: string[]; createdAt: Date; updatedAt: Date;
+  detected?: Pick<AttachmentCrystal, 'contentType' | 'mediaKind' | 'detectedContentType'>;
+};
+const matchAttachedBlob = (blob: BlobDoc | null, attachment: AttachmentDoc): blob is BlobDoc =>
+  !!blob && blob.ownerId === attachment.ownerId && blob.objectSizeBytes === attachment.objectSizeBytes &&
+  blob.shareId === attachment.attachmentBlob?.id &&
+  blob.attachmentBlobData.originAttachmentId === attachment.attachmentBlob?.objectAttachmentId &&
+  blob.attachmentBlobData.objectVersionId === attachment.attachmentBlob?.objectVersionId &&
+  canonicalStoredBytes(blob) === blob.objectSizeBytes;
 
 export type AttachmentStore = {
 	reservePending(input: PendingInput): Promise<AttachmentDoc>;
@@ -192,11 +220,13 @@ export type AttachmentStore = {
 		crystal: AttachmentCrystal,
 		objectVersionId: string,
 		expiresAt: Date,
-		leaseId: string
+		leaseId: string,
+    verifiedFingerprint?: ContentFingerprint
 	): Promise<AttachmentDoc>;
 	setObjectVersionId(ownerId: string, id: string, objectVersionId: string): Promise<AttachmentDoc>;
 	claimObjectlessPendingDeleting(ownerId: string, id: string, scope: AttachmentDraftDeleteClaimScope): Promise<AttachmentDoc | null>;
 	claimDeleting(ownerId: string, id: string, allowedStates: AttachmentState[], scope: AttachmentDeleteClaimScope): Promise<AttachmentDoc | null>;
+	prepareBlobDeletion?(ownerId: string, id: string): Promise<'deleted' | 'last' | 'skipped'>;
 	removeDeleting(ownerId: string, id: string): Promise<boolean>;
 	recordMpuCleanupVerification(ownerId: string, id: string, emptyVerifiedAt: Date | null, retryAt: Date, partsIssuedAt?: Date): Promise<void>;
 	deferDeletingRetry(ownerId: string, id: string, retryAt: Date): Promise<void>;
@@ -206,6 +236,105 @@ export type AttachmentStore = {
 	listReadyUndetected(limit: number, afterId?: string): Promise<AttachmentDoc[]>;
 	upgradeReadyCrystal(id: string, crystal: AttachmentCrystal, expectedObjectVersionId: string): Promise<AttachmentDoc>;
 };
+
+/** Resolve a maintenance candidate without exposing any locator to clients. */
+export async function findVerifiedBlobCandidate(ownerId: string, size: number, fingerprint: ContentFingerprint): Promise<AttachmentBlobRef | null> {
+  const id = attachmentBlobId(ownerId, size, fingerprint);
+  const row = await (await getHomeThingsCollection()).findOne(blobMatch(ownerId, id)) as BlobDoc | null;
+  if (!row || canonicalStoredBytes(row) !== size || row.attachmentBlobData.phase !== 'ready') return null;
+  return { id, objectAttachmentId: row.attachmentBlobData.originAttachmentId, objectVersionId: row.attachmentBlobData.objectVersionId! };
+}
+
+/** Install a physical alias only after the maintenance caller checked the exact
+ * original HEAD. The original logical locator and content version stay fixed. */
+export const consolidateLegacySyncAttachment = async (
+  observed: AttachmentDoc, fingerprint: ContentFingerprint, verifiedReplacement: AttachmentBlobRef | null, assertLease?: () => Promise<void>
+): Promise<'adopted' | 'aliased' | 'skipped'> => {
+  const { ownerId, shareId: id, objectSizeBytes: size, objectVersionId, objectKey } = observed;
+  if (!validContentFingerprint(fingerprint, size) || !isAttachmentObjectVersionId(objectVersionId) ||
+    objectKey !== 'objects/' + id || !observed.attachmentFileSyncOrigin || observed.attachmentBlob ||
+    observed.attachmentPurpose !== 'file' || observed.attachmentState !== 'ready' || observed.attachmentImportDraft ||
+    observed.attachmentLinked || observed.moderation?.status === 'blocked') return 'skipped';
+
+  const attempt = () => withHomeMongoTransaction(async (session) => {
+    const things = await getHomeThingsCollection();
+    const fence = { ...attachmentMatch(id), ownerId, attachmentState: 'ready', attachmentPurpose: 'file',
+      objectKey, objectVersionId, updatedAt: observed.updatedAt, sizeBytes: observed.sizeBytes, attachmentBlob: { $exists: false } };
+    const before = await things.findOne(fence, { session }) as AttachmentDoc | null;
+    if (!before) return 'skipped';
+    const blobId = attachmentBlobId(ownerId, size, fingerprint);
+    const filter = blobMatch(ownerId, blobId);
+    const blob = await things.findOne(filter, { session }) as BlobDoc | null;
+    const now = new Date();
+    let attachmentBlob: AttachmentBlobRef;
+    if (blob) {
+      const data = blob.attachmentBlobData;
+      if (canonicalStoredBytes(blob) !== size || data.phase !== 'ready' || data.references === Number.MAX_SAFE_INTEGER || !data.objectVersionId || data.originAttachmentId === id ||
+        verifiedReplacement?.id !== blobId || verifiedReplacement.objectVersionId !== data.objectVersionId ||
+        verifiedReplacement.objectAttachmentId !== data.originAttachmentId ||
+        !sameAttachmentBlobFingerprint(fingerprint, data.fingerprint, size)) return 'skipped';
+      attachmentBlob = { id: blobId, objectAttachmentId: data.originAttachmentId, objectVersionId: data.objectVersionId };
+      const increased = await things.updateOne(filter, { $inc: { 'attachmentBlobData.references': 1 }, $set: { updatedAt: now } }, { session });
+      if (increased.matchedCount !== 1) throw new AttachmentStoreConflictError();
+    } else {
+      if (verifiedReplacement) return 'skipped';
+      attachmentBlob = { id: blobId, objectAttachmentId: id, objectVersionId };
+      const data: AttachmentBlobData = { fingerprint, phase: 'ready', originAttachmentId: id, objectVersionId, references: 1 };
+      const detected = { contentType: before.crystal.contentType, mediaKind: before.crystal.mediaKind,
+        ...(before.crystal.detectedContentType ? { detectedContentType: before.crystal.detectedContentType } : {}) };
+      const fresh: BlobDoc = { ...filter, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, storageClass: 'content',
+        storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, sizeBytes: size, objectSizeBytes: size, crystal: {},
+        extended: null, tags: [], acl: [ACL_OWNER], createdAt: now, updatedAt: now, attachmentBlobData: data, detected };
+      await things.insertOne(fresh as any, { session });
+    }
+    const changed = { attachmentBlob, attachmentExpectedFingerprint: fingerprint, ...(blob ? { attachmentRedundantDeleteAfter: null } : {}) };
+    const sizeBytes = thingStorageSizeBytes({ ...before, ...changed });
+    // Conversion is byte-neutral; a redundant object remains fully accounted
+    // until the exact version is physically removed after URL expiry.
+    if (sizeBytes + (blob ? 0 : size) !== canonicalStoredBytes(before)) throw new AttachmentStoreConflictError('Sync consolidation storage changed');
+    const written = await things.updateOne(fence, { $set: { ...changed, sizeBytes, updatedAt: now } }, { session });
+    if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+    await assertLease?.();
+    return blob ? 'aliased' : 'adopted';
+  });
+  try { return await attempt(); }
+  catch (error) {
+    if (Number((error as any)?.code) !== 11000) throw error;
+    return attempt();
+  }
+};
+
+export async function beginRedundantAttachmentDrain(observed: AttachmentDoc, drainMs: number): Promise<Date | null> {
+  const { ownerId, shareId, objectKey, objectVersionId, attachmentBlob } = observed;
+  if (observed.attachmentRedundantDeleteAfter !== null || !attachmentBlob || !isAttachmentObjectVersionId(objectVersionId)) return null;
+  const things = await getHomeThingsCollection();
+  const fence = { ...attachmentMatch(shareId), ownerId, objectKey, objectVersionId, attachmentBlob };
+  const projection = { attachmentRedundantDeleteAfter: 1 };
+  // This update can only observe a committed alias. Use the database clock so
+  // an earlier migration snapshot or transaction retry cannot shorten the drain.
+  const started = await things.findOneAndUpdate(
+    { ...fence, attachmentRedundantDeleteAfter: { $type: 'null' } },
+    [{ $set: { attachmentRedundantDeleteAfter: { $add: ['$$NOW', drainMs] } } }],
+    { returnDocument: 'after', projection }
+  );
+  const current = started ?? await things.findOne({ ...fence, attachmentRedundantDeleteAfter: { $type: 'date' } }, { projection });
+  return current?.attachmentRedundantDeleteAfter instanceof Date ? current.attachmentRedundantDeleteAfter : null;
+}
+
+export const refundRedundantAttachmentObject = async (observed: AttachmentDoc): Promise<boolean> => withHomeMongoTransaction(async (session) => {
+  const { ownerId, shareId, objectKey, objectVersionId, attachmentBlob, attachmentRedundantDeleteAfter } = observed;
+  if (!attachmentBlob || !attachmentRedundantDeleteAfter) return false;
+  const things = await getHomeThingsCollection();
+  const fence = { ...attachmentMatch(shareId), ownerId, objectKey, objectVersionId, attachmentBlob, attachmentRedundantDeleteAfter };
+  const before = await things.findOne(fence, { session }) as AttachmentDoc | null;
+  if (!before) return false;
+  const sizeBytes = thingStorageSizeBytes({ ...before, attachmentRedundantDeleteAfter: undefined });
+  if (canonicalStoredBytes(before) - sizeBytes !== before.objectSizeBytes) throw new AttachmentStoreConflictError('Sync consolidation storage changed');
+  const written = await things.updateOne(fence, { $set: { sizeBytes, updatedAt: new Date() }, $unset: { attachmentRedundantDeleteAfter: '' } }, { session });
+  if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+  await applyUserStorageDelta(ownerId, -before.objectSizeBytes, session);
+  return true;
+});
 
 export const expiredAttachmentDraftFilter = (
 	expiredAtOrBefore: Date,
@@ -251,9 +380,11 @@ export const attachmentStore: AttachmentStore = {
       return { ...next, sizeBytes: nextSize };
     });
   },
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft, fileSyncOrigin }) {
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft, fileSyncOrigin, expectedFingerprint }) {
 		if (fileSyncOrigin && (purpose !== 'file' || recordingImportDraft)) throw new AttachmentBindingError(400, 'Sync origin requires an ordinary file reservation');
 		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
+    if (expectedFingerprint && (!fileSyncOrigin || !validContentFingerprint(expectedFingerprint, crystal.size)))
+      throw new AttachmentBindingError(400, 'Invalid sync upload fingerprint');
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -270,6 +401,7 @@ export const attachmentStore: AttachmentStore = {
 			attachmentState: 'pending' as const,
 			objectSizeBytes: crystal.size,
 			objectKey,
+      ...(expectedFingerprint ? { attachmentExpectedFingerprint: expectedFingerprint } : {}),
 			attachmentRequestFingerprint: requestFingerprint,
 			...(fileSyncOrigin ? { attachmentFileSyncOrigin: parseFileSyncUploadOrigin(fileSyncOrigin) } : {}),
 			attachmentPurpose: purpose,
@@ -279,13 +411,65 @@ export const attachmentStore: AttachmentStore = {
 			createdAt: now,
 			updatedAt: now
 		};
-		const doc: AttachmentDoc = { ...unstamped, sizeBytes: thingStorageSizeBytes(unstamped) };
-
-		await withHomeMongoTransaction(async (session) => {
-			await applyUserStorageDelta(ownerId, doc.sizeBytes, session);
-			await (await getHomeThingsCollection()).insertOne(doc as any, { session });
-		});
-		return doc;
+    const reserve = async () => withHomeMongoTransaction(async (session) => {
+      const things = await getHomeThingsCollection();
+      let pending: Omit<AttachmentDoc, 'sizeBytes'> = unstamped;
+      if (expectedFingerprint) {
+        const blobId = attachmentBlobId(ownerId, crystal.size, expectedFingerprint);
+        const filter = blobMatch(ownerId, blobId);
+        const existing = await things.findOne(filter, { session }) as BlobDoc | null;
+        if (existing) {
+          const data = existing.attachmentBlobData;
+          if (!sameAttachmentBlobFingerprint(expectedFingerprint, data.fingerprint, crystal.size) ||
+            existing.objectSizeBytes !== crystal.size || canonicalStoredBytes(existing) !== crystal.size ||
+            data.phase !== 'ready' || data.references === Number.MAX_SAFE_INTEGER || !data.objectVersionId || !existing.detected) throw new AttachmentBlobBusyError();
+          const attachmentBlob = { id: blobId, objectAttachmentId: data.originAttachmentId, objectVersionId: data.objectVersionId };
+          const readable = {
+            thingtime: ATTACHMENT_THINGTIME, ownerId, attachmentBlob, attachmentPurpose: 'file', attachmentState: 'ready',
+            attachmentLinked: { $ne: true }, attachmentImportDraft: { $ne: true }, 'moderation.status': { $ne: 'blocked' },
+            $or: [{ targetId: { $type: 'string', $ne: '' } }, { attachmentExpiresAt: { $exists: false } },
+              { attachmentExpiresAt: { $gt: new Date() } }]
+          };
+          // The common path is the indexed original ID. A remaining owner-
+          // readable alias can authorize reuse after that reference is removed.
+          const options = { session, projection: { _id: 1 } };
+          const source = await things.findOne({ ...readable, shareId: data.originAttachmentId }, options) ??
+            await things.findOne(readable, options);
+          if (source) {
+            // Write the exact witness so concurrent moderation or deletion
+            // conflicts with this transaction before a new readable alias lands.
+            const witness = await things.updateOne({ ...readable, _id: source._id },
+              { $set: { attachmentBlobReuseFence: randomUUID() } }, { session });
+            if (witness.matchedCount !== 1) throw new AttachmentStoreConflictError();
+            pending = { ...unstamped, crystal: { ...crystal, ...existing.detected }, attachmentState: 'ready', attachmentBlob,
+              objectVersionId: data.objectVersionId,
+              moderation: crystal.size === 0 ? { status: 'skipped', provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: now } : { status: 'pending' } };
+            if (isDurableRecordingUpload(pending)) delete pending.attachmentExpiresAt;
+            const ref = await things.updateOne(filter, { $inc: { 'attachmentBlobData.references': 1 }, $set: { updatedAt: now } }, { session });
+            if (ref.matchedCount !== 1) throw new AttachmentStoreConflictError();
+          }
+        } else {
+          const blob: BlobDoc = {
+            ...filter, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, storageClass: 'content',
+            storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION, sizeBytes: 0, objectSizeBytes: crystal.size,
+            crystal: {}, extended: null, tags: [], acl: [ACL_OWNER], createdAt: now, updatedAt: now,
+            attachmentBlobData: { fingerprint: expectedFingerprint, originAttachmentId: id, phase: 'staging', references: 0 }
+          };
+          await things.insertOne(blob as any, { session });
+        }
+      }
+      const doc: AttachmentDoc = { ...pending, sizeBytes: thingStorageSizeBytes(pending) };
+      await applyUserStorageDelta(ownerId, doc.sizeBytes, session);
+      await things.insertOne(doc as any, { session });
+      return doc;
+    });
+    try { return await reserve(); }
+    catch (error) {
+      // Competing first reservations may both see an empty slot under snapshot
+      // isolation. Re-read the winner once; the unique shareId fences insertion.
+      if (!expectedFingerprint || Number((error as any)?.code) !== 11000) throw error;
+      return reserve();
+    }
 	},
 
 	// A linked (external URL) attachment is born READY: there is no upload to
@@ -507,7 +691,7 @@ export const attachmentStore: AttachmentStore = {
 		)) as any as AttachmentDoc | null;
 	},
 
-	async markReady(ownerId, id, crystal, objectVersionId, expiresAt, leaseId) {
+	async markReady(ownerId, id, crystal, objectVersionId, expiresAt, leaseId, verifiedFingerprint) {
 		if (!isAttachmentObjectVersionId(objectVersionId)) throw new AttachmentStoreConflictError('Invalid object version');
 		if (!isAttachmentFinalizationLeaseId(leaseId)) throw new AttachmentStoreConflictError('Invalid finalization lease');
 		return withHomeMongoTransaction(async (session) => {
@@ -541,8 +725,33 @@ export const attachmentStore: AttachmentStore = {
 			delete next.uploadId;
 			delete next.attachmentFinalizationLeaseId;
 			delete next.attachmentPartsIssuedAt;
-			const nextSize = thingStorageSizeBytes(next);
-			const deltaBytes = nextSize - canonicalStoredBytes(before);
+      let blobBytes = 0;
+      let attachmentBlob: AttachmentBlobRef | undefined;
+      if (before.attachmentExpectedFingerprint) {
+        if (!sameAttachmentBlobFingerprint(before.attachmentExpectedFingerprint, verifiedFingerprint, before.objectSizeBytes))
+          throw new AttachmentStoreConflictError('Verified sync content fingerprint is required');
+        const blobId = attachmentBlobId(ownerId, before.objectSizeBytes, before.attachmentExpectedFingerprint);
+        const filter = { ...blobMatch(ownerId, blobId), 'attachmentBlobData.phase': 'staging', 'attachmentBlobData.originAttachmentId': id };
+        const blob = await things.findOne(filter, { session }) as BlobDoc | null;
+        // A reservation without a readable reuse witness uploads and verifies
+        // its own bytes. Only the reservation owning the staging blob may
+        // promote it. All other verified uploads retain their own payload charge.
+        if (blob) {
+          if (canonicalStoredBytes(blob) !== 0 || blob.objectSizeBytes !== before.objectSizeBytes ||
+            !sameAttachmentBlobFingerprint(before.attachmentExpectedFingerprint, blob.attachmentBlobData.fingerprint, before.objectSizeBytes))
+            throw new AttachmentStoreConflictError('Sync content reservation changed');
+          const data: AttachmentBlobData = { ...blob.attachmentBlobData, phase: 'ready', references: 1, objectVersionId };
+          const detected: NonNullable<BlobDoc['detected']> = { contentType: crystal.contentType, mediaKind: crystal.mediaKind,
+            ...(crystal.detectedContentType ? { detectedContentType: crystal.detectedContentType } : {}) };
+          blobBytes = thingStorageSizeBytes({ ...blob, attachmentBlobData: data });
+          const stored = await things.updateOne(filter, { $set: { attachmentBlobData: data, detected, sizeBytes: blobBytes, updatedAt: next.updatedAt } }, { session });
+          if (stored.matchedCount !== 1) throw new AttachmentStoreConflictError();
+          attachmentBlob = { id: blobId, objectAttachmentId: id, objectVersionId };
+        }
+      }
+      const ready = { ...next, ...(attachmentBlob ? { attachmentBlob } : {}) };
+			const nextSize = thingStorageSizeBytes(ready);
+			const deltaBytes = nextSize + blobBytes - canonicalStoredBytes(before);
 			await applyUserStorageDelta(ownerId, deltaBytes, session);
 
 			const write = await things.updateOne(
@@ -558,6 +767,7 @@ export const attachmentStore: AttachmentStore = {
 					$set: {
 						crystal,
 						objectVersionId,
+            ...(attachmentBlob ? { attachmentBlob } : {}),
 						attachmentState: 'ready',
 						moderation: next.moderation,
 						...(isDurableRecordingUpload(before) ? {} : { attachmentExpiresAt: expiresAt }),
@@ -569,7 +779,7 @@ export const attachmentStore: AttachmentStore = {
 				{ session }
 			);
 			if (!write.matchedCount) throw new AttachmentStoreConflictError();
-			return { ...next, sizeBytes: nextSize };
+			return { ...ready, sizeBytes: nextSize };
 		});
 	},
 
@@ -685,6 +895,32 @@ export const attachmentStore: AttachmentStore = {
 		} as any)) as any as AttachmentDoc | null;
 	},
 
+  async prepareBlobDeletion(ownerId, id) {
+    return withHomeMongoTransaction(async (session) => {
+      const things = await getHomeThingsCollection();
+      const attachment = await things.findOne({ ...attachmentMatch(id), ownerId, attachmentState: 'deleting' }, { session }) as AttachmentDoc | null;
+      if (!attachment?.attachmentBlob) return 'skipped';
+      if (attachment.attachmentRedundantDeleteAfter !== undefined)
+        throw new AttachmentStoreConflictError('Superseded file bytes still require cleanup');
+      const filter = blobMatch(ownerId, attachment.attachmentBlob.id);
+      const blob = await things.findOne(filter, { session }) as BlobDoc | null;
+      if (!matchAttachedBlob(blob, attachment)) throw new AttachmentStoreConflictError('Sync content reference changed');
+      const data = blob.attachmentBlobData;
+      if (data.phase === 'deleting' && data.deletingAttachmentId === id) return 'last';
+      if (data.phase !== 'ready') throw new AttachmentStoreConflictError('Sync content is already releasing');
+      if (data.references === 1) {
+        const written = await things.updateOne(filter, { $set: { 'attachmentBlobData.phase': 'deleting', 'attachmentBlobData.deletingAttachmentId': id, updatedAt: new Date() } }, { session });
+        if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+        return 'last';
+      }
+      const written = await things.updateOne(filter, { $inc: { 'attachmentBlobData.references': -1 }, $set: { updatedAt: new Date() } }, { session });
+      const removed = await things.deleteOne({ ...attachmentMatch(id), ownerId, attachmentState: 'deleting' }, { session });
+      if (written.matchedCount !== 1 || removed.deletedCount !== 1) throw new AttachmentStoreConflictError();
+      await applyUserStorageDelta(ownerId, -canonicalStoredBytes(attachment), session);
+      return 'deleted';
+    });
+  },
+
 	async removeDeleting(ownerId, id) {
 		return withHomeMongoTransaction(async (session) => {
 			const things = await getHomeThingsCollection();
@@ -692,11 +928,23 @@ export const attachmentStore: AttachmentStore = {
 				session
 			})) as any as AttachmentDoc | null;
 			if (!removed) return false;
+      let blobBytes = 0;
+      if (removed.attachmentBlob) {
+        const filter = blobMatch(ownerId, removed.attachmentBlob.id);
+        const blob = await things.findOne(filter, { session }) as BlobDoc | null;
+        if (!matchAttachedBlob(blob, removed) || blob.attachmentBlobData.phase !== 'deleting' || blob.attachmentBlobData.deletingAttachmentId !== id)
+          throw new AttachmentStoreConflictError('Sync content deletion was not claimed');
+        blobBytes = canonicalStoredBytes(blob);
+        if ((await things.deleteOne(filter, { session })).deletedCount !== 1) throw new AttachmentStoreConflictError();
+      } else if (removed.attachmentExpectedFingerprint) {
+        const filter = blobMatch(ownerId, attachmentBlobId(ownerId, removed.objectSizeBytes, removed.attachmentExpectedFingerprint));
+        await things.deleteOne({ ...filter, 'attachmentBlobData.phase': 'staging', 'attachmentBlobData.originAttachmentId': id }, { session });
+      }
 			const bytes = currentContentStorageSizeBytes(removed);
 			if (bytes === null) {
 				await markUserStorageNeedsReconcile(ownerId, session);
 			} else {
-				await applyUserStorageDelta(ownerId, -bytes, session);
+				await applyUserStorageDelta(ownerId, -(bytes + blobBytes), session);
 			}
 			return true;
 		});
