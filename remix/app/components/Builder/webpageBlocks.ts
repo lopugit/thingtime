@@ -1,3 +1,4 @@
+import type { PageCollectionBinding } from '~/schemas/pageCollections';
 import type { WebpageActivation } from '~/schemas/webpageActivation';
 
 // Client types and pure block-tree operations. The server validates each block;
@@ -13,6 +14,7 @@ export interface WebpageBlockSource {
 	action: string;
 	// Bind data without creating a local form, click or event boundary.
 	passive?: boolean;
+	collection?: PageCollectionBinding;
 	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
 	inputs?: Record<string, string | number | boolean>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.

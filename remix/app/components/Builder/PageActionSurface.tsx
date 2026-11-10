@@ -58,7 +58,11 @@ export const PageActionSurface = ({
 		// Native adapters may retain a callback across an async event.
 		if (heldRef.current) return;
 		if (input.op === 'query' && input.scope === 'page') {
-			runtime.setPageQuery(input.params);
+			runtime.setPageQuery(input.params, false, input.clearSelection);
+			return;
+		}
+		if (input.scope === 'page' && (input.op === 'toggle-member' || input.op === 'clear-selection')) {
+			runtime.updatePageSelection(input);
 			return;
 		}
 		if (input.op === 'query' || input.op === 'back') {
@@ -87,14 +91,17 @@ export const PageActionSurface = ({
 		setLocal((previous) => ({ identity, values: reduceLocalUi(previous.identity === identity ? previous.values : {}, parentScope, input) }));
 	};
 	const onAction = useTtActionClicks({ onUnowned, confirm, onLocal, fallbackGroup: expandedActionGroup });
+	const onPageAction = actionEnabled ? (event: React.MouseEvent<HTMLDivElement>) => {
+		if (isExpandedPageAction(event.target as Element)) onAction(event);
+	} : undefined;
 	return <ComponentLocalControl.Provider value={actionEnabled ? onLocal : null}>
-		<ComponentDataScope.Provider value={{ ...parentScope, ...values, ...(runtime.pageId ? { query: runtime.query, last: runtime.last, viewer: runtime.viewer, page: { id: runtime.pageId } } : {}) }}>
+		<ComponentDataScope.Provider value={{ ...parentScope, ...values, ...(runtime.pageId ? { query: runtime.query, last: runtime.last, viewer: runtime.viewer, page: { id: runtime.pageId, selection: runtime.selection } } : {}) }}>
 		<Box key={runtime.identity.key}
 		{...props}
 		ref={surfaceRef}
-		onClickCapture={actionEnabled ? (event: React.MouseEvent<HTMLDivElement>) => {
-			if (isExpandedPageAction(event.target as Element)) onAction(event);
-		} : undefined}
+		onClickCapture={onPageAction}
+		onMouseDownCapture={onPageAction}
+		onContextMenuCapture={onPageAction}
 		onChangeCapture={actionEnabled ? (event: React.ChangeEvent<HTMLDivElement>) => {
 			const field = event.target as HTMLInputElement;
 			if (!isExpandedPageControl(field) || field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;

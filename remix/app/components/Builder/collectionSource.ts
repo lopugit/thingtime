@@ -76,3 +76,45 @@ export function collectionOffsetPage(source: CollectionSource, result: unknown, 
  if (page.items.length > limit) throw new Error('The collection source exceeded the requested page size.');
  return page;
 }
+
+type CollectionSourceResponse = { status?: unknown; result?: unknown; cache?: unknown; [key: string]: unknown };
+
+/** A cursor-backed collection publishes only a complete set from a successful cursor read. */
+export async function loadCollectionPages(
+	source: CollectionSource,
+	run: (cursor?: string) => Promise<CollectionSourceResponse>,
+	stale: () => boolean,
+	initial = source.inputs[source.cursorInput] as unknown
+): Promise<CollectionSourceResponse> {
+	const seen = new Set<string>(typeof initial === 'string' && initial ? [initial] : []);
+	const points = new Map<unknown, unknown>();
+	let cursor: string | undefined;
+	let noStore = false;
+	do {
+		if (stale()) throw new Error('Collection source changed.');
+		const response = await run(cursor);
+		if (stale()) throw new Error('Collection source changed.');
+		if (response.status !== 'ok') return response;
+		const page = appendCollectionPage(source, response.result);
+		for (const point of page.items) points.set(componentScopeValue(point, source.itemKey), point);
+		noStore ||= response.cache === 'no-store';
+		cursor = page.cursor || undefined;
+		if (cursor && seen.has(cursor)) throw new Error('The collection source repeated a cursor.');
+		if (cursor) seen.add(cursor);
+	} while (cursor);
+	return { status: 'ok', result: [...points.values()], ...(noStore ? { cache: 'no-store' } : {}) };
+}
+
+
+export function indexCollectionRows(rows: unknown, keyPath: string): Record<string, unknown[]> {
+	const indexed: Record<string, unknown[]> = Object.create(null);
+	if (!Array.isArray(rows)) return indexed;
+	for (const row of rows) {
+		const key = componentScopeValue(row, keyPath);
+		if (!(typeof key === 'string' && key) && !(typeof key === 'number' && Number.isFinite(key))) continue;
+		const name = String(key);
+		if (['__proto__', 'constructor', 'prototype'].includes(name)) continue;
+		(indexed[name] ??= []).push(row);
+	}
+	return indexed;
+}

@@ -111,7 +111,7 @@ async function exercise(context, profile) {
 		contentType: 'text/css', body: '[aria-label="Composed fixture map"] { position: relative; background: #c8ded5 }'
 	}));
 	await page.route(origin + '/.well-known/thingtime-capabilities.json', route => route.fulfill({ json: {
-		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.2.0' }, 'api.webpages-resolve': { version: '1.10.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.39.0' } }
+		schemaVersion: 1, origin, features: { 'api.maps': { version: '1.2.0' }, 'api.webpages-resolve': { version: '1.16.0' }, 'api.attachment-content': { version: '1.12.0' }, 'api.actions-run': { version: '1.46.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } }
 	} }));
 	await page.route(origin + '/api/v1/maps', route => {
 		assert.equal(route.request().postDataJSON().operation, 'browser-config');
@@ -122,16 +122,24 @@ async function exercise(context, profile) {
 		return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4f64BAAUdAk6Fw5rJAAAAAElFTkSuQmCC', 'base64') });
 	});
 	let rank = 1;
+	const batches = [];
 	let releaseSlowDetail, releaseSlowSuggestion, releaseSave;
 	const slowSuggestionGate = new Promise(resolve => { releaseSlowSuggestion = resolve; });
 	const saveGate = new Promise(resolve => { releaseSave = resolve; });
 	const slowDetailGate = new Promise(resolveSlowDetail => { releaseSlowDetail = resolveSlowDetail; });
 	await page.route(origin + '/api/v1/actions/run', async route => {
 		const { action, inputs, sharedRoot } = route.request().postDataJSON();
-		assert.equal(sharedRoot, 'fixture-routes');
+		if (sharedRoot !== undefined) assert.equal(sharedRoot, 'fixture-routes');
+		if (action === 'fixture-keyed-metadata' || action === 'fixture-batch') assert.equal(sharedRoot, undefined);
 		calls.set(action, (calls.get(action) || 0) + 1);
 		let result;
-		if (action === 'fixture-favourites') {
+		if (action === 'fixture-keyed-metadata') {
+			result = inputs.cursor ? { items: [{ id: 'c', targetId: 'fixture-quay', label: 'Second annotation' }], nextCursor: null }
+				: { items: [{ id: 'a', targetId: 'fixture-quay', label: 'First annotation' }, { id: 'b', targetId: 'fixture-fern', label: 'Fern annotation' }], nextCursor: 'next' };
+		} else if (action === 'fixture-batch') {
+			batches.push(inputs);
+			result = {};
+		} else if (action === 'fixture-favourites') {
 			result = { items: [
 				{ id: 'fixture-quay', component: 'other-component', renderComponent: 'other-component', coordinates: [144.95, -37.81], crystal: { title: 'Copper Quay', markerIcon: '★', markerLabelMode: 'both', markerLabel: 'Coffee and a river walk', markerIcons: ['✦', '☕'], markerAvatarAttachmentId: 'fixture-avatar' } },
 				{ id: 'fixture-fern', coordinates: [144.97, -37.82], crystal: { title: 'Fern Library', markerLabelMode: 'title' } }
@@ -287,6 +295,8 @@ async function exercise(context, profile) {
 		await page.getByRole('button', { name: 'Open a deep link' }).click();
 		await page.waitForURL('**?favouriteId=fixture-fern');
 		await exerciseComposed(page, profile);
+		await page.goto(origin + '/p/fixture-routes?owned=1&group=first');
+		await exerciseSelection(page, profile, batches);
 		assert.deepEqual(errors, []);
 		console.log(profile + ' legacy and composed marker, details, search, list, draft, focus, manual refresh and navigation passed');
 	} catch (error) {
@@ -422,4 +432,50 @@ async function exerciseMarkerMenu(page, map, label, pulse, profile, structural =
  await show();await popup.waitFor();
  await popup.press('Escape');
  assert.equal(await trigger.evaluate(node => node === node.ownerDocument.activeElement), true);
+}
+
+
+async function exerciseSelection(page, profile, batches) {
+	const map = page.getByRole('region', { name: 'Composed fixture map' });
+	const first = map.getByRole('button', { name: /Saved · Copper Quay/ });
+	const second = map.getByRole('button', { name: /Saved · Fern Library/ });
+	await first.getByText('Second annotation').waitFor();
+	await second.getByText('Fern annotation').waitFor();
+	assert.equal(await first.getByText('Fern annotation').count(), 0);
+	assert.equal(await second.getByText('Second annotation').count(), 0);
+	if (profile === 'desktop') {
+		await first.click({ modifiers: ['Meta'] });
+		await page.getByText('Selection count: 1').waitFor();
+		// Cover browsers emitting both events in one Ctrl-primary gesture.
+		await first.evaluate((button) => {
+			for (const type of ['mousedown', 'contextmenu', 'click']) {
+				button.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, detail: 1, ctrlKey: true }));
+			}
+		});
+		await page.getByText('Selection count: 0').waitFor();
+		await first.click({ modifiers: ['Control'] });
+		await page.getByText('Selection count: 1').waitFor();
+		assert.equal(await first.getAttribute('aria-pressed'), 'true');
+		await first.click({ button: 'right' });
+		await page.getByRole('menuitem', { name: 'Toggle marker selection' }).waitFor();
+		await page.keyboard.press('Escape');
+	} else {
+		await first.tap();
+		await page.getByRole('button', { name: 'Marker commands for Copper Quay' }).tap();
+		await page.getByRole('menuitem', { name: 'Toggle marker selection' }).tap();
+		await page.getByText('Selection count: 1').waitFor();
+	}
+	await second.click({ modifiers: ['Meta'] });
+	await page.getByText('Selection count: 2').waitFor();
+	await page.getByRole('button', { name: 'Run selection batch' }).click();
+	await page.getByText('Batch processed: 2', { exact: true }).waitFor();
+	assert.deepEqual(batches, [{ group: 'first', ids: ['fixture-quay'] }, { group: 'first', ids: ['fixture-fern'] }]);
+	await page.getByText('Selection count: 2').waitFor();
+	await page.getByRole('button', { name: 'Select a new group' }).click();
+	await page.getByText('Selection count:', { exact: true }).waitFor();
+	await first.click({ modifiers: ['Meta'] });
+	await page.getByText('Selection count: 1').waitFor();
+	await page.getByRole('button', { name: 'Switch fixture database' }).click();
+	await page.getByText('Selection count:', { exact: true }).waitFor();
+	console.log(profile + ' keyed source, marker selection, context-menu parity, action chunks and identity reset passed');
 }
