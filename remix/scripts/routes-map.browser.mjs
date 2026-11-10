@@ -435,6 +435,45 @@ async function exerciseMarkerMenu(page, map, label, pulse, profile, structural =
 }
 
 
+async function exerciseMarkerHitTesting(page, profile, rear, front) {
+	await rear.scrollIntoViewIfNeeded();
+	const rearHandle = await rear.elementHandle();
+	const hit = await front.evaluate((frontButton, rearButton) => {
+		const anchor = frontButton.closest('div[data-tt-map-point]');
+		const map = anchor.parentElement;
+		const originalStyle = anchor.getAttribute('style');
+		const box = map.getBoundingClientRect();
+		const rearBox = rearButton.getBoundingClientRect();
+		const x = rearBox.x + rearBox.width / 2;
+		const y = rearBox.y + rearBox.height / 2;
+		const left = x - box.left - 8;
+		const top = y - box.top - 8;
+		Object.assign(anchor.style, {
+			left: left + 'px', top: top + 'px', width: '220px', height: '115px', transform: 'none', zIndex: '3'
+		});
+		const frontBox = frontButton.getBoundingClientRect();
+		const at = (x, y) => document.elementFromPoint(x, y);
+		return {
+			originalStyle, x, y,
+			scaled: getComputedStyle(anchor.querySelector('[data-tt-map-marker-visual]')).transform,
+			frontCoversRear: anchor.getBoundingClientRect().right > x && anchor.getBoundingClientRect().bottom > y,
+			rearControl: rearButton.contains(at(x, y)),
+			frontControl: frontButton.contains(at(frontBox.x + frontBox.width / 2, frontBox.y + frontBox.height / 2)),
+			mapSurface: at(box.left + left + 212, box.top + top + 107) === map,
+		};
+	}, rearHandle);
+	await rearHandle.dispose();
+	assert.equal(hit.scaled, 'matrix(0.5, 0, 0, 0.5, 0, 0)');
+	assert.equal(hit.frontCoversRear, true);
+	assert.equal(hit.rearControl, true, 'transparent foreground anchor must not intercept the rear control');
+	assert.equal(hit.frontControl, true, 'foreground authored button remains interactive');
+	assert.equal(hit.mapSurface, true, 'empty foreground anchor area leaves the map surface hittable');
+	if (profile === 'mobile') await page.touchscreen.tap(hit.x, hit.y);
+	else await page.mouse.click(hit.x, hit.y);
+	await page.getByText('Selected marker: fixture-quay', { exact: true }).waitFor();
+	await front.evaluate((button, style) => button.closest('div[data-tt-map-point]').setAttribute('style', style), hit.originalStyle);
+}
+
 async function exerciseSelection(page, profile, batches) {
 	const map = page.getByRole('region', { name: 'Composed fixture map' });
 	const first = map.getByRole('button', { name: /Saved · Copper Quay/ });
@@ -443,6 +482,7 @@ async function exerciseSelection(page, profile, batches) {
 	await second.getByText('Fern annotation').waitFor();
 	assert.equal(await first.getByText('Fern annotation').count(), 0);
 	assert.equal(await second.getByText('Second annotation').count(), 0);
+	await exerciseMarkerHitTesting(page, profile, first, second);
 	if (profile === 'desktop') {
 		await first.click({ modifiers: ['Meta'] });
 		await page.getByText('Selection count: 1').waitFor();
@@ -456,7 +496,15 @@ async function exerciseSelection(page, profile, batches) {
 		await first.click({ modifiers: ['Control'] });
 		await page.getByText('Selection count: 1').waitFor();
 		assert.equal(await first.getAttribute('aria-pressed'), 'true');
-		await first.click({ button: 'right' });
+		const menuTarget = first.locator('xpath=..');
+		assert.equal(await menuTarget.getAttribute('data-tt-menu-slot'), 'target');
+		const point = await menuTarget.evaluate(target => {
+			const bounds = target.getBoundingClientRect();
+			return { x: bounds.left + bounds.width / 2, y: bounds.bottom - 2 };
+		});
+		assert.equal(await menuTarget.evaluate((target, { x, y }) => document.elementFromPoint(x, y) === target, point), true,
+			'plain authored menu padding remains hittable');
+		await page.mouse.click(point.x, point.y, { button: 'right' });
 		await page.getByRole('menuitem', { name: 'Toggle marker selection' }).waitFor();
 		await page.keyboard.press('Escape');
 	} else {
