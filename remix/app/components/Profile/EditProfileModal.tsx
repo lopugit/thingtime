@@ -57,8 +57,8 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     const current = userRef.current;
     setDisplayName(current?.displayName || '');
     setBio(current?.bio || '');
-		setAvatarMedia(preservedProfileMediaSnapshot(current?.avatarUrl || null));
-		setBannerMedia(preservedProfileMediaSnapshot(current?.bannerUrl || null));
+		setAvatarMedia(preservedProfileMediaSnapshot(current?.avatarUrl || null, current?.avatarPresentation));
+		setBannerMedia(preservedProfileMediaSnapshot(current?.bannerUrl || null, current?.bannerPresentation));
     setSaving(false);
   }, [open]);
 
@@ -84,7 +84,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
     if (!open) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
-			if (event.code === 'Escape' && !saving) {
+			if (event.code === 'Escape' && !saving && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('[data-image-editor]'))) {
         onClose();
       }
     };
@@ -125,12 +125,12 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 			const response = await api.v1.profile.update({
         displayName: displayName.trim() || null,
         bio: bio.trim() ? bio.trim() : null,
-				...profileMediaUpdateFields('avatar', avatarMedia.mutation),
-				...profileMediaUpdateFields('banner', bannerMedia.mutation)
+				...profileMediaUpdateFields('avatar', avatarMedia.mutation, avatarMedia.presentationUpdate, avatarMedia.presentationSource),
+				...profileMediaUpdateFields('banner', bannerMedia.mutation, bannerMedia.presentationUpdate, bannerMedia.presentationSource)
       });
 			if (!response?.user) throw new Error('invalid profile response');
-			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null);
-			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null);
+			avatarMediaRef.current?.commit(response.user.avatarUrl ?? null, response.user.avatarLinkedUrl ?? null, response.user.avatarPresentation);
+			bannerMediaRef.current?.commit(response.user.bannerUrl ?? null, response.user.bannerLinkedUrl ?? null, response.user.bannerPresentation);
       lopu({ title: 'Profile updated ✨', status: 'success' });
       onClose();
 		} catch (error: unknown) {
@@ -189,10 +189,11 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 
       {/* live preview */}
       <Box position="relative" paddingBottom="24px">
-				<ProfileBanner bannerUrl={bannerMedia.previewUrl} height="72px" radius="var(--tt-radius-md, 12px)" />
+				<ProfileBanner bannerUrl={bannerMedia.previewUrl} presentation={bannerMedia.previewPresentation} height="72px" radius="var(--tt-radius-md, 12px)" />
         <Box position="absolute" left="16px" bottom={0}>
           <ProfileAvatarCircle
 						avatarUrl={avatarMedia.previewUrl}
+						presentation={avatarMedia.previewPresentation}
             name={displayName || user?.displayName || user?.username || '?'}
             size="48px"
             fontSize="md"
@@ -239,6 +240,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.avatarUrl}
 					savedLinkedUrl={user.avatarLinkedUrl}
+					savedPresentation={user.avatarPresentation}
 					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}
@@ -254,6 +256,7 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 					ownerId={user.id}
 					savedUrl={user.bannerUrl}
 					savedLinkedUrl={user.bannerLinkedUrl}
+					savedPresentation={user.bannerPresentation}
 					privateUploadsEnabled={user.privateUploadsEnabled}
 					disabled={saving}
 					remainingBytes={user.storage.remainingBytes}
@@ -315,58 +318,38 @@ export const EditProfileModal = (props: EditProfileModalProps) => {
 				}}
       ></Box>
 
-      {isMobile ? (
+      {/* Keep the same form mounted while its dialog switches layouts. */}
+      <Center
+        className={isMobile ? 'editProfileSheet' : 'editProfileModal'}
+        position="fixed"
+        zIndex={DRAWER_MODAL_Z}
+        inset={0}
+        alignItems={isMobile ? 'flex-end' : 'center'}
+        padding={isMobile ? 0 : 6}
+        pointerEvents="none"
+      >
         <Box
-          className="editProfileSheet"
-          position="fixed"
-          zIndex={DRAWER_MODAL_Z}
-          right={0}
-          bottom={0}
-          left={0}
-          height="88vh"
-          sx={{
+          width={isMobile ? '100%' : '560px'}
+          maxWidth="100%"
+          height={isMobile ? '88vh' : undefined}
+          maxHeight={isMobile ? undefined : '86vh'}
+          sx={isMobile ? {
             '@supports (height: 100dvh)': {
               height: '88dvh'
             }
-          }}
+          } : undefined}
           background="var(--tt-card, white)"
-          borderTopRadius="var(--tt-radius-xl, 20px)"
-          boxShadow="0px -8px 30px rgba(0,0,0,0.18)"
-          transform={visible ? 'translateY(0)' : 'translateY(100%)'}
-          transition="transform 0.28s ease-out"
+          borderRadius={isMobile ? 'var(--tt-radius-xl, 20px) var(--tt-radius-xl, 20px) 0 0' : 'var(--tt-radius-lg, 16px)'}
+          boxShadow={isMobile ? '0px -8px 30px rgba(0,0,0,0.18)' : 'var(--tt-shadow-panel, 0px 18px 60px rgba(0,0,0,0.22))'}
+          transform={isMobile ? (visible ? 'translateY(0)' : 'translateY(100%)') : (visible ? 'scale(1)' : 'scale(0.96)')}
+          opacity={isMobile || visible ? 1 : 0}
+          transition={isMobile ? 'transform 0.28s ease-out' : 'transform 0.22s ease-out, opacity 0.22s ease-out'}
           overflowY="auto"
+          pointerEvents="all"
         >
           {content}
         </Box>
-      ) : (
-        <Center
-          className="editProfileModal"
-          position="fixed"
-          zIndex={DRAWER_MODAL_Z}
-          top={0}
-          right={0}
-          bottom={0}
-          left={0}
-          pointerEvents="none"
-          padding={6}
-        >
-          <Box
-            width="560px"
-            maxWidth="100%"
-            maxHeight="86vh"
-            background="var(--tt-card, white)"
-            borderRadius="var(--tt-radius-lg, 16px)"
-            boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0,0,0,0.22))"
-            transform={visible ? 'scale(1)' : 'scale(0.96)'}
-            opacity={visible ? 1 : 0}
-            transition="transform 0.22s ease-out, opacity 0.22s ease-out"
-            overflowY="auto"
-            pointerEvents="all"
-          >
-            {content}
-          </Box>
-        </Center>
-      )}
+      </Center>
     </>
   );
 };

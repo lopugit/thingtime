@@ -1,0 +1,45 @@
+import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
+
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { connectProvider, listConnections } from '~/api/utils/connections/connections';
+import { requestOrigin } from '~/api/utils/connections/oauth';
+import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+
+// GET /api/v1/connections — list the current user's linked third-party
+// accounts. POST — link one: { provider, fields: { … } } per the provider's
+// declared connect fields (see GET /api/v1/connections/providers).
+export const loader = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
+  const user = await getCurrentUser(request);
+  if (!user || user.accountKind === 'service') {
+    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const limit = await enforceRateLimit(request, 'connections.read', `user:${user.id}`);
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'Listing connections very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
+  }
+  const result = await listConnections(user, new URL(request.url).searchParams.get('includeNamed') === '1' ? requestOrigin(request) : undefined);
+  return json({ ok: true, ownerId: user.id, connections: result.connections }, { headers: { 'Cache-Control': 'private, no-store' } });
+});
+
+export const action = async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
+  const user = await getCurrentUser(request);
+  if (!user || user.accountKind === 'service') {
+    return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const limit = await enforceRateLimit(request, 'connections.write', `user:${user.id}`);
+  if (!limit.allowed) {
+    return json({ ok: false, error: 'Linking accounts very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
+  }
+  const unsupported = requireJsonContentType(request);
+  if (unsupported) return unsupported;
+  const body = await readJsonBody(request, 16 * 1024);
+  if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed. Reload before saving.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+  const result = await connectProvider(user, { provider: body?.provider, fields: body?.fields, named: body?.named, origin: requestOrigin(request) });
+  if (result.ok === false) {
+    return json({ ok: false, error: result.error }, { status: result.status });
+  }
+  return json({ ok: true, connection: result.connection, alreadyLinked: result.alreadyLinked });
+});

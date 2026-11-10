@@ -9,8 +9,11 @@ import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/regist
 import { clearUserActiveTheme } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { newThingMutationCapture } from '../timeline/recordMutation';
+import { recordThemeMutation } from '../timeline/themeContent';
 
-// Themes are THINGS now (thingtime ["theme"], see claude-todo/12): the resolved,
+// Themes are THINGS now (thingtime ["theme"], see
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): the resolved,
 // sanitized token document (see app/theme/tokens.ts) lives in crystal as
 // { name, theme }, and the legacy visibility enum maps onto the acl
 // (public → ['tt:all'], private → ['tt:user']). This module keeps the LEGACY
@@ -136,6 +139,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
   const things = await getThingsCollection();
   const themes = await getThemesCollection();
   const now = new Date();
+	const capture = newThingMutationCapture(ownerId);
 
   if (typeof input.id === 'string' && input.id) {
     // Update whichever store holds the doc: things first, legacy fallback.
@@ -192,6 +196,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 						updatedAt: now
 					};
+					await recordThemeMutation(things, before, updatedThing, capture, session);
 				});
 			} catch (error) {
 				const projected = storageFail(error);
@@ -267,6 +272,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 		await withHomeMongoTransaction(async (session) => {
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
+			await recordThemeMutation(things, null, thing, capture, session);
 		});
 	} catch (error) {
 		const projected = storageFail(error);
@@ -305,6 +311,27 @@ export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]>
   return mergeThemeDocs(thingDocs, legacyDocs).map(toPublicTheme);
 };
 
+// Public gallery list — every PUBLIC theme, newest-updated first, across both
+// eras (claude-todo/10 ✨ theme gallery). The acl/visibility filters mirror
+// getSharedTheme's public gate exactly, so a theme is listed iff its share
+// link would resolve.
+export const MAX_GALLERY_THEMES = 60;
+
+export const listPublicThemes = async (limit: number = MAX_GALLERY_THEMES): Promise<PublicTheme[]> => {
+  const cap = Math.max(1, Math.min(Math.floor(limit) || MAX_GALLERY_THEMES, MAX_GALLERY_THEMES));
+  const things = await getThingsCollection();
+  const thingDocs = (
+    await things
+      .find({ thingtime: 'theme', acl: ACL_ALL } as any)
+      .sort({ updatedAt: -1 })
+      .limit(cap)
+      .toArray()
+  ).map(themeThingToDoc);
+  const themes = await getThemesCollection();
+  const legacyDocs = await themes.find({ visibility: 'public' }).sort({ updatedAt: -1 }).limit(cap).toArray();
+  return mergeThemeDocs(thingDocs, legacyDocs).slice(0, cap).map(toPublicTheme);
+};
+
 // Public shared read — only returns public themes; 'not found' for private
 // ones so their existence isn't revealed.
 export const getSharedTheme = async (shareId: string): Promise<PublicTheme | null> => {
@@ -334,6 +361,7 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
     return { ok: false, status: 400, error: 'Theme id is required' };
   }
   const id = shareId.trim();
+	const capture = newThingMutationCapture(ownerId);
   // Delete from BOTH stores (owner-scoped, so someone else's shareId 404s like
 	// an unknown one). A Thing deletion refunds its exact before-image in the
 	// same transaction. A ready account is never allowed to mutate a leftover
@@ -353,6 +381,7 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 				const exactBytes = currentContentStorageSizeBytes(before);
 				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
+				await recordThemeMutation(things, before, null, capture, session);
 			}
 			deletedThing = !!before;
 			deletedLegacy = legacyRes.deletedCount > 0;

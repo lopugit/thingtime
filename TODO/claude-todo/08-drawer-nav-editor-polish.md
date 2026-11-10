@@ -6,7 +6,12 @@ fixed/refined independently rather than needing a full plan doc.
 
 ## 1. Groups in drawer: click *and* draggable
 
-- Status: partially done.
+- Status: ✅ done 2026-07-21. Group sections are drag-reorderable via their
+  headers (hold-to-drag, same `ReorderableList` primitive with a new
+  `shouldStartDrag` handle predicate so nested per-item lists keep their own
+  drags); ordering persists through the existing per-top-item
+  `userDrawerOrdering` flat list (section order = first-appearance order).
+  Header click still toggles collapse; live-verified incl. reload persistence.
 - What exists: group headers (`Modes`, `Vercel`, `Database`, etc. defined in
   `drawerMenu.tsx`) already toggle collapse/expand on click
   (`DrawerContent.tsx` `toggleGroupCollapsed`, ~L399-427). Items *within* a
@@ -21,7 +26,8 @@ fixed/refined independently rather than needing a full plan doc.
 
 ## 2. "Thingtime" brand name in drawer → link home
 
-- Status: not started.
+- Status: ✅ already shipped on main (verified 2026-07-21): the brand row is a
+  button (`title="Home"`, `onBrandClick` → navigate('/') + close).
 - What exists: the brand row in `DrawerContent.tsx` (~L303-317) is a static
   `Flex`/`Text` ("Thingtime" + unicorn icon), not a link.
 - Action: wrap it in the router `Link` (as used elsewhere in the drawer)
@@ -56,7 +62,10 @@ fixed/refined independently rather than needing a full plan doc.
 
 ## 5. Improve hover context window on "things" property names/key paths
 
-- Status: partially done / needs polish.
+- Status: ✅ done 2026-07-21. Hovering a property key (`thingPathDom-raw`)
+  shows the full dotted path after a 450ms hover intent, in the same style as
+  the seedling row's context window; long paths ellipsize
+  (`min(80vw, 560px)`), hides on leave. Live-verified on /edit.
 - What exists: `Thingtime.tsx` already renders a hover tooltip with the full
   dotted path (`safeJoin(fullPath)`, ~L1203-1216) — but only on the "add new
   child" seedling row (`showFullPathContext` state, ~L1193-1199), not when

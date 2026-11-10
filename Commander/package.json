@@ -1,0 +1,37 @@
+{
+  "name": "@thingtime/commander",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Thingtime Commander — a fast, cross-platform command launcher",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "corepack pnpm@10.12.1 build:protocol && corepack pnpm@10.12.1 build:indexer-client && corepack pnpm@10.12.1 build:compat && corepack pnpm@10.12.1 build:ui && corepack pnpm@10.12.1 build:daemon",
+    "build:protocol": "corepack pnpm@10.12.1 --filter @commander/protocol build",
+    "build:indexer-client": "corepack pnpm@10.12.1 --filter @commander/filesystem-indexer build",
+    "build:compat": "corepack pnpm@10.12.1 --filter @commander/raycast-compat build",
+    "build:ui": "corepack pnpm@10.12.1 --filter @commander/desktop-ui build",
+    "build:daemon": "corepack pnpm@10.12.1 --filter @commander/daemon build",
+    "dev": "corepack pnpm@10.12.1 --filter @commander/desktop-ui dev",
+    "dev:daemon": "corepack pnpm@10.12.1 --filter @commander/daemon dev",
+    "test": "corepack pnpm@10.12.1 build:protocol && corepack pnpm@10.12.1 build:indexer-client && corepack pnpm@10.12.1 build:compat && corepack pnpm@10.12.1 -r test && corepack pnpm@10.12.1 test:raycast-extension",
+    "test:raycast-extension": "vitest run tests/regexToReplacementConverter.test.ts",
+    "typecheck": "corepack pnpm@10.12.1 build:protocol && corepack pnpm@10.12.1 build:indexer-client && corepack pnpm@10.12.1 build:compat && corepack pnpm@10.12.1 -r typecheck",
+    "lint": "corepack pnpm@10.12.1 build:protocol && corepack pnpm@10.12.1 build:indexer-client && corepack pnpm@10.12.1 build:compat && corepack pnpm@10.12.1 -r lint",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "version:check": "node ./script/release-version.mjs check",
+    "version:bump": "node ./script/release-version.mjs bump",
+    "build:macos": "./script/build_and_run.sh --build-only",
+    "run:macos": "./script/build_and_run.sh",
+    "verify:macos": "./script/build_and_run.sh --verify"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

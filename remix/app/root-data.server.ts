@@ -1,11 +1,17 @@
 import { json } from './api/http';
+import { getDeploymentDataEnvironment, type DeploymentDataEnvironment } from './api/utils/deployment/dataEnvironment';
 import { getCurrentUser } from './api/utils/auth/getCurrentUser';
 import { isVercelStatusEnabled } from './api/utils/vercel/environment';
 import { Session } from './cookies.server';
+import { getRequestMongoEndpoint } from './api/utils/mongodb/endpoint';
+import { mongoDataPlane } from './api/utils/mongodb/dataPlane';
 
 export type RootLoaderData = {
-  envFromCookie: Record<string, string | undefined>;
-  devKitEnv: Record<string, string | undefined>;
+	dataPlane: string;
+	envFromCookie: Record<string, string | undefined>;
+	/** Public, non-secret database/authentication authority for this deployment. */
+	dataEnvironment: DeploymentDataEnvironment | null;
+	devKitEnv: Record<string, string | undefined>;
   titlePrefix: string;
   user: Awaited<ReturnType<typeof getCurrentUser>>;
 };
@@ -30,6 +36,10 @@ const getDeploymentBranchName = () => {
     process.env.THINGTIME_BRANCH_NAME ||
     'git/unknown'
   );
+};
+
+const getDeploymentCommitSha = () => {
+  return process.env.VERCEL_GIT_COMMIT_SHA || process.env.THINGTIME_GIT_COMMIT_SHA;
 };
 
 export async function loadRootData(request: Request) {
@@ -60,13 +70,15 @@ export async function loadRootData(request: Request) {
     process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
   processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
   processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
-  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = getDeploymentCommitSha();
   processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = isVercelStatusEnabled() ? 'true' : 'false';
 
   return {
-    data: {
-      envFromCookie: { ...processEnv },
-      devKitEnv,
+		data: {
+			dataPlane: mongoDataPlane(await getRequestMongoEndpoint(request)),
+			envFromCookie: { ...processEnv },
+			dataEnvironment: getDeploymentDataEnvironment(),
+			devKitEnv,
       titlePrefix,
       user: await getCurrentUser(request)
     } satisfies RootLoaderData,
@@ -74,7 +86,7 @@ export async function loadRootData(request: Request) {
       'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
       'Pragma': 'no-cache',
       'Set-Cookie': await Session.serialize({ ...cookie, pingCounter }),
-      'Vary': 'Cookie'
+      'Vary': 'Cookie, x-tt-mongo-url'
     }
   };
 }

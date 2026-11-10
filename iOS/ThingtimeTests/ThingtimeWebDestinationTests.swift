@@ -2,10 +2,10 @@ import XCTest
 @testable import Thingtime
 
 final class ThingtimeWebDestinationTests: XCTestCase {
-    func testHomeURLLoadsProductionThingtime() {
-        XCTAssertEqual(ThingtimeWebDestination.home.absoluteString, "https://thingtime.com")
-        XCTAssertEqual(ThingtimeWebDestination.home.scheme, "https")
-        XCTAssertEqual(ThingtimeWebDestination.home.host, "thingtime.com")
+    func testProductionDestinationLoadsProductionThingtime() {
+        XCTAssertEqual(ThingtimeWebDestination.production.url.absoluteString, "https://thingtime.com")
+        XCTAssertEqual(ThingtimeWebDestination.production.url.scheme, "https")
+        XCTAssertEqual(ThingtimeWebDestination.production.url.host, "thingtime.com")
     }
 
     func testConfiguredHTTPSURLCanOverrideHomeURL() {
@@ -57,6 +57,53 @@ final class ThingtimeWebDestinationTests: XCTestCase {
         XCTAssertEqual(destinations.map(\.url.absoluteString), ["https://thingtime.com"])
     }
 
+    func testStartupMigratesLegacyProductionSelectionToConfiguredBuildOrigin() {
+        let destinations = ThingtimeWebDestination.availableDestinations(
+            from: ["ThingtimeWebURL": "https://pr-596.previews.dev.thingtime.com"]
+        )
+
+        let selection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: ThingtimeWebDestination.production.id,
+            lastConfiguredDestinationID: "",
+            hasExplicitSelection: false,
+            destinations: destinations
+        )
+
+        XCTAssertEqual(selection.selectedDestinationID, "https://pr-596.previews.dev.thingtime.com")
+        XCTAssertEqual(selection.lastConfiguredDestinationID, selection.selectedDestinationID)
+    }
+
+    func testStartupPreservesExplicitProductionSelection() {
+        let destinations = ThingtimeWebDestination.availableDestinations(
+            from: ["ThingtimeWebURL": "https://pr-596.previews.dev.thingtime.com"]
+        )
+
+        let selection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: ThingtimeWebDestination.production.id,
+            lastConfiguredDestinationID: "https://previous.preview.thingtime.com",
+            hasExplicitSelection: true,
+            destinations: destinations
+        )
+
+        XCTAssertEqual(selection.selectedDestinationID, ThingtimeWebDestination.production.id)
+        XCTAssertEqual(selection.lastConfiguredDestinationID, "https://pr-596.previews.dev.thingtime.com")
+    }
+
+    func testStartupFollowsChangedConfiguredOriginWhenSelectionWasNotExplicit() {
+        let destinations = ThingtimeWebDestination.availableDestinations(
+            from: ["ThingtimeWebURL": "https://new.preview.thingtime.com"]
+        )
+
+        let selection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: "https://old.preview.thingtime.com",
+            lastConfiguredDestinationID: "https://old.preview.thingtime.com",
+            hasExplicitSelection: false,
+            destinations: destinations
+        )
+
+        XCTAssertEqual(selection.selectedDestinationID, "https://new.preview.thingtime.com")
+    }
+
     func testAvailableDestinationsIncludesVercelDeploymentsFromAPI() {
         let deployments = [
             ThingtimeWebDestination.DeploymentSummary(
@@ -72,7 +119,7 @@ final class ThingtimeWebDestinationTests: XCTestCase {
                 url: "https://thingtime-git-codex-ios-deployment-url-picker-lopugits-projects.vercel.app"
             )
         ]
-        let destinations = ThingtimeWebDestination.availableDestinations(vercelDeployments: deployments)
+        let destinations = ThingtimeWebDestination.availableDestinations(from: nil, vercelDeployments: deployments)
 
         XCTAssertEqual(
             destinations.map(\.url.absoluteString),
@@ -101,7 +148,7 @@ final class ThingtimeWebDestinationTests: XCTestCase {
             )
         }
 
-        let destinations = ThingtimeWebDestination.availableDestinations(vercelDeployments: deployments)
+        let destinations = ThingtimeWebDestination.availableDestinations(from: nil, vercelDeployments: deployments)
 
         XCTAssertEqual(destinations.count, 51)
         XCTAssertEqual(destinations.first, ThingtimeWebDestination.production)

@@ -1,12 +1,34 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
-import { Box, Button, Flex, Image, Input } from '@chakra-ui/react';
+import { Box, Button, Flex, Input } from '@chakra-ui/react';
 
 import { timeAgo } from '../Feed/feedTypes';
-import { chatDisplayName, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
+import { chatDisplayName, externalSourceAvatar, memberDisplayName, type ChatSummary, type MessengerProfile } from './messengerTypes';
 import type { MessengerApi } from './useMessengerApi';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: string | null }) => {
+  if (chat.externalSource) {
+    // ChatGPT/Claude keep their brand discs; Lopu is the unicorn on a rainbow disc
+    const look = externalSourceAvatar(chat.externalSource);
+    return (
+      <Flex
+        width="42px"
+        height="42px"
+        borderRadius="full"
+        align="center"
+        justify="center"
+        background={look.background}
+        color={look.color}
+        fontSize="20px"
+        fontWeight={700}
+        flexShrink={0}
+        title={chat.externalSource.label}
+      >
+        {look.glyph}
+      </Flex>
+    );
+  }
   const others = (chat.members || []).filter((m) => m.userId !== viewerId);
   const shown = others.slice(0, 2);
   if (!shown.length) {
@@ -35,7 +57,7 @@ const StackedAvatars = ({ chat, viewerId }: { chat: ChatSummary; viewerId: strin
       flexShrink: 0
     };
     return profile?.avatarUrl ? (
-      <Image src={profile.avatarUrl} alt={letter} objectFit="cover" {...common} />
+      <Box {...common} overflow="hidden"><PresentedImage src={profile.avatarUrl} presentation={profile.avatarPresentation} alt={letter} /></Box>
     ) : (
       <Flex
         align="center"
@@ -80,7 +102,7 @@ export type InboxSidebarProps = {
 export const InboxSidebar = (props: InboxSidebarProps) => {
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<
-    Array<{ id: string; username: string; displayName: string | null; temporary?: boolean; avatarUrl: string | null }>
+    Array<MessengerProfile>
   >([]);
   const seqRef = React.useRef(0);
 
@@ -156,7 +178,7 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
 								flexShrink={0}
 							>
 								{person.avatarUrl ? (
-									<Image src={person.avatarUrl} width="28px" height="28px" objectFit="cover" />
+									<PresentedImage src={person.avatarUrl} presentation={person.avatarPresentation} alt={getUserDisplayName(person)} />
 								) : (
 									getUserDisplayName(person).slice(0, 1).toUpperCase()
 								)}
@@ -219,8 +241,12 @@ export const InboxSidebar = (props: InboxSidebarProps) => {
           const unread = chat.unreadCount > 0;
           const last = chat.lastMessage;
           const lastAuthor =
-            last && last.authorId === props.viewerId
+            last?.externalSource?.role === 'user'
               ? 'You'
+              : last?.externalSource
+                ? last.externalSource.authorName || last.externalSource.label
+                : last && last.authorId === props.viewerId
+                  ? 'You'
               : last
                 ? memberDisplayName((chat.members || []).find((m) => m.userId === last.authorId)) || last.authorName || ''
                 : '';

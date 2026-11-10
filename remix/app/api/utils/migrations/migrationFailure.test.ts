@@ -147,6 +147,27 @@ test('only an authored operator context can retain a MongoDB ObjectId for reveal
 	}
 });
 
+test('invalid attachment envelopes fail closed with a revealable source id', () => {
+	const objectId = '507f1f77bcf86cd799439011';
+	const originalConsoleError = console.error;
+	console.error = () => {};
+	try {
+		const result = migrationFailureResult(
+			'backfill-user-storage-accounting',
+			new MigrationOperatorError('invalid_attachment_envelope', {
+				internalMessage: `Attachment Thing ${objectId} has an invalid protected storage envelope`,
+				diagnosticObjectIds: [objectId]
+			})
+		);
+		assert.equal(result.status, 409);
+		assert.match(result.error, /attachment has an invalid protected storage envelope/i);
+		assert.doesNotMatch(result.error, new RegExp(objectId, 'i'));
+		assert.deepEqual(captureMigrationFailureDiagnostic(result)?.revealables.map((entry) => entry.value), [objectId]);
+	} finally {
+		console.error = originalConsoleError;
+	}
+});
+
 test('operator taxonomy validates dynamic prerequisite context', () => {
   const originalConsoleError = console.error;
   console.error = () => {};

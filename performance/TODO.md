@@ -318,6 +318,11 @@ obvious approach.
 
 ## Architecture — multi-node, cross-region and real-time
 
+The cross-region half of this section has a companion proposal:
+[docs/architecture/geo-distribution.md](../docs/architecture/geo-distribution.md).
+Its Phase 0 is precisely the round-trip items below, so fixing them first is a
+prerequisite there rather than a parallel effort.
+
 - [ ] **All real-time messaging is client polling; the open-chat poll refetches the entire page every 4s**  
       `remix/app/components/Messenger/ChatView.tsx:122` · **Critical** · fix safety: needs-care
 

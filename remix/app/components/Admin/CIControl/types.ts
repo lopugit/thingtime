@@ -24,6 +24,18 @@ export type CiEvent = CiEntity & {
   occurredAt?: string | null;
 };
 
+export type CiPreviewPolicy = {
+  id: string;
+  prNumber: number;
+  repository: string;
+  develop: boolean;
+  production: boolean;
+  headSha: string | null;
+  headRef: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
 export type CiDashboard = {
   repositories: CiEntity[];
   automations: CiAutomationPolicy[];
@@ -33,6 +45,7 @@ export type CiDashboard = {
   workflowRuns: CiEntity[];
   deployments: CiEntity[];
   previews: CiEntity[];
+  previewPolicies: CiPreviewPolicy[];
   dispatches: CiEntity[];
   events: CiEvent[];
   stats: {
@@ -71,6 +84,8 @@ export type CiIntegration = {
   providerRouterConfigured: boolean;
   vercelRunnerReady: boolean;
   vercelRunnerMissing: string[];
+  previewBuilderConfigured: boolean;
+  previewBuilderMissing: string[];
 };
 
 export type CiControlResponse = {
@@ -80,6 +95,7 @@ export type CiControlResponse = {
 };
 
 export type CiWorkflowKey =
+  | 'feature-stack'
   | 'resolve-conflicts'
   | 'rebase-stack'
   | 'promote-features'

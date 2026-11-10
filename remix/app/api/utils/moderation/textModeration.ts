@@ -1,3 +1,4 @@
+import { requestOmniModeration } from './omniRequest';
 // Post/comment TEXT moderation via OpenAI's free omni-moderation endpoint.
 // Text is where omni is at full strength: all 13 categories apply (including
 // sexual/minors, threats, and hate — the ones that are image-blind), so the
@@ -88,16 +89,14 @@ export const createOmniTextScreen = (env: NodeJS.ProcessEnv = process.env, fetch
 			...content.imageUrls.slice(0, MODERATED_IMAGE_URL_CAP).map((url) => ({ type: 'image_url', image_url: { url } }))
 		];
 		if (!input.length) throw new Error('moderation: nothing to screen');
-		const response = await fetchImpl(OPENAI_MODERATION_URL, {
+		const payload = (await requestOmniModeration(OPENAI_MODERATION_URL, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
 				Authorization: `Bearer ${env.OPENAI_API_KEY ?? ''}`
 			},
 			body: JSON.stringify({ model: OPENAI_MODERATION_MODEL, input })
-		});
-		if (!response.ok) throw new Error(`moderation: omni-moderation text request failed (${response.status})`);
-		const payload = (await response.json()) as { results?: OmniModerationResult[] };
+		}, fetchImpl)) as { results?: OmniModerationResult[] };
 		const result = payload?.results?.[0];
 		if (!result || typeof result.flagged !== 'boolean') {
 			throw new Error('moderation: malformed omni-moderation text response');

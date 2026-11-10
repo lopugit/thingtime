@@ -110,8 +110,13 @@ const SCOPE_ROWS = [
   },
   {
     id: 'profile',
-    shares: 'The whole public profile (covers every profile.* leaf)',
+    shares: 'The whole public profile (covers every non-exact profile.* leaf)',
     notes: 'Ancestors cover descendants — new leaves join automatically.'
+  },
+  {
+    id: 'profile.birthday',
+    shares: 'The birth date (YYYY-MM-DD) on the account',
+    notes: 'EXACT consent — private data, so even a full profile grant does NOT imply it; request it explicitly.'
   },
   {
     id: 'email',

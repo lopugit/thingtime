@@ -1,4 +1,4 @@
-import { json } from '~/api/http';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
 import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
@@ -6,7 +6,7 @@ import { createReadyAttachmentCommentInsertHook, inspectReadyAttachmentsForComme
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { attachmentPostActorAllowed, bodyHasAttachmentIds, postBodyWithoutAttachmentIds } from '~/api/utils/attachments/postCreate';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { addComment, viewerOf } from '~/api/utils/things/things';
+import { addComment, viewerOf, withLinkKeys } from '~/api/utils/things/things';
 
 // POST /api/v1/things/comment — { id, text } for a simple text comment, or
 // { id, type, text?, images?, listing?, thing?, tags? } for a rich comment (a
@@ -34,8 +34,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'You’re commenting too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...cors } });
   }
 
-  // same ceiling as post creation — rich comments carry image URL lists
-  const body = await readJsonBodyWithCors(request, 256 * 1024, cors);
+  const body = await readJsonBodyWithCors(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT, cors);
 	let bodyForComment = body || {};
 	let commentOptions: Parameters<typeof addComment>[4] | undefined;
   if (bodyHasAttachmentIds(body)) {
@@ -72,7 +71,14 @@ export const action = async ({ request }: { request: Request }) => {
 		bodyForComment = postBodyWithoutAttachmentIds(body as Record<string, unknown>);
 	}
 	const { id, ...rest } = bodyForComment as Record<string, unknown>;
-	const result = await addComment(viewerOf(user, actorPat(actor)), id, rest, app, commentOptions);
+	// body.key admits hidden-link holders to the thread their key reveals
+	const result = await addComment(
+		withLinkKeys(viewerOf(user, actorPat(actor)), [typeof (rest as any)?.key === 'string' ? (rest as any).key : '']),
+		id,
+		rest,
+		app,
+		commentOptions
+	);
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

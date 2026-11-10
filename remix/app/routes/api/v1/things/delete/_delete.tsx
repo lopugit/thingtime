@@ -36,8 +36,8 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
   const attachmentHooks =
     actor.kind !== 'app' && user.accountKind === 'user'
-      ? { beforeCascade: prepareAttachmentCascadeForThing }
-      : undefined;
+      ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body.expectedUpdatedAt }
+      : { expectedUpdatedAt: body.expectedUpdatedAt };
   const result = await deletePost(viewerOf(user, actorPat(actor)), body.id, app, attachmentHooks);
 
   if (result.ok === false) {

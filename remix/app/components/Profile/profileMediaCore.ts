@@ -1,3 +1,6 @@
+import type { ImagePresentation } from '../Media/imagePresentation';
+import { IMAGE_UPLOAD_CONTENT_TYPES } from '../Attachments/attachmentFileTypes';
+import { isHeicImage } from '../Attachments/heicImage';
 export type ProfileMediaSlot = 'avatar' | 'banner';
 
 export type ProfileMediaMutation =
@@ -9,12 +12,15 @@ export type ProfileMediaMutation =
 export type ProfileMediaFieldSnapshot = {
 	mutation: ProfileMediaMutation;
 	previewUrl: string | null;
+	previewPresentation: ImagePresentation | null;
+	presentationUpdate?: ImagePresentation | null;
+	presentationSource?: string;
 	blocking: boolean;
 };
 
 export const MAX_PROFILE_MEDIA_BYTES = 64 * 1024 * 1024;
 export const MAX_EXTERNAL_PROFILE_IMAGE_URL_CHARS = 2048;
-export const PROFILE_MEDIA_CONTENT_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export const PROFILE_MEDIA_CONTENT_TYPES = IMAGE_UPLOAD_CONTENT_TYPES;
 const PROFILE_MEDIA_CONTENT_TYPE_SET = new Set<string>(PROFILE_MEDIA_CONTENT_TYPES);
 
 export const isManagedProfileMediaUrl = (value: unknown): value is string => {
@@ -52,28 +58,34 @@ export const isExternalProfileImageUrl = (value: unknown): value is string => {
 export const initialExternalProfileImageUrl = (savedUrl: unknown): string =>
 	isManagedProfileMediaUrl(savedUrl) ? '' : isExternalProfileImageUrl(savedUrl) ? savedUrl.trim() : '';
 
-export const preservedProfileMediaSnapshot = (savedUrl: string | null): ProfileMediaFieldSnapshot => ({
+export const preservedProfileMediaSnapshot = (savedUrl: string | null, presentation: ImagePresentation | null = null): ProfileMediaFieldSnapshot => ({
 	mutation: { kind: 'preserve' },
 	previewUrl: savedUrl,
+	previewPresentation: presentation,
 	blocking: false
 });
 
-export const profileImageFileError = (file: Pick<File, 'size' | 'type'>): string | null => {
-	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase())) {
-		return 'Choose a JPEG, PNG, GIF, WebP, or AVIF image.';
+export const profileImageFileError = (file: Pick<File, 'size' | 'type'> & { name?: string }): string | null => {
+	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase()) && !isHeicImage(file)) {
+		return 'Choose a JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF image.';
 	}
 	if (!Number.isSafeInteger(file.size) || file.size < 1) return 'Choose an image that contains data.';
 	if (file.size > MAX_PROFILE_MEDIA_BYTES) return 'Profile images can be up to 64 MiB.';
 	return null;
 };
 
-export const profileMediaUpdateFields = (slot: ProfileMediaSlot, mutation: ProfileMediaMutation): Record<string, string | null> => {
+export const profileMediaUpdateFields = (slot: ProfileMediaSlot, mutation: ProfileMediaMutation, presentation?: ImagePresentation | null, presentationSource?: string): Record<string, string | ImagePresentation | null> => {
 	const urlField = `${slot}Url`;
 	const attachmentField = `${slot}AttachmentId`;
-	if (mutation.kind === 'preserve') return {};
-	if (mutation.kind === 'attachment') return { [attachmentField]: mutation.attachmentId };
-	if (mutation.kind === 'external') return { [urlField]: mutation.url.trim(), [attachmentField]: null };
-	return { [urlField]: null, [attachmentField]: null };
+	const fields: Record<string, string | ImagePresentation | null> =
+		presentation === undefined ? {} : { [slot + 'Presentation']: presentation };
+	if (presentation !== undefined && presentationSource !== undefined) fields[slot + 'PresentationSource'] = presentationSource;
+	if (mutation.kind === 'attachment') fields[attachmentField] = mutation.attachmentId;
+	else if (mutation.kind === 'external' || mutation.kind === 'clear') {
+		fields[urlField] = mutation.kind === 'external' ? mutation.url.trim() : null;
+		fields[attachmentField] = null;
+	}
+	return fields;
 };
 
 export const profileSaveErrorMessage = (error: unknown): string => {

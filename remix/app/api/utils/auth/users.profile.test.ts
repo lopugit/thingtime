@@ -28,6 +28,7 @@ const createHarness = (options: { thing?: any; legacy?: any; matchedCount?: numb
 	const session = { id: 'home-session' };
 	const updates: Array<{ store: 'thing' | 'legacy'; filter: any; update: any; options: any }> = [];
 	const reconciliations: any[] = [];
+	const secureMutations: any[] = [];
 	let transactions = 0;
 	const thingCollection = {
 		findOne: async (_filter: any, readOptions: any) => {
@@ -61,9 +62,15 @@ const createHarness = (options: { thing?: any; legacy?: any; matchedCount?: numb
 		},
 		findUser: async (id: string) => ({ _id: id }),
 		projectUser: async (user: any) => ({ id: String(user._id) } as any),
+		mutateSecure: async (_userId: string, mutate: (secure: any) => void) => {
+			const secure = { meta: {} };
+			mutate(secure);
+			secureMutations.push(secure);
+			return 'mutated' as const;
+		},
 		now: () => now
 	});
-	return { update, session, updates, reconciliations, transactions: () => transactions };
+	return { update, session, updates, reconciliations, secureMutations, transactions: () => transactions };
 };
 
 test('new and migrated user Things preserve only nonempty server-owned profile attachment refs at the root', () => {
@@ -146,6 +153,16 @@ test('profile media input rejects ambiguity, unsafe URLs, duplicate slot ids, an
 	}
 });
 
+test('hide-email preference is private, safe by default, and accepts only booleans', async () => {
+	const harness = createHarness();
+	assert.equal((await harness.update('user-1', { hideEmailOnProfile: true })).ok, true);
+	assert.equal(harness.transactions(), 0);
+	assert.deepEqual(harness.secureMutations, [{ meta: { hideEmailOnProfile: true } }]);
+
+	const invalid = await createHarness().update('user-1', { hideEmailOnProfile: 'no' });
+	assert.deepEqual(invalid, { ok: false, status: 400, error: 'Hide email on profile must be true or false' });
+});
+
 test('legacy profile updates use the same home transaction and attachment reconciliation contract', async () => {
 	const legacyId = '664f1c2a9d3e5b0012345678';
 	const harness = createHarness({
@@ -196,9 +213,87 @@ test('self projection exposes managed ids and linked fallbacks separately; publi
 	assert.equal(self.avatarLinkedUrl, 'https://images.example/fallback.jpg');
 	assert.equal(self.bannerAttachmentId, null);
 	assert.equal(self.bannerLinkedUrl, null);
+	assert.equal(self.hideEmailOnProfile, true);
 
 	const publicProfile = toPublicProfile(doc);
 	assert.equal(publicProfile.avatarUrl, '/api/v1/attachments/content?id=avatar-managed');
 	assert.equal(publicProfile.temporary, false);
 	assert.deepEqual(Object.keys(publicProfile).sort(), ['avatarUrl', 'bannerUrl', 'bio', 'createdAt', 'displayName', 'id', 'temporary', 'username']);
+	assert.equal(Object.prototype.hasOwnProperty.call(publicProfile, 'email'), false);
+
+	const shownOnOwnProfile = toPublicUser({ ...doc, meta: { hideEmailOnProfile: false } });
+	assert.equal(shownOnOwnProfile.hideEmailOnProfile, false);
+	assert.equal(Object.prototype.hasOwnProperty.call(toPublicProfile({ ...doc, meta: { hideEmailOnProfile: false } }), 'email'), false);
+});
+
+test('presentation-only changes retain managed media; source replacements and explicit resets clear saved presentation', async () => {
+	const presentation = { zoom: 150, attributes: { alt: 'A rainbow', decoding: 'async' }, css: { opacity: '0.8' } };
+	const existing = canonicalUser();
+	const thing = { ...existing, crystal: { ...existing.crystal, avatarPresentation: presentation } };
+	const edited = createHarness({ thing });
+	assert.equal((await edited.update('user-1', { avatarPresentation: { ...presentation, zoom: 125 } })).ok, true);
+	assert.deepEqual(edited.updates[0].update.$set['crystal.avatarPresentation'], { ...presentation, zoom: 125 });
+	assert.equal(edited.reconciliations.length, 0);
+	assert.equal(edited.updates[0].update.$set.avatarAttachmentId, undefined);
+
+	const replaced = createHarness({ thing });
+	assert.equal((await replaced.update('user-1', { avatarAttachmentId: 'avatar-next' })).ok, true);
+	assert.equal(replaced.updates[0].update.$set['crystal.avatarPresentation'], null);
+	const reset = createHarness({ thing });
+	assert.equal((await reset.update('user-1', { avatarPresentation: null })).ok, true);
+	assert.equal(reset.updates[0].update.$set['crystal.avatarPresentation'], null);
+});
+
+test('presentation cannot bind a missing source or override image requests and rejects CSS network fetches', async () => {
+	const missing = createHarness();
+	assert.equal((await missing.update('user-1', { bannerPresentation: { zoom: 150 } })).ok, false);
+	assert.equal(missing.updates.length, 0);
+	for (const avatarPresentation of [
+		{ attributes: { src: 'https://outside.example/collect.png' } },
+		{ attributes: { srcset: 'https://outside.example/collect.png' } },
+		{ attributes: { onerror: 'alert(1)' } },
+		{ attributes: { loading: 'fast' } },
+		{ css: { background: 'image-set("https://outside.example/collect.png" 1x)' } },
+		{ css: { background: String.raw`u\72l(https://outside.example/collect.png)` } }
+	]) {
+		const harness = createHarness();
+		const result = await harness.update('user-1', { avatarPresentation });
+		assert.equal(result.ok, false);
+		assert.equal(harness.transactions(), 0);
+	}
+});
+
+test('public profile projects valid presentation only beside a real source', () => {
+	const user = {
+		_id: 'user-1', username: 'lopu', createdAt: now,
+		bannerUrl: 'https://images.example/banner.jpg', bannerPresentation: { fit: 'contain', anchorY: 35 }
+	};
+	assert.deepEqual(toPublicProfile(user).bannerPresentation, user.bannerPresentation);
+	assert.equal(toPublicProfile({ ...user, bannerUrl: null }).bannerPresentation, undefined);
+	assert.equal(toPublicProfile({ ...user, bannerPresentation: { attributes: { src: 'https://untrusted.example/image.png' } } }).bannerPresentation, undefined);
+});
+
+test('an editor cannot apply or reset presentation on a concurrently replaced source', async () => {
+	const oldUrl = 'https://images.example/banner-a.png';
+	const replacement = 'https://images.example/banner-b.png';
+	const existing = canonicalUser();
+	const thing = { ...existing, crystal: { ...existing.crystal, bannerUrl: replacement } };
+	for (const bannerPresentation of [{ zoom: 140 }, null]) {
+		const stale = createHarness({ thing });
+		assert.deepEqual(await stale.update('user-1', { bannerPresentation, bannerPresentationSource: oldUrl }), {
+			ok: false, status: 409, error: 'Profile image changed while it was being edited'
+		});
+		assert.equal(stale.updates.length, 0);
+		assert.equal(stale.reconciliations.length, 0);
+	}
+	const matched = createHarness({ thing });
+	assert.equal((await matched.update('user-1', { bannerPresentation: { zoom: 140 }, bannerPresentationSource: replacement })).ok, true);
+	assert.deepEqual(matched.updates[0].update.$set['crystal.bannerPresentation'], { zoom: 140 });
+	assert.equal(matched.reconciliations.length, 0);
+
+	const managed = createHarness();
+	assert.equal((await managed.update('user-1', {
+		avatarPresentation: { zoom: 90 }, avatarPresentationSource: '/api/v1/attachments/content?id=avatar-old'
+	})).ok, true);
+	assert.equal(managed.reconciliations.length, 0);
 });

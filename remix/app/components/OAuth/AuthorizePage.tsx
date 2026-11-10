@@ -1,3 +1,4 @@
+import { ssoReturnUrl } from '../Account/ssoNavigation';
 import React from 'react';
 import { Box, Button, Flex } from '@chakra-ui/react';
 
@@ -59,6 +60,7 @@ const SCOPE_EMOJI: Record<string, string> = {
   'profile.avatar': '🖼️',
   'profile.bio': '📝',
   'profile.banner': '🎨',
+  'profile.birthday': '🎂',
   email: '💌',
   'app-data': '📦',
   'app-data.shared': '🤝',
@@ -219,6 +221,7 @@ export const AuthorizePage = () => {
   // redeems at its own /api/v1/auth/sso-session. Origins stay default-open;
   // the per-code binding is the security.
   const selfMode = !sandbox && !desktopFlow && params.get('self') === '1';
+  const selfRedirect = selfMode && params.get('redirect') === '1';
   // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
   // mint verbatim — the server validates
   const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
@@ -273,7 +276,7 @@ export const AuthorizePage = () => {
       // still runs so a signed-in visitor goes straight to the confirm card.
       try {
         const normalized = new URL(origin).origin;
-        if (normalized !== origin) throw new Error('origin must be a bare web origin');
+        if (normalized !== origin || !/^https?:$/.test(new URL(origin).protocol) || (selfRedirect && !ssoReturnUrl(origin, state, { cancelled: true }))) throw new Error('origin must be a bare web origin');
         setVerifiedOrigin(normalized);
       } catch {
         setInvalidReason('This link is missing a valid target origin.');
@@ -287,7 +290,7 @@ export const AuthorizePage = () => {
     }
 
     if (desktopFlow && (!desktopRedirect || !desktopChallenge || !desktopState)) {
-      setInvalidReason('This desktop login link is missing its loopback callback, random state, or S256 PKCE challenge.');
+      setInvalidReason('This desktop login link is missing its registered callback, random state, or S256 PKCE challenge.');
       return;
     }
 
@@ -301,7 +304,10 @@ export const AuthorizePage = () => {
     }
 
     fetchJson(
-      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}&origin=${encodeURIComponent(origin)}` +
+      `/api/v1/apps/public?clientId=${encodeURIComponent(clientId)}` +
+        (desktopFlow
+          ? `&redirect_uri=${encodeURIComponent(desktopRedirect!.uri)}`
+          : `&origin=${encodeURIComponent(origin)}`) +
         `&scope=${encodeURIComponent(scopeParam)}&optional_scope=${encodeURIComponent(optionalScopeParam)}`
     ).then((resp) => {
       if (resp?.ok && resp.app) {
@@ -370,10 +376,8 @@ export const AuthorizePage = () => {
     [requiredIds, selected]
   );
 
-  // "Share more" candidates: leaf/capability/picker scopes neither the
-  // required nor the optional set already covers (namespaces stay out — the
-  // fields say it better). Coverage, not exact id, so a leaf whose ancestor is
-  // already offered never double-appears.
+  // Show narrower alternatives when an optional parent permission is unticked.
+  // A selected parent already includes its leaves; required parents remain locked.
   const extraScopes = React.useMemo(
     () =>
       catalog.filter(
@@ -381,17 +385,20 @@ export const AuthorizePage = () => {
           scope.kind !== 'namespace' &&
           !scope.baseline &&
           !anyCovers(requiredIds, scope.id, exactIds) &&
-          !anyCovers(optionalIds, scope.id, exactIds)
+          !optionalIds.includes(scope.id) &&
+          !anyCovers(selection.filter((id) => id !== scope.id), scope.id, exactIds)
       ),
-    [catalog, requiredIds, optionalIds, exactIds]
+    [catalog, requiredIds, optionalIds, exactIds, selection]
   );
 
   const thingsActive = React.useMemo(() => anyCovers(selection, 'things'), [selection]);
+  const allThingsRead = anyCovers(selection, 'account.things.read', exactIds);
+  const pickerActive = thingsActive && !allThingsRead;
 
   // ---- things picker -------------------------------------------------------
 
   React.useEffect(() => {
-    if (!thingsActive || pickerThings !== null) return;
+    if (!pickerActive || pickerThings !== null) return;
 
     if (sandbox) {
       // Sandbox always uses mock things — it never reads the real account.
@@ -441,7 +448,7 @@ export const AuthorizePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [thingsActive, pickerThings, sandbox, user]);
+  }, [pickerActive, pickerThings, sandbox, user]);
 
   const pickedIds = React.useMemo(
     () => Object.keys(pickedThings).filter((id) => pickedThings[id]),
@@ -510,7 +517,7 @@ export const AuthorizePage = () => {
     }
 
     if (desktopFlow) {
-      if (!desktopRedirect || !desktopChallenge || !desktopState) {
+      if (!verifiedOrigin || !desktopRedirect || !desktopChallenge || !desktopState) {
         setIssueError('This window could not verify the app’s loopback callback. Close it and start the sign-in again.');
         setIssuing(false);
         return;
@@ -600,7 +607,7 @@ export const AuthorizePage = () => {
     setIssuing(true);
     setIssueError(null);
 
-    if (!verifiedOrigin || typeof window === 'undefined' || !window.opener) {
+    if (!verifiedOrigin || typeof window === 'undefined' || (!selfRedirect && !window.opener)) {
       setIssueError('This window lost its connection to the site that opened it. Close it and start the sign-in again.');
       setIssuing(false);
       return;
@@ -613,6 +620,10 @@ export const AuthorizePage = () => {
     });
 
     if (resp?.ok && resp.code) {
+      if (selfRedirect) {
+        const callback = ssoReturnUrl(verifiedOrigin, state, { code: resp.code });
+        if (callback) { window.location.replace(callback); return; }
+      }
       const delivered = postToOpener({ type: 'thingtime:sso', ok: true, code: resp.code });
       if (delivered) {
         setDone('approved');
@@ -627,6 +638,10 @@ export const AuthorizePage = () => {
   };
 
   const cancel = () => {
+    if (selfRedirect && verifiedOrigin) {
+      const callback = ssoReturnUrl(verifiedOrigin, state, { cancelled: true });
+      if (callback) { window.location.replace(callback); return; }
+    }
     if (desktopFlow && desktopRedirect && desktopState) {
       window.location.assign(
         appendDesktopAuthorizationResult(desktopRedirect.uri, {
@@ -863,7 +878,12 @@ export const AuthorizePage = () => {
           </Flex>
         ) : null}
 
-        {thingsActive ? (
+        {allThingsRead ? (
+          <Box padding={3} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface-alt, #f5f5f7)" fontSize="13px">
+            All Things access includes your private Things, beyond the picker. Uncheck it and use “Share more” for individual permissions, or “Things you choose” for a limited selection.
+          </Box>
+        ) : null}
+        {pickerActive ? (
           <Flex
             flexDirection="column"
             gap={1}
@@ -938,7 +958,7 @@ export const AuthorizePage = () => {
 
         <Flex gap={2} alignItems="center" fontSize="13px" color="var(--tt-muted, #9a9aa6)">
           <Box>🔒</Box>
-          <Box>It only ever gets what’s ticked above — never your password, posts, or other apps’ data.</Box>
+          <Box>Only the permissions approved above are granted. Your password and account security settings are never shared.</Box>
         </Flex>
 
         {issueError ? (

@@ -1,3 +1,7 @@
+import { passwordVerification } from '~/api/utils/passwords/verification';
+import { getAuthToken } from '~/api/utils/auth/authCookie';
+import { resolvePublicOrigin } from '~/api/utils/auth/publicOrigin';
+import { validPasswordId } from '~/passwords/model';
 import { json, readJsonBody } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -25,20 +29,33 @@ export const action = async ({ request }: { request: Request }) => {
 	}
 
 	const body = await readJsonBody(request, MAX_BODY_BYTES);
-	const confirmation = await confirmCurrentPassword(user.id, body?.password);
+	const origin = resolvePublicOrigin(request).origin;
+  if (request.headers.get('Sec-Fetch-Site') === 'cross-site' || (request.headers.get('Origin') && request.headers.get('Origin') !== origin)) return json({ok:false,error:'Use the same Thingtime origin.'},{status:403});
+  const token = await getAuthToken(request);
+  const remembered = body?.verificationRequestId !== undefined;
+  if (remembered && (!validPasswordId(body.verificationRequestId) || !token || request.headers.has('Authorization'))) return json({ok:false,error:'Use your current browser session.'},{status:400});
+  const context = {purpose:'account-create' as const,rp:new URL(origin).hostname};
+  let cookie:string|null=null;
+  const confirmation = remembered && !body?.password ? null : await confirmCurrentPassword(user.id, body?.password);
 	if (confirmation === 'unavailable') {
 		return json({ ok: false, error: 'This account has no password to confirm — contact support' }, { status: 400 });
 	}
-	if (confirmation !== 'confirmed') {
+	if ((!remembered || body?.password) && confirmation !== 'confirmed') {
 		return json({ ok: false, error: 'Wrong password' }, { status: 403 });
 	}
 
-	const result = await startPasskeyRegistration(user, request);
+	try {
+    if (remembered) { const who=await passwordVerification.identity(user.id,origin,token!); cookie=await passwordVerification.verify(request,who,context,body.verificationRequestId,confirmation==='confirmed'); }
+  } catch { return json({ok:false,error:'Verify your Thingtime password for this device.'},{status:403}); }
+  if ((await getCurrentUser(request))?.id !== user.id || await getAuthToken(request) !== token) return json({ok:false,error:'Your account session changed.'},{status:401});
+  const result = await startPasskeyRegistration(user, request, remembered ? {requestId:body.verificationRequestId,context} : undefined);
 	if (result.ok === false) {
 		return json({ ok: false, error: result.error }, { status: result.status });
 	}
 
 	const headers = new Headers();
+	headers.set('Cache-Control','private, no-store');
+  if(cookie) headers.append('Set-Cookie',cookie);
 	for (const cookie of result.setCookies) headers.append('Set-Cookie', cookie);
 	return json({ ok: true, options: result.options }, { headers });
 };

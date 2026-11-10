@@ -17,13 +17,17 @@ export const MessengerEmojiPicker = ({
   activeTokens,
   onPick,
   onUploadRequest,
-  autoFocus
+  autoFocus,
+  query,
+  onQueryChange
 }: {
   emojis: CustomEmoji[];
   activeTokens?: string[];
   onPick: (token: string) => void;
   onUploadRequest?: () => void;
   autoFocus?: boolean;
+  query?: string;
+  onQueryChange?: (value: string) => void;
 }) => {
   const user = useCurrentUser();
   const [tab, setTab] = React.useState<'emoji' | 'custom'>('emoji');
@@ -51,13 +55,13 @@ export const MessengerEmojiPicker = ({
   );
 
   return (
-    <Box width="320px" maxWidth="86vw">
+    <Box width="320px" maxWidth="min(100%, calc(100vw - 42px))">
       <Flex gap={1} marginBottom={2}>
         {tabButton('emoji', '😀 Emoji')}
         {tabButton('custom', `✨ Custom${emojis.length ? ` (${emojis.length})` : ''}`)}
       </Flex>
       {tab === 'emoji' ? (
-        <EmojiPicker onPick={onPick} recent={recent} activeTokens={activeTokens} autoFocus={autoFocus} />
+        <EmojiPicker onPick={onPick} recent={recent} activeTokens={activeTokens} autoFocus={autoFocus} query={query} onQueryChange={onQueryChange} />
       ) : (
         <Box maxHeight="280px" overflowY="auto">
           {recentCustom.length ? (

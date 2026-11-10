@@ -72,7 +72,7 @@ test('admin POST validates and persists the full ordered waterfall with actor id
     }
   });
 
-  const waterfall = ['claude-opus-5', 'claude-fable-5', 'default'];
+  const waterfall = ['claude-opus-5:high', 'claude-fable-5'];
   const response = await action({ request: postRequest({ waterfall }) });
   const body: any = await response.json();
 
@@ -96,7 +96,7 @@ test('admin POST rejects malformed and oversized bodies without writing', async 
   assert.equal(writes, 0);
 
   await assert.rejects(
-    () => action({ request: postRequest(JSON.stringify({ waterfall: ['default'], padding: 'x'.repeat(20_000) })) }),
+    () => action({ request: postRequest(JSON.stringify({ waterfall: ['default'], padding: 'x'.repeat(70_000) })) }),
     (error: unknown) => error instanceof Response && error.status === 413
   );
   assert.equal(writes, 0);

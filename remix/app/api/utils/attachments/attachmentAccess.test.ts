@@ -1,7 +1,9 @@
+import { foundPostId, foundPostDigest } from '../things/foundPosts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { attachmentTargetAclAllows, createCanViewHomeAttachmentTarget, profileAttachmentTargetAllows } from './attachmentAccess';
+import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 
 const post = (overrides: Record<string, unknown> = {}) => ({
 	shareId: 'post-1',
@@ -10,6 +12,18 @@ const post = (overrides: Record<string, unknown> = {}) => ({
 	targetId: null,
 	acl: ['tt:all'],
 	...overrides
+});
+
+test('attachment targets share the ordinary hidden-link, group, revocation and token fences', () => {
+	const hidden = post({ thingtime: ['webpage'], acl: ['tt:hidden'], linkKey: 'fixture-link' });
+	assert.equal(attachmentTargetAclAllows(hidden, null), true);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['wrong']) }), true);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['fixture-link']) }), true);
+	assert.equal(attachmentTargetAclAllows({ ...hidden, acl: ['tt:user'] }, { id: '', linkKeys: new Set(['fixture-link']) }), false);
+	const group = post({ acl: ['tt:custom', 'tt:group/group-1'] });
+	assert.equal(attachmentTargetAclAllows(group, { id: 'reader', groupIds: new Set(['group-1']) }), true);
+	assert.equal(attachmentTargetAclAllows(group, { id: 'reader', groupIds: new Set() }), false);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: 'owner-1', pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' } }), false);
 });
 
 test('narrow attachment target ACL check handles owners, public grants, exclusions, and fails closed', () => {
@@ -120,13 +134,18 @@ test('comment attachment authorization walks the exact home comment chain to the
 test('message attachment authorization requires the exact live message and an active or pending chat membership', async () => {
 	let memberState: string | null = 'active';
 	const canView = createCanViewHomeAttachmentTarget({
+		memberFilter: async (key) => thingUniqueKeyFilter('memberKey', key),
 		getThings: async () =>
 			({
 				findOne: async (filter: any) => {
 					if (filter.shareId === 'message-1') {
 						return { shareId: 'message-1', ownerId: 'author-1', thingtime: ['chat-message'], targetId: 'chat-1', crystal: {} };
 					}
+					if (filter.thingtime === 'chat' && filter.shareId === 'chat-1') return { shareId: 'chat-1', crystal: {} };
 					if (filter.thingtime === 'chat-member' && memberState && filter.ownerId === 'reader-1') {
+						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'chat-1:reader-1').uniqueKeys);
+						assert.equal(filter.targetId, 'chat-1');
+						assert.deepEqual(filter['crystal.state'], { $in: ['active', 'pending'] });
 						return { shareId: 'member-1', crystal: { state: memberState } };
 					}
 					return null;
@@ -150,6 +169,7 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 	let communityScoped = false;
 	let member = true;
 	const canView = createCanViewHomeAttachmentTarget({
+		memberFilter: async (key) => thingUniqueKeyFilter('memberKey', key),
 		getThings: async () =>
 			({
 				findOne: async (filter: any) => {
@@ -162,7 +182,13 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 							emojiAttachmentId: 'attachment-1'
 						};
 					}
-					if (filter.thingtime === 'community-member' && member) return { shareId: 'community-member-1' };
+					if (filter.thingtime === 'community' && filter.shareId === 'community-1') return { shareId: 'community-1', crystal: {} };
+					if (filter.thingtime === 'community-member' && member) {
+						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'community-1:reader-1').uniqueKeys);
+						assert.equal(filter.targetId, 'community-1');
+						assert.equal(filter.ownerId, 'reader-1');
+						return { shareId: 'community-member-1' };
+					}
 					return null;
 				}
 			} as any),
@@ -181,4 +207,85 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 	assert.equal(await canView({ id: 'reader-1' }, attachment), true);
 	member = false;
 	assert.equal(await canView({ id: 'reader-1' }, attachment), false);
+});
+
+test('post-purpose media binds to webpage targets too — authorized by the page ACL, filter-shape exact', async () => {
+	let captured: any = null;
+	let page: any = { shareId: 'page-1', ownerId: 'owner-1', thingtime: ['webpage'], targetId: null, acl: ['tt:all'] };
+	const canView = createCanViewHomeAttachmentTarget({
+		getThings: async () =>
+			({
+				findOne: async (filter: any) => {
+					captured = filter;
+					return page;
+				}
+			} as any),
+		getUsers: async () => ({ findOne: async () => null } as any)
+	});
+	const attachment = { shareId: 'att-1', ownerId: 'owner-1', attachmentPurpose: 'post', targetId: 'page-1' } as any;
+	// public page: anonymous viewer sees the media
+	assert.equal(await canView(null, attachment), true);
+	assert.deepEqual(captured.thingtime, { $in: ['post', 'webpage'] });
+	// private page: only the owner does
+	page = { ...page, acl: ['tt:user'] };
+	assert.equal(await canView(null, attachment), false);
+	assert.equal(await canView({ id: 'owner-1' } as any, attachment), true);
+});
+
+
+test('collected post content rechecks account/browser proof and the current link generation', async () => {
+ const target: any = post({ acl: ['tt:hidden'], linkKey: 'collected-key' });
+ const discovery = (id: string) => ({ shareId: foundPostId(id, target.shareId), ownerId: id, targetId: target.shareId, thingtime: ['post-discovery'], crystal: { linkKeyDigest: foundPostDigest('collected-key') } });
+ const receipts = [discovery('reader'), discovery('anonymous-fixture')];
+ const canRead = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (query: any) => query.shareId === target.shareId ? target : receipts.find(row => row.shareId === query.shareId) || null } as any) });
+ const media = { shareId: 'video', ownerId: target.ownerId, targetId: target.shareId, attachmentPurpose: 'post' as const };
+ assert.equal(await canRead({ id: 'reader' }, media), true);
+ assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), true);
+ assert.equal(await canRead(null, media), true);
+ assert.equal(await canRead({ id: 'someone-else' }, media), true);
+ assert.equal(await canRead({ id: 'reader', pat: { tokenId: 'pat', onlyCreatedThings: false } }, media), true);
+ target.linkKey = 'rotated';
+ assert.equal(await canRead({ id: 'reader' }, media), true);
+ target.linkKey = 'collected-key'; target.acl = ['tt:user'];
+ assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), false);
+});
+
+test('comment galleries inherit through media and remain private after root revocation', async () => {
+ const docs = new Map<string, any>([
+  ['reply', { shareId: 'reply', ownerId: 'author', thingtime: ['post', 'comment'], targetId: 'media', acl: ['tt:inherit'] }],
+  ['media', { shareId: 'media', ownerId: 'root-owner', thingtime: ['attachment'], targetId: 'post-1', acl: ['tt:inherit'] }],
+  ['post-1', post()]
+ ]);
+ const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (filter: any) => docs.get(filter.shareId) || null } as any) });
+ const file = { shareId: 'file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
+ assert.equal(await view(null, file), true);
+ docs.set('post-1', post({ acl: ['tt:user'] }));
+ assert.equal(await view(null, file), false);
+ assert.equal(await view({ id: 'owner-1' }, file), true);
+ docs.set('media', { ...docs.get('media'), targetId: 'reply' });
+ assert.equal(await view({ id: 'owner-1' }, file), false);
+});
+
+test('comment galleries on collected media load the discovery proof through the projected home lookup', async () => {
+ const root: any = post({ acl: ['tt:hidden'], linkKey: 'collected-key' });
+ const receipt = { shareId: foundPostId('anonymous-fixture', root.shareId), ownerId: 'anonymous-fixture', targetId: root.shareId, thingtime: ['post-discovery'], crystal: { linkKeyDigest: foundPostDigest('collected-key') } };
+ const docs = new Map<string, any>([
+  [root.shareId, root], [receipt.shareId, receipt],
+  ['media', { shareId: 'media', ownerId: root.ownerId, thingtime: ['attachment'], targetId: root.shareId, acl: ['tt:inherit'] }],
+  ['reply', { shareId: 'reply', ownerId: 'author', thingtime: ['post', 'comment'], targetId: 'media', acl: ['tt:inherit'] }]
+ ]);
+ const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (filter: any, options: any) => {
+  const doc = docs.get(filter.shareId);
+  if (doc === receipt) {
+   assert.equal(options?.projection?.['crystal.linkKeyDigest'], 1, 'discovery digest must survive the database projection');
+  }
+  return doc || null;
+ } } as any) });
+ const file = { shareId: 'comment-file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
+ const viewer = { id: '', anonymousId: 'anonymous-fixture' };
+ assert.equal(await view(viewer, file), true);
+ assert.equal(await view({ id: '', anonymousId: 'unrelated-browser' }, file), true);
+ assert.equal(await view({ id: '', anonymousId: 'anonymous-fixture', pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' } }, file), false);
+ root.linkKey = 'rotated';
+ assert.equal(await view(viewer, file), true);
 });

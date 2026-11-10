@@ -4,6 +4,8 @@ import UIKit
 struct ThingtimeWebView: View {
     private enum StorageKey {
         static let selectedDestinationID = "thingtime.webDestination.selectedID"
+        static let lastConfiguredDestinationID = "thingtime.webDestination.lastConfiguredID"
+        static let hasExplicitDestinationSelection = "thingtime.webDestination.hasExplicitSelection"
     }
 
     enum DeploymentsLoadState: Equatable {
@@ -16,7 +18,15 @@ struct ThingtimeWebView: View {
     private let deploymentsClient = ThingtimeWebDeploymentsClient()
 
     @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
+    @AppStorage(StorageKey.lastConfiguredDestinationID) private var lastConfiguredDestinationID = ""
+    @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var widgetPath: String?
+    @State private var lidarRequest: UUID?
+    @State private var invalidScanLink = false
+    @State private var pendingShare: UUID?
+    @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
     @State private var deploymentsLoadState = DeploymentsLoadState.idle
@@ -49,8 +59,21 @@ struct ThingtimeWebView: View {
             let drawerWidth = min(proxy.size.width - 48, 360)
 
             ZStack(alignment: .leading) {
-                WebView(url: selectedDestination.url)
-                    .ignoresSafeArea(.container, edges: [.bottom])
+                VStack(spacing: 0) {
+                    if let pendingShare {
+                        Button {
+                            widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: pendingShare)?.absoluteString
+                            self.pendingShare = nil
+                        } label: {
+                            Label("Continue shared draft", systemImage: "square.and.pencil")
+                                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .background(.regularMaterial)
+                        .accessibilityHint("Opens your unfinished share in the post composer")
+                    }
+                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, lidarRequest: $lidarRequest)
+                        .ignoresSafeArea(.container, edges: [.bottom])
+                }
 
                 if isDestinationPickerOpen {
                     Color.black.opacity(0.2)
@@ -68,8 +91,12 @@ struct ThingtimeWebView: View {
                     safeAreaInsets: proxy.safeAreaInsets,
                     onSelect: select,
                     onRefreshDeployments: refreshDeployments,
-                    onClose: closeDestinationPicker
+                    onClose: closeDestinationPicker,
+                    onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
+                    onMail: { closeDestinationPicker(); widgetPath = "/mail" },
+                    onScan: { closeDestinationPicker(); lidarRequest = UUID() }
                 )
+                .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
                 .frame(maxHeight: .infinity)
                 .offset(x: isDestinationPickerOpen ? 0 : -max(drawerWidth, 280))
@@ -79,17 +106,47 @@ struct ThingtimeWebView: View {
             .background(Color.white.ignoresSafeArea())
             .simultaneousGesture(openDrawerGesture(leadingEdgeWidth: 28))
             .animation(.easeOut(duration: 0.22), value: isDestinationPickerOpen)
-            .onAppear(perform: prepareDestinationState)
+            .sheet(isPresented: $widgetSettingsOpen) {
+                NavigationStack {
+                    WidgetPreferences().toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { widgetSettingsOpen = false } }
+                    }
+                }
+            }
+            .onOpenURL { url in
+                if url.scheme == "thingtime", url.host == "scan" {
+                    if LiDARLaunchRoute.accepts(url, selectedOrigin: selectedDestination.url) {
+                        closeDestinationPicker(); lidarRequest = UUID()
+                    } else { invalidScanLink = true }
+                } else { widgetPath = WidgetRoute.path(for: url) }
+            }
+            .alert("Scanner destination does not match", isPresented: $invalidScanLink) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Select the same Thingtime destination in the native drawer, then open the scanner again.")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction(); refreshPendingShare() } }
+            .onAppear { prepareDestinationState(); receiveWidgetAction(); refreshPendingShare() }
             .task {
                 await refreshDeploymentsIfNeeded()
             }
             .onChange(of: selectedDestinationID) { _, _ in
                 ensureSelectedDestinationIsAvailable()
+                refreshPendingShare()
             }
             .onChange(of: deploymentGroups) { _, _ in
                 ensureSelectedDestinationIsAvailable()
             }
         }
+    }
+
+    private func refreshPendingShare() {
+        pendingShare = (try? ShareInbox.shared().pendingComposers(origin: selectedDestination.url))?.first
+    }
+
+    private func receiveWidgetAction() {
+        if let url = WidgetActionInbox.take() { widgetPath = WidgetRoute.path(for: url) }
     }
 
     private func openDrawerGesture(leadingEdgeWidth: CGFloat) -> some Gesture {
@@ -112,6 +169,14 @@ struct ThingtimeWebView: View {
     }
 
     private func prepareDestinationState() {
+        let startupSelection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: selectedDestinationID,
+            lastConfiguredDestinationID: lastConfiguredDestinationID,
+            hasExplicitSelection: hasExplicitDestinationSelection,
+            destinations: staticDestinations
+        )
+        selectedDestinationID = startupSelection.selectedDestinationID
+        lastConfiguredDestinationID = startupSelection.lastConfiguredDestinationID
         ensureSelectedDestinationIsAvailable()
     }
 
@@ -143,6 +208,7 @@ struct ThingtimeWebView: View {
 
     private func select(_ destination: ThingtimeWebDestination.Destination) {
         selectedDestinationID = destination.id
+        hasExplicitDestinationSelection = true
         closeDestinationPicker()
     }
 

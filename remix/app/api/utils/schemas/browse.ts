@@ -1,4 +1,5 @@
 import { getThingsCollection } from '../mongodb/collections';
+import { COUNT_MAX_TIME_MS, fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
   asViewer,
   canViewInherited,
@@ -32,8 +33,10 @@ import { searchThings } from '../things/search';
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 const POPULAR_MAX_OFFSET = 500;
-const COUNT_LIMIT = 1000;
-const COUNT_MAX_TIME_MS = 2000;
+// COUNT_LIMIT / COUNT_MAX_TIME_MS and the capped-count helper live in
+// ../mongodb/cappedTotal, shared with things/search.ts so the "N match" readout
+// and its cap/timeout stay identical on /schemas and /search. COUNT_MAX_TIME_MS
+// is imported above because the usage-count aggregate below reuses the deadline.
 
 export type BrowseSchemasQuery = {
   q?: unknown;
@@ -61,23 +64,6 @@ export type BrowseSchemasResult = {
 
 const clampLimit = (raw: unknown): number =>
   Math.min(Math.max(1, Number(raw) || DEFAULT_LIMIT), MAX_LIMIT);
-
-// First-page-only capped total, shared by every browse mode that reports one:
-// cursor pages skip the count entirely, failures degrade to null, and the
-// result is clamped so `total === COUNT_LIMIT` uniformly means "capped".
-const cappedCount = async (
-  collection: { countDocuments: (filter: any, options: any) => Promise<number> },
-  match: unknown,
-  cursor: unknown
-): Promise<number | null> => {
-  if (cursor) return null;
-  try {
-    const count = await collection.countDocuments(match, { limit: COUNT_LIMIT + 1, maxTimeMS: COUNT_MAX_TIME_MS });
-    return Math.min(count, COUNT_LIMIT);
-  } catch {
-    return null;
-  }
-};
 
 const truthyFlag = (raw: unknown): boolean => raw === true || raw === '1' || raw === 'true';
 
@@ -194,11 +180,11 @@ const browsePopular = async (
   // request): (1) collect candidate schema ids, (2) one $group over reaction
   // things by targetId. Sort the counts in memory (same order the $sort used:
   // reactionCount desc, createdAt desc, shareId asc) and page by offset.
-  const [candidates, total] = await Promise.all([
+  const [candidates, { total, totalCapped }] = await Promise.all([
     collection.find(match as any).project({ shareId: 1, createdAt: 1 }).toArray() as Promise<
       { shareId: string; createdAt: Date }[]
     >,
-    cappedCount(collection, match, cursor)
+    fetchCappedTotal(collection, match, cursor)
   ]);
 
   const candidateIds = candidates.map((candidate) => candidate.shareId);
@@ -242,7 +228,7 @@ const browsePopular = async (
     things: await toPublicThings(visible, viewer),
     nextCursor,
     total,
-    totalCapped: total === COUNT_LIMIT
+    totalCapped
   };
 };
 
@@ -289,7 +275,7 @@ const browseMine = async (
   sort: 'newest' | 'oldest',
   cursor: unknown,
   limit: number
-): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null }> => {
+): Promise<Fail | { things: PublicThing[]; nextCursor: string | null; total: number | null; totalCapped: boolean }> => {
   if (!viewer?.id) return fail(401, 'Sign in to see your schemas');
   const collection = await getThingsCollection();
 
@@ -298,19 +284,19 @@ const browseMine = async (
     { ownerId: viewer.id, thingtime: 'schema' },
     ...(cursorDoc ? [sort === 'oldest' ? oldestCursorClause(cursorDoc) : chronoCursorClause(cursorDoc)] : [])
   );
-  const [docs, total] = await Promise.all([
+  const [docs, { total, totalCapped }] = await Promise.all([
     collection
       .find(match as any)
       .sort(sort === 'oldest' ? { createdAt: 1, shareId: 1 } : { createdAt: -1, shareId: 1 })
       .limit(limit + 1)
       .toArray() as Promise<ThingDoc[]>,
-    cappedCount(collection, { ownerId: viewer.id, thingtime: 'schema' }, cursor)
+    fetchCappedTotal(collection, { ownerId: viewer.id, thingtime: 'schema' }, cursor)
   ]);
 
   const page = docs.slice(0, limit);
   const last = page[page.length - 1];
   const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
-  return { things: await toPublicThings(page, viewer), nextCursor, total: typeof total === 'number' ? total : null };
+  return { things: await toPublicThings(page, viewer), nextCursor, total, totalCapped };
 };
 
 export const browseSchemas = async (
@@ -343,7 +329,7 @@ export const browseSchemas = async (
       schemas: await decorate(viewer, result.things),
       nextCursor: result.nextCursor,
       total: result.total,
-      totalCapped: result.total === COUNT_LIMIT
+      totalCapped: result.totalCapped
     };
   }
 

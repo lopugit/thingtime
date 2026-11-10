@@ -1,0 +1,78 @@
+{
+  "format": "thingtime.transfer",
+  "version": 1,
+  "roots": [
+    "affirmation-page"
+  ],
+  "things": [
+    {
+      "id": "affirmation-page",
+      "thingtime": [
+        "webpage"
+      ],
+      "crystal": {
+        "name": "Affirmation preview",
+        "version": 1,
+        "blocks": [
+          {
+            "id": "card",
+            "type": "component",
+            "css": {
+              "width": "100%",
+              "max-width": "400px"
+            },
+            "component": "affirmation-card"
+          }
+        ]
+      }
+    },
+    {
+      "id": "affirmation-card",
+      "thingtime": [
+        "component"
+      ],
+      "crystal": {
+        "name": "Original affirmation card",
+        "library": "custom",
+        "category": "general",
+        "componentKey": "original-affirmation",
+        "version": 1,
+        "args": [
+          {
+            "name": "message",
+            "type": "text",
+            "default": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me."
+          }
+        ],
+        "render": {
+          "tag": "article",
+          "props": {
+            "style": {
+              "width": "min(400px, 100%)",
+              "aspectRatio": "5 / 7",
+              "borderRadius": "28px",
+              "background": "linear-gradient(155deg, #fff1ce 0%, #f8d5c2 100%)",
+              "display": "flex",
+              "alignItems": "center",
+              "justifyContent": "center",
+              "padding": "28px 18px",
+              "boxSizing": "border-box",
+              "color": "#a45f4d",
+              "fontFamily": "Georgia, serif",
+              "fontSize": "clamp(17px, 4.9vw, 23px)",
+              "lineHeight": "1.48",
+              "textAlign": "center",
+              "whiteSpace": "pre-wrap"
+            }
+          },
+          "children": [
+            {
+              "ttArg": "message"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "files": []
+}

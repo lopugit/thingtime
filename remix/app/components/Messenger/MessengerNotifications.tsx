@@ -1,10 +1,11 @@
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { useLocation } from 'react-router';
 
 import { useLopu } from '../Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MESSENGER_REFRESH_EVENT, readUnread, writeUnread } from './messengerCache';
-import { chatDisplayName, type ChatSummary } from './messengerTypes';
+import { chatDisplayName, isLopuAiSource, type ChatSummary } from './messengerTypes';
 
 const IDLE_POLL_MS = 25_000;
 const TOAST_THROTTLE_MS = 30_000;
@@ -58,6 +59,8 @@ export const MessengerNotifications = () => {
         for (const chat of chats) {
           const last = chat.lastMessage;
           if (!last) continue;
+          // Lopu answers the user's own turns while they watch — never a toast
+          if (isLopuAiSource(chat.externalSource)) continue;
           const prev = lastSeenRef.current.get(chat.id);
           lastSeenRef.current.set(chat.id, last.id);
           if (!primedRef.current) continue; // first poll only primes the diff
@@ -85,20 +88,12 @@ export const MessengerNotifications = () => {
       }
     };
 
-    void poll();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void poll();
-    }, IDLE_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void poll();
-    };
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-unread:${user.id}`, poll, IDLE_POLL_MS);
     const onRefresh = () => void poll();
-    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener(MESSENGER_REFRESH_EVENT, onRefresh);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
       window.removeEventListener(MESSENGER_REFRESH_EVENT, onRefresh);
     };
   }, [lopu, user?.id]);

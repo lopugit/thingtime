@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import { recordCiEvent, upsertCiEntity, type CiEntityInput } from './store';
+import { linkFeatureStackWorkflowRun } from './featureStackStore';
+import { recordCiEvent, upsertCiEntity, type CiEntityInput, type UpsertCiEntityOptions } from './store';
 
 const DEFAULT_REPOSITORY = 'lopugit/thingtime';
 
@@ -104,8 +105,12 @@ const eventBase = (provider: 'github' | 'vercel', repository: string, deliveryId
     new Date()
 });
 
-const upsert = async (entity: CiEntityInput, event: ReturnType<typeof eventBase>, data?: Record<string, unknown>) =>
-  upsertCiEntity(entity, { ...event, data });
+const upsert = async (
+  entity: CiEntityInput,
+  event: ReturnType<typeof eventBase>,
+  data?: Record<string, unknown>,
+  options?: UpsertCiEntityOptions
+) => upsertCiEntity(entity, { ...event, data }, options);
 
 export const ingestGitHubWebhook = async (input: {
   eventType: string;
@@ -125,6 +130,9 @@ export const ingestGitHubWebhook = async (input: {
   const touched: string[] = [];
   const remember = (result: { id: string }) => touched.push(result.id);
   const repo = payload.repository;
+  // Every delivery refreshes the repository header row, but only an insert
+  // or an active/archived transition is HISTORY — measured live, the
+  // per-delivery "active → active" event here was half of all ci-events.
   remember(
     await upsert(
       {
@@ -143,7 +151,9 @@ export const ingestGitHubWebhook = async (input: {
           installationId: safeNumber(payload?.installation?.id)
         }
       },
-      event
+      event,
+      undefined,
+      { eventPolicy: 'on-change' }
     )
   );
 
@@ -269,6 +279,8 @@ export const ingestGitHubWebhook = async (input: {
     const run = payload.workflow_run;
     const id = safeNumber(run.id);
     if (id) {
+			const title = safeString(run.display_title ?? run.name, 500) || `Run #${id}`;
+			const status = safeString(run.conclusion ?? run.status, 80) || 'unknown';
       remember(
         await upsert(
           {
@@ -276,14 +288,16 @@ export const ingestGitHubWebhook = async (input: {
             provider: 'github',
             repository,
             externalId: String(id),
-            title: safeString(run.name ?? run.display_title, 500) || `Run #${id}`,
-            status: safeString(run.conclusion ?? run.status, 80) || 'unknown',
+            title,
+            status,
             url: safeUrl(run.html_url),
             occurredAt: run.updated_at ?? run.created_at,
             data: {
               runId: id,
               runNumber: safeNumber(run.run_number),
               workflowId: safeNumber(run.workflow_id),
+					displayTitle: safeString(run.display_title, 500) || null,
+					workflowName: safeString(run.name, 500) || null,
               event: safeString(run.event, 80),
               status: safeString(run.status, 80),
               conclusion: safeString(run.conclusion, 80) || null,
@@ -297,6 +311,18 @@ export const ingestGitHubWebhook = async (input: {
           event
         )
       );
+			const featureStackRunId = title.match(/\b(feature-stack-run-[0-9a-f-]{36})\b/i)?.[1]?.toLowerCase();
+			if (featureStackRunId) {
+				await linkFeatureStackWorkflowRun({
+					runId: featureStackRunId,
+					workflowRunId: id,
+					url: safeUrl(run.html_url),
+					title,
+					status,
+					startedAt: run.run_started_at ?? run.created_at ?? event.occurredAt,
+					completedAt: run.status === 'completed' ? run.updated_at ?? null : null
+				});
+			}
     }
   }
 
@@ -438,8 +464,10 @@ export const ingestVercelWebhook = async (input: {
   const data = payload.payload ?? payload.data ?? payload;
   const deployment = data.deployment ?? data;
   const meta = deployment.meta ?? data.meta ?? {};
+  const githubOrg = safeString(meta.githubCommitOrg, 180);
+  const githubRepo = safeString(meta.githubCommitRepo, 180);
   const repository =
-    safeString(meta.githubCommitRepo, 300) ||
+    (githubOrg && githubRepo ? `${githubOrg}/${githubRepo}` : '') ||
     safeString(process.env.THINGTIME_GITHUB_REPOSITORY, 300) ||
     DEFAULT_REPOSITORY;
   const projectId = safeString(deployment.projectId ?? data.projectId, 180);
@@ -466,6 +494,9 @@ export const ingestVercelWebhook = async (input: {
         projectName: safeString(deployment.name ?? data.name, 180) || null,
         ref: safeString(meta.githubCommitRef, 300) || null,
         sha: safeString(meta.githubCommitSha, 64) || null,
+        prNumber: safeNumber(meta.githubPrId),
+        previewEnvironment: safeString(meta.thingtimePreviewEnvironment, 40) || null,
+        thingtimeAdminPrPreview: meta.thingtimeAdminPrPreview === '1',
         commitAuthor: safeString(meta.githubCommitAuthorLogin, 180) || null,
         target: safeString(deployment.target, 80) || null,
         readyState: status
@@ -491,6 +522,9 @@ export const ingestVercelWebhook = async (input: {
           projectId: projectId || null,
           ref: safeString(meta.githubCommitRef, 300) || null,
           sha: safeString(meta.githubCommitSha, 64) || null,
+          prNumber: safeNumber(meta.githubPrId),
+          previewEnvironment: safeString(meta.thingtimePreviewEnvironment, 40) || null,
+          thingtimeAdminPrPreview: meta.thingtimeAdminPrPreview === '1',
           target: safeString(deployment.target, 80) || null
         }
       },

@@ -1,14 +1,16 @@
-import { json } from '~/api/http';
+import { withFoundPostBrowser, foundPostVisitIp } from '~/api/utils/things/foundPostRequest';
+import { JSON_BODY_WITHOUT_APPLICATION_LIMIT, json } from '~/api/http';
 
-import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
-import { appCorsHeaders, appDataPreflight } from '~/api/utils/apps/cors';
+import { actorCors, actorPat, actorUser, inspectActorForBody, resolveActor } from '~/api/utils/auth/resolveActor';
+import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import {
   createReadyAttachmentPostInsertHook,
   inspectReadyAttachmentsForPost,
   prepareAttachmentCascadeForThing,
-  reorderReadyAttachmentsForTarget
+  syncReadyAttachmentsForTarget
 } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { bindOwnedWebpageAttachments } from '~/api/utils/webpages/webpageAttachments';
 import {
   attachmentPostActorAllowed,
   postAttachmentRequest,
@@ -19,15 +21,27 @@ import {
   appShapeProjections,
   createPost,
   createThing,
+  countThings,
   deleteThing,
   getThing,
+  getThings,
   listThings,
   toPublicPosts,
   toPublicThings,
   updateThing,
   upsertThing,
-  viewerOf
+  viewerOf,
+  withLinkKeys
 } from '~/api/utils/things/things';
+import { isCustomMongoEndpointActive } from '~/api/utils/mongodb/endpoint';
+import { parseCommentSort } from '~/api/utils/things/updownCore';
+import { sharedThingRead } from './sharedThingRead';
+import { readThingNumericSummary } from '~/api/utils/things/numericSummary';
+import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
+import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
+import { isStoragePolicyRevision } from '~/api/utils/things/thingStoragePolicyCore';
+import { isThingMetadataReference } from '~/utils/thingMetadata';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -62,22 +76,18 @@ const patScopeFor = (method: string, body: any): string | string[] => {
   return 'things.read';
 };
 
-// Crystal payloads are small (text + image URLs + listing), but every thing
-// also carries the schema-free `extended` sidecar (up to EXTENDED_MAX_BYTES =
-// 512KB, enforced by sanitizeExtended) — the body cap leaves headroom for both.
-const MAX_BODY_BYTES = 768 * 1024;
-
 const csv = (value: string | null): string[] =>
   (value || '')
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-// GET /api/v1/things?id=<shareId> — read one thing (post projection included
-// for post things).
+// GET /api/v1/things?id=<shareId>[&commentSort=top|new|old] — read one thing
+// (post projection included for post things; commentSort re-orders the
+// shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
+// GET /api/v1/things?thingtime=&schemaId=&parentId=&folder=&cursor=&limit= — list your own things
 // (folder=root for unfiled things, folder=<folder shareId> for its children;
 // session auth may add appId=<clientId> to browse ONE app's namespace).
 //
@@ -89,9 +99,76 @@ export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
-  const viewer = viewerOf(user);
+  const params = new URL(request.url).searchParams;
+  // pat context rides reads too: a visibility-restricted token (public-only /
+  // private-only) must have its audience fence applied to everything it lists.
+  // A presented ?key= rides along so hidden things resolve for key-holders —
+  // logged-out ones included.
+  const viewer = withLinkKeys(withFoundPostBrowser(viewerOf(user, actorPat(actor)), request, actor.kind === 'anonymous'), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  if (params.has('ids') && (params.getAll('ids').length !== 1 || Array.from(params.keys()).some(key => key !== 'ids' && key !== 'key') || params.getAll('key').length > 1))
+    return json({ ok: false, error: 'ids requires an exact batch read without list or projection parameters' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
+  const libraryArchive = params.get('libraryArchive');
+  if (libraryArchive && (actor.kind !== 'user' || user?.accountKind !== 'user' || user.temporary))
+    return json({ ok: false, error: 'The library archive filter requires a first-party owner' }, { status: 403, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+  if (params.has('libraryArchive') && (params.getAll('libraryArchive').length !== 1 ||
+      (libraryArchive !== 'active' && libraryArchive !== 'archived') ||
+      ['id', 'target', 'archive', 'sharedRoot', 'maxCrystalField', 'commentProjection'].some(key => params.has(key))))
+    return json({ ok: false, error: 'Invalid owner library archive filter' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
+  const countRequested = params.get('count') === 'true';
+  const countKeys = new Set(['count', 'thingtime', 'schemaId', 'parentId', 'target', 'folder', 'appId', 'builderApp', 'excludeArchived', 'libraryArchive', 'key']);
+  if (['count', 'excludeArchived'].some(key => params.getAll(key).length > 1 || (params.has(key) && params.get(key) !== 'true' && params.get(key) !== 'false')) ||
+      (countRequested && Array.from(params.keys()).some(key => !countKeys.has(key) || params.getAll(key).length !== 1)))
+    return json({ ok: false, error: 'Invalid unpaged Things count or archive filter' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+  if (countRequested && !viewer?.id) return json({ ok: false, error: 'Sign in to count Things' }, { status: 401, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
+  if (params.has('offset') && (params.getAll('offset').length !== 1 || !/^(0|[1-9][0-9]*)$/.test(params.get('offset') || '') ||
+      !Number.isSafeInteger(Number(params.get('offset'))) || ['id', 'cursor', 'commentProjection', 'archive', 'sharedRoot', 'maxCrystalField'].some(key => params.has(key))))
+    return json({ ok: false, error: 'offset requires an ordinary un-cursored list and a nonnegative safe integer' }, { status: 400, headers: cors });
+
+  if (params.has('maxCrystalField')) {
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    // Account-scoped OAuth tokens use PAT-shaped authorization with CORS.
+    const kind = actor.kind === 'pat' && actor.cors ? 'app' : actor.kind;
+    const result = await readThingNumericSummary(params, kind, (query) => listThings(viewer, query, null, { signal: request.signal }), request.signal);
+    if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status, headers });
+    return json(result, { headers });
+  }
+
+  const commentProjection = params.has('commentProjection');
+  if (commentProjection) {
+    const id = (params.get('id') || '').trim(), target = (params.get('target') || '').trim();
+    const invalid = ['commentProjection', 'id', 'target', 'thingtime', 'cursor', 'limit'].some(key => params.getAll(key).length > 1) || params.get('commentProjection') !== 'true' || actor.kind === 'app' || isCustomMongoEndpointActive() ||
+      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort', 'schemaId', 'parentId'].some(key => params.has(key)) ||
+      (id ? params.has('target') || ['thingtime', 'cursor', 'limit'].some(key => params.has(key))
+          : params.has('id') || !target || csv(params.get('thingtime')).length !== 1 || csv(params.get('thingtime'))[0] !== 'comment') ||
+      (params.has('limit') && !/^(?:[1-9]|1[0-9]|20)$/.test(params.get('limit') || ''));
+    if (invalid) return json({ ok: false, error: 'Invalid first-party discussion projection request' }, { status: 400, headers: cors });
+  }
+
+  if (params.has('archive')) {
+    const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    if (actor.kind !== 'user' || user?.accountKind !== 'user') return json({ ok: false, error: 'Sign in to read your archive' }, { status: 401, headers });
+    const id = (params.get('id') || '').trim();
+    if (params.get('archive') !== 'true' || !id || params.has('sharedRoot') || params.has('key') || params.has('appId')) return json({ ok: false, error: 'Invalid archive request' }, { status: 400, headers });
+    const limit = await enforceRateLimit(request, 'oauth.read', `archive-user:${user.id}`, { failClosed: true });
+    if (!limit.allowed) {
+      const init = rateLimitedResponseInit(limit);
+      return json({ ok: false, error: 'Archive reads are temporarily rate-limited' }, { ...init, headers: { ...init.headers, ...headers } });
+    }
+    try {
+      const archive = await readOwnedChatArchive(user.id, id);
+      return archive ? json({ ok: true, archive }, { headers }) : json({ ok: false, error: 'Archive not found' }, { status: 404, headers });
+    } catch {
+      return json({ ok: false, error: 'Archive history is unavailable; try again' }, { status: 503, headers });
+    }
+  }
+
+  if (params.has('sharedRoot')) return sharedThingRead(request, { viewer, app: actor.kind === 'app', cors });
 
   if (actor.kind === 'app') {
     // per-(user, app) buckets — an app never rides the user's own windows
@@ -105,38 +182,80 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
-  const params = new URL(request.url).searchParams;
+  if (params.has('ids')) {
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    let ids: unknown;
+    try { ids = JSON.parse(params.get('ids')!); }
+    catch { return json({ ok: false, error: 'ids must be a JSON array of Thing ID strings' }, { status: 400, headers }); }
+    const result = await getThings(viewer, ids, app, { signal: request.signal });
+    return json(result.ok === false ? { ok: false, error: result.error } : result, { status: result.ok === false ? result.status : 200, headers });
+  }
 
   const id = (params.get('id') || '').trim();
+  if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
-    const result = await getThing(viewer, id, app);
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp') || params.has('count') || params.has('excludeArchived')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
+    // commentSort=top|new|old re-orders the shipped comment page of the post
+    // projection (round 2 S7); absent keeps the default page, a typo is a 400
+    // (never a silently re-ordered thread)
+    const commentSort = parseCommentSort(params.get('commentSort') || undefined);
+    if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
+    // Canonical-link reads stay readable during limiter outages, but creating
+    // durable discovery state is bounded per authenticated user or request IP.
+    const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
+    const rateForView = () => enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true });
+    const discoveryRate = canRemember ? await rateForView() : null;
+    const headers = { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    let metadataRate = discoveryRate;
+    const metadata = !app && !(actor.kind === 'pat' && actor.cors) && isThingMetadataReference(id)
+      ? await (await import('~/api/utils/things/thingMetadata')).getThingMetadataThing(id, viewer, request.signal, async () => {
+        metadataRate ??= await rateForView();
+        return metadataRate.allowed ? null : { ok: false, status: metadataRate.unavailable ? 503 : 429, error: 'Thing metadata is unavailable or rate limited' };
+      }) : null;
+    const result = metadata ?? await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryRate?.allowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
-      return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+      if (metadata && metadataRate && !metadataRate.allowed) {
+        const init = rateLimitedResponseInit(metadataRate);
+        return json({ ok: false, error: result.error }, { ...init, headers: { ...init.headers, ...headers } });
+      }
+      return json({ ok: false, error: result.error }, { status: result.status, headers: metadata ? headers : cors });
     }
     // comments project as posts too; parent/root carry their thread context
-    // (post/parent/root are first-party projections — null under the app lens)
+    // (post/parent/root are first-party projections — null under the app lens);
+    // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root },
-      { headers: cors }
+      { ok: true, thing: result.thing, post: result.post, discussion: result.discussion, parent: result.parent, root: result.root, commentSort: commentSort.sort },
+      { headers }
     );
   }
 
-  const result = await listThings(
+  const count = countRequested;
+  const result = await (count ? countThings : listThings)(
     viewer,
     {
+      commentProjection,
       thingtime: csv(params.get('thingtime')),
+      schemaId: params.get('schemaId'),
+      parentId: params.get('parentId'),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
-      cursor: params.get('cursor'),
-      limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
+      cursor: count ? undefined : params.get('cursor'),
+      limit: count ? undefined : Number(params.get('limit')) || undefined,
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
+      builderAppOnly: params.get('builderApp') === 'true',
+      excludeArchived: params.get('excludeArchived') === 'true',
+      libraryArchive: libraryArchive === 'active' || libraryArchive === 'archived' ? libraryArchive : undefined,
+      offset: params.has('offset') ? Number(params.get('offset')) : undefined
     },
-    app
+    app,
+    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined, signal: request.signal }
   );
   if (result.ok === false) {
-    return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+    return json({ ok: false, error: result.error }, { status: result.status, headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: cors });
+  if ('count' in result) return json(result, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...('offset' in result ? { offset: result.offset, nextOffset: result.nextOffset } : {}), ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
@@ -162,22 +281,20 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request, 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   if (preflight) return preflight;
 
-  // The 413 fires before any actor resolution (an oversized payload must not
-  // consume a PAT use), so its CORS headers come straight from the Origin.
-  const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return json(
-      { ok: false, error: 'Post payload too large' },
-      { status: 413, headers: appCorsHeaders(request.headers.get('Origin')) }
-    );
-  }
-
-  // Body before auth: the PAT scope a mutation needs depends on what the body
-  // says it is (a POST carrying thingtime ['reaction'] is a react, not a
-  // create), and a missing scope must 403 BEFORE a use is consumed.
   const method = request.method.toUpperCase();
-  const body = await request.json().catch(() => ({}));
-
+  const candidates = method === 'POST' ? ['things.create', 'things.comment', 'things.react'] : [patScopeFor(method, {})];
+  const ingressActor = await inspectActorForBody(request, candidates);
+  if (ingressActor instanceof Response) return ingressActor;
+  if (ingressActor.kind === 'anonymous') return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+  const ingressUser = actorUser(ingressActor)!;
+  const ingressKey = rateLimitKeyFor({}, ingressUser.accountKind);
+  const ingressLimit = await enforceRateLimit(request, ingressKey, ingressActor.kind === 'app' ? ingressActor.rateIdentity : `user:${ingressUser.id}`);
+  if (!ingressLimit.allowed) {
+    const init = rateLimitedResponseInit(ingressLimit);
+    return json({ ok: false, error: 'You’re doing that too fast — take a breather 🌸' }, { ...init, headers: { ...init.headers, ...actorCors(ingressActor) } });
+  }
+  const body = await readJsonBodyWithCors(request, JSON_BODY_WITHOUT_APPLICATION_LIMIT, actorCors(ingressActor));
+  // Exact permission and atomic token-use admission precede every effect.
   const actor = await resolveActor(request, { thingsScope: patScopeFor(method, body) });
   if (actor instanceof Response) return actor;
   if (actor.kind === 'anonymous') {
@@ -185,8 +302,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const user = actorUser(actor)!;
   // pat context rides the viewer: creates stamp the token's tt:token grant,
-  // and a sandboxed token's writes stay inside its granted things (things.ts)
-  const viewer = viewerOf(user, actorPat(actor));
+  // and a sandboxed token's writes stay inside its granted things (things.ts).
+  // body.key lets a hidden-link holder attach to (comment on, react to) the
+  // hidden thing their key reveals.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [typeof body?.key === 'string' ? body.key : '']);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
@@ -195,9 +314,10 @@ export const action = async ({ request }: { request: Request }) => {
   // one is exempt (service-account provisioning is unauthenticated, so
   // accountKind confers no trust); service accounts just get a higher ceiling.
   // App actors consume their own per-(user, app) windows.
-  const limit = await enforceRateLimit(
+  const operationKey = rateLimitKeyFor(body, user.accountKind);
+  const limit = operationKey === ingressKey ? ingressLimit : await enforceRateLimit(
     request,
-    rateLimitKeyFor(body, user.accountKind),
+    operationKey,
     actor.kind === 'app' ? actor.rateIdentity : `user:${user.id}`
   );
   if (!limit.allowed) {
@@ -206,6 +326,19 @@ export const action = async ({ request }: { request: Request }) => {
       { ok: false, error: 'You’re doing that too fast — take a breather 🌸' },
       { ...init, headers: { ...init.headers, ...cors } }
     );
+  }
+
+  const expectedStoragePolicyRevision: unknown = body?.expectedStoragePolicyRevision;
+  const guardedStorageWrite = Object.prototype.hasOwnProperty.call(body || {}, 'expectedStoragePolicyRevision');
+  if (guardedStorageWrite) {
+    if (method !== 'PATCH' || !isStoragePolicyRevision(expectedStoragePolicyRevision)) {
+      return json({ ok: false, error: 'Invalid storage policy revision for Thing update' }, { status: 400, headers: cors });
+    }
+    const site = request.headers.get('Sec-Fetch-Site')?.trim().toLowerCase();
+    if (actor.kind !== 'user' || user.accountKind !== 'user' || (site && site !== 'same-origin' && site !== 'none') ||
+        !isSameOriginAttachmentRequest(request) || isCustomMongoEndpointActive()) {
+      return json({ ok: false, error: 'Storage policy writes require a same-origin owner session on the home data plane' }, { status: 403, headers: cors });
+    }
   }
 
   const isUnifiedPostBody =
@@ -281,6 +414,12 @@ export const action = async ({ request }: { request: Request }) => {
       if (result.ok === false) {
         return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
       }
+      // webpage saves claim the owner's referenced builder uploads so the
+      // draft reaper can't take a page's media out from under it (tolerant:
+      // foreign/external/expired references are simply not bound)
+      if (actor.kind !== 'app' && user.accountKind === 'user' && (result.doc.thingtime || []).includes('webpage')) {
+        await bindOwnedWebpageAttachments(user.id, result.doc.crystal, result.doc.shareId);
+      }
       if (app) {
         const thing = (await toPublicThings([result.doc], viewer))[0];
         await appShapeProjections(app, [result.doc], [thing]);
@@ -311,29 +450,62 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
-    // Reorder before the document update so the projection the client gets
-    // back already lists attachments in the new order. The reorder is an
-    // idempotent permutation stamp — a failed updateThing after it leaves
-    // nothing dangling, and a retry re-applies the same order safely.
-    if (attachmentRequest.present && attachmentRequest.kind === 'reorder') {
-      const reordered = await reorderReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
-      if (reordered.ok === false) {
-        return json({ ok: false, error: reordered.error }, { status: reordered.status, headers: cors });
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'displayTitle')) {
+      if (Object.keys(body).some(key => !['id', 'displayTitle', 'expectedUpdatedAt'].includes(key))) return json({ ok: false, error: 'Rename accepts only id, displayTitle and expectedUpdatedAt' }, { status: 400, headers: cors });
+      const result = await renameLibraryThing({ actorKind: actor.kind, accountKind: user.accountKind, ownerId: user.id,
+        sameOrigin: isSameOriginAttachmentRequest(request), id: body.id, title: body.displayTitle, expectedUpdatedAt: body.expectedUpdatedAt });
+      return json(result, { status: result.ok === false ? result.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+    }
+    // Sync attachments before the document update so the projection the
+    // client gets back already lists them in the new order — and so
+    // updateThing's boundAttachmentPresence sees freshly added media when it
+    // validates the crystal. The sync is idempotent (owner-fenced bind +
+    // order stamp of the full desired list), so a failed updateThing after
+    // it leaves nothing inconsistent and a retry re-applies the same list.
+    if (!guardedStorageWrite && attachmentRequest.present && attachmentRequest.kind === 'sync') {
+      const synced = await syncReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
+      if (synced.ok === false) {
+        return json({ ok: false, error: synced.error }, { status: synced.status, headers: cors });
       }
     }
-    const result = await updateThing(viewer, body?.id, bodyForCreate, { replaceCrystal: false }, app);
+    const result = await updateThing(
+      viewer,
+      body?.id,
+      bodyForCreate,
+      {
+        replaceCrystal: body?.replaceCrystal === true,
+        expectedUpdatedAt: body?.expectedUpdatedAt,
+        ...(guardedStorageWrite && isStoragePolicyRevision(expectedStoragePolicyRevision) ? { storageCloudWrite: {
+          expectedRevision: expectedStoragePolicyRevision,
+          ...(attachmentRequest.present && attachmentRequest.kind === 'sync' ? { attachmentIds: attachmentRequest.attachmentIds } : {})
+        } } : {})
+      },
+      app
+    );
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
+    }
+    const updatedThing = result.thing as { id?: unknown; thingtime?: unknown; crystal?: unknown } | undefined;
+    if (
+      actor.kind !== 'app' &&
+      user.accountKind === 'user' &&
+      Array.isArray(updatedThing?.thingtime) &&
+      (updatedThing.thingtime as unknown[]).includes('webpage')
+    ) {
+      await bindOwnedWebpageAttachments(user.id, updatedThing.crystal, String(updatedThing.id || ''));
     }
     return json({ ok: true, thing: result.thing, post: result.post }, { headers: cors });
   }
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
+    const archiveResult = await deleteOwnedChatArchive({ actorKind: actor.kind, accountKind: user.accountKind,
+      ownerId: user.id, id, sameOrigin: isSameOriginAttachmentRequest(request), expectedUpdatedAt: body?.expectedUpdatedAt });
+    if (archiveResult) return json(archiveResult, { status: archiveResult.ok === false ? archiveResult.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
-        ? { beforeCascade: prepareAttachmentCascadeForThing }
-        : undefined;
+        ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }
+        : { expectedUpdatedAt: body?.expectedUpdatedAt };
     const result = await deleteThing(viewer, id, app, attachmentHooks);
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

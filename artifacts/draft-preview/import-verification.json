@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "fixture": "dedicated local draftPreview replica",
+  "imported": 2,
+  "freshIds": true,
+  "dependencyRemapped": true,
+  "privateAcl": true,
+  "anonymousReadsDenied": true,
+  "canonicalReexport": true
+}

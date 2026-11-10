@@ -8,28 +8,28 @@
 // paste / arrange / select). Every leaf fires a command the page dispatches.
 
 import type {
-  ThingContextAction,
   ThingContextMenuModel,
-  ThingContextSection,
   ThingContextSubmenu
 } from '~/components/Thingtime/ContextMenu/contextMenuModel';
+import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
+import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
+import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
+import { thingBrowseHref } from './thingsLocation';
+import { thingStorageHref } from './thingStorageNavigation';
 
 import {
   THINGS_GROUP_OPTIONS,
   THINGS_SORT_OPTIONS,
-  ThingsDisplayMode,
-  ThingsGroupBy,
-  ThingsSort,
-  ThingsThing,
-  ThingsView,
+  type ThingsDisplayMode,
+  type ThingsGroupBy,
+  type ThingsSort,
+  type ThingsThing,
+  type ThingsView,
+  isDuplicable,
   isFolder,
   primaryKindOf
 } from './thingsCore';
-
-const canRename = (thing: ThingsThing) => {
-  const kind = primaryKindOf(thing);
-  return kind === 'folder' || kind === 'data' || kind === 'schema';
-};
 
 // "Copy 4 things" when acting on a multi-selection, plain verb otherwise
 const countLabel = (verb: string, count: number) => (count > 1 ? `${verb} ${count} things` : verb);
@@ -40,92 +40,63 @@ export type ThingsItemMenuArgs = {
   // bigger selection)
   actCount: number;
   clipboardCount: number;
+  ownerId?: string;
+  locationSearch?: string;
+  builderMode?: boolean;
+  dataPlane?: string | null;
+  libraryAction?: 'archive' | 'restore';
+  allowCreation?: boolean;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, libraryAction, allowCreation = true }: ThingsItemMenuArgs): ThingContextMenuModel => {
+  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
   const folder = isFolder(thing);
-  const sections: ThingContextSection[] = [];
-
-  sections.push({
-    id: 'open',
-    actions: [
-      folder
-        ? { id: 'open', command: 'open', label: 'Open folder', icon: '📂', lucide: 'folder-open' }
-        : thing.thingtime.includes('post')
-          ? { id: 'open', command: 'open', label: 'Open post', icon: '📝', lucide: 'external-link' }
-          : { id: 'open', command: 'open', label: 'Preview', icon: '👀', lucide: 'eye' },
-      { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' }
-    ]
-  });
-
-  sections.push({
-    id: 'organise',
-    label: 'Organise',
-    actions: [
-      ...(canRename(thing) && actCount === 1
-        ? [{ id: 'rename', command: 'rename', label: 'Rename…', icon: '✏️', lucide: 'pen-line' } as ThingContextAction]
-        : []),
+  const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
+  const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
+  // "Download all files" (one ZIP) + its share link: folders enumerate server-side,
+  // so the count is unknown here; the page probes the manifest before saving.
+  const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
+  const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
+  return buildThingEntityMenu({
+    'storage-placement': actCount === 1 && !!ownerId && thing.author?.id === ownerId && { href: thingStorageHref(thing.id, { archive, dataPlane, fromThings: true }) },
+    history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true, 'share-preview': actCount === 1,
+    rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
+    share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
+    delete: !archive && { hint: bulkHint, kbd: '⌫' },
+    'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
+  }, [
+    ...builderThingMenuSections(thing, ownerId, actCount),
+    ...(builderMode && thing.thingtime.includes('component') && actCount === 1 && thing.author?.id === ownerId
+      ? [{ id: 'builder-definition', actions: [{ id: 'edit-definition', command: 'edit-definition', label: 'Edit definition…', icon: '✏️', lucide: 'pencil' }] }]
+      : []),
+    ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
+    ...(files ? [files] : []),
+    { id: 'organise', label: 'Organise', actions: [
       { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' },
-      {
-        id: 'share',
-        command: 'share',
-        label: `${countLabel('Share', actCount)}…`,
-        icon: '🌐',
-        lucide: 'share-2',
-        ...(folder ? { hint: 'Audience for the folder — optionally everything inside' } : {})
-      }
-    ]
-  });
-
-  sections.push({
-    id: 'clipboard',
-    label: 'Clipboard',
-    actions: [
-      {
-        id: 'copy',
-        command: 'copy',
-        label: countLabel('Copy', actCount),
-        icon: '📋',
-        lucide: 'copy',
-        kbd: '⌘C',
-        ...(folder ? { hint: 'Folders copy everything inside' } : {})
-      },
+      ...(libraryAction && !!ownerId && thing.author?.id === ownerId ? [{
+        id: libraryAction, command: libraryAction, label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount),
+        icon: libraryAction === 'archive' ? '📦' : '↩️', lucide: libraryAction === 'archive' ? 'package' : 'package-open',
+        hint: libraryAction === 'archive' ? 'Find it in Archived' : 'Show in Things again'
+      }] : [])
+    ] },
+    { id: 'clipboard', label: 'Clipboard', actions: [
+      { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
+        hint: folder ? 'Folders copy everything inside' : undefined },
+      ...(allowCreation && !archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
+        hint: folder ? 'Duplicates the folder and everything inside' : undefined }] : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
-      ...(folder
-        ? [
-            {
-              id: 'paste-into',
-              command: 'paste-into',
-              label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
-              icon: '📥',
-              lucide: 'clipboard-paste',
-              disabled: !clipboardCount,
-              hint: clipboardCount ? undefined : 'Nothing on the clipboard yet'
-            } as ThingContextAction
-          ]
-        : [])
-    ]
-  });
-
-  sections.push({
-    id: 'danger',
-    actions: [
-      {
-        id: 'delete',
-        command: 'delete',
-        label: countLabel('Delete', actCount),
-        icon: '🗑️',
-        lucide: 'trash-2',
-        kbd: '⌫',
-        danger: true
-      }
-    ]
-  });
-
-  return { sections };
+      { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
+      // portable paste: the OS clipboard may hold a Thingtime transfer even when
+      // this tab's clipboard is empty, so the entry stays enabled
+      ...(folder && allowCreation ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
+        icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
+    ] }
+  ]);
 };
 
 export type ThingsBackgroundMenuArgs = {
+  allowCreation?: boolean;
   clipboardCount: number;
   itemCount: number;
   sort: ThingsSort;
@@ -172,7 +143,7 @@ const groupSubmenu = (groupBy: ThingsGroupBy): ThingContextSubmenu => ({
   ]
 });
 
-const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingContextSubmenu => ({
+const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode, allowColumns: boolean): ThingContextSubmenu => ({
   title: 'View',
   sections: [
     {
@@ -181,7 +152,7 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingCon
       actions: [
         { id: 'view-grid', command: 'set-view', payload: { view: 'grid' }, label: 'Grid', icon: '🔲', lucide: 'layout-grid', selected: view === 'grid' },
         { id: 'view-list', command: 'set-view', payload: { view: 'list' }, label: 'List', icon: '📃', lucide: 'rows-3', selected: view === 'list' },
-        { id: 'view-columns', command: 'set-view', payload: { view: 'columns' }, label: 'Columns', icon: '🪜', lucide: 'columns-3', selected: view === 'columns' }
+        ...(allowColumns ? [{ id: 'view-columns', command: 'set-view', payload: { view: 'columns' }, label: 'Columns', icon: '🪜', lucide: 'columns-3', selected: view === 'columns' }] : [])
       ]
     },
     {
@@ -196,6 +167,7 @@ const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingCon
 });
 
 export const buildThingsBackgroundMenu = ({
+  allowCreation = true,
   clipboardCount,
   itemCount,
   sort,
@@ -204,10 +176,11 @@ export const buildThingsBackgroundMenu = ({
   displayMode
 }: ThingsBackgroundMenuArgs): ThingContextMenuModel => ({
   sections: [
-    {
+    ...(allowCreation ? [{
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
         {
           id: 'paste',
           command: 'paste',
@@ -215,18 +188,17 @@ export const buildThingsBackgroundMenu = ({
           icon: '📥',
           lucide: 'clipboard-paste',
           kbd: '⌘V',
-          disabled: !clipboardCount,
-          ...(clipboardCount ? {} : { hint: 'Copy or cut things first' })
+          hint: 'Paste a Thingtime transfer from your clipboard'
         }
       ]
-    },
+    }] : []),
     {
       id: 'arrange',
       label: 'Arrange',
       actions: [
         { id: 'sort-by', label: 'Sort by…', icon: '🔃', lucide: 'arrow-up-down', submenu: sortSubmenu(sort) },
         { id: 'group-by', label: 'Group by…', icon: '🗂️', lucide: 'layers', submenu: groupSubmenu(groupBy) },
-        { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode) }
+        { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode, allowCreation) }
       ]
     },
     {

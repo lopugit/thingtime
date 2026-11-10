@@ -1,4 +1,7 @@
-import { inlineHtmlToText } from './inlineHtmlText';
+// @ts-ignore Direct Node test imports require the source extension.
+import { MAX_STORABLE_NESTING } from '../../schemas/storableLimits.ts';
+// @ts-ignore Node 24 runs the *.test.ts suite on this file directly and needs the .ts extension (Vite resolves it too).
+import { inlineHtmlToText } from './inlineHtmlText.ts';
 
 export type EditorJsBlock = {
 	type: string;
@@ -141,6 +144,41 @@ export const isEditorJsDocSafeToEdit = (value: EditorJsDoc): boolean => {
 	} catch {
 		return false;
 	}
+};
+
+/** Explicit rich-text documents are validated in full. Recognition budgets
+ * apply only to auto-detecting an ordinary string, never authored content. */
+export const isExplicitEditorJsDocSafeToEdit = (value: unknown): value is EditorJsDoc => {
+ const active = new Set<object>();
+ const stack: Array<{ value: unknown; depth: number; exit?: boolean }> = [{ value, depth: 2 }];
+ try {
+  while (stack.length) {
+   const current = stack.pop()!;
+   if (current.exit) { active.delete(current.value as object); continue; }
+   if (current.depth > MAX_STORABLE_NESTING) return false;
+   const item = current.value;
+   if (item === null || typeof item === 'string' || typeof item === 'boolean' || item === undefined) continue;
+   if (typeof item === 'number') { if (!Number.isFinite(item)) return false; continue; }
+   if (typeof item !== 'object' || active.has(item)) return false;
+   const prototype = Object.getPrototypeOf(item);
+   if (!Array.isArray(item) && prototype !== Object.prototype && prototype !== null) return false;
+   active.add(item); stack.push({ value: item, depth: current.depth, exit: true });
+   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(item)).filter(([, entry]) => entry.enumerable)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(key) || !('value' in descriptor)) return false;
+    stack.push({ value: descriptor.value, depth: current.depth + 1 });
+   }
+  }
+  return isEditorJsDoc(value);
+ } catch { return false; }
+};
+
+/** An explicit user conversion may parse the complete document; unlike
+ * automatic recognition this never imposes a content-size or block budget. */
+export const parseExplicitEditorJsDocString = (value: unknown): EditorJsDoc | null => {
+ if (typeof value !== 'string') return null;
+ const source = value.trim();
+ if (!source.startsWith('{') || !source.endsWith('}')) return null;
+ try { const parsed = JSON.parse(source); return isExplicitEditorJsDocSafeToEdit(parsed) ? parsed : null; } catch { return null; }
 };
 
 // Native Editor.js output is the persistent rich-text datatype. Keep this

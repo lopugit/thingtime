@@ -1,8 +1,10 @@
 import { Box, Flex, Input, Switch, Text } from '@chakra-ui/react';
 import React from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
+import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
@@ -205,6 +207,9 @@ const ActionButton = ({ onClick, children, tone = 'default', ...props }: any) =>
 const COLOR_FIELDS: { key: string; label: string; hint?: string }[] = [
 	{ key: 'accent', label: 'Accent', hint: 'CTAs + highlights' },
 	{ key: 'accentTint', label: 'Accent tint' },
+	{ key: 'focusBorder', label: 'Focus border', hint: 'selected controls; choose a contrasting colour' },
+	{ key: 'focusGlowStart', label: 'Focus glow start', hint: 'left side of the gradient halo' },
+	{ key: 'focusGlowEnd', label: 'Focus glow end', hint: 'right side of the gradient halo' },
 	{ key: 'ink', label: 'Ink', hint: 'headings + borders' },
 	{ key: 'text', label: 'Body text' },
 	{ key: 'muted', label: 'Muted text' },
@@ -376,7 +381,11 @@ export const ThemeStudio = () => {
 				</Text>
 				<Text marginTop="6px" fontSize="md" color="var(--tt-text, #5a5a66)">
 					Make Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it
-					with a link.
+					with a link — or browse everyone&rsquo;s public looks in the{' '}
+					<Text as={RouterLink} to="/themes/gallery" textDecoration="underline" _hover={{ color: 'var(--tt-ink, #16161a)' }}>
+						theme gallery ✨
+					</Text>
+					.
 				</Text>
 
 				{/* Presets */}
@@ -413,6 +422,7 @@ export const ThemeStudio = () => {
 					{COLOR_FIELDS.map((field) => (
 						<Row key={field.key} label={field.label} hint={field.hint} customKey={`color.${field.key}`}>
 							<ColorControl
+								label={field.label}
 								value={(theme.colors as any)[field.key]}
 								onChange={(v) => setColor(field.key, v)}
 							/>
@@ -485,6 +495,12 @@ export const ThemeStudio = () => {
 							step={1}
 							format={(v: number) => `${v}px`}
 						/>
+					</Row>
+					<Row label="Focus glow softness" hint="blur around focused controls" customKey="general.focusGlowBlur">
+						<Flex alignItems="center" gap={2}><Input type="number" aria-label="Focus glow softness" min={0} step={1} value={g.focusGlowBlur} width="96px" onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0) setGeneral('focusGlowBlur', value); }} /><Text fontSize="sm">px</Text></Flex>
+					</Row>
+					<Row label="Focus glow strength" hint="0% turns the glow off; the focus border stays visible" customKey="general.focusGlowOpacity">
+						<StepControl value={g.focusGlowOpacity} onChange={(v: number) => setGeneral('focusGlowOpacity', v)} min={0} max={1} step={0.02} format={(v: number) => `${Math.round(v * 100)}%`} />
 					</Row>
 					<Row label="Shadows" customKey="general.shadow">
 						<Flex background="var(--tt-surface-alt, #f5f5f7)" borderRadius="var(--tt-radius-md, 12px)" padding="4px" gap="4px">
@@ -601,6 +617,7 @@ export const ThemeStudio = () => {
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
 					My themes
 				</Text>
+				<Box marginBottom={3}><ThingTransferControls onImported={refreshMyThemes} /></Box>
 				{!user ? (
 					<Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
 						<Box as="button" onClick={() => navigate('/login')} color="var(--tt-link, #2f8fd6)" cursor="pointer" fontWeight={600}>
@@ -641,6 +658,8 @@ export const ThemeStudio = () => {
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">
 										<ActionButton onClick={() => applySaved(saved)}>Apply</ActionButton>
+										<ActionButton onClick={() => openThingHistory(saved.id, ['theme'])}>History</ActionButton>
+										<ThingTransferControls id={saved.id} canCut onImported={refreshMyThemes} />
 										{saved.visibility === 'public' ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
 										<ActionButton tone="danger" onClick={() => deleteSaved(saved)}>
 											Delete

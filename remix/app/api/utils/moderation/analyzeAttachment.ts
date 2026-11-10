@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 // Post-upload moderation orchestrator. Runs asynchronously after an
 // attachment reaches `ready` (fire-and-forget from completeAttachmentUpload;
 // the admin sweep re-runs anything still pending/unstamped). Loads the doc,
@@ -11,6 +12,7 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { attachmentContentDisposition } from '../attachments/attachmentPresentation';
 import { getPrivateS3, type AttachmentS3 } from '../attachments/privateS3';
+import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import {
 	moderationFromVerdict,
 	type AttachmentModeration,
@@ -35,7 +37,7 @@ export type AnalyzeAttachmentDependencies = {
 };
 
 const defaultFetchBytes = async (url: string): Promise<Uint8Array> => {
-	const response = await fetch(url);
+	const response = await fetchStoredObject(url);
 	if (!response.ok) throw new Error(`moderation: object fetch failed (${response.status})`);
 	return new Uint8Array(await response.arrayBuffer());
 };
@@ -147,6 +149,19 @@ export const createAnalyzeReadyAttachment =
 			return { ok: true, status: currentStatus };
 		}
 
+		// Linked attachments carry no stored bytes — there is no object for the
+		// analyzer to fetch. They are stamped 'skipped' at mint; this guard keeps
+		// a mint whose stamp was lost from wedging the sweep on a missing object.
+		if (doc.attachmentLinked === true) {
+			await stampModeration(
+				things,
+				shareId,
+				{ status: 'skipped', categories: ['external-url'], provider: 'linked', analyzedAt: now },
+				{ allowOverwriteOf: [null, 'pending'], now }
+			);
+			return { ok: true, status: 'skipped' };
+		}
+
 		const choice = await deps.resolveProvider();
 		if (choice.kind === 'off') {
 			await stampModeration(things, shareId, { status: 'skipped', provider: 'off', analyzedAt: now }, { allowOverwriteOf: [null, 'pending'], now });
@@ -179,9 +194,10 @@ export const createAnalyzeReadyAttachment =
 		await stampModeration(things, shareId, { status: 'pending', provider: choice.provider.name }, { allowOverwriteOf: [null, 'pending'], now });
 
 		try {
+      const physical = attachmentPhysicalObject({ ...doc, shareId, objectKey: String(doc.objectKey) });
 			const signed = await deps.getS3().signDownload({
-				objectKey: String(doc.objectKey),
-				versionId: String(doc.objectVersionId || ''),
+				objectKey: physical.objectKey,
+				versionId: physical.versionId ?? '',
 				contentDisposition: attachmentContentDisposition(String(doc.crystal?.name || 'attachment'), false),
 				contentType
 			});
