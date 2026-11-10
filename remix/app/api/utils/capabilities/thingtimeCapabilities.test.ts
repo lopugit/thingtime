@@ -695,7 +695,7 @@ test('empty post and message files require the compatible original-byte contract
 
 
 test('long Data text requires compatible write import and schema contracts', () => {
- for (const [feature, minimum, previous] of [['api.things', '1.58.0', '1.49.2'], ['api.things-update', '1.24.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.2', '1.6.0'], ['api.actions-run', '1.45.0', '1.40.1'], ['api.chatgpt-mcp', '2.1.0', '2.0.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
+ for (const [feature, minimum, previous] of [['api.things', '1.58.0', '1.49.2'], ['api.things-update', '1.24.0', '1.18.1'], ['api.things-import', '1.13.0', '1.12.0'], ['api.schemas', '1.2.0', '1.1.1'], ['api.things-bulk', '1.7.2', '1.6.0'], ['api.actions-run', '1.45.0', '1.40.1'], ['api.chatgpt-mcp', '2.2.0', '2.1.0'], ['api.builder-workspaces', '1.1.0', '1.0.1']]) {
   assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
   assert.equal(thingtimeCapabilityManifest('https://shares.test').features[feature].version, minimum);
   for (const version of [undefined, previous, `${Number(minimum.split('.')[0]) + 1}.0.0`]) assert.equal(capabilitySatisfies(version, minimum), false);

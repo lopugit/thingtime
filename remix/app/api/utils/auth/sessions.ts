@@ -26,6 +26,9 @@ export type SessionDoc = {
 };
 
 export type CreateSessionOptions = {
+  // A signed one-time authorization request can supply its preallocated ID so
+  // repeated consent submissions collide on the existing unique jti index.
+  jti?: string;
   expiresAt?: Date | null;
   purpose?: SessionDoc['purpose'];
   meta?: Record<string, any>;
@@ -37,7 +40,7 @@ export type CreateSessionOptions = {
 export const createSession = async (userId: string, options: CreateSessionOptions = {}): Promise<SessionDoc> => {
   const now = new Date();
   const session: SessionDoc = {
-    jti: crypto.randomUUID(),
+    jti: options.jti ?? crypto.randomUUID(),
     userId,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.sessions,
     createdAt: now,
