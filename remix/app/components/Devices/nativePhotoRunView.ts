@@ -5,6 +5,7 @@ import type { SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import { syncConnectionGlance } from '~/fileSync/connectionGlance';
 import { formatSyncBytes } from '~/fileSync/directionalProgress';
 import { readNativePhotoRunProgress } from '~/fileSync/mobileFolders.client';
+import type { NativePhotoActivityPhase, NativePhotoRunActivity } from '~/fileSync/nativePhotoRunProgress';
 import { SYNC_JOBS_CHANGED_EVENT } from '~/fileSync/syncJobJournal';
 import { nativeBridgeMessageEvent } from '~/utils/nativeBridge';
 import { rootIdentity } from '~/utils/rootIdentity';
@@ -96,6 +97,8 @@ export function nativePhotoRunLabel(view?: NativePhotoRunView): string {
 	if (view.previousRevision) return 'Waiting for the native queue to pick up these saved settings.';
 	const progress = view.progress;
 	if (progress?.continuation === 'held') return 'Background processing stopped. Resume when you’re ready.';
+	if (progress?.stage === 'uploading' && progress.activity && progress.activity.phase !== 'uploading')
+		return phaseLabels[progress.activity.phase];
 	switch (progress?.stage) {
 		case 'ready': return 'Backup queued';
 		case 'preparing': return 'Preparing Photos backup…';
@@ -119,9 +122,70 @@ export function nativePhotoRunSchedule(view?: NativePhotoRunView) {
 
 export function nativePhotoCanContinue(view?: NativePhotoRunView) {
 	const progress = view?.progress;
-	return !view?.stale && !!progress && progress.continuation !== 'active' &&
+	if (view?.stale || view?.previousRevision || !progress || progress.continuation === 'active') return false;
+	const preparing = progress.continuation !== 'held' && (progress.stage === 'preparing' ||
+		(progress.stage === 'ready' && !!progress.activity && preparationPhases.has(progress.activity.phase)));
+	return preparing || (
 		(progress.continuation === 'held' || ['ready', 'preparing', 'uploading'].includes(progress.stage)) &&
-		((progress.pendingOriginals ?? 0) > 0 || (progress.currentFile?.totalBytes ?? 0) > 0);
+		((progress.pendingOriginals ?? 0) > 0 || (progress.currentFile?.totalBytes ?? 0) > 0));
+}
+
+const preparationPhases = new Set<NativePhotoActivityPhase>(['verifying', 'indexing', 'checking-originals', 'downloading', 'checking-cloud']);
+const phaseLabels: Record<NativePhotoActivityPhase, string> = {
+	verifying: 'Verifying backup settings',
+	indexing: 'Indexing the Photos library',
+	'checking-originals': 'Checking originals on this iPhone',
+	downloading: 'Downloading an original from iCloud',
+	'checking-cloud': 'Checking the cloud destination',
+	uploading: 'Uploading originals',
+	publishing: 'Publishing originals to the cloud folder',
+	waiting: 'Waiting to continue',
+	complete: 'Backup check finished'
+};
+const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string> = {
+	interrupted: 'The previous run was interrupted. The backup can resume from its saved progress.',
+	'library-changed': 'The Photos library changed. Its index needs another check.',
+	'photo-access': 'Review Thingtime’s access to the Photos library on this iPhone.',
+	'device-storage': 'This iPhone needs more free space to prepare an original.',
+	'photo-read': 'An original could not be read from the Photos library.',
+	'cloud-request': 'The cloud request could not finish.',
+	'saved-settings': 'Waiting for the current saved backup settings.',
+	'destination-review': 'Review the backup’s cloud destination.',
+	retry: 'Waiting to retry the backup.'
+};
+
+export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['backgroundRequest']) {
+	switch (status) {
+		case 'active': return 'Background processing requested for this backup.';
+		case 'declined': return 'iOS didn’t start background processing. You can keep Thingtime open or try again.';
+		case 'waiting': return 'This backup is waiting for its saved transfer conditions.';
+		case 'complete': return 'This backup check has finished.';
+		default: return '';
+	}
+}
+
+const count = (value: number, singular: string, plural = singular + 's') =>
+	`${value.toLocaleString()} ${value === 1 ? singular : plural}`;
+const eventTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+
+export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false) {
+	const activity = view?.progress?.activity;
+	if (!view?.progress || !activity || view.previousRevision) return undefined;
+	const { continuation } = view.progress;
+	const phase = paused ? 'Paused' : continuation === 'held' ? 'Background processing stopped' : phaseLabels[activity.phase];
+	const { indexed, prepared, backlogOriginals: backlog } = activity;
+	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction : undefined;
+	return {
+		phase: view.stale ? `Last reported · ${phase}` : phase,
+		reason: activity.reason ? reasonLabels[activity.reason] : '',
+		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : '',
+		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : '',
+		backlog: backlog === undefined ? '' : count(backlog, 'original'),
+		downloadPercent: fraction === undefined ? undefined : Math.floor(fraction * 100),
+		events: activity.events?.map(({ phase, at }, index) => ({
+			id: `${at}:${phase}:${index}`, label: phaseLabels[phase], at, time: eventTime.format(new Date(at))
+		})) ?? []
+	};
 }
 
 const bytes = (count: number) => formatSyncBytes(String(count)).replace(/ ([A-Za-z]+)$/, '\u00a0$1');
@@ -129,17 +193,18 @@ export function nativePhotoRunGlance(view?: NativePhotoRunView) {
 	const base = syncConnectionGlance({ deviceLabel: 'iPhone', mode: 'backup', online: true, active: false, paused: false });
 	const progress = view?.progress;
 	const confirmed = progress?.confirmed;
-	const rate = view?.stale || progress?.uploadBytesPerSecond === undefined || progress.stage !== 'uploading' || progress.continuation === 'held' ? 'Upload speed unavailable' :
+	const uploading = progress?.stage === 'uploading' && (!progress.activity || progress.activity.phase === 'uploading');
+	const rate = view?.stale || progress?.uploadBytesPerSecond === undefined || !uploading || progress.continuation === 'held' ? 'Upload speed unavailable' :
 		`${(progress.uploadBytesPerSecond / 125_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} Mbps live`;
 	if (!confirmed) return { ...base, upload: { ...base.upload, rate, progress: 'Progress unavailable' } };
 	const { photos, videos, other, wifiBytes, mobileBytes, unknownBytes } = confirmed;
 	const totalBytes = BigInt(wifiBytes) + BigInt(mobileBytes) + BigInt(unknownBytes);
-	const file = progress.currentFile;
+	const file = !progress.activity || uploading ? progress.currentFile : undefined;
 	return { ...base, upload: {
 		...base.upload,
 		rate,
 		progress: file ? `Current original: ${bytes(file.sentBytes)} of ${bytes(file.totalBytes)} sent` : '',
-		bytes: `${formatSyncBytes(String(totalBytes))} confirmed`,
+		bytes: `${formatSyncBytes(String(totalBytes))} transfer traffic`,
 		remaining: `Wi-Fi ${bytes(wifiBytes)} · Mobile data ${bytes(mobileBytes)}${unknownBytes ? ` · Network unknown ${bytes(unknownBytes)}` : ''}`,
 		operations: `${photos.toLocaleString()} ${photos === 1 ? 'photo' : 'photos'} · ${videos.toLocaleString()} ${videos === 1 ? 'video' : 'videos'}${other ? ` · ${other.toLocaleString()} other` : ''} confirmed`
 	} };

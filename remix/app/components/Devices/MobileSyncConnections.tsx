@@ -15,7 +15,7 @@ import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { SyncResourceControls } from './SyncResourceControls';
 import { PhotoAutomationControls } from './PhotoAutomationControls';
 import { photoSyncScheduleLabel, photoSyncWaitingMessage, usePhotoSyncJobs } from './photoSyncPresentation';
-import { nativePhotoCanContinue, nativePhotoRunActive, nativePhotoRunGlance, nativePhotoRunLabel, nativePhotoRunSchedule, useNativePhotoRunProgress } from './nativePhotoRunView';
+import { nativePhotoActivityDisplay, nativePhotoBackgroundLabel, nativePhotoCanContinue, nativePhotoRunActive, nativePhotoRunGlance, nativePhotoRunLabel, nativePhotoRunSchedule, useNativePhotoRunProgress } from './nativePhotoRunView';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
 import { readNativeInventory } from '~/fileSync/nativeInventory';
 import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask, supportsNativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
@@ -403,10 +403,7 @@ function Connections({
 			const result = await requestNativePhotoBackground(scope.ownerId, {
 				rootId: saved.configuration.localRootId, configurationId: id, configurationRevision: saved.updatedAt, deviceId: scope.deviceId
 			}, request.signal);
-			publish(result.status === 'active' && result.requested ? 'Background processing requested for this backup.' :
-				result.status === 'complete' ? 'This backup is up to date.' :
-				result.status === 'waiting' ? 'This backup is waiting for its saved transfer conditions.' :
-				'iOS didn’t start background processing. You can keep Thingtime open or try again.');
+			publish(nativePhotoBackgroundLabel(result.status));
 		} catch (cause) {
 			publish(cause instanceof Error ? cause.message : 'Background processing could not be confirmed.');
 		} finally {
@@ -913,6 +910,7 @@ function Connections({
                         error={runError || ''}
                         preparation={preparation}
                         photoQueue={photoQueue}
+                        photoActivity={nativeOwns && photos && rootsReady && nativeRoot ? nativePhotoActivityDisplay(nativeRun, paused) : undefined}
                         automation={nativeOwns ? nativePhotoRunSchedule(nativeRun) : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
                             photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' : undefined}
                         pauseAction={automatic && !running && !paused && !pausing ? { label: 'Pause sync', run: () => pausePhotoAutomation(saved.id) } : undefined}
@@ -923,7 +921,7 @@ function Connections({
                         } : undefined}
                         continuationStatus={!nativeOwns || saved.configuration.paused || nativeProgress?.stage === 'complete' ? undefined :
                             continuationActive && !nativeRun?.stale ? 'Continuing this backup with iOS background processing.' :
-                            continuationHeld ? undefined : continuation?.status}
+                            continuationHeld ? undefined : continuation?.status || (!nativeRun?.stale ? nativePhotoBackgroundLabel(nativeProgress?.activity?.backgroundRequest) : undefined)}
                         quickAction={!pausing && automaticallyWaiting ? undefined : { label: actionLabel,
                             disabled: pausing || (running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready || (nativeOwns && (!nativeRun || nativeRun.stale))),
                             run: () => {

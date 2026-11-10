@@ -79,6 +79,13 @@ public struct PhotoOriginalDownloadControl: Sendable {
 /// in one Data value. The cache is private, ephemeral and partitioned by grant.
 public final class PhotoLibraryReader: @unchecked Sendable {
     public typealias Scope = MobileFolderInventory.Scope
+    public struct IndexedLibrary: Codable, Equatable, Sendable {
+        public var photos = 0, videos = 0, files = 0
+    }
+    public enum CaptureProgress: Sendable {
+        case indexed(IndexedLibrary)
+        case checking(completed: Int, selected: Int, ahead: Int)
+    }
     public struct OriginalIdentity: Equatable, Sendable {
         public let group: String, resource: String, kind: String?
         public let count: Int
@@ -126,6 +133,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         let revision: String
         let orderRevision: String
         let resources: [PhotoResource]
+        let indexed: IndexedLibrary
     }
     private var queueSnapshot: (stamp: UInt64, access: String, value: Snapshot)?
     private var queue: (scope: Scope, value: PhotoBackupQueue)?
@@ -337,11 +345,20 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         let access = provider.access(), stamp = reuseForQueue ? provider.membershipStamp() : nil
         if let stamp, let cached = queueSnapshot, cached.stamp == stamp, cached.access == access { return cached.value }
         let resources = try provider.inventory().sorted { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
-        var digest = SHA256(), ordering = SHA256(), previous: String?
+        var digest = SHA256(), ordering = SHA256(), previous: String?, previousAsset: String?
+        var indexed = IndexedLibrary()
         for resource in resources {
             try Task.checkCancellation()
             guard resource.path != previous else { throw Failure.changed }
             previous = resource.path
+            // The opaque path begins with the asset hash, so the sorted
+            // originals and companions of each asset are contiguous.
+            if resource.asset != previousAsset {
+                if resource.assetKind == "photo" { indexed.photos += 1 }
+                if resource.assetKind == "video" { indexed.videos += 1 }
+                previousAsset = resource.asset
+            }
+            indexed.files += 1
             for value in [resource.path, resource.identity, resource.revision] {
                 let data = Data(SHA256.hash(data: Data(value.utf8)))
                 digest.update(data: data); ordering.update(data: data)
@@ -355,7 +372,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         try require()
         guard access == provider.access(), stamp == (reuseForQueue ? provider.membershipStamp() : nil) else { throw Failure.changed }
         let result = Snapshot(revision: digest.finalize().map { String(format: "%02x", $0) }.joined(),
-            orderRevision: ordering.finalize().map { String(format: "%02x", $0) }.joined(), resources: resources)
+            orderRevision: ordering.finalize().map { String(format: "%02x", $0) }.joined(), resources: resources, indexed: indexed)
         if let stamp { queueSnapshot = (stamp, access, result) }
         return result
     }
@@ -377,11 +394,13 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return store
     }
 
-    private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false) throws -> (Snapshot, PhotoBackupQueue.Work) {
+    private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false,
+                               startWithSingleAsset: Bool = false) throws -> (Snapshot, PhotoBackupQueue.Work) {
         let library = try snapshot(reuseForQueue: true)
-        let work = try store.select(revision: library.orderRevision, resources: library.resources, replaceStale: replaceStale)
+        let work = try store.select(revision: library.orderRevision, resources: library.resources, replaceStale: replaceStale,
+                                    startWithSingleAsset: startWithSingleAsset)
         let revision = Self.hash(Data((work.selection.id.uuidString + work.selection.stamps.map(\.version).joined()).utf8))
-        return (.init(revision: revision, orderRevision: revision, resources: work.assets.flatMap(\.resources)), work)
+        return (.init(revision: revision, orderRevision: revision, resources: work.assets.flatMap(\.resources), indexed: library.indexed), work)
     }
 
     private func capturedSnapshot(scope: Scope, batch: PhotoBackupQueueBatch?) throws -> Snapshot {
@@ -418,15 +437,18 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     public func prepareCapture(scope: Scope, id: String, generation: String, allowCloudGaps: Bool,
                                download: PhotoOriginalDownloadControl? = nil, maximumCloudDownloads: Int? = nil,
-                               queueRequest: PhotoBackupQueueRequest? = nil, progress: (Int, Int) -> Void = { _, _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
+                               queueRequest: PhotoBackupQueueRequest? = nil, startWithSingleAsset: Bool = false,
+                               progress: (Int, Int) -> Void = { _, _ in }, activity: (CaptureProgress) -> Void = { _ in },
+                               authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
         guard UUID(uuidString: id) != nil, id.lowercased() == generation.lowercased() else { throw MobileFolderStore.Failure.invalid }
         let client = try requireClient(), generation = generation.lowercased()
         try authorize()
         guard queueRequest == nil || allowCloudGaps else { throw Failure.changed }
         let batchStore = try queueRequest.map { try queueStore(scope: scope, request: $0) }
-        let batch = try batchStore.map { try batchSnapshot(scope: scope, store: $0, replaceStale: true) }
+        let batch = try batchStore.map { try batchSnapshot(scope: scope, store: $0, replaceStale: true, startWithSingleAsset: startWithSingleAsset) }
         let start = try batch?.0 ?? snapshot()
+        activity(.indexed(start.indexed))
         var batchStatus = batch?.1.descriptor
         var began = false
         do {
@@ -438,6 +460,11 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             }
             began = true
             var indexed = prepared.entryCount, skipped = prepared.gapCount, cloudDownloads = 0
+            func report(legacy: Bool = true) {
+                if legacy { progress(indexed, skipped) }
+                activity(.checking(completed: indexed, selected: start.resources.count, ahead: batchStatus?.pending ?? 0))
+            }
+            report(legacy: false)
             let retainedGaps = Set(batch?.1.selection.attempts?.flatMap(\.unavailable) ?? [])
             var batchGaps = Set<String>(), batchEntries: [MobileFolderReader.Entry] = []
             if prepared.coverage == "scanning" {
@@ -454,8 +481,8 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
-                            gaps.insert(resource.path); skipped += 1; progress(indexed, skipped)
-                        }) { indexed += 1; progress(indexed, skipped) }
+                            gaps.insert(resource.path); skipped += 1; report()
+                        }) { indexed += 1; report() }
                     if !entries.isEmpty {
                         if batch != nil { batchEntries += entries }
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
@@ -743,7 +770,11 @@ public struct SystemPhotoResources: PhotoResourceProvider {
         do {
             while state.finished.wait(timeout: .now() + 0.1) == .timedOut {
                 try require(); try download?.authorize(); try state.result()
-                if download != nil && state.stalled() { throw PhotoLibraryReader.Failure.cloudOriginal }
+                if state.stalled() {
+                    // A quiet PhotoKit request can outlive the foreground
+                    // assertion even when network access was disabled.
+                    throw download == nil ? PhotoLibraryReader.Failure.readFailed : PhotoLibraryReader.Failure.cloudOriginal
+                }
             }
             try state.result(); try require(); try download?.authorize(); try validate(resource)
         } catch { manager.cancelDataRequest(request); state.cancel(); throw error }

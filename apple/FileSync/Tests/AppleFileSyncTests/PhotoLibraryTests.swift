@@ -33,9 +33,9 @@ private final class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
         control.progress(1)
     }
     @discardableResult func add(_ asset: String, index: Int = 0, bytes: Data, revision: String = "v1",
-                                captured: Double? = nil, modified: Double? = nil) -> PhotoResource {
+                                captured: Double? = nil, modified: Double? = nil, kind: String? = nil) -> PhotoResource {
         let r = PhotoResource(asset: asset, index: index, name: "same-original.jpg", revision: revision,
-            capturedAt: captured.map { Date(timeIntervalSince1970: $0) }, modifiedAt: modified.map { Date(timeIntervalSince1970: $0) })
+            capturedAt: captured.map { Date(timeIntervalSince1970: $0) }, modifiedAt: modified.map { Date(timeIntervalSince1970: $0) }, assetKind: kind)
         records.append(r); self.bytes[r.path] = bytes; membershipRevision = membershipRevision.map { $0 + 1 }; return r
     }
 }
@@ -265,6 +265,60 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertEqual(number, 10)
         XCTAssertEqual(Set(provider.attempts).count, 40)
         XCTAssertEqual(provider.inventoryCalls, 2, "Ten batches and one membership change require only two whole-library reads")
+    }
+
+    func testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt() throws {
+        let provider = PhotoFixtures()
+        let newest = provider.add("live", bytes: Data([9]), captured: 90, kind: "photo")
+        let companion = provider.add("live", index: 1, bytes: Data([8]), captured: 90, kind: "photo")
+        let older = (0..<5).map { provider.add("old-\($0)", bytes: Data([7]), captured: Double($0), kind: "video") }
+        let files = FileManager.default
+        let base = files.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let real = base.appendingPathComponent("real", isDirectory: true)
+        let alias = base.appendingPathComponent("alias", isDirectory: true)
+        try files.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: base) }
+        try files.createSymbolicLink(at: alias, withDestinationURL: real)
+        let owner = try FileSyncOwnerScope(ownerId: "photos", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "fixture", rootId: UUID().uuidString)
+        let queue = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let oldSelection = PhotoBackupQueue(directory: alias.appendingPathComponent("legacy"), request: queue)
+        XCTAssertEqual(try oldSelection.select(revision: "library", resources: provider.records).assets.count, 4)
+        let refined = try oldSelection.select(revision: "library", resources: provider.records, replaceStale: true, startWithSingleAsset: true)
+        XCTAssertEqual(refined.assets.flatMap(\.resources), [newest, companion])
+        var indexed: PhotoLibraryReader.IndexedLibrary?
+        var prepared: [Int] = []
+        func capture(_ reader: PhotoLibraryReader) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let result = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true,
+                queueRequest: queue, startWithSingleAsset: true, activity: {
+                    switch $0 {
+                    case .indexed(let counts): indexed = counts
+                    case .checking(let complete, _, _): prepared.append(complete)
+                    }
+                })
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: result).photoQueue)
+        }
+        let reader = try makeReader(provider, queueDirectory: alias)
+        let first = try capture(reader)
+        XCTAssertEqual(first.pending, 5)
+        XCTAssertEqual(indexed?.photos, 1)
+        XCTAssertEqual(indexed?.videos, 5)
+        XCTAssertEqual(indexed?.files, 7)
+        XCTAssertEqual(prepared, [0, 1, 2])
+        XCTAssertEqual(provider.attempts, [newest.path, companion.path])
+        try reader.finishQueueBatch(scope: scope, request: queue, batchId: first.id)
+
+        let reopened = try makeReader(provider, queueDirectory: alias)
+        let next = try capture(reopened)
+        XCTAssertEqual(next.assetKeys.count, 4)
+        XCTAssertEqual(next.pending, 1)
+        XCTAssertEqual(Array(provider.attempts.dropFirst(2)), older.suffix(4).reversed().map(\.path))
+
+        let outcomes = try XCTUnwrap(files.enumerator(at: real, includingPropertiesForKeys: nil))
+        let record = try XCTUnwrap(outcomes.compactMap { $0 as? URL }.first { $0.deletingLastPathComponent().lastPathComponent == "attempts" })
+        try files.moveItem(at: record, to: record.deletingLastPathComponent().appendingPathComponent("wrong.json"))
+        XCTAssertThrowsError(try capture(makeReader(provider, queueDirectory: alias)))
     }
 
     func testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen() throws {

@@ -659,6 +659,7 @@ test('native Photos run status accepts the iOS grant snapshot and preserves exac
 	assert.equal(result?.configurationRevision, revision);
 	assert.deepEqual(result?.photoRunProgress?.confirmed, counters);
 	assert.equal(result?.photoRunProgress?.uploadBytesPerSecond, 4);
+	assert.equal(result?.photoRunProgress?.activity, undefined);
 	assert.equal(JSON.stringify(result).includes('privatePath'), false);
 	assert.deepEqual(parse({ configurationRevision: undefined, photoRunProgress: null }), { configurationRevision: null, photoRunProgress: null });
 	for (const patch of [
@@ -670,12 +671,37 @@ test('native Photos run status accepts the iOS grant snapshot and preserves exac
 	]) assert.throws(() => parse(patch));
 });
 
+test('optional native Photos activity exposes only measured progress and known, newest-first events', () => {
+	const request = { action: 'photo-run-status', rootId, configurationId: 'config', deviceId: 'phone' } as const;
+	const revision = '2026-11-08T00:00:00.000Z';
+	const progress = { stage: 'preparing', confirmed: { photos: 2, videos: 1, other: 0, wifiBytes: 12, mobileBytes: 4, unknownBytes: 1 } };
+	const parse = (activity: unknown) => parseMobileFolderResult(response({ ...request, roots: iosPhotoRoots,
+		configurationRevision: revision, photoRunProgress: { ...progress, activity } }), expected, request)?.photoRunStatus?.photoRunProgress;
+	assert.deepEqual(parse({
+		phase: 'downloading', downloadFraction: 0, backlogOriginals: 0, privatePath: '/hidden', backgroundRequest: 'declined',
+		indexed: { photos: 2, videos: 0, files: 4, assetId: 'private' }, prepared: { completed: 0, total: 2 },
+		events: [{ phase: 'verifying', at: revision }, { phase: 'indexing', at: '2026-11-08T00:00:02Z', privatePath: '/hidden' },
+			{ phase: 'private', at: revision }, { phase: 'uploading', at: '/hidden' }]
+	})?.activity, {
+		phase: 'downloading', downloadFraction: 0, backlogOriginals: 0, backgroundRequest: 'declined',
+		indexed: { photos: 2, videos: 0, files: 4 }, prepared: { completed: 0, total: 2 },
+		events: [{ phase: 'indexing', at: '2026-11-08T00:00:02.000Z' }, { phase: 'verifying', at: revision }]
+	});
+	assert.deepEqual(parse({ phase: 'waiting', downloadFraction: 0.5, backlogOriginals: -1, reason: 'secret',
+		prepared: { completed: 3, total: 2 }, backgroundRequest: 'secret' })?.activity, { phase: 'waiting' });
+	assert.equal(parse({ phase: 'unknown' })?.activity, undefined);
+	assert.deepEqual(parse({ phase: 'unknown' })?.confirmed, progress.confirmed);
+	assert.equal(parse({ phase: 'indexing', events: Array.from({ length: 30 }, () => ({ phase: 'indexing', at: revision })) })?.activity?.events?.length, 12);
+});
+
 test('continued Photos work is separately negotiated and bound to one exact configuration revision', () => {
 	const old = { platform: 'ios', filePhotoAutomationVersion: '1.1.0', filePhotoContinuationVersion: '1.0.0' } as const;
 	const current = { ...old, filePhotoAutomationVersion: '1.2.0' };
 	assert.equal(supportsSoleNativePhotoRun(old), false);
 	assert.equal(supportsNativePhotoContinuation(old), false);
 	assert.equal(supportsNativePhotoContinuation(current), true);
+	assert.equal(supportsNativePhotoContinuation(current, '1.1.0'), false);
+	assert.equal(supportsNativePhotoContinuation({ ...current, filePhotoContinuationVersion: '1.1.0' }, '1.1.0'), true);
 	assert.equal(supportsNativePhotoContinuation({ ...current, filePhotoContinuationVersion: '2.0.0' }), false);
 	const request = { action: 'run-photo-in-background', rootId, configurationId: 'config', deviceId: 'phone',
 		configurationRevision: '2026-11-08T00:00:00.000Z' } as const;

@@ -24,6 +24,7 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     var pendingOriginals: Int?
     var unavailableOriginals: Int?
     var continuedHold: Bool?
+    var activity: NativePhotoRunActivity.Snapshot?
 
     var rootId: String { authorization.configuration.localRootId }
     var queue: PhotoBackupQueueRequest { .init(epoch: epoch, configurationId: authorization.id, configurationRevision: authorization.updatedAt) }

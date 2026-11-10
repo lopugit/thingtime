@@ -30,7 +30,7 @@ try {
  for (const [label, width, height] of [['desktop', 1440, 1000], ['phone', 390, 844]]) {
   for (const scenario of process.env.TT_PHOTO_DESTINATION_TEST ? ['photo-destination'] : process.env.TT_SYNC_UI_SCENARIOS?.split(',') ??
    ['success', 'cas', 'uncertain', 'draft', 'identity', 'ios-managed', 'photo-destination', 'photo-policy', 'remote-iphone', 'paired-iphone',
-    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause', 'native-only']) {
+    'auto-legacy', 'auto-budget', 'auto-budget-minimum', 'auto-charging', 'auto-identity', 'auto-settings', 'auto-unsupported', 'auto-offline-pause', 'native-only', 'native-activity']) {
    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
    const page = await context.newPage(); page.setDefaultTimeout(12_000); page.on('pageerror', error => errors.push(error.message));
@@ -41,6 +41,54 @@ try {
      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
      results.push({ viewport: label, scenario, passed: true });
     };
+    if (scenario === 'native-activity') {
+     await page.goto(origin + '/?nativeOnly=1&nativeActivity=1');
+     const state = () => page.evaluate(() => window.remoteSyncFixture.nativeOnlyState());
+     const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
+     await card.getByText('Last transfer finished.', { exact: true }).first().waitFor();
+     assert.equal((await state()).nativeCalls.filter(call => call.continueInBackground).length, 0);
+     await card.getByRole('button', { name: 'Back up now', exact: true }).click();
+     const disclosure = card.locator('summary').filter({ hasText: 'Backup activity' });
+     await disclosure.getByText('Downloading an original from iCloud', { exact: true }).waitFor();
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'arm-photo-run' && call.continueInBackground).length, 1);
+     assert.equal((await state()).nativeCalls.filter(call => call.action === 'run-photo-in-background').length, 0);
+     await card.getByText('iOS didn’t start background processing. You can keep Thingtime open or try again.', { exact: true }).waitFor();
+     await disclosure.focus();
+     await page.keyboard.press('Enter');
+     await card.getByRole('progressbar', { name: 'Current iCloud download' }).waitFor();
+     assert.equal(await card.getByRole('progressbar', { name: 'Current iCloud download' }).getAttribute('value'), '0');
+     assert.equal(await card.getByText('3 photos · 0 videos · 4 files', { exact: true }).isVisible(), true);
+     assert.equal(await card.getByText('0 of 2', { exact: true }).isVisible(), true);
+     assert.equal(await card.getByText('Originals in queue', { exact: true }).count(), 0);
+     assert.deepEqual(await card.locator('[data-block-id="folder-card-activity-event-time"]').evaluateAll(elements => elements.map(element => element.title)),
+      ['2026-11-08T00:00:02.000Z', '2026-11-08T00:00:00.000Z']);
+     await page.screenshot({ path: join(evidence, `${label}-native-activity-open.png`), fullPage: true });
+     const layout = card.locator('[data-settings-document="device-sync-folder-card"]');
+     await enableCurrentPageBuilder(page);
+     await layout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+     await layout.locator('[data-block-id="folder-card-activity-title"]').click();
+     const selected = page.getByRole('combobox', { name: 'Select block', exact: true });
+     assert.equal(await selected.inputValue(), 'folder-card-activity-title');
+     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('My backup activity');
+     await selected.selectOption('folder-card-activity-event-time');
+     assert.equal(await selected.inputValue(), 'folder-card-activity-event-time');
+     await page.getByRole('textbox', { name: 'Block text', exact: true }).fill('Reported {item.time}');
+     await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+     assert.equal(await layout.locator('[data-block-id="folder-card-activity-title"]').textContent(), 'My backup activity');
+     await layout.getByRole('button', { name: 'Save layout', exact: true }).click();
+     await layout.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+     const savedLayout = (await page.evaluate(() => window.remoteSyncFixture.state())).rows.find(row => row.crystal.pageKey === 'settings-device-sync-folder-card');
+     assert.ok(JSON.stringify(savedLayout?.crystal.blocks)?.includes('My backup activity'));
+     assert.ok(JSON.stringify(savedLayout?.crystal.blocks)?.includes('Reported {item.time}'));
+     await page.reload();
+     await card.locator('summary').filter({ hasText: 'My backup activity' }).click();
+     const eventTime = await card.locator('[data-block-id="folder-card-activity-event-time"]').first().textContent();
+     assert.ok(eventTime?.startsWith('Reported '));
+     await card.getByRole('button', { name: 'Run in Background', exact: true }).click();
+     await page.waitForFunction(() => window.remoteSyncFixture.nativeOnlyState().nativeCalls.filter(call => call.action === 'run-photo-in-background').length === 1);
+     assert.equal((await state()).webTransfers.length, 0);
+     await finish(); continue;
+    }
     if (scenario === 'native-only') {
      await page.clock.install();
      await page.goto(origin + '/?nativeOnly=1');
@@ -48,7 +96,7 @@ try {
      const card = page.locator('[aria-label="Local sync"] article').filter({ has: page.getByRole('heading', { name: 'iPhone Photos', exact: true }) });
      await card.getByText('Waiting for the selected network.', { exact: true }).waitFor();
      await card.getByText('2 photos · 1 video confirmed', { exact: true }).waitFor();
-     await card.getByText('3.5 MiB confirmed', { exact: true }).waitFor();
+     await card.getByText('3.5 MiB transfer traffic', { exact: true }).waitFor();
      await card.getByText('Wi-Fi 1 MiB · Mobile data 2 MiB · Network unknown 512 KiB', { exact: true }).waitFor();
      assert.equal(await card.getByText('Legacy WebView progress must stay hidden.', { exact: true }).count(), 0);
      await card.getByText('Upload speed unavailable', { exact: true }).waitFor();
