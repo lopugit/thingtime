@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { deflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { ImageMagick, MagickFormat, Orientation } from '@imagemagick/magick-wasm';
-import { compressImage, imageDimensions, isImageFile, pngAnimationFrames, validateStaticSvg, type ImageWasmAssets } from './imagePipeline';
+import { SVG_DOCUMENT_HEAD, compressImage, imageDimensions, isImageFile, pngAnimationFrames, validateStaticSvg, type ImageWasmAssets } from './imagePipeline';
 
 const require = createRequire(import.meta.url);
 const assets: ImageWasmAssets = {
@@ -323,6 +323,27 @@ test('missing and malformed local image engines reject without starting decode',
 	assert.equal(result.error, undefined);
 	assert.equal(result.status, 0, result.stderr);
 	assert.match(result.stdout, /EXPECTED_REJECTION/);
+});
+// A chosen file decides this header test, so a header that never reaches
+// `<svg` must cost what it is, not exponential backtracking on the browser's
+// only thread. The lazy comment body this replaced took 160ms at 24
+// repetitions of `--><!--`, and the 4096-byte window holds ~580.
+test('SVG detection reads commented headers without exponential backtracking', () => {
+	for (const header of [
+		'<svg xmlns="http://www.w3.org/2000/svg">',
+		'  <svg>',
+		'<?xml version="1.0"?><svg >',
+		'<?xml version="1.0"?>\n<!-- a -->\n<!-- b --> <svg\t',
+		'<!----><svg>',
+		'<!-- -- --><svg>'
+	])
+		assert.ok(SVG_DOCUMENT_HEAD.test(header), header);
+	for (const header of ['<html><svg>', '<svgx>', '<!-- unterminated <svg>', '<?xml?><!-- c --><notsvg>'])
+		assert.equal(SVG_DOCUMENT_HEAD.test(header), false, header);
+	const hostile = '<!--' + '--><!--'.repeat(580);
+	const started = process.hrtime.bigint();
+	assert.equal(SVG_DOCUMENT_HEAD.test(hostile), false);
+	assert.ok(Number(process.hrtime.bigint() - started) / 1e6 < 1000, 'the refusal must stay linear');
 });
 test('static SVG renders locally while text, animation and external dependencies fail', async () => {
 	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="#ff0000"/></svg>';
