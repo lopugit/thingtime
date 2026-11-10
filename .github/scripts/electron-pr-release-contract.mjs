@@ -37,7 +37,7 @@ function assertPrReleaseContract() {
   );
   assert.match(
     workflow,
-    /github\.event_name == 'workflow_call'[\s\S]*github\.ref_name == 'develop'[\s\S]*github\.ref_name == 'main'/u,
+    /github\.event_name == 'pull_request_target'[\s\S]*github\.ref_name == 'develop'[\s\S]*github\.ref_name == 'main'/u,
     "reusable release calls are accepted only from the protected product listeners",
   );
   assert.match(
@@ -87,7 +87,7 @@ function assertPrReleaseContract() {
   assert.match(workflow, /build-unsigned-release\.sh/u, "the unsigned lane builds the companion Recovery artifact without notarization");
   assert.match(workflow, /Thingtime-Electron-App-UNSIGNED-Release/u, "unsigned desktop assets have a non-ambiguous public name");
   assert.match(workflow, /Thingtime-Recovery-App-UNSIGNED-Release/u, "unsigned Recovery assets have a non-ambiguous public name");
-  assert.match(workflow, /UNSIGNED Thingtime Desktop PR release/u, "unsigned release notes are unmistakable");
+  assert.match(workflow, /UNSIGNED Thingtime Desktop release/u, "unsigned release notes are unmistakable");
   assert.match(workflow, /Open Anyway/u, "unsigned release notes direct users to macOS's explicit approval path");
   assert.match(workflow, /MAC_CSC_LINK: \$\{\{ secrets\.MAC_CSC_LINK \}\}/u, "Developer ID certificate remains a release-only secret");
   assert.match(workflow, /APPLE_API_KEY_BASE64: \$\{\{ secrets\.APPLE_API_KEY_BASE64 \}\}/u, "notarization key remains a release-only secret");

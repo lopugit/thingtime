@@ -17,10 +17,312 @@ every entry is attributed the same way the app changelog attributes them.
 
 ---
 
+## 2026-09-05 — Cooperative review handover and preview recovery
+
+Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md).
+
+- Batch reviews can finish their current PR, publish through the existing
+  exact-head gate, and queue a bounded remainder when other fleet work waits.
+  No hard cancellation or incomplete-review publication; atomic repairs and
+  deployments remain protected. — Codex (AI)
+- Recovered PR #611's missed preview after its historical comment-write 403
+  using the corrected controller: run `33952929854`, exact head `e81d6aa7`,
+  persistent alias and immutable deployment posted successfully. — Codex (AI)
+
+## 2026-09-05 — Desktop and Recovery cloud release repair
+
+- Main releases share the approved PR worker's dependency checks, trust-lane
+  selection, Electron/Recovery packaging and archive verification. The obsolete
+  unsigned invocation with a signed-looking version is removed.
+- Gate reusable jobs on the original push, dispatch or pull_request_target event;
+  revalidate source repository, owner, label and immutable SHA before checkout.
+- GitHub release-list failures stop publication instead of pretending no release
+  exists. Unsigned and PR artifacts remain prereleases and never replace latest.
+- Validation: actionlint, release contracts, actual shell version generation,
+  and allowed/denied caller-event regression cases.
+
 ## [Unreleased]
+
+- Added PR-scoped last-success preview timestamp labels (Melbourne time),
+  independent current-state and admin-environment labels, bounded retry-safe
+  comment/label writes, and scheduled recovery for eligible PRs without builds.
+  Reused deployments keep their actual READY time; recovery skips active work,
+  caps attempts per commit, and preserves the protected secretless build split.
+  See [PR #642](PRs/642-preview-status-recovery--discoverable-status-and-missed-build-repair.md).
+  — Codex (AI), 2026-09-05
+
+- Prevented owner-PAT preview status comments from recursively waking Lopu,
+  preserved human quote replies, and revalidated queued comments before model
+  work. Added markers to all rebase result paths and made both preview comment
+  writers skip unchanged content. Scoped control-plane CI cancellation per PR
+  or ref and skipped product builds for controller-only heads. The targeted
+  event and comment regression suites now block `verify`. Extends repairs #624,
+  #625, and #626; see [PR #634](PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md). — Codex (AI), 2026-09-05
+
+- Restored Lopu PR manager admission after its protected workflow crossed
+  GitHub's workflow-size boundary and began accumulating permanently pre-queued
+  runs with no jobs or logs. The controller is compact again and its contract
+  now enforces byte headroom. Develop preview dispatches also tolerate GitHub
+  dropping a verified source run's PR association, while preserving exact
+  repository/SHA/ref fences. GitHub API failures now identify the exact safe
+  route and error class, retry proven rate-limit responses plus response-less
+  transient 403s, and still fail immediately on explicit integration
+  permission denials. Protected preview authorization and publishing reuse
+  Lopu's repository automation credential when available so GitHub's
+  PR-specific integration-token downgrade cannot suppress the required early
+  comment or deployment receipt. Marker upserts recognize both the Actions bot
+  and the repository owner's automation identity, preventing one status
+  comment per deployment phase; untrusted build jobs remain secretless. —
+  Codex (AI), 2026-09-04
+
+- Allowed the rebase conflict-round credential gate to recognize the existing
+  Thingtime credential-vault router secret. Repository-dispatch rebase workers
+  can now reach the same ordered Claude credential waterfall already used by
+  Lopu's repository-review worker instead of failing before the model starts.
+  The hardened repo-less conflict scratch now carries, hashes, and restores the
+  two credential helper scripts needed by that nested Lopu action, and exposes
+  a disposable empty Git repository for the action's required bot-identity
+  and remote-credential bootstrap without reconnecting the model to the real
+  rebase repository. — Codex (AI), 2026-09-05
+
+- Moved the ordinary Develop preview's expected URL and ready estimate into the
+  protected authorization phase so the PR comment exists before checkout,
+  dependency installation, or build. The same timestamp is preserved through
+  publisher updates, and both secretless build paths now retry the pinned pnpm
+  bootstrap after the observed transient Corepack transport assertion. — Codex
+  (AI), 2026-09-03
+
+- Moved admin-selected Develop and Production/Main PR preview publication into
+  the protected `github-actions` controller. The product backend now sends only
+  a GitHub App-authenticated policy dispatch; the controller immediately
+  comments the expected PR-scoped URLs and ready estimate, adds immutable
+  snapshot URLs when known, and publishes aliases only after an exact-SHA READY
+  verification. Develop previews now also accept every trusted same-repository
+  PR base without requiring a live parent PR. — Codex (AI), 2026-09-03
+
+- Reconciled cancelled or stale Feature Stack wrappers after their exact
+  protected target PRs have already merged. Lopu now verifies every published
+  branch/base identity and target-contained merge commit, skips duplicate AI
+  work, and signs the terminal success back to the production CI console. —
+  Codex (AI), 2026-09-01
+
+- Kept Feature Stack completion tracking attached to the stable published PR
+  instead of its first head SHA. An authorized repair push may now advance the
+  protected PR while the original wrapper is waiting; the gate revalidates the
+  exact head/base branch identity, follows that PR number, and reports its real
+  merge rather than waiting five hours on a stale SHA. — Codex (AI), 2026-09-01
+- Moved develop PR preview compilation from Vercel into a secret-free GitHub
+  job. The exact authorized SHA now produces a symlink-preserving
+  `.vercel/output` artifact; a separate protected publisher validates the
+  untrusted archive and uploads it with a pinned Vercel CLI in prebuilt-only
+  mode before applying the SHA-fenced alias and live CORS checks. — Codex (AI),
+  2026-09-01
+- Feature Stack target workers now start after their expected sibling jobs are
+  skipped. The protected controller uses the same explicit `!cancelled()`
+  dependency guard as the other Lopu workers and validates the durable
+  Thingtime run identity against the immutable merge plan. — Codex (AI),
+  2026-09-01
+- Kept the priority `sync/main-into-develop` detector independent of the
+  repository-wide open-PR GraphQL inventory. Its trusted pull-request event now
+  hydrates and validates only the exact automation-owned PR through the REST
+  API, so a large inventory-side GitHub 502 cannot stall a new `main` commit;
+  scheduled and ordinary PR sweeps retain the complete topology scan. — Codex
+  (AI), 2026-09-01
+- Bounded the control-plane Graphify store to one active portable snapshot by
+  default, added an explicit safe prune command, and made every successful
+  update activate its replacement before deleting superseded snapshots. The
+  active snapshot and semantic CAS remain preserved, while invalid retention
+  settings fail closed. — Codex (AI), 2026-09-01
+- Gave the exact automation-owned `sync/main-into-develop` conflict worker its
+  own serialized priority lane. Detector deduplication now sees both that lane
+  and the ordinary Lopu fleet, while ordinary capacity limits no longer defer
+  the standing synchronizer; historical PR conflicts therefore cannot hold a
+  new `main` commit behind the global model FIFO queue. — Codex (AI),
+  2026-08-31
+- Hardened the standing `main` to `develop` PR merger against two live GitHub
+  consistency edges: the PR object's head may briefly lag the automation-owned
+  branch ref, and a transient merge API error may arrive after GitHub has
+  committed the merge. The merger now polls the first case and proves the
+  merged PR plus `develop` ancestry before recovering the second, avoiding
+  false deferrals and false-red runs without weakening the SHA fences. — Codex
+  (AI), 2026-08-31
+- Made the standing `main` to `develop` synchronization PR merge itself as soon
+  as its exact published head becomes mergeable. Both the clean sync lane and
+  Lopu conflict resolver now invoke one SHA-fenced terminal merger that verifies
+  the repository, head/base names, live branch tips, and `main` ancestry before
+  merging, then verifies `develop` afterward; moving refs and remaining
+  conflicts defer safely instead of depending on unavailable native GitHub
+  auto-merge. — Codex (AI), 2026-08-31
+- Made Graphify scope exclusions compatible with the pinned `graphify 0.9.4`
+  CLI. The immutable CAS wrapper now consumes and validates repository-local
+  `--exclude` paths itself, atomically hides the nested trusted controller only
+  while Graphify runs, and restores it on both success and failure instead of
+  forwarding an unsupported update/extract option. — Codex (AI), 2026-08-28
+- Moved post-rebase repository maintenance behind a verifiable rebase-fleet
+  finalizer. Rewritten tips now carry one run/PR-bound Lopu trailer whose live
+  controller run and exact rebase job must match before PR/push listeners defer
+  work. The last active stack worker queues one repository-wide review and
+  all-branch rebuild, while an already-draining conflict batch retains its own
+  single finalizer. — Codex (AI), 2026-08-28
+- Bound Lopu's per-resolution review and all-branch deferrals to durable
+  controller provenance instead of GitHub's push actor alone. Repository-owner
+  PAT pushes are now recognized through a run/PR commit trailer whose live
+  workflow run must belong to the protected `github-actions` resolver; ordinary
+  collaborator messages cannot suppress maintenance. Clean merges, AI-resolved
+  merges, and terminal Graphify commits all carry the same marker. — Codex
+  (AI), 2026-08-28
+- Made every queued Lopu conflict owner immediately discoverable. Conflict
+  matrices now materialize completely inside a 90-member durable-fleet cap
+  instead of hiding later PRs behind `max-parallel: 3`; overflow stays
+  conflicting for the next event or scheduled scan, and an unavailable queue
+  inventory safely defers dispatch rather than risking GitHub dropping jobs at
+  its 100-pending-member limit. Pre-migration batches with unknowable latent
+  members drain under their distinct legacy title before the new dispatcher
+  admits replacements. — Codex (AI), 2026-08-28
+- Stopped overlapping Lopu conflict detectors from queuing the same PR more
+  than once behind the durable repository fleet. Before dispatching a fresh
+  batch, the protected handoff now reads GitHub's live concurrency group and
+  removes PRs that already have a pending or in-progress merge/rebase owner;
+  immutable worker leases remain the fail-open correctness backstop if that
+  read-only inventory is temporarily unavailable. — Codex (AI), 2026-08-28
+- Allowed Lopu's isolated rebase rounds to resolve ordinary executable text
+  conflicts. Scratch copies remain non-executable, while the trusted verifier
+  restores the incoming replay side's exact `100644` or `100755` Git mode;
+  symlinks, submodules, non-regular entries, and binaries remain excluded. —
+  Codex (AI), 2026-08-28
+- Coalesced Lopu's conflict-resolution follow-up work at the batch boundary.
+  Bot-authored resolution pushes no longer enqueue one repository review and
+  one all-branch rebuild per PR ahead of the remaining conflict matrix; one
+  review and one rebuild are dispatched after the complete batch succeeds. —
+  Codex (AI), 2026-08-28
+- Fixed Lopu's post-merge Graphify scan so the nested `trusted/` controller
+  checkout remains available for GitHub action post-steps without being
+  indexed as duplicate product source. Both structural and LLM-semantic phases
+  now exclude that checkout, preventing duplicate-node collisions and false
+  unchanged-file symbol-loss rejections. — Codex (AI), 2026-08-28
+- Fixed Lopu's Graphify snapshot stager on legacy product branches whose broad
+  ignore rules predate the immutable CAS layout. The trusted stager now
+  force-adds only allowlisted immutable snapshots and semantic-cache variants,
+  while mutable legacy root outputs retain ordinary Git ignore semantics.
+- Fixed Lopu's post-resolution cleanup so its ignored `trusted/` controller
+  checkout survives the Graphify preflight. This keeps the local action
+  definition available for GitHub's registered post-run steps while every
+  other ignored or untracked model-created path is still removed.
+- Fixed Lopu's `all`-branch rebuild so generated `graphify-out/` state is
+  pinned to the primary-base snapshot after every PR merge, preventing legacy
+  cache/snapshot layouts from excluding real source changes or ballooning the
+  synthetic branch. A failed lazy promisor fetch now also triggers one
+  complete refetch of the exact live base and PR refs before retrying.
+- Fixed Lopu's stack-rebase prompt so the live rebase checkout is explicitly
+  inspection-only and every bounded related edit is submitted as a verified
+  scratch copy, preventing model-side writes from tripping the immutable real
+  checkout guard during large semantic conflict rounds.
 
 ### Changed
 
+- **Lopu now resolves Git's marker-free distinct-type conflicts for the
+  repository's canonical root instruction aliases**: when the exact target
+  snapshot proves `AGENTS.md` and `CLAUDE.md` are `AI_ALL.md` symlinks and the
+  historical PR head proves regular files, the trusted controller preserves
+  the canonical symlinks, removes Git's synthetic `~HEAD` sidecars, and leaves
+  every unfamiliar type conflict untouched. A real merge fixture protects the
+  behavior. — Codex (AI), 2026-08-28
+- **Lopu rebase rounds now preserve validated related fixes instead of
+  discarding an otherwise-correct conflict resolution**: a live Commander
+  replay resolved all thirteen mechanically-derived conflicts but also updated
+  the existing Nitro API route registry required by Thingtime's endpoint
+  conventions, so the former exact-file-set guard rejected the whole round.
+  Every listed conflict remains mandatory, while up to 32 related edits may
+  now be admitted only when they are existing stage-0, non-executable regular
+  text files and pass the same path, size, binary, marker, credential, index,
+  aggregate-byte, and final staged-tree verification before import. — Codex
+  (AI), 2026-08-28
+- **Lopu now coalesces obsolete pending conflict-worker batches before it
+  dispatches a fresh live snapshot**: repeated push, PR, check, and workflow
+  signals had accumulated fourteen not-yet-admitted batch runs behind the
+  single-agent fleet; GitHub then rejected newer matrix jobs before assigning a
+  runner or first step. The protected handoff lists only pending/queued Lopu
+  batch workers, rechecks each live status, preserves every in-progress run,
+  cancels stale waiters, waits for their capacity to release, and only then
+  dispatches the newest re-derived batch. Graphify's CAS router also makes
+  private working copies writable after copying 0444 immutable snapshots, so a
+  new source fingerprint can refresh without weakening stored snapshot
+  immutability. — Codex (AI), 2026-08-27
+- **Lopu now rejects poisoned Graphify snapshots at the single immutable CAS
+  boundary**: every structural and semantic result is compared with the richest
+  snapshot for the same source fingerprint. If Graphify's manifest says a file
+  is unchanged but its graph loses two or more symbols, publication fails even
+  when other files make the total graph larger; one-node extractor jitter and
+  legitimate hash-changing edits remain allowed. Immutable snapshot files are
+  also made read-only when finalized or activated, so a legacy raw Graphify
+  hook cannot follow a compatibility symlink and rewrite a content-addressed
+  artifact in place; if that legacy writer replaces only an ignored root alias
+  with a regular generated file, the next CAS activation safely reclaims the
+  exact compatibility pathname. — Codex (AI), 2026-08-27
+- **Graphify snapshot activation now repairs dangling compatibility aliases**:
+  deleting a stale snapshot leaves its ignored root symlink present even though
+  ordinary existence checks report it missing. The trusted router now inspects
+  the link itself, replaces it with the newly selected immutable target, and
+  regression-tests the exact migration sequence. — Codex (AI), 2026-08-27
+- **Lopu's Graphify publisher now content-addresses semantic-cache variants as
+  well as graph snapshots**: real semantic builds proved that upstream can
+  rewrite one input-key filename with different valid response bytes. The
+  trusted router hydrates a private work cache from
+  `semantic-cas/v1/<input-key>/<content-hash>.json`, ingests only after a
+  successful build, preserves divergent responses additively, and restores any
+  legacy tracked mutable cache after staging so old product branches remain
+  clean. — Codex (AI), 2026-08-27
+- **Lopu now wakes on first-party CI failures without duplicating repository
+  review sessions**: the default listener forwards a bounded allowlist of
+  completed GitHub Actions workflows, and the protected controller binds the
+  exact workflow-run id into the review evidence. PR, CodeQL, external-check,
+  and first-party CI signals coalesce only when an identical review scope is
+  still unstarted; a running review retains one newest waiter and is never
+  cancelled. Human conversation is deliberately never coalesced — only its own
+  dispatch id names the comment Lopu must read and answer — so every PR comment
+  still wakes its own session. CodeQL dispositions enforce GitHub's
+  280-character evidence limit and accept a transient nullable alert state only
+  when the exact newest instance remains open, unfixed, and undismissed
+  immediately before the isolated writer acts. — Codex (AI), reviewed by Lopu
+  (AI), 2026-08-27
+- **Lopu's historical CodeQL backfill now advances past completed PR
+  snapshots instead of repeatedly dispatching safe no-ops**: inventory resolves
+  each live synthetic merge ref and validates its exact base/head parents using
+  the same ownership rule as the analyzer. It no longer trusts the lagging
+  `merge_commit_sha` returned by the paginated pull-list API, so the bounded
+  maintenance window reaches older genuinely missing PR analyses. — Codex
+  (AI), 2026-08-27
+- **Lopu's isolated CodeQL writer now validates repository-level dispositions
+  against the live target branch tip** instead of the historical base snapshot
+  stored on an out-of-date PR. The pre-write guard still requires the exact
+  reviewed PR head and CodeQL head-or-merge instance, but valid dispositions on
+  older `develop` PRs are no longer silently skipped solely because their
+  recorded base SHA predates the current target. Matching proposals for a
+  shared repository alert are coalesced to one write; conflicting reasons leave
+  the alert open without failing unrelated reviews. — Codex (AI), 2026-08-27
+- **Unrouted Lopu review events now fail closed instead of escalating to every
+  open PR**: exact PR, branch, operator-wide, and protected-controller-push
+  scopes retain their existing behavior, while any unknown event that carries
+  no derivable scope logs a notice and dispatches no model work. This removes
+  merge-order dependence between metadata-only product listeners and the
+  protected controller, preventing a newly activated trigger from saturating
+  the repository-wide Lopu fleet before its matching router lands. — Codex
+  (AI), 2026-08-27
+- **Commander macOS releases are now Developer ID signed, notarized, and
+  stapled**: the release job imports the existing Developer ID certificate and
+  App Store Connect key into an ephemeral runner keychain, builds under the
+  distribution signing policy instead of the previous ad-hoc identity, and then
+  submits, staples, and Gatekeeper-assesses the bundle before it publishes any
+  asset. Credentials are imported only after the duplicate-release check — the
+  same ordering the Electron PR release uses — so a re-run that publishes
+  nothing never unlocks them, and the otherwise unbounded notarization wait is
+  capped so an Apple-side stall cannot hold a macOS runner for six hours. The
+  imported keychain, certificate, and App Store Connect key are deleted at the
+  end of the job whatever its outcome, matching the Electron lane, so a failed
+  build or notarization does not leave signing material behind. The lane
+  requires the six existing macOS signing secrets and stays inert until the
+  Commander sources reach `main` (#263) and a thin `main` listener calls this
+  workflow. — Lopu (AI), 2026-08-27
 - **All-branch maintenance now coalesces before it reaches Lopu's durable model
   fleet**: PR lifecycle, protected-branch push, and hourly backstop events make
   the same metadata-only handoff to the protected manager instead of attaching
@@ -152,6 +454,12 @@ every entry is attributed the same way the app changelog attributes them.
   then records the evidence and disposition on the PR. Lopu never selects
   `won't fix`, and the model itself has read-only code-scanning access. — Codex
   (AI), 2026-08-25
+- **Lopu now publishes conflict-free Graphify snapshots**: structural and
+  semantic refreshes run through a trusted content-addressed router that
+  fingerprints only source, serializes writers, validates atomic portable
+  output, rejects large accidental collapse, and stages immutable additive
+  snapshots. Root graph aliases are local-only, so independent PRs and stacks
+  no longer fight over the same generated JSON paths. — Codex (AI), 2026-08-27
 - **Lopu now updates clean-but-behind PR branches before reviewing them**:
   the shared detector treats GitHub's `BEHIND` state as a base-merge request,
   snapshots both refs, and merges the PR target into an eligible same-repo
@@ -355,6 +663,18 @@ every entry is attributed the same way the app changelog attributes them.
   and the control-plane contract inventories all active AI workflow/action
   YAML while rejecting legacy or hardcoded model selections. — Codex (AI),
   2026-08-10
+- **A branch pushed just before its PR opens no longer times out that PR's
+  CodeQL check**: the analyzer's scope pre-flight samples PR ownership seconds
+  after the push, so a branch adopted by a PR moments later still reached the
+  analyze job believing it owned analysis. The resulting `refs/heads` analysis
+  at a live PR head made GitHub Advanced Security open that PR's check against
+  the branch snapshot and close it `timed_out` with only one of the two
+  language configurations uploaded — the recurring "1 configuration not found"
+  symptom. The analyze job now re-confirms ownership after database init and
+  before upload, ceding to the PR's own run; a transient lookup failure keeps
+  the prepared analysis rather than failing the check it protects. Only the
+  branch-ref push path is affected, so `pull_request`, scheduled, and centrally
+  dispatched merge-ref analyses are unchanged. — Lopu (AI), 2026-08-27
 
 ### Added
 
@@ -408,3 +728,12 @@ every entry is attributed the same way the app changelog attributes them.
   content to different bases, so the per-base replay and the worker decide.
   Off by default; set the `PROMOTION_TARGET_BRANCHES` repository variable to
   enable. — Claude (AI), 2026-08-10
+
+
+## 2026-09-05 — Signed Commander releases and Recovery pairing
+
+Repair the Commander controller's main-commit selection, signing secret fallback,
+and archive naming. Compile/test before credential import, publish notarized
+Commander and Recovery archives with verified extraction and SHA-256 checksums,
+retain exact build provenance, and keep Electron as the repository latest release.
+Caller gates, GitHub failures and publication boundaries have executable coverage.

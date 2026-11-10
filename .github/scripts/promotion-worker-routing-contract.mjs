@@ -82,9 +82,68 @@ const durableFleetQueue =
   /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}\n(?:\s*#.*\n)*\s*queue: max\s+cancel-in-progress: false/g;
 assert.equal(
   [...workflow.matchAll(durableFleetQueue)].length,
-  3,
-  "every review, promotion, and conflict worker uses the durable single-Lopu queue",
+  2,
+  "review and promotion workers use the durable ordinary Lopu queue",
 );
+assert.match(
+  workflow,
+  /feature_stack_merge:[\s\S]*group: lopu-feature-stack-\$\{\{ github\.repository \}\}-\$\{\{ matrix\.target \}\}[\s\S]*queue: max[\s\S]*cancel-in-progress: false/u,
+  "admin Feature Stacks use a durable per-target priority lane",
+);
+assert.match(
+  workflow,
+  /matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*lopu-priority-main-develop-\{0\}[\s\S]*lopu-agent-fleet-\{0\}/,
+  "the conflict worker selects a dedicated serialized lane only for the standing synchronizer",
+);
+assert.match(workflow, /feature_stack_plan:\s+name: Validate the immutable Feature Stack/);
+assert.match(workflow, /feature_stack_run_id:/);
+assert.match(workflow, /Feature Stack run identity does not match its immutable plan/);
+assert.match(
+	workflow,
+	/jq -r '\.plan\.runId' \"\$decoded\"/,
+	"Feature Stack admission validates the run id inside the decoded immutable plan",
+);
+assert.match(workflow, /feature_stack_merge:\s+name: Merge Feature Stack into \$\{\{ matrix\.target \}\}/);
+// The rule is that this job leads with `!cancelled()` and then states an
+// explicit success check for each of its two `needs`, so a skipped job
+// elsewhere in the graph cannot silently skip it. Assert those three
+// requirements inside the job's own `if:` block instead of pinning them as
+// adjacent text: an extra orthogonal guard is legitimate -- d5e984a0 added
+// `recovery != 'true'` between them -- and demanding adjacency did not make
+// the rule stricter, it just made it permanently red, so it stopped checking
+// anything at all. Scoping to the block is what keeps this strict.
+//
+// Take the job's own block first, and only then look inside it for the guard.
+// The body is every following line that is blank or indented past the job
+// header, so the scan stops at the next job instead of running on through the
+// file. That bound is what makes this strict rather than merely non-adjacent:
+// scanning forward from the header for the first `if: >-` will happily cross
+// into a later job, so a `feature_stack_merge` that lost its `if:` altogether
+// would be checked against some other job's guard and this contract would
+// report OK on exactly the regression it exists to catch. The decoy is
+// structural, not bad luck -- `feature_stack_progress` gates on the same two
+// `needs` and today its block is byte-identical to this one.
+const featureStackMergeJob = /\n {2}feature_stack_merge:\n((?: {4,}.*\n|\n)*)/u.exec(workflow);
+assert.ok(featureStackMergeJob, "feature_stack_merge declares a job block");
+const featureStackMergeIf = /^ {4}if: >-\n((?: {6}.*\n)+)/mu.exec(featureStackMergeJob[1]);
+assert.ok(featureStackMergeIf, "feature_stack_merge declares a multi-line if: guard");
+for (const clause of [
+	/^ *!cancelled\(\)\s*\n/u,
+	/\n *&& needs\.feature_stack_plan\.result == 'success'\s*\n/u,
+	/\n *&& needs\.model_config\.result == 'success'\s*\n/u,
+]) {
+	assert.match(
+		featureStackMergeIf[1],
+		clause,
+		"Feature Stack workers still run when skipped indirect dependencies are expected",
+	);
+}
+assert.match(workflow, /feature-stack-plan\.mjs verify/);
+assert.match(workflow, /git clone --shared --no-checkout "\$GITHUB_WORKSPACE\/trusted" "\$integration"/);
+assert.match(workflow, /git -C "\$integration" update-ref "refs\/remotes\/origin\/\$head" "\$sha"/);
+assert.doesNotMatch(workflow, /git -C "\$integration" fetch --no-tags snapshot/);
+assert.match(workflow, /gh pr merge "\$pr_url" --auto --merge/);
+assert.match(workflow, /CLAUDE_CODE_OAUTH_TOKEN_THINGTIME/);
 assert.match(rebaseWorkflow, /uses: &thingtime_rebase_conflict_round_action \.\/trusted\/\.github\/actions\/rebase-conflict-round/);
 assert.match(rebaseWorkflow, /backend: \$\{\{ vars\.LOPU_AGENT_BACKEND/);
 assert.match(workflow, /--dangerously-skip-permissions/);
@@ -92,6 +151,15 @@ assert.match(workflow, /--allowedTools "Bash\(\*\),Read,Edit,Write,Glob,Grep,Web
 assert.doesNotMatch(workflow, /DISALLOWED_TOOLS/);
 assert.doesNotMatch(workflow, /Gate publication of AI-resolved workflow files before model spend/);
 assert.doesNotMatch(workflow, /Workflow-file promotion requires the review-gated publication token/);
+assert.match(workflow, /graphify_scope_args=\(--exclude trusted\/\)/);
+assert.match(
+  workflow,
+  /node "\$graphify_router" update \. "\$\{graphify_scope_args\[@\]\}"/,
+);
+assert.match(
+  workflow,
+  /node "\$graphify_router" extract \. "\$\{graphify_scope_args\[@\]\}"/,
+);
 
 assert.match(rebaseWorkflow, /^name: Lopu rebase engine$/m);
 assert.match(rebaseWorkflow, /workflow_dispatch\|workflow_call\)/);

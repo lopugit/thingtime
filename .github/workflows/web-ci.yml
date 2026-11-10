@@ -51,7 +51,9 @@ jobs:
   scope:
     name: Classify Web CI scope
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # Large Graphify snapshots can make a shallow checkout take just over two
+    # minutes; leave enough headroom for scope detection to actually run.
+    timeout-minutes: 5
     outputs:
       full_web_ci: ${{ steps.scope.outputs.full_web_ci }}
     steps:
