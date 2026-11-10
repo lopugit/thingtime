@@ -1,3 +1,4 @@
+import { LopuTaskDiagnostics } from './LopuTaskDiagnostics';
 import { LopuTaskRing, useAiBackgroundTasks } from './LopuTaskRing';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -91,6 +92,7 @@ const TaskRow = ({ task, title }: { task: LopuDisplayTask; title?: string }) => 
 					</Button>
 				) : null}
 			</Flex>
+			<LopuTaskDiagnostics task={task} />
 			{opened ? (
 				<Box as="pre" mt={3} whiteSpace="pre-wrap" overflowWrap="anywhere" fontFamily="inherit" fontSize="sm" maxH="360px" overflowY="auto">
 					{result || 'Reading saved result…'}

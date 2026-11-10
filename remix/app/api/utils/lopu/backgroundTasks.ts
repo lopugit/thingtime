@@ -1,3 +1,4 @@
+import { readBackgroundTaskDiagnostics } from './backgroundTaskDiagnostics';
 import { lopuProviderManagement } from './continuationCore';
 import { createHash } from 'node:crypto';
 import { Binary } from 'mongodb';
@@ -126,6 +127,11 @@ export const readBackgroundTasks = async (request: Request) => {
 		url = new URL(request.url),
 		id = url.searchParams.get('id');
 	const filter = { ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope };
+	// Diagnostics must not reconcile stale work, expire output, stop or finalize.
+	if (url.searchParams.has('diagnostics')) {
+		if (url.searchParams.get('diagnostics') !== '1' || !id) return fail('Provide id and diagnostics=1.');
+		return readBackgroundTaskDiagnostics(request, user.id, scope, id);
+	}
 	await stale(filter);
 	const retention = await getHomeThingsCollection();
 	await retention.updateMany(

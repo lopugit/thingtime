@@ -29,159 +29,19 @@ masking, closing, changing account/data plane or entering Builder invalidates
 pending work and feedback. A clipboard write already submitted to the browser
 cannot be revoked; its late completion cannot restore stale feedback.
 
-Verification on 26 October 2026: the focused password suite passed 56 tests with
-zero skips. All 11 isolated Chromium acceptance groups passed, covering masked
-copying, TOTP codes, clipboard rejection, stale feedback, independent Copy-label
-editing and desktop/mobile page scrolling. The clipboard device boundary was
-synthetic; real clipboard delivery, installed/native and production acceptance
-remain separate gates.
+## Optional host integration and release boundary
 
-## Native verification-code setup
+The web editor accepts the separately versioned `authenticatorSetupVersion`
+1.0.0 bridge only when available and bound to the current origin/document/owner.
+Older installed hosts do not gain this bridge from a web release. Missing or
+incompatible setup support remains unavailable; codes are never persisted or
+passed through a navigation URL as a fallback. Web create/edit/QR paths remain
+independent of this optional host integration.
 
-The iOS host and the separate macOS Thingtime Passwords companion register
-`otpauth` for TOTP setup. AutoFill's `ProvidesOneTimeCodes` capability fills saved
-codes; URL registration and an actual intake handler provide the separate
-system **Set Up Codes In** path. Migration and HOTP schemes are not registered.
-Apple describes scheme registration in its [default-app updates](https://developer.apple.com/documentation/updates/defaultapps).
-
-The shared parser rejects duplicate/unknown query options, invalid Base32
-padding/residual bits, unsupported parameters and non-TOTP payloads. A native
-memory-only inbox retains one setup for at most ten minutes. Another incoming
-setup cannot replace it, and warm delivery does not reload an existing editor.
-Unbound input survives normal login navigation; navigation after owner/document
-binding cancels it. No setup value enters a navigation URL, generic bridge log,
-clipboard, persisted layout, Timeline or restoration state.
-
-The companion uses `WKWebsiteDataStore.nonPersistent()` and normal sign-in.
-The configured linked origin and owner constrain that sign-in, but its stored
-native credential is never injected into the new browser. Missing native
-metadata uses the build's explicit HTTPS origin; locked/unreadable metadata
-never silently selects a different origin. Pending input remains in memory while
-the destination is unavailable and is retried when the app becomes active.
-
-The separate `window.thingtimeAuthenticatorSetup` version 1.0.0 surface supports
-`ready`, `consume` and `cancel`; native events are `available`, `setup`, `status`
-and `unavailable` (plus request-scoped `expired`). This narrow companion does not advertise the unrelated
-connect/sync bridge. Intake requires the exact configured HTTPS origin,
-main-frame `/passwords` without query/fragment, a fresh immutable document nonce,
-an editor nonce, the home data plane and a server-verified current owner. The
-host reads the existing paginated metadata GET using only that WK session's
-HttpOnly cookie, rejects redirects and negotiates `api.passwords` >=1.2.0 in
-major 1. It rechecks the cookie after verification. The setup URI is delivered
-only after an explicit create/attach choice, using WebKit arguments targeted at
-the captured frame. Execution-time origin/path/document/editor-scope guards
-prevent delayed delivery into a new page or account.
-
-The separate `password-authenticator-setup` settings document exposes the notice
-for accounts that already customized their password layout, without replacing
-those saved blocks. The existing individually editable PasswordManager notice, buttons and masked
-field controls hold the resulting draft in component memory. Existing drafts
-remain unchanged until explicitly selected; Save uses the existing owner and
-revision guards. Account/data-plane changes, logout, cancellation, expiry and
-navigation retire pending native authority. Full signed macOS/iOS menu, Safari
-QR handoff, sign-in and real saved-code acceptance remain separate from unit,
-JavaScript-model and unsigned build checks.
-
-## Anonymous device vault
-
-Open `/passwords`, or Settings → Security → Device passwords, without signing in.
-Choose a separate passphrase of at least 12 characters. The normal field editor,
-local TOTP/QR helpers and acknowledged CSV/1PUX importer/exporter work through the
-device adapter. This vault does not require server secrets, a database, an account
-or a network connection after the offline shell has been installed. WebCrypto
-requires a secure context (HTTPS or loopback).
-
-The existing version-2 AES-256-GCM value envelope and version-1 scrypt password
-wrapper are shared between browser and server. Browser/server interoperability is
-tested. Device authenticated data binds the browser origin and complete workspace
-scope, plus key, record and purpose. Titles, categories, field definitions and
-values are encrypted together; only record IDs, revisions, timestamps and retry
-metadata remain visible in device storage. Retry identities are keyed HMACs.
-Password entries and encrypted file metadata use the same 16 MiB codec ceiling
-as the account writer. MongoDB measures the complete encrypted BSON document,
-so its actual admissible plaintext is smaller; a device save does not promise
-remote admission. Device storage accommodates the base64 envelope and fixed
-retry metadata using actual browser capacity. Provider
-credentials and key wrappers retain their separate defaults. Passphrases remain
-limited to 4,096 UTF-8 bytes and listing/export uses 50-entry pages. Native storage
-quota failures roll back the workspace transaction. One password KDF runs at a
-time per JavaScript realm. Remaining buffered import/preview paths and native
-large-data acceptance are still open; this does not claim unlimited storage.
-
-The unwrapped key stays in tab memory. Manual lock, page teardown, workspace
-invalidation or five minutes without use clear it and unmount the editor. Each
-tab unlocks independently. Transaction guards reject writes after cancellation
-or lock; revisions preserve stale editor input instead of overwriting another
-tab's saved entry. Missing keys or damaged ciphertext fail visibly and retain the
-encrypted records. There is no passphrase reset or server recovery for this vault;
-normal explicit exports contain plaintext and still require acknowledgement.
-
-Anonymous entries never create account sync commands or become account content
-on login. They are excluded from ordinary Things, Timeline, transfer exports and
-request diagnostics. Anonymous native AutoFill is not enabled. Account workspaces now use the encrypted device adapter described below.
-Settings provider/environment credentials and signed native offline integration
-remain separate unfinished acceptance items.
-
-## Account device access and sync
-
-In an account workspace, the normal password editor uses a separately encrypted
-device copy with its own passphrase. This phrase is not sent to the server and is
-not the account password. After initial setup/unlock, existing entries are read
-through the normal session-bound API and encrypted before retention. A retained
-account workspace can unlock, edit, delete and export while offline with
-`user: null`; its local pointer grants no network authority.
-
-Local mutations commit their encrypted entry and encrypted account intent in one
-workspace transaction. Pulls and uploads run independently of editor completion.
-Each upload freezes the normal write ID, content and expected server revision
-before sending; retries reuse that exact command. Per-entry claims prevent tabs
-from racing later revisions past an unresolved write. Invalid receipts and lost
-responses retain the encrypted retry. Definitive refusals block that entry for
-review while unrelated entries continue syncing. Background work does not extend
-the five-minute unlock timer; locking aborts outstanding operations and leaves
-unacknowledged commands encrypted for the next unlock.
-
-Every request requires matching confirmed account, browser/API origin and selected
-data-plane leases and sends the existing expected-actor/data-plane headers. The
-password API itself still stores account credentials on the home plane. It has
-no generic request-history path, automatic fallback or saved bearer credential.
-Requests have a 20-second timeout and bounded response parsing. Identity or
-confirmation changes abort requests before response adoption. These device copies
-remain separate from anonymous entries and other account/origin/plane partitions.
-
-Refused entries offer explicit choices: keep the device version as a new entry,
-or discard its pending changes and use the account version. Both read the current
-account value and compare the local revision again before committing. Creating a
-copy and replacing the original projection are atomic, including quota failures.
-An uncertain write cannot be discarded through this conflict UI. Other unsaved
-editor fields are preserved; reopen the entry to load the resolved saved version.
-
-Refresh processes the canonical 50-entry pages until completion, without a total
-page-count cutoff. Empty continuing pages, repeated cursors and duplicate entry
-identities fail visibly. Cancellation, locking and identity changes stop response
-adoption. Partial refreshes retain existing entries and validated pages; retry
-starts from the beginning and only a complete traversal can retire missing account
-entries. Concurrent local edits/pending commands are protected. A single scoped
-pull token also fences older tabs, including when the newer pull confirms the
-same revision or fails midway. The token contains no entry values or credentials
-and is retained after completion/failure so an old pull cannot resume cleanup.
-An older superseded pull returns that outcome normally; it must not start an
-error-retry timer that could repeatedly interrupt the newer long traversal.
-Remote or storage failures remain visible while previously saved entries stay
-available. The existing account native-provider controls remain available only
-with a confirmed account; signed-device/offline provider behavior is not verified
-by these web fixtures.
-
-## Account storage and access
-Password fields in an open entry have an explicit **Copy** control. Copy writes
-that field's current draft value to the browser clipboard without revealing it,
-saving an edit, or recording a notification/history event. Empty values cannot
-be copied. Success and clipboard refusal use secret-free inline status. The
-control requires the ordinary authorized entry read; it adds no retrieval API
-or verification bypass. Native passkey entries do not enable copying signing
-fields. The shared fields renderer enables this only with `copyPasswords`.
-Clipboard contents are left to the user and operating system; the application
-never reads them or schedules a later clipboard overwrite.
+All Apple/Electron/iOS/macOS implementation, setup URL registration, native
+session/indexing changes and signing/provisioning work remain in PR #1240.
+Their source assertions stay with that deferred implementation. Signed installed
+menu, AutoFill, Google credential and physical iOS acceptance remain pending.
 
 ## Storage and access
 
@@ -196,8 +56,8 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The native picker checks the same
-account again before filling and requires device-owner verification.
+excluded. Responses are private/no-store. Native picker acceptance is separate
+from this web/backend release.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -428,22 +288,9 @@ web clients require that exact value. New clients accept major-1 bridges but
 require coherent explicit status fields before reporting synchronized; missing
 fields remain unknown. No HTTP API operation or capability version changes.
 
-New Electron opts into `--connection-status-v1`; the macOS helper then uses
-fixed exit codes 20/21/22 for the three explicit states. Without that flag the
-new helper preserves legacy exit 0 for older consumers. An older helper ignores
-the flag; its exit 0 on connect/sync is unknown to new Electron, not synchronized. No usernames, catalog
-entries, raw system errors or session values are returned. Both native platforms
-serialize replacement and stale-index cleanup, rechecking current session (and
-iOS document/generation) before and after the OS callback. Failed/stale replace
-attempts clear suggestions best-effort before a newer queued replacement; a
-failed clear never becomes a successful synchronization claim. The provider
-still reauthorizes the selected record against the current owner before fill.
-The Electron bridge rejects a changed account session after helper completion
-and clears old native authority before a later queued connection.
-
-Actual disabled/enabled OS indexing and account switching still require signed
-installed acceptance; source/mocked statuses are not proof that Chrome requests
-or fills a matching Google credential.
+Older installed `passwordsVersion` 1.0.0 bridges remain accepted, but generic
+legacy success is unknown rather than proof that OS suggestions synchronized.
+New native explicit-status reporting and its installed acceptance are deferred.
 
 ## Validation and setup
 

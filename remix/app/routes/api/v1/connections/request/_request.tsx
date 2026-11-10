@@ -13,7 +13,6 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const unsupported = requireJsonContentType(request);
   if (unsupported) return unsupported;
-  // Provider continuation tokens are opaque and may exceed ordinary form sizes.
   const body = await request.json().catch(() => null);
   const result = await runConnectionRequest(user, {
     connectionId: body?.connectionId, operation: body?.operation, resourceId: body?.resourceId, pageToken: body?.pageToken
