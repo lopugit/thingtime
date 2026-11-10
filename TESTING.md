@@ -1730,6 +1730,14 @@ is fixed, and cite the checklist you ran in the PR description.
       the granted scopes; an unchanged old grant and a revoked new PAT cannot
       report. The isolated built check is
       `node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect`.
+- [ ] Coordinate as the upgraded task Character in a private subspace.
+      Verify the exact Post projection reports that private subspace and the
+      author and owner can read it. Anonymous and signed-in nonmembers cannot
+      read it. If text moderation holds the post, retain its pending receipt
+      and repeat the original request ID and payload after release. Verify
+      the same post ID, completed receipt and cleared task lock, then update
+      that post. `test:agent-reporting` covers pending and blocked moderation,
+      changed content or audience, and concurrent retries without a second write.
 - [ ] With a known Thing ID outside the first recent/list page,
       `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
       stable `thing_not_found` error; it never falls back to list/search. With a
