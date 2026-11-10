@@ -32,7 +32,7 @@ SOFTWARE.
 The bundled `commander-indexer` binary statically includes SQLite through
 `libsqlite3-sys`/`rusqlite` and uses the Rust `ignore`, `globset`, and `regex`
 crates. Exact resolved versions are recorded in
-`../filesystem-indexer/crates/indexer/Cargo.lock`.
+`crates/commander-indexer/Cargo.lock`.
 
 - SQLite is in the public domain: https://sqlite.org/copyright.html
 - rusqlite is licensed under MIT: https://github.com/rusqlite/rusqlite

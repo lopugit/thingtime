@@ -2,13 +2,10 @@ import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { commanderCapabilityManifest } from './services/httpRoutes.js';
-import { LOGIN_REQUIREMENTS } from './services/loginRegistration.js';
 import { createCommanderServer, type CommanderServer } from './server.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.restoreAllMocks();
 });
 
 describe('Commander daemon HTTP trust boundaries', () => {
@@ -24,14 +21,6 @@ describe('Commander daemon HTTP trust boundaries', () => {
     try {
       server = await createCommanderServer({ host: '127.0.0.1', port: 0, uiPath, platform: 'macos' });
       expect(server.token).not.toBe(server.nativeToken);
-
-      const publicShell = await fetch(`${server.url}/launcher.html`);
-      expect(publicShell.status).toBe(200);
-      expect(await publicShell.text()).toContain('Commander test');
-      const capabilities = await fetch(`${server.url}/.well-known/commander-capabilities.json`);
-      expect(capabilities.status).toBe(200);
-      expect(capabilities.headers.get('cache-control')).toBe('no-store');
-      expect(await capabilities.json()).toEqual(commanderCapabilityManifest(server.url));
 
       const health = await fetch(`${server.url}/healthz`);
       expect(health.status).toBe(200);
@@ -72,69 +61,6 @@ describe('Commander daemon HTTP trust boundaries', () => {
         headers: { 'x-commander-native': server.nativeToken },
       });
       expect(uiRouteWithNativeToken.status).toBe(401);
-
-      let nativeRegistered = true;
-      const originalFetch = globalThis.fetch;
-      const registrationFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-        const url = new URL(String(input));
-        if (url.pathname === '/.well-known/thingtime-capabilities.json')
-          return Response.json({
-            schemaVersion: 1,
-            origin: url.origin,
-            features: Object.fromEntries(
-              Object.entries(LOGIN_REQUIREMENTS).map(([key, version]) => [key, { version }]),
-            ),
-          });
-        if (
-          url.pathname === '/api/v1/apps/public' &&
-          !nativeRegistered &&
-          url.searchParams.get('redirect_uri') === 'com.thingtime.commander://oauth/callback'
-        )
-          return Response.json(
-            { ok: false, error: 'This desktop callback is not registered on the app' },
-            { status: 403 },
-          );
-        if (url.pathname === '/api/v1/apps/public')
-          return Response.json({
-            ok: true,
-            app: { clientId: url.searchParams.get('clientId') },
-            origin: url.searchParams.get('redirect_uri'),
-          });
-        return originalFetch(input, init);
-      });
-      const login = await fetch(`${server.url}/api/accounts/login`, {
-        method: 'POST',
-        headers: { 'x-commander-session': server.token },
-      });
-      expect(login.status).toBe(200);
-      const loginBody = (await login.json()) as { authorizeUrl: string };
-      expect(new URL(loginBody.authorizeUrl).searchParams.get('redirect_uri')).toBe(
-        'com.thingtime.commander://oauth/callback',
-      );
-      nativeRegistered = false;
-      const loopbackLogin = await fetch(`${server.url}/api/accounts/login`, {
-        method: 'POST',
-        headers: { 'x-commander-session': server.token },
-      });
-      expect(loopbackLogin.status).toBe(200);
-      const loopbackBody = (await loopbackLogin.json()) as { authorizeUrl: string };
-      expect(new URL(loopbackBody.authorizeUrl).searchParams.get('redirect_uri')).toBe(
-        `${server.url}/oauth/callback`,
-      );
-      registrationFetch.mockRestore();
-
-      const malformedNativeCallback = await fetch(`${server.url}/api/native/oauth/callback`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-commander-native': server.nativeToken,
-        },
-        body: JSON.stringify({ callbackUrl: 'com.thingtime.commander://oauth/callback?code=no-state' }),
-      });
-      expect(malformedNativeCallback.status).toBe(400);
-      expect(await malformedNativeCallback.json()).toEqual({
-        error: 'Commander rejected an invalid native sign-in callback',
-      });
 
       const bootstrap = await fetch(`${server.url}/api/bootstrap`, {
         headers: { 'x-commander-session': server.token },
@@ -235,10 +161,10 @@ describe('Commander daemon HTTP trust boundaries', () => {
       expect(indexingStatus.status).toBe(200);
       expect(await indexingStatus.json()).toMatchObject({
         available: false,
-        running: expect.any(Array),
+        running: [],
         databaseSizeBytes: 0,
         commands: { count: expect.any(Number), lastIndexedAtMs: expect.any(Number) },
-        automaticRefresh: { applicationsMinutes: 360, filesystemMinutes: 360 },
+        automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
       });
 
       const settingsSearch = await fetch(`${server.url}/api/search?q=settings`, {
@@ -448,15 +374,13 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       expect(exitSearch.status).toBe(200);
       const exitResults = (await exitSearch.json()) as { hits: Array<{ id: string }> };
-      expect(exitResults.hits).toContainEqual(
-        expect.objectContaining({
-          id: 'extension:builtin:commander:close-commander',
-          title: 'Close Commander',
-          subtitle: 'Commander',
-          extensionId: 'builtin:commander',
-          commandName: 'close-commander',
-        }),
-      );
+      expect(exitResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:commander:close-commander',
+        title: 'Close Commander',
+        subtitle: 'Commander',
+        extensionId: 'builtin:commander',
+        commandName: 'close-commander',
+      });
 
       const closeCommander = await fetch(`${server.url}/api/execute`, {
         method: 'POST',
@@ -546,16 +470,14 @@ describe('Commander daemon HTTP trust boundaries', () => {
       const accessibilityResults = (await accessibilitySearch.json()) as {
         hits: Array<{ id: string }>;
       };
-      expect(accessibilityResults.hits).toContainEqual(
-        expect.objectContaining({
-          id: 'extension:builtin:macos-system:open-accessibility-settings',
-          title: 'Accessibility Settings',
-          subtitle: 'macOS System',
-          kind: 'system',
-          extensionId: 'builtin:macos-system',
-          commandName: 'open-accessibility-settings',
-        }),
-      );
+      expect(accessibilityResults.hits[0]).toMatchObject({
+        id: 'extension:builtin:macos-system:open-accessibility-settings',
+        title: 'Accessibility Settings',
+        subtitle: 'macOS System',
+        kind: 'system',
+        extensionId: 'builtin:macos-system',
+        commandName: 'open-accessibility-settings',
+      });
 
       const openAccessibilitySettings = await fetch(`${server.url}/api/execute`, {
         method: 'POST',
@@ -695,9 +617,9 @@ describe('Commander daemon HTTP trust boundaries', () => {
       await server?.close();
       await rm(temporary, { recursive: true, force: true });
     }
-  }, 30_000); // Full server lifecycle and full HTTP/security assertions, not a latency test.
+  });
 
-  it('does not replay a stale cache frame across a live catalog revision', async () => {
+  it('re-ranks a nearby cached filesystem candidate set without a catalog-only downgrade', async () => {
     const temporary = await mkdtemp(path.join(os.tmpdir(), 'commander-stream-cache-test-'));
     const uiPath = path.join(temporary, 'ui');
     const indexerPath = path.join(temporary, 'fake-indexer.mjs');
@@ -719,14 +641,6 @@ describe('Commander daemon HTTP trust boundaries', () => {
       });
       const headers = { 'x-commander-session': server.token };
       const first = await fetch(`${server.url}/api/search/stream?q=comm`, { headers });
-      // Fresh indexes no longer rescan at startup. Explicitly revise the
-      // catalogue while the first streamed query is still in flight.
-      const refresh = await fetch(`${server.url}/api/index`, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({ scope: 'commands' }),
-      });
-      expect(refresh.ok).toBe(true);
       expect((await streamEvents(first)).at(-1)).toMatchObject({
         phase: 'filesystem',
         complete: true,
@@ -734,9 +648,9 @@ describe('Commander daemon HTTP trust boundaries', () => {
 
       const refined = await fetch(`${server.url}/api/search/stream?q=comma`, { headers });
       const refinedEvents = await streamEvents(refined);
-      expect(refinedEvents[0]).toMatchObject({ phase: 'catalog', cached: false, complete: false });
-      expect(refinedEvents.map((event) => event.phase)).toEqual(['catalog', 'filesystem']);
-      expect(refinedEvents.at(-1)?.hits).toEqual(
+      expect(refinedEvents[0]).toMatchObject({ phase: 'cache', cached: true, complete: false });
+      expect(refinedEvents.map((event) => event.phase)).toEqual(['cache', 'filesystem']);
+      expect(refinedEvents[0]?.hits).toEqual(
         expect.arrayContaining([expect.objectContaining({ title: 'Commander-notes.md', kind: 'file' })]),
       );
     } finally {
@@ -825,7 +739,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
   }
   const query = request.request?.query ?? '';
   const records = query ? [file] : [application];
-  setTimeout(() => reply({ records }), query ? 200 : 0);
+  setTimeout(() => reply({ records }), query ? 60 : 0);
 });
 `;
 }

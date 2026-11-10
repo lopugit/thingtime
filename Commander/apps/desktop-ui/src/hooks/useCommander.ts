@@ -8,14 +8,9 @@ import type {
   RecentSearchCommand,
   SearchHit,
 } from '@commander/protocol';
-import { addRecentSearch, extensionCommandItemId } from '@commander/protocol';
+import { addRecentSearch } from '@commander/protocol';
 import { api } from '../lib/api.js';
 import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
-
-// Give ordinary typing a brief chance to settle before it enters the native
-// search pipeline. This prevents one request per keystroke without making the
-// launcher feel like it is waiting after a completed query.
-const SEARCH_DEBOUNCE_MS = 100;
 
 export interface CommanderState {
   bootstrap: BootstrapResponse | null;
@@ -30,7 +25,6 @@ export interface CommanderState {
   error: string | null;
   notice: string | null;
   activeView: CommanderViewId | null;
-  activeViewSession: number;
   setQuery(value: string): void;
   setSelectedIndex(value: number): void;
   setActionsOpen(value: boolean): void;
@@ -55,34 +49,15 @@ export function useCommander(): CommanderState {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [{ id: activeView, session: activeViewSession }, setView] = useState<{
-    id: CommanderViewId | null;
-    session: number;
-  }>({ id: null, session: 0 });
-  const viewSession = useRef(0);
+  const [activeView, setActiveView] = useState<CommanderViewId | null>(null);
   const [searchRefresh, setSearchRefresh] = useState(0);
   const requestSequence = useRef(0);
   const recentSearchSequence = useRef(0);
   const queryRef = useRef('');
   const recentSearchesRef = useRef<RecentSearch[]>([]);
-  const knownIndexTimeouts = useRef(new Set<string>());
-  const indexTimeoutsHydrated = useRef(false);
-
-  const setActiveView = useCallback((id: CommanderViewId | null) => {
-    // Native reopen and shortcut events can commit together while the same view
-    // is still mounted. Treat the new opening as a new view instance.
-    setView({ id, session: ++viewSession.current });
-  }, []);
 
   const setQuery = useCallback((value: string) => {
-    if (value !== queryRef.current) {
-      // Results describe the previous query. Keeping them visible under new
-      // input makes a correct search look wrong while the next frame arrives.
-      // Clear synchronously; cached or live results for *this* query replace
-      // the empty state as soon as they stream in.
-      setHits([]);
-      setResultsStale(true);
-    }
+    if (value !== queryRef.current) setResultsStale(true);
     queryRef.current = value;
     setQueryState(value);
     setSelectedIndex(0);
@@ -106,38 +81,19 @@ export function useCommander(): CommanderState {
   useEffect(() => {
     if (!bootstrap) return;
     let cancelled = false;
-    let timer: number | undefined;
     const poll = async () => {
       try {
         const status = await api.indexingStatus();
-        if (!cancelled) {
-          setIndexingStatus(status);
-          const attempts = status.timeoutAttempts ?? [];
-          if (indexTimeoutsHydrated.current) {
-            for (const attempt of attempts) {
-              if (knownIndexTimeouts.current.has(attempt.id)) continue;
-              knownIndexTimeouts.current.add(attempt.id);
-              void nativeRequest('notification.show', {
-                id: attempt.id,
-                title: 'Commander indexing timed out',
-                body: `${attempt.message} Open Search settings to adjust the limit.`,
-              }).catch(() => undefined);
-            }
-          } else {
-            for (const attempt of attempts) knownIndexTimeouts.current.add(attempt.id);
-            indexTimeoutsHydrated.current = true;
-          }
-        }
+        if (!cancelled) setIndexingStatus(status);
       } catch {
         // Search remains available while the optional index status is temporarily unavailable.
-      } finally {
-        if (!cancelled) timer = window.setTimeout(() => void poll(), 5_000);
       }
     };
     void poll();
+    const timer = window.setInterval(() => void poll(), 1_000);
     return () => {
       cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
+      window.clearInterval(timer);
     };
   }, [bootstrap]);
 
@@ -174,7 +130,7 @@ export function useCommander(): CommanderState {
     };
     window.addEventListener('commander:launcher-opened', handleLauncherOpened);
     return () => window.removeEventListener('commander:launcher-opened', handleLauncherOpened);
-  }, [rememberRecentSearch, setActiveView, setQuery]);
+  }, [rememberRecentSearch, setQuery]);
 
   useEffect(() => {
     if (!bootstrap) return;
@@ -206,7 +162,7 @@ export function useCommander(): CommanderState {
             setError(reason instanceof Error ? reason.message : 'Search failed');
           },
         );
-    }, SEARCH_DEBOUNCE_MS);
+    }, 35);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
@@ -232,24 +188,8 @@ export function useCommander(): CommanderState {
 
   const executeCommand = useCallback(
     async (itemId: string, actionId: string, searchQuery = queryRef.current) => {
-      // An enabled bundled local view must not wait behind indexing HTTP work.
-      const emojiExtension = bootstrap?.extensions.find((extension) => extension.id === 'builtin:emoji-symbols');
-      const emojiCommand = emojiExtension?.commands.find((command) => command.name === 'search-emoji-symbols');
-      if (actionId === 'run'
-        && itemId === extensionCommandItemId('builtin:emoji-symbols', 'search-emoji-symbols')
-        && emojiExtension?.enabled && emojiCommand?.mode === 'view' && !emojiCommand.disabled) {
-        setActiveView('emoji-symbols');
-        setActionsOpen(false);
-        setError(null);
-        // Retain execution/history without replaying its eventual view response
-        // over the user's later navigation. This bundled command only opens UI.
-        void api.execute(itemId, actionId, searchQuery).catch(() => undefined);
-        return;
-      }
       let nativeRequestMethod: string | undefined;
-      const requestedViewSession = viewSession.current;
       const response = await api.execute(itemId, actionId, searchQuery);
-      if (response.view && requestedViewSession !== viewSession.current) return;
       if (response.notice) setNotice(response.notice);
       if (response.view) setActiveView(response.view.id);
       if (response.nativeRequest) {
@@ -289,7 +229,7 @@ export function useCommander(): CommanderState {
       setActionsOpen(false);
       setError(null);
     },
-    [bootstrap, refresh, refreshSearch, setActiveView],
+    [refresh, refreshSearch],
   );
 
   useEffect(() => {
@@ -318,7 +258,6 @@ export function useCommander(): CommanderState {
       error,
       notice,
       activeView,
-      activeViewSession,
       setQuery,
       setSelectedIndex,
       setActionsOpen,
@@ -343,8 +282,6 @@ export function useCommander(): CommanderState {
       error,
       notice,
       activeView,
-      activeViewSession,
-      setActiveView,
       setQuery,
       rememberRecentSearch,
       executeCommand,

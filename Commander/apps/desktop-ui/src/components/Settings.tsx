@@ -1,10 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  COMMANDER_THINGTIME_ENVIRONMENTS,
-  isSettingsTab,
-  type CommanderSettings,
-  type SettingsTab,
-} from '@commander/protocol';
+import { useEffect, useState } from 'react';
+import { isSettingsTab, type CommanderSettings, type SettingsTab } from '@commander/protocol';
 import {
   Activity,
   Box,
@@ -22,9 +17,9 @@ import { ActivitySettings } from './ActivitySettings.js';
 import { CloudSyncSettings } from './CloudSyncSettings.js';
 import { ExtensionsSettings } from './ExtensionsSettings.js';
 import { GeneralSettings } from './GeneralSettings.js';
-import { FullDiskAccessCard, IndexingSettings } from './IndexingSettings.js';
+import { IndexingSettings } from './IndexingSettings.js';
 import { SearchPreferencesSettings } from './SearchPreferencesSettings.js';
-import { beginTitlebarDrag } from '../lib/nativeBridge.js';
+import { beginWindowDrag } from '../lib/nativeBridge.js';
 
 const tabs: Array<{ id: SettingsTab; title: string; Icon: typeof Settings2 }> = [
   { id: 'general', title: 'General', Icon: Settings2 },
@@ -55,7 +50,7 @@ export function Settings({ state }: { state: CommanderState }) {
 
   return (
     <main className="settings-shell">
-      <header className="settings-titlebar" onMouseDown={beginTitlebarDrag}>
+      <header className="settings-titlebar" onMouseDown={beginWindowDrag}>
         <span className="commander-mark small" aria-hidden="true">
           ›_
         </span>
@@ -78,7 +73,6 @@ export function Settings({ state }: { state: CommanderState }) {
       <div className="settings-content">
         {tab === 'general' ? (
           <GeneralSettings
-            platform={bootstrap.platform}
             settings={bootstrap.settings}
             onChange={(next) => void state.saveSettings(next)}
             onError={state.reportError}
@@ -99,13 +93,7 @@ export function Settings({ state }: { state: CommanderState }) {
             onError={state.reportError}
           />
         ) : null}
-        {tab === 'activity' ? (
-          <ActivitySettings
-            settings={bootstrap.settings}
-            onChange={(next) => void state.saveSettings(next)}
-            onError={state.reportError}
-          />
-        ) : null}
+        {tab === 'activity' ? <ActivitySettings onError={state.reportError} /> : null}
         {tab === 'sync' ? (
           <CloudSyncSettings
             accounts={bootstrap.accounts}
@@ -147,85 +135,14 @@ function AdvancedSettings({
 }) {
   const [baseUrl, setBaseUrl] = useState(settings.thingtimeBaseUrl);
   const [clientId, setClientId] = useState(settings.thingtimeClientId);
-  const [customName, setCustomName] = useState('');
   useEffect(() => setBaseUrl(settings.thingtimeBaseUrl), [settings.thingtimeBaseUrl]);
   useEffect(() => setClientId(settings.thingtimeClientId), [settings.thingtimeClientId]);
 
-  const selectedEnvironment = useMemo(() => {
-    const builtIn = COMMANDER_THINGTIME_ENVIRONMENTS.find(
-      (environment) =>
-        environment.baseUrl === settings.thingtimeBaseUrl &&
-        environment.clientId === settings.thingtimeClientId,
-    );
-    if (builtIn) return builtIn.id;
-    const custom = settings.thingtimeCustomEnvironments.find(
-      (environment) =>
-        environment.baseUrl === settings.thingtimeBaseUrl &&
-        environment.clientId === settings.thingtimeClientId,
-    );
-    return custom ? `custom:${custom.id}` : 'custom-current';
-  }, [settings.thingtimeBaseUrl, settings.thingtimeClientId, settings.thingtimeCustomEnvironments]);
-
-  const activeCustomEnvironment = selectedEnvironment.startsWith('custom:')
-    ? settings.thingtimeCustomEnvironments.find(
-        (environment) => environment.id === selectedEnvironment.slice(7),
-      )
-    : undefined;
-
-  useEffect(
-    () => setCustomName(activeCustomEnvironment?.name ?? ''),
-    [activeCustomEnvironment?.id, activeCustomEnvironment?.name],
-  );
-
-  const commit = (nextBaseUrl = baseUrl, nextClientId = clientId) => {
-    const normalizedBaseUrl = nextBaseUrl.trim().replace(/\/+$/, '') || 'https://thingtime.com';
-    const normalizedClientId = nextClientId.trim();
-    onChange({ ...settings, thingtimeBaseUrl: normalizedBaseUrl, thingtimeClientId: normalizedClientId });
+  const commit = () => {
+    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '') || 'https://thingtime.com';
+    onChange({ ...settings, thingtimeBaseUrl: normalizedBaseUrl, thingtimeClientId: clientId.trim() });
     setBaseUrl(normalizedBaseUrl);
-    setClientId(normalizedClientId);
-  };
-
-  const chooseEnvironment = (value: string) => {
-    if (value === 'custom-current') return;
-    const selected = value.startsWith('custom:')
-      ? settings.thingtimeCustomEnvironments.find((environment) => environment.id === value.slice(7))
-      : COMMANDER_THINGTIME_ENVIRONMENTS.find((environment) => environment.id === value);
-    if (!selected) return;
-    commit(selected.baseUrl, selected.clientId);
-  };
-
-  const saveCustomEnvironment = () => {
-    const name = customName.trim();
-    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '');
-    const normalizedClientId = clientId.trim();
-    if (!name || !normalizedBaseUrl || !normalizedClientId) return;
-    const id = activeCustomEnvironment?.id ?? `custom-${crypto.randomUUID()}`;
-    const custom = { id, name, baseUrl: normalizedBaseUrl, clientId: normalizedClientId };
-    const environments = activeCustomEnvironment
-      ? settings.thingtimeCustomEnvironments.map((environment) =>
-          environment.id === id ? custom : environment,
-        )
-      : [...settings.thingtimeCustomEnvironments, custom];
-    onChange({
-      ...settings,
-      thingtimeBaseUrl: normalizedBaseUrl,
-      thingtimeClientId: normalizedClientId,
-      thingtimeCustomEnvironments: environments,
-    });
-  };
-
-  const removeCustomEnvironment = () => {
-    if (!activeCustomEnvironment) return;
-    const production = COMMANDER_THINGTIME_ENVIRONMENTS[0];
-    onChange({
-      ...settings,
-      thingtimeBaseUrl: production.baseUrl,
-      thingtimeClientId: production.clientId,
-      thingtimeCustomEnvironments: settings.thingtimeCustomEnvironments.filter(
-        (environment) => environment.id !== activeCustomEnvironment.id,
-      ),
-    });
-    setCustomName('');
+    setClientId(clientId.trim());
   };
 
   return (
@@ -239,33 +156,11 @@ function AdvancedSettings({
       </div>
       <section className="advanced-card">
         <label>
-          <span>Thingtime environment</span>
-          <select
-            aria-label="Thingtime environment"
-            value={selectedEnvironment}
-            onChange={(event) => chooseEnvironment(event.target.value)}
-          >
-            {COMMANDER_THINGTIME_ENVIRONMENTS.map((environment) => (
-              <option key={environment.id} value={environment.id}>
-                {environment.name}
-              </option>
-            ))}
-            {settings.thingtimeCustomEnvironments.map((environment) => (
-              <option key={environment.id} value={`custom:${environment.id}`}>
-                {environment.name}
-              </option>
-            ))}
-            {selectedEnvironment === 'custom-current' ? (
-              <option value="custom-current">Custom configuration</option>
-            ) : null}
-          </select>
-        </label>
-        <label>
           <span>Thingtime URL</span>
           <input
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
-            onBlur={() => commit()}
+            onBlur={commit}
             onKeyDown={(event) => event.key === 'Enter' && commit()}
             placeholder="https://thingtime.com"
             spellCheck={false}
@@ -276,49 +171,12 @@ function AdvancedSettings({
           <input
             value={clientId}
             onChange={(event) => setClientId(event.target.value)}
-            onBlur={() => commit()}
+            onBlur={commit}
             onKeyDown={(event) => event.key === 'Enter' && commit()}
             placeholder="Commander app client ID"
             spellCheck={false}
           />
         </label>
-      </section>
-      <section className="custom-environment-card" aria-labelledby="custom-environments-heading">
-        <div>
-          <strong id="custom-environments-heading">Custom environments</strong>
-          <span>
-            Enter the Thingtime URL and public client ID above, then give that deployment a reusable name.
-          </span>
-        </div>
-        <label>
-          <span>Environment name</span>
-          <input
-            aria-label="Custom environment name"
-            value={customName}
-            onChange={(event) => setCustomName(event.target.value)}
-            placeholder="Staging"
-            maxLength={96}
-          />
-        </label>
-        <div className="custom-environment-actions">
-          <button
-            type="button"
-            className="primary-button"
-            onClick={saveCustomEnvironment}
-            disabled={!customName.trim()}
-          >
-            {activeCustomEnvironment ? 'Save custom environment' : 'Add custom environment'}
-          </button>
-          {activeCustomEnvironment ? (
-            <button
-              type="button"
-              className="secondary-button danger-button"
-              onClick={removeCustomEnvironment}
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
       </section>
       <div className="callback-card">
         <KeyRound />
@@ -353,21 +211,18 @@ function SearchSettings({
           <p>Control Commander’s local indexes and adaptive result ranking.</p>
         </div>
       </div>
-      <div className="search-settings-stack">
-        <FullDiskAccessCard onError={onError} />
-        <div className="search-ranking-card">
-          <Search />
-          <div>
-            <strong>Fuzzy and adaptive everywhere</strong>
-            <span>
-              Apps, commands, extensions, files, and folders tolerate spelling mistakes. Choices made for each
-              search are learned locally so Commander ranks your preferred results first over time.
-            </span>
-          </div>
+      <div className="search-ranking-card">
+        <Search />
+        <div>
+          <strong>Fuzzy and adaptive everywhere</strong>
+          <span>
+            Apps, commands, extensions, files, and folders tolerate spelling mistakes. Choices made for each
+            search are learned locally so Commander ranks your preferred results first over time.
+          </span>
         </div>
-        <SearchPreferencesSettings settings={settings} onChange={onChange} onError={onError} />
-        <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
       </div>
+      <SearchPreferencesSettings settings={settings} onChange={onChange} onError={onError} />
+      <IndexingSettings settings={settings} onChange={onChange} onError={onError} />
     </div>
   );
 }

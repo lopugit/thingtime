@@ -23,7 +23,6 @@ import {
   learnedEmojiCounts,
   loadEmojiLearning,
   recordEmojiChoice,
-  resetEmojiChoice,
   saveEmojiLearning,
 } from './emojiLearning.js';
 
@@ -58,9 +57,6 @@ export function EmojiPicker({
   const [actionsOpen, setActionsOpen] = useState(false);
   const [targetApplication, setTargetApplication] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const [requiresAccessibility, setRequiresAccessibility] = useState(false);
-  const actionInFlight = useRef(false);
-  const recoveryHadFocus = useRef(false);
 
   const learnedCounts = useMemo(() => learnedEmojiCounts(learning, deferredQuery), [deferredQuery, learning]);
   const results = useMemo(
@@ -120,38 +116,19 @@ export function EmojiPicker({
 
   const runAction = useCallback(
     async (actionID: string, target: EmojiEntry | undefined = selected) => {
-      if (!target || actionInFlight.current) return;
+      if (!target) return;
       const value = emojiValue(target, tone);
-      if (actionID === 'reset-learning') {
-        setRequiresAccessibility(false);
-        setLearning((current) => resetEmojiChoice(current, query, target.id));
-        setActionsOpen(false);
-        setStatus(
-          query.trim()
-            ? `Reset ${value} learning for “${query.trim()}”`
-            : 'Search for a phrase before resetting emoji learning',
-        );
-        return;
-      }
-      actionInFlight.current = true;
+      remember(target);
+      learn(target);
       setActionsOpen(false);
-      const recordSuccess = () => {
-        setRequiresAccessibility(false);
-        setStatus(null);
-        learnedSelectionID.current = target.id;
-        remember(target);
-        learn(target);
-      };
       try {
         if (actionID === 'copy-unicode') {
           await writeClipboard(unicodeNotation(value));
-          recordSuccess();
           setStatus(`Copied ${unicodeNotation(value)}`);
           return;
         }
         if (actionID === 'copy') {
           await writeClipboard(value);
-          recordSuccess();
           setStatus(`${value} copied to the clipboard`);
           return;
         }
@@ -164,60 +141,28 @@ export function EmojiPicker({
           if (preserveClipboard)
             throw new Error('Paste to the current app requires the Commander desktop host');
           await browserClipboard(value);
-          recordSuccess();
           setStatus(`${value} copied to the clipboard`);
         } else if (!result.pasted) {
-          // A rejected paste is not a choice: keep recents, ranking and selection
-          // stable so retrying cannot silently select a different emoji.
-          if (result.copied && !preserveClipboard) recordSuccess();
-          setRequiresAccessibility(result.requiresAccessibility);
           setStatus(
             result.requiresAccessibility
               ? preserveClipboard
-                ? `Commander needs Accessibility access to paste ${value}. Your clipboard is unchanged.`
-                : result.copied
-                  ? `${value} is copied. Commander needs Accessibility access to paste automatically.`
-                  : `Commander needs Accessibility access to paste ${value}. It could not be copied.`
+                ? `Allow Commander in Accessibility to paste ${value} without changing your clipboard`
+                : `${value} copied — allow Commander in Accessibility to paste automatically`
               : preserveClipboard
                 ? `${value} could not be pasted`
-                : result.copied
-                  ? `${value} copied to the clipboard`
-                  : `${value} could not be pasted or copied`,
+                : `${value} copied to the clipboard`,
           );
-        } else {
-          recordSuccess();
         }
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Could not use that emoji');
-      } finally {
-        actionInFlight.current = false;
       }
     },
-    [learn, query, remember, selected, tone],
+    [learn, remember, selected, tone],
   );
-
-  // Activating a recovery control unmounts it, which drops focus to the document
-  // body and silently stops typing from reaching the query field. Restore focus
-  // only when it was actually lost, so a deliberate focus elsewhere is not stolen.
-  useEffect(() => {
-    if (requiresAccessibility || !recoveryHadFocus.current) return;
-    recoveryHadFocus.current = false;
-    if (document.activeElement && document.activeElement !== document.body) return;
-    inputRef.current?.focus();
-  }, [requiresAccessibility]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (actionsOpen && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
-      // Recovery controls are reached by keyboard precisely when paste is denied.
-      // Cancelling their Enter would retry the failing paste instead of activating them.
-      if (
-        event.key === 'Enter' &&
-        !event.metaKey &&
-        event.target instanceof HTMLElement &&
-        event.target.closest('.emoji-recovery-actions')
-      )
-        return;
       if (event.key === 'Escape') {
         event.preventDefault();
         if (actionsOpen) setActionsOpen(false);
@@ -272,19 +217,11 @@ export function EmojiPicker({
         { id: 'paste-and-copy', title: 'Paste and Keep on Clipboard' },
         { id: 'copy', title: 'Copy to Clipboard', shortcut: '⌘↵' },
         { id: 'copy-unicode', title: 'Copy Unicode Code Points', shortcut: '⇧⌘C' },
-        ...(deferredQuery.trim()
-          ? [
-              {
-                id: 'reset-learning',
-                title: `Reset learned score for “${deferredQuery.trim()}”`,
-              },
-            ]
-          : []),
       ],
       score: 0,
       matchedRanges: [],
     };
-  }, [deferredQuery, selected, selectedValue]);
+  }, [selected, selectedValue]);
 
   const selectFromPointer = useCallback((index: number, event: ReactPointerEvent<HTMLElement>) => {
     const previous = lastPointerPosition.current;
@@ -385,11 +322,6 @@ export function EmojiPicker({
                     title={entry.label}
                     onPointerMove={(event) => selectFromPointer(index, event)}
                     onClick={() => setSelectedIndex(index)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setSelectedIndex(index);
-                      setActionsOpen(true);
-                    }}
                     onDoubleClick={() => void runAction(defaultAction, entry)}
                   >
                     <span>{value}</span>
@@ -422,50 +354,19 @@ export function EmojiPicker({
           <span className="emoji-footer-selection">
             {selected ? `${selectedValue}  ${titleCase(selected.label)}` : 'Search Emoji & Symbols'}
           </span>
-          <span className="footer-spacer" />
+          {status ? (
+            <span className="emoji-status" role="status">
+              {status}
+            </span>
+          ) : (
+            <span className="footer-spacer" />
+          )}
           <span className="emoji-primary-action">
             {emojiActionLabel(defaultAction, targetApplication)} <kbd>↵</kbd>
           </span>
           <span className="footer-divider" />
           <span>Actions</span>
           <kbd>⌘ K</kbd>
-          {status ? (
-            <div className="emoji-feedback">
-              <span className="emoji-status" role="status">
-                {status}
-              </span>
-              {requiresAccessibility ? (
-                <>
-                  <span className="emoji-permission-help">
-                    Enable Commander in Privacy &amp; Security → Accessibility. If it is already enabled,
-                    switch Commander off and on, then quit and reopen Commander.
-                  </span>
-                  <div
-                    className="emoji-recovery-actions"
-                    onFocus={() => {
-                      recoveryHadFocus.current = true;
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void nativeRequest('application.open', {
-                          path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
-                        }).catch(() =>
-                          setStatus('Could not open Accessibility settings. Open System Settings manually.'),
-                        );
-                      }}
-                    >
-                      Open Accessibility Settings
-                    </button>
-                    <button type="button" onClick={() => void runAction('copy')}>
-                      Copy Emoji
-                    </button>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ) : null}
         </footer>
 
         {actionsOpen && actionItem ? (

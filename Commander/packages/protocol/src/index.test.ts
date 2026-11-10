@@ -5,9 +5,7 @@ import {
   fuzzyTextScore,
   INDEXING_SETTINGS_VERSION,
   isSettingsTab,
-  normalizeActivitySettings,
   normalizeCalculatorSettings,
-  normalizeCommanderThingtimeCustomEnvironments,
   normalizeIndexingSettings,
   normalizeSearchCacheSettings,
   normalizeSearchCategoryOrder,
@@ -70,56 +68,11 @@ describe('Commander presentation settings', () => {
       maxDecimalPlaces: 0,
     });
   });
-
-  it('keeps costly automatic network speed testing opt-in and bounds its interval', () => {
-    expect(normalizeActivitySettings(undefined)).toEqual({
-      periodicSpeedTestEnabled: false,
-      periodicSpeedTestIntervalMinutes: 15,
-    });
-    expect(
-      normalizeActivitySettings({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 1 }),
-    ).toEqual({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 5 });
-    expect(
-      normalizeActivitySettings({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 99_999 }),
-    ).toEqual({ periodicSpeedTestEnabled: true, periodicSpeedTestIntervalMinutes: 1440 });
-  });
-
-  it('keeps valid custom Thingtime environments while rejecting malformed and duplicate entries', () => {
-    expect(
-      normalizeCommanderThingtimeCustomEnvironments([
-        {
-          id: 'staging',
-          name: ' Staging ',
-          baseUrl: 'https://staging.thingtime.com/',
-          clientId: ' ttapp_staging ',
-        },
-        {
-          id: 'staging',
-          name: 'Duplicate',
-          baseUrl: 'https://duplicate.example',
-          clientId: 'ttapp_duplicate',
-        },
-        { id: 'bad', name: 'Bad', baseUrl: 'javascript:alert(1)', clientId: 'ttapp_bad' },
-      ]),
-    ).toEqual([
-      {
-        id: 'staging',
-        name: 'Staging',
-        baseUrl: 'https://staging.thingtime.com',
-        clientId: 'ttapp_staging',
-      },
-    ]);
-  });
 });
 
 describe('normalizeIndexingSettings', () => {
   it('migrates legacy settings to safe local indexing defaults', () => {
     expect(normalizeIndexingSettings(undefined)).toEqual(DEFAULT_INDEXING_SETTINGS);
-  });
-
-  it('upgrades the former singleton home-directory default to whole-volume indexing', () => {
-    expect(normalizeIndexingSettings({ version: 4, roots: ['~'] }).roots).toEqual(['/']);
-    expect(normalizeIndexingSettings({ version: 4, roots: ['~/Projects'] }).roots).toEqual(['~/Projects']);
   });
 
   it('preserves valid roots and wildcard/regex rules while enforcing resource bounds', () => {
@@ -156,7 +109,6 @@ describe('normalizeIndexingSettings', () => {
       ],
       refreshIntervalMinutes: 5,
       maxEntries: 99_000_000,
-      customTimeoutMs: null,
       resourceLimits: {
         maxThreads: 64,
         maxParallelism: 1,
@@ -190,15 +142,6 @@ describe('normalizeIndexingSettings', () => {
       maxCpuPercent: 42,
       maxMemoryMiB: 768,
     });
-  });
-
-  it('keeps a positive custom timeout without imposing a product cap', () => {
-    expect(normalizeIndexingSettings({ customTimeoutMs: Number.MAX_SAFE_INTEGER }).customTimeoutMs).toBe(
-      Number.MAX_SAFE_INTEGER,
-    );
-    expect(normalizeIndexingSettings({ customTimeoutMs: 900_000 }).customTimeoutMs).toBe(900_000);
-    expect(normalizeIndexingSettings({ customTimeoutMs: 0 }).customTimeoutMs).toBeNull();
-    expect(normalizeIndexingSettings({ customTimeoutMs: 2.5 }).customTimeoutMs).toBeNull();
   });
 
   it('adds the noindex default to the previous built-in ignore set', () => {
@@ -289,12 +232,5 @@ describe('fuzzyTextScore', () => {
     expect(fuzzyTextScore('nite', 'note')).toBeGreaterThanOrEqual(0);
     expect(fuzzyTextScore('raycsat', 'raycast-start')).toBeGreaterThanOrEqual(0);
     expect(fuzzyTextScore('raycsat', 'unrelated')).toBe(-1);
-  });
-
-  it('treats a space-separated query as an exact filename title', () => {
-    expect(fuzzyTextScore('raycast stop', 'raycast-stop')).toBe(100_000);
-    expect(fuzzyTextScore('raycast stop', 'raycast-stop')).toBeGreaterThan(
-      fuzzyTextScore('raycast stop', 'raycast-start'),
-    );
   });
 });
