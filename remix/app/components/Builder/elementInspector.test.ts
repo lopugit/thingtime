@@ -54,5 +54,5 @@ test('long CSS and HTML authoring keeps literal custom properties and the existi
  assert.deepEqual({ ...article.css }, css);
  assert.equal(article.html, html);
  assert.equal(sanitizeWebpageBlocks([{ id: 'attack', type: 'html', html, css: { '--payload': 'url(javascript:alert(1))' } }]).ok, false);
- assert.equal(EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], '1.25.0');
+ assert.equal(EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], '1.26.0');
 });

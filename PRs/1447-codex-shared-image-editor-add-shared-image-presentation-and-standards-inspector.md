@@ -30,8 +30,9 @@ retain their normal rendering and validation boundaries.
   for the manual checklist.
 
 The branch also integrates authored selection, keyed collections, and owner
-library archive from main. Things 1.60.0, Things-update 1.25.0, and Webpages
-resolve 1.17.0 distinguish expanded authoring from the earlier contracts.
+library archive from main. Things 1.61.0, Things-update 1.26.0, and Webpages
+resolve 1.18.0 distinguish expanded authoring from the source input reference
+contracts now available to the Agent overview.
 Things Search 1.6.0 adds optional avatar presentation alongside archive
 filtering. Existing archive callers still accept their original minimum
 versions. The selection merge passed 104 renderer, schema, Action, and

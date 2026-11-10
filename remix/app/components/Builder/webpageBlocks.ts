@@ -1,5 +1,6 @@
 import type { PageCollectionBinding } from '~/schemas/pageCollections';
 import type { WebpageActivation } from '~/schemas/webpageActivation';
+import type { SourceInputValue } from '~/schemas/sourceInputs';
 
 // Client types and pure block-tree operations. The server validates each block;
 // pages have no arbitrary block-count or nesting-depth product limit.
@@ -15,8 +16,8 @@ export interface WebpageBlockSource {
 	// Bind data without creating a local form, click or event boundary.
 	passive?: boolean;
 	collection?: PageCollectionBinding;
-	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
-	inputs?: Record<string, string | number | boolean>;
+	// Scalar values, string tokens or a ttArg binding with an optional fallback.
+	inputs?: Record<string, SourceInputValue>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;

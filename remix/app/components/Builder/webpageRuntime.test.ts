@@ -3,6 +3,7 @@ import test from 'node:test';
 import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
 import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
 import { localQueryHref } from '../Actions/localUiAction';
+import { resolveThingSourceInputs } from './liveComponent';
 
 import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
 
@@ -64,11 +65,29 @@ test('a sharing bearer key never enters the template or action input query scope
 	assert.deepEqual(queryScopeOf('?key=private-link-key&question=hello'), { question: 'hello' });
 });
 
-test('the query scope caps value length and key count', () => {
-	const long = 'x'.repeat(500);
-	assert.equal(queryScopeOf(`?note=${long}`).note?.length, 200);
+test('query selection preserves long lists through navigation while bounding key count', () => {
+	const projectIds = Array.from({ length: 8 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+	const href = localQueryHref('overview-page', { projectIds });
+	assert.ok(href);
+	const query = queryScopeOf(new URL(href, 'https://thingtime.test').search);
+	assert.equal(query.projectIds, JSON.stringify(projectIds));
+	assert.equal(localQueryHref('overview-page', { ...query, view: 'list' }), `${href}&view=list`);
 	const many = Array.from({ length: 80 }, (_value, index) => `k${index}=${index}`).join('&');
 	assert.ok(Object.keys(queryScopeOf(`?${many}`)).length <= 32);
+});
+
+test('source input fallback fills a missing selection and preserves explicit empty, false and zero values', () => {
+	const inputs = {
+		taskLevels: { ttArg: 'query.taskLevels', fallback: 'defaultLevel' },
+		statuses: { ttArg: 'query.statuses', fallback: 'query.status' },
+		invalid: { ttArg: 'query' }, unset: { ttArg: 'missing' }, enabled: false, count: 0, title: 'Tasks {query.term}'
+	};
+	assert.deepEqual(resolveThingSourceInputs(inputs, { defaultLevel: 'top-level', query: { status: 'blocked', term: 'today' } }), {
+		taskLevels: 'top-level', statuses: 'blocked', enabled: false, count: 0, title: 'Tasks today'
+	});
+	assert.deepEqual(resolveThingSourceInputs(inputs, { defaultLevel: 'top-level', query: { taskLevels: '', statuses: '', status: 'blocked' } }), {
+		taskLevels: '', statuses: '', enabled: false, count: 0, title: 'Tasks '
+	});
 });
 
 test('overview next-page cursors survive local navigation and query binding intact', () => {

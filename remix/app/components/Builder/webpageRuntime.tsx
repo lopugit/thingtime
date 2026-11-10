@@ -108,7 +108,6 @@ const WebpageRuntimeContext = React.createContext<WebpageRuntime>(INERT_RUNTIME)
 export const useWebpageRuntime = (): WebpageRuntime => React.useContext(WebpageRuntimeContext);
 
 const MAX_QUERY_KEYS = 32;
-const MAX_QUERY_VALUE_CHARS = 200;
 const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 
 // A shared-load entry only earns its keep for the SIBLING blocks that ask for
@@ -151,7 +150,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 		// oversized token into a valid first-page request by silently dropping it.
 		out[key] = isPaginationCursorKey(key)
 			? value.length <= MAX_PAGINATION_CURSOR_CHARS ? value : INVALID_PAGINATION_CURSOR
-			: value.slice(0, MAX_QUERY_VALUE_CHARS);
+			: value;
 		count += 1;
 	});
 	return out;

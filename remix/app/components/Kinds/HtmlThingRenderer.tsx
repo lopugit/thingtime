@@ -21,6 +21,7 @@ import { ComponentUpload } from '../Builder/ComponentUpload';
 import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
+import { HtmlMultipleSelect, HtmlSelectOption } from './HtmlMultipleSelect';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
@@ -148,16 +149,23 @@ const FIELD_TAGS = new Set(['input', 'textarea', 'select']);
 const fieldProps = (tag: string, props: Record<string, unknown>): Record<string, unknown> => {
 	if (!FIELD_TAGS.has(tag)) return props;
 	const out: Record<string, unknown> = { ...props };
-	let value = out.value;
-	if (tag === 'select' && out.multiple === true && !Array.isArray(value)) value = value == null ? [] : [String(value)];
+	if (tag === 'select' && out.multiple === true) {
+		// A typed array is an authored default. String query bindings stay
+		// authoritative and can explicitly clear an edited filter.
+		if (Array.isArray(out.value)) {
+			out.defaultValue = out.value;
+			delete out.value;
+		}
+		return out;
+	}
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
 	if (out.type === 'file') { delete out.value; delete out.defaultValue; return out; }
  if (out['data-tt-action'] === '$ui' || (out['data-tt-action'] === '$transient' && ('value' in out || 'checked' in out))) {
-  return { ...out, ...('checked' in out ? { checked: out.checked === true || out.checked === 'true' || out.checked === 'checked' } : { value: value ?? '' }), onChange: () => {} };
+  return { ...out, ...('checked' in out ? { checked: out.checked === true || out.checked === 'true' || out.checked === 'checked' } : { value: out.value ?? '' }), onChange: () => {} };
  }
 	if ('value' in out) {
-		out.defaultValue = value;
+		out.defaultValue = out.value;
 		delete out.value;
 	}
 	if ('checked' in out) {
@@ -282,6 +290,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; delete props[MODIFIER_ACTION_INPUTS]; delete props[ACTION_BATCH_ATTRIBUTE]; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
+	if (tag === 'option') return <HtmlSelectOption key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlSelectOption>;
+	if (tag === 'select' && props.multiple) return <HtmlMultipleSelect key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlMultipleSelect>;
 
 	if (tag === 'textarea') {
 		// React forbids textarea children whenever a value/defaultValue exists,
@@ -353,6 +363,8 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children, marke
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
  for (const key of ['src', 'poster', 'href']) if (typeof props[key] === 'string') props[key] = mediaUrl(props[key]);
  const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
+ if (safeTag === 'option') return <HtmlSelectOption props={merged}>{children}</HtmlSelectOption>;
+ if (safeTag === 'select' && props.multiple) return <HtmlMultipleSelect props={merged} editing={!!editorProps?.onClick}>{children}</HtmlMultipleSelect>;
  if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
  if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
  const fallback = attributes?.['data-tt-image-fallback'];

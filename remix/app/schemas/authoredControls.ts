@@ -1,3 +1,5 @@
+import { parseSourceInputArgument } from './sourceInputs';
+
 export const AUTHORED_CONTROL_REQUIREMENTS = {
 	'api.things': '1.50.0',
 	'api.things-update': '1.19.0',
@@ -16,6 +18,12 @@ export const PASSIVE_SOURCE_REQUIREMENTS = {
 	'api.things': '1.57.0',
 	'api.things-update': '1.23.0',
 	'api.webpages-resolve': '1.15.0'
+} as const;
+
+export const SOURCE_INPUT_REFERENCE_REQUIREMENTS = {
+	'api.things': '1.60.0',
+	'api.things-update': '1.25.0',
+	'api.webpages-resolve': '1.17.0'
 } as const;
 
 function hasAuthoredNode(value: unknown, matches: (node: Record<string, unknown>) => boolean): boolean {
@@ -65,4 +73,13 @@ export function usesPageCollections(value: unknown): boolean {
 		(!!ttEach && typeof ttEach === 'object' && 'keyArg' in ttEach) ||
 		([ttIf, condition].some(value => !!value && typeof value === 'object' && 'valueArg' in value)) ||
 		(op === 'things.get' && ownedFolderId !== undefined));
+}
+
+export function usesSourceInputReferences(value: unknown): boolean {
+	return hasAuthoredNode(value, ({ source }) => {
+		if (!source || typeof source !== 'object' || !('action' in source) || typeof source.action !== 'string' || !('inputs' in source)) return false;
+		const { inputs } = source;
+		return !!inputs && typeof inputs === 'object' && !Array.isArray(inputs) &&
+			Object.values(inputs).some(parseSourceInputArgument);
+	});
 }

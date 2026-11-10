@@ -9,6 +9,7 @@ const allowed = { path: '/api/v1/agent-overview', feature: 'api.agent-overview',
 
 test('live sources require an allowlisted capability binding', () => {
 	assert.equal(validateLiveSourceStream(allowed), true);
+	assert.equal(validateLiveSourceStream({ ...allowed, minimumVersion: '2.1.0' }), true);
 	assert.equal(validateLiveSourceStream({ ...allowed, path: '/api/v1/things' }), false);
 	assert.equal(validateLiveSourceStream({ ...allowed, feature: 'api.other' }), false);
 	assert.equal(validateLiveSourceStream({ ...allowed, minimumVersion: 'latest' }), false);
