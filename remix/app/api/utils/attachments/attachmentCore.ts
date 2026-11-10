@@ -762,7 +762,8 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	const crystal = canonicalAttachmentCrystal(doc.crystal);
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
   if (doc.attachmentRedundantDeleteAfter !== undefined && (!validAttachmentBlobRef(doc.attachmentBlob) ||
-    !(doc.attachmentRedundantDeleteAfter instanceof Date) || !Number.isFinite(doc.attachmentRedundantDeleteAfter.getTime()) ||
+    (doc.attachmentRedundantDeleteAfter !== null && (!(doc.attachmentRedundantDeleteAfter instanceof Date) ||
+      !Number.isFinite(doc.attachmentRedundantDeleteAfter.getTime()))) ||
     doc.objectKey === 'objects/' + doc.attachmentBlob.objectAttachmentId)) return null;
   if (doc.attachmentBlob !== undefined) {
     if (!validAttachmentBlobRef(doc.attachmentBlob) || doc.attachmentPurpose !== 'file' ||

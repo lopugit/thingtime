@@ -2602,10 +2602,11 @@ deletion with disposable references before touching existing files.
 
 The separate `consolidate-sync-attachment-blobs` migration applies to existing
 files with recorded sync provenance. Start with a dry run to count the remaining
-candidates. Confirm a bounded pass and repeat after the signed download URL
-window has elapsed. The migration verifies both exact objects before switching
-the reference, preserves the logical version, and refunds the redundant bytes
-only after deleting the original redundant object version. Review skips and
+candidates. The migration verifies both exact objects before switching the
+reference and preserves the logical version. Run another confirmed pass to
+start the signed download URL drain for committed aliases. Once that window
+has elapsed, a later pass deletes the original redundant version and refunds
+its bytes. Review skips and
 remaining work between passes. Use a compatible build for any rollback after
 activation because existing shared references still require compatible reads,
 accounting and cleanup.

@@ -3,13 +3,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { createAttachmentService } from '../app/api/utils/attachments/attachments';
 import { createLocalAttachmentStorage } from '../app/api/utils/attachments/localAttachmentStorage';
-import { attachmentStore } from '../app/api/utils/attachments/attachmentStore';
+import { attachmentStore, consolidateLegacySyncAttachment, findVerifiedBlobCandidate } from '../app/api/utils/attachments/attachmentStore';
 import { attachmentContentVersion } from '../app/api/utils/attachments/contentFingerprint';
 import { activateSyncAttachmentDedup } from '../app/api/utils/attachments/attachmentBlobActivation';
 import { runSyncAttachmentDedupMigration, purgeRedundantAttachmentObject } from '../app/api/utils/attachments/attachmentBlobMaintenance';
 import { contentPartPlan } from '../app/fileSync/contentFingerprint';
 import { getUserStorageUsage } from '../app/api/utils/storage/userStorage';
 import { getHomeThingsCollection } from '../app/api/utils/mongodb/collections';
+import { reviewAttachmentModeration } from '../app/api/utils/moderation/moderationAdmin';
+import { DOWNLOAD_URL_TTL_SECONDS } from '../app/api/utils/attachments/privateS3';
 
 export async function runAttachmentDedupFixture(directory: string, origin: string, owner: string, other: string) {
   const media = join(directory, 'dedup-objects');
@@ -100,6 +102,10 @@ export async function runAttachmentDedupFixture(directory: string, origin: strin
   assert.equal(deletes, beforeDeletes, 'Deleting the uploader does not delete shared bytes');
   const stillThere = await service.fingerprint({ id: owner }, b.id);
   assert.ok(stillThere.ok);
+  const afterOriginal = await start(owner, input('remaining-alias.bin'));
+  assert.equal(afterOriginal.state, 'ready', 'A readable surviving reference can authorize reuse');
+  assert.equal(mpus, 3);
+  assert.ok((await service.remove(owner, { id: afterOriginal.id })).ok);
   assert.ok((await service.remove(owner, { id: b.id })).ok);
   assert.equal(deletes, beforeDeletes + 1);
   assert.equal((await getUserStorageUsage(owner)).usedBytes, initial);
@@ -116,6 +122,28 @@ export async function runAttachmentDedupFixture(directory: string, origin: strin
   await service.remove(owner, { id: zero1.id }); await service.remove(owner, { id: zero2.id });
   assert.equal((await getUserStorageUsage(owner)).usedBytes, initial);
 
+  const blocked = await start(owner, input('blocked.bin'));
+  await finish(owner, blocked.id);
+  assert.ok((await reviewAttachmentModeration(blocked.id, 'block', 'test-moderator')).ok);
+  const denied = await service.download({ id: owner }, blocked.id, true);
+  assert.ok(!denied.ok && denied.status === 404);
+  const beforeFallback = await getUserStorageUsage(owner);
+  const beforeFallbackUploads = mpus;
+  const fallback = await start(owner, input('same-digest.bin'));
+  assert.equal(fallback.state, undefined, 'A blocked-only fingerprint cannot create a readable alias');
+  assert.equal(mpus, beforeFallbackUploads + 1);
+  assert.ok(!(await service.download({ id: owner }, fallback.id, true)).ok);
+  const wrong = await service.signParts(owner, { uploadId: fallback.id, parts: [{ partNumber: 1, checksumSha256: Buffer.alloc(32).toString('base64') }] });
+  assert.ok(!wrong.ok && wrong.status === 409, 'Fallback still requires the original digest');
+  await finish(owner, fallback.id);
+  const standalone = (await attachmentStore.getOwned(owner, fallback.id))!;
+  assert.equal(standalone.attachmentBlob, undefined);
+  assert.equal((await getUserStorageUsage(owner)).usedBytes! - beforeFallback.usedBytes!, standalone.sizeBytes);
+  assert.equal(await blobCount(), 1);
+  assert.ok((await service.remove(owner, { id: fallback.id })).ok);
+  assert.ok((await service.remove(owner, { id: blocked.id })).ok);
+  assert.equal((await getUserStorageUsage(owner)).usedBytes, initial);
+
   enabled = false;
   const old1 = await start(owner, input('old-mac.bin', false)), old2 = await start(owner, input('old-iphone.bin', false));
   await finish(owner, old1.id); await finish(owner, old2.id);
@@ -123,16 +151,42 @@ export async function runAttachmentDedupFixture(directory: string, origin: strin
   const usage = (await getUserStorageUsage(owner)).usedBytes!;
   const oldVersions = new Map(oldRows.map(row => [row!.shareId, attachmentContentVersion(row!.shareId, row!.objectKey, row!.objectVersionId!)]));
   assert.equal((await runSyncAttachmentDedupMigration({ dryRun: true })).matched, 2);
-  await runSyncAttachmentDedupMigration({ dryRun: false });
+  const [oldCanonical, oldAlias] = oldRows;
+  assert.equal(await consolidateLegacySyncAttachment(oldCanonical!, contentFingerprint, null), 'adopted');
+  const replacement = await findVerifiedBlobCandidate(owner, bytes.length, contentFingerprint);
+  assert.ok(replacement);
+  const signedBeforeCommit: { url: string; expiresAt: string }[] = [];
+  const aliasWriteStarted = Date.now();
+  assert.equal(await consolidateLegacySyncAttachment(oldAlias!, contentFingerprint, replacement, async () => {
+    // The alias is written inside the transaction, but the old locator is still
+    // live to an independent authorized reader until that transaction commits.
+    const current = await attachmentStore.getOwned(owner, oldAlias!.shareId);
+    assert.equal(current?.attachmentBlob, undefined);
+    const link = await service.download({ id: owner }, oldAlias!.shareId, true);
+    assert.ok(link.ok);
+    signedBeforeCommit.push(link);
+  }), 'aliased');
   assert.equal(await blobCount(), 1);
   assert.equal((await getUserStorageUsage(owner)).usedBytes, usage, 'Refund waits for signed URL drain and exact redundant version deletion');
   const converted = await Promise.all([old1.id, old2.id].map(id => attachmentStore.getOwned(owner, id)));
-  const redundant = converted.find(row => row?.attachmentRedundantDeleteAfter)!;
+  const redundant = converted.find(row => row?.attachmentRedundantDeleteAfter === null)!;
   assert.ok(redundant);
-  assert.equal(await purgeRedundantAttachmentObject(provider, redundant, clock), false);
-  clock = new Date(redundant.attachmentRedundantDeleteAfter!.getTime() + 1000);
-  assert.equal(await purgeRedundantAttachmentObject(provider, redundant, clock), true);
-  assert.equal(await purgeRedundantAttachmentObject(provider, redundant, clock), false, 'Lost-reply retry must not refund twice');
+  const lateLink = signedBeforeCommit.at(-1);
+  assert.ok(lateLink, 'An old URL was signed after the alias write and before commit');
+  assert.ok(Date.parse(lateLink.expiresAt) >= aliasWriteStarted + DOWNLOAD_URL_TTL_SECONDS * 1000);
+  assert.equal(await purgeRedundantAttachmentObject(provider, redundant, new Date(Date.now() + 86_400_000)), false,
+    'The committed alias has no deletion authority before a later observation');
+  const observedAfterCommit = Date.now();
+  await runSyncAttachmentDedupMigration({ dryRun: false });
+  const draining = (await attachmentStore.getOwned(owner, redundant.shareId))!;
+  const drainEnds = draining.attachmentRedundantDeleteAfter!;
+  assert.ok(drainEnds.getTime() >= observedAfterCommit + DOWNLOAD_URL_TTL_SECONDS * 1000);
+  assert.ok(drainEnds.getTime() >= Date.parse(lateLink.expiresAt));
+  assert.equal(await purgeRedundantAttachmentObject(provider, draining, new Date(drainEnds.getTime() - 1)), false);
+  assert.equal((await storage.handleRequest(new Request(new URL(lateLink.url, origin)))).status, 200);
+  clock = new Date(drainEnds.getTime() + 1000);
+  assert.equal(await purgeRedundantAttachmentObject(provider, draining, clock), true);
+  assert.equal(await purgeRedundantAttachmentObject(provider, draining, clock), false, 'Lost-reply retry must not refund twice');
   assert.equal((await getUserStorageUsage(owner)).usedBytes, usage - bytes.length);
   for (const row of converted) {
     const found = await service.fingerprint({ id: owner }, row!.shareId);
@@ -144,9 +198,31 @@ export async function runAttachmentDedupFixture(directory: string, origin: strin
   assert.equal(deletes, finalDeletes + 1, 'Concurrent logical cleanup destroys only the last physical object');
   assert.equal((await getUserStorageUsage(owner)).usedBytes, initial);
   assert.equal(await blobCount(), 0);
+
+  clock = new Date();
+  const oldDelete1 = await start(owner, input('delete-before-drain-one.bin', false));
+  const oldDelete2 = await start(owner, input('delete-before-drain-two.bin', false));
+  await finish(owner, oldDelete1.id); await finish(owner, oldDelete2.id);
+  await runSyncAttachmentDedupMigration({ dryRun: false });
+  const deletePair = await Promise.all([oldDelete1.id, oldDelete2.id].map(id => attachmentStore.getOwned(owner, id)));
+  const undrained = deletePair.find(row => row?.attachmentRedundantDeleteAfter === null)!;
+  const canonical = deletePair.find(row => row?.attachmentRedundantDeleteAfter === undefined)!;
+  assert.ok(undrained && canonical);
+  const beforeDrainDeletes = deletes;
+  const deferred = await service.remove(owner, { id: undrained.shareId });
+  assert.ok(deferred.ok && deferred.deferred && deferred.retryAt);
+  assert.equal(deletes, beforeDrainDeletes, 'Ordinary claimed delete cannot bypass a postcommit drain');
+  assert.ok((await service.fingerprint({ id: owner }, canonical.shareId)).ok);
+  clock = new Date(Date.parse(deferred.retryAt) + 1000);
+  assert.ok((await service.remove(owner, { id: undrained.shareId })).ok);
+  assert.equal(deletes, beforeDrainDeletes + 1);
+  assert.ok((await service.remove(owner, { id: canonical.shareId })).ok);
+  assert.equal((await getUserStorageUsage(owner)).usedBytes, initial);
   return ['same-account-exact-storage', 'concurrent-first-upload-and-reference-replay', 'different-account-separation',
     'logical-disposition-and-version', 'final-reference-only-delete', 'explicit-activation',
-    'legacy-version-preserved', 'legacy-exact-delete-before-refund', 'reserved-digest-rejects-mismatched-part', 'empty-exact-byte-reuse'];
+    'legacy-version-preserved', 'legacy-exact-delete-before-refund', 'reserved-digest-rejects-mismatched-part', 'empty-exact-byte-reuse',
+    'remaining-readable-reference-authorizes-reuse', 'blocked-only-fallback-requires-exact-bytes',
+    'postcommit-url-drain-and-late-signed-read', 'ordinary-delete-defers-undrained-object'];
 }
 
 /** Real production route handlers, session cookies, private approval, file
@@ -175,25 +251,29 @@ export async function runAttachmentDedupRoutes(origin: string, owner: string, co
   const bytes = new Uint8Array([16, 35, 66, 99, 8, 6]);
   const checksum = createHash('sha256').update(bytes).digest();
   const contentFingerprint = { algorithm: 'sha256-parts-v1', ...contentPartPlan(bytes.length), sha256: createHash('sha256').update(checksum).digest('hex') };
+  const reserve = (name: string, id: string, operationId: string) => post(start.action, '/api/v1/attachments/uploads', {
+    filename: name, requestId: operationId, contentType: 'application/octet-stream', purpose: 'file', sizeBytes: bytes.length, contentFingerprint,
+    fileSyncOrigin: { version: 1, deviceId: randomUUID(), localRootId: randomUUID(), fileId: id, folderId: null, path: name }
+  });
+  const uploadBytes = async (attachmentId: string) => {
+    const signed = await post(parts.action, '/api/v1/attachments/uploads/parts', {
+      uploadId: attachmentId, parts: [{ partNumber: 1, checksumSha256: checksum.toString('base64') }]
+    });
+    const target = signed.parts[0];
+    const put = await handleLocalAttachmentStorageRequest(new Request(new URL(target.url, origin), {
+      method: 'PUT', headers: { ...target.headers, 'Content-Length': String(bytes.length) }, body: bytes
+    }));
+    assert.equal(put.status, 200);
+    await post(complete.action, '/api/v1/attachments/uploads/complete', { uploadId: attachmentId });
+  };
   const result: { name: string; id: string; attachmentId: string; version: string }[] = [];
   for (const name of ['routes-first.bin', 'routes-second.bin', 'routes-unbound.bin']) {
     const id = randomUUID(), operationId = randomUUID();
-    const started = await post(start.action, '/api/v1/attachments/uploads', {
-      filename: name, requestId: operationId, contentType: 'application/octet-stream', purpose: 'file', sizeBytes: bytes.length, contentFingerprint,
-      fileSyncOrigin: { version: 1, deviceId: randomUUID(), localRootId: randomUUID(), fileId: id, folderId: null, path: name }
-    });
+    const started = await reserve(name, id, operationId);
     const attachmentId = started.upload.id;
     if (!result.length) {
       assert.notEqual(started.upload.state, 'ready');
-      const signed = await post(parts.action, '/api/v1/attachments/uploads/parts', {
-        uploadId: attachmentId, parts: [{ partNumber: 1, checksumSha256: checksum.toString('base64') }]
-      });
-      const target = signed.parts[0];
-      const put = await handleLocalAttachmentStorageRequest(new Request(new URL(target.url, origin), {
-        method: 'PUT', headers: { ...target.headers, 'Content-Length': String(bytes.length) }, body: bytes
-      }));
-      assert.equal(put.status, 200);
-      await post(complete.action, '/api/v1/attachments/uploads/complete', { uploadId: attachmentId });
+      await uploadBytes(attachmentId);
     } else assert.equal(started.upload.state, 'ready');
     const query = '/api/v1/attachments/content?id=' + attachmentId + '&fingerprint=1';
     const fingerprint = await content.loader({ request: req(query) });
@@ -220,5 +300,17 @@ export async function runAttachmentDedupRoutes(origin: string, owner: string, co
   const stored = await handleLocalAttachmentStorageRequest(new Request(new URL(response.headers.get('location')!, origin)));
   assert.match(stored.headers.get('Content-Disposition')!, /routes-second\.bin/);
   assert.deepEqual(new Uint8Array(await stored.arrayBuffer()), bytes);
-  return ['production-upload-parts-complete-delete-handlers', 'two-canonical-file-publications-and-owner-only-readback'];
+  for (const { attachmentId } of result.slice(0, 2)) {
+    assert.ok((await reviewAttachmentModeration(attachmentId, 'block', 'test-moderator')).ok);
+    assert.equal((await content.loader({ request: req('/api/v1/attachments/content?id=' + attachmentId + '&download=1') })).status, 404);
+  }
+  const fallback = await reserve('routes-blocked-digest.bin', randomUUID(), randomUUID());
+  assert.notEqual(fallback.upload.state, 'ready');
+  assert.equal((await content.loader({ request: req('/api/v1/attachments/content?id=' + fallback.upload.id + '&download=1') })).status, 404);
+  await uploadBytes(fallback.upload.id);
+  const fallbackDoc = await attachmentStore.getOwned(owner, fallback.upload.id);
+  assert.ok(fallbackDoc && !fallbackDoc.attachmentBlob && fallbackDoc.objectSizeBytes === bytes.length);
+  await post(remove.action, '/api/v1/attachments/delete', { id: fallback.upload.id });
+  return ['production-upload-parts-complete-delete-handlers', 'two-canonical-file-publications-and-owner-only-readback',
+    'blocked-digest-route-requires-a-new-upload'];
 }

@@ -16,7 +16,9 @@ pending.
 Attachment content is shared only within its owning account. A protected blob
 owns a verified physical generation and payload charge; logical attachment
 references retain access checks, filenames and version history. Concurrent
-admission and final-reference deletion share transactional accounting. Explicit
+admission and final-reference deletion share transactional accounting.
+Ready reuse requires a live readable owner reference, and historical cleanup
+starts its old signed URL drain after the alias commits. Explicit
 activation and historical-consolidation migrations keep rollout separate from
 source delivery.
 
@@ -29,10 +31,11 @@ source delivery.
   (59 cases), plus desktop recovery. Remote protocol/client (16) and worker
   (13) checks passed, including Pause during pending enrollment.
 - Storage checks include 355 attachment tests, 71 focused storage/batch/cloud
-  tests, and 22 real transactional Mongo/private-byte retention checks. Real
+  tests, and 27 real transactional Mongo/private-byte retention checks. Real
   request-handler tests cover normal upload approval, parts, completion,
   content reads, deletion, two Files publications, cross-account refusal,
-  quota/reference accounting and historical consolidation.
+  quota/reference accounting, blocked-only fallback and historical
+  consolidation with a download issued during the uncommitted switch.
 - Capability coverage passed 162 tests after integrating the latest main.
 - Final file-sync coverage passed 845 cases with zero skips; raw TypeScript
   and Nitro server build passed. Changed-file lint passed after fixing a

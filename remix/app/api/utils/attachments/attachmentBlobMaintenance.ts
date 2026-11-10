@@ -1,6 +1,6 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { attachmentPhysicalObject, sameAttachmentBlobFingerprint } from './attachmentBlobs';
-import { consolidateLegacySyncAttachment, findVerifiedBlobCandidate, refundRedundantAttachmentObject, type AttachmentDoc } from './attachmentStore';
+import { beginRedundantAttachmentDrain, consolidateLegacySyncAttachment, findVerifiedBlobCandidate, refundRedundantAttachmentObject, type AttachmentDoc } from './attachmentStore';
 import { isAttachmentObjectVersionId } from './attachmentCore';
 import { fingerprintFromVerifiedHead } from './contentFingerprint';
 import { DOWNLOAD_URL_TTL_SECONDS, getPrivateS3, type AttachmentS3 } from './privateS3';
@@ -10,7 +10,7 @@ import { syncAttachmentDedupActive } from './attachmentBlobActivation';
 const eligible = { thingtime: 'attachment', attachmentPurpose: 'file', attachmentState: 'ready',
   attachmentFileSyncOrigin: { $exists: true }, attachmentLinked: { $ne: true }, attachmentImportDraft: { $ne: true },
   'moderation.status': { $ne: 'blocked' }, objectVersionId: { $type: 'string' }, attachmentBlob: { $exists: false } };
-const superseded = { thingtime: 'attachment', attachmentPurpose: 'file', attachmentRedundantDeleteAfter: { $type: 'date' } };
+const superseded = { thingtime: 'attachment', attachmentPurpose: 'file', attachmentRedundantDeleteAfter: { $exists: true } };
 const urlDrainMs = DOWNLOAD_URL_TTL_SECONDS * 1000;
 // One existing shareId cursor for each pass. Retain headroom under the
 // deployed request budget; invocations continue from these durable cursors.
@@ -18,8 +18,13 @@ const workPage = 64;
 const workBudgetMs = 20000;
 const cursorKey = 'maintenance:sync-attachment-dedup:v1';
 
+export const startRedundantAttachmentDrain = (doc: AttachmentDoc) => beginRedundantAttachmentDrain(doc, urlDrainMs);
+
 export async function purgeRedundantAttachmentObject(s3: AttachmentS3, doc: AttachmentDoc, now: Date): Promise<boolean> {
-  if (!doc.attachmentRedundantDeleteAfter || doc.attachmentRedundantDeleteAfter > now) return false;
+  const deleteAfter = doc.attachmentRedundantDeleteAfter;
+  if (deleteAfter === undefined || deleteAfter === null) return false;
+  if (!(deleteAfter instanceof Date) || !Number.isFinite(deleteAfter.getTime())) throw Error('Superseded sync object drain state changed');
+  if (deleteAfter > now) return false;
   const replacement = attachmentPhysicalObject(doc);
   if (doc.objectKey !== 'objects/' + doc.shareId || doc.objectKey === replacement.objectKey ||
     !isAttachmentObjectVersionId(doc.objectVersionId) || !replacement.versionId || !doc.attachmentExpectedFingerprint)
@@ -70,7 +75,14 @@ export async function runSyncAttachmentDedupMigration(
     await options.assertLease?.();
     await settings.updateOne({ key: cursorKey }, { $set: { [step]: !interrupted && read < workPage ? '' : cursor, updatedAt: new Date() } }, { upsert: true });
   };
-  await pass('release', { ...superseded, attachmentRedundantDeleteAfter: { $lte: now } }, async doc => {
+  await pass('release', { ...superseded, $or: [
+    { attachmentRedundantDeleteAfter: { $type: 'null' } },
+    { attachmentRedundantDeleteAfter: { $type: 'date', $lte: now } }
+  ] }, async doc => {
+    if (doc.attachmentRedundantDeleteAfter === null) {
+      if (!await startRedundantAttachmentDrain(doc)) skipped++;
+      return;
+    }
     if (await purgeRedundantAttachmentObject(s3, doc, now)) migrated++;
     else skipped++;
   });
@@ -90,11 +102,11 @@ export async function runSyncAttachmentDedupMigration(
       }
     }
     await options.assertLease?.();
-    const result = await consolidateLegacySyncAttachment(doc, fingerprint, new Date(Date.now() + urlDrainMs), replacement);
+    const result = await consolidateLegacySyncAttachment(doc, fingerprint, replacement, options.assertLease);
     if (result === 'adopted') created++;
     else if (result === 'aliased') switched++;
     else skipped++;
   });
-  notes.push(`Canonical objects registered: ${created}; references repointed: ${switched}; old object versions deleted and refunded: ${migrated}. Repeat after the URL expiry window until no work remains.`);
+  notes.push(`Canonical objects registered: ${created}; references repointed: ${switched}; old object versions deleted and refunded: ${migrated}. A postcommit pass starts the URL expiry window. Repeat until no work remains.`);
   return { dryRun: false, matched, created, migrated: migrated + switched, skipped, notes };
 }

@@ -1,4 +1,5 @@
 import { attachmentBlobId, sameAttachmentBlobFingerprint, type AttachmentBlobData } from './attachmentBlobs';
+import { randomUUID } from 'node:crypto';
 import { validContentFingerprint, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { ownedMediaDraftIds } from '../drafts/media';
@@ -74,7 +75,8 @@ export type AttachmentDoc = {
 	objectVersionId?: string;
 	attachmentExpectedFingerprint?: ContentFingerprint;
 	attachmentBlob?: AttachmentBlobRef;
-	attachmentRedundantDeleteAfter?: Date;
+	// Null retains the billed old generation until a postcommit pass starts its URL drain.
+	attachmentRedundantDeleteAfter?: Date | null;
 	attachmentRequestFingerprint?: string;
 	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	// Canonical scoped publication records the verified native source separately from reservation input.
@@ -245,7 +247,7 @@ export async function findVerifiedBlobCandidate(ownerId: string, size: number, f
 /** Install a physical alias only after the maintenance caller checked the exact
  * original HEAD. The original logical locator and content version stay fixed. */
 export const consolidateLegacySyncAttachment = async (
-  observed: AttachmentDoc, fingerprint: ContentFingerprint, deleteAfter: Date, verifiedReplacement: AttachmentBlobRef | null
+  observed: AttachmentDoc, fingerprint: ContentFingerprint, verifiedReplacement: AttachmentBlobRef | null, assertLease?: () => Promise<void>
 ): Promise<'adopted' | 'aliased' | 'skipped'> => {
   const { ownerId, shareId: id, objectSizeBytes: size, objectVersionId, objectKey } = observed;
   if (!validContentFingerprint(fingerprint, size) || !isAttachmentObjectVersionId(objectVersionId) ||
@@ -284,13 +286,14 @@ export const consolidateLegacySyncAttachment = async (
         extended: null, tags: [], acl: [ACL_OWNER], createdAt: now, updatedAt: now, attachmentBlobData: data, detected };
       await things.insertOne(fresh as any, { session });
     }
-    const changed = { attachmentBlob, attachmentExpectedFingerprint: fingerprint, ...(blob ? { attachmentRedundantDeleteAfter: deleteAfter } : {}) };
+    const changed = { attachmentBlob, attachmentExpectedFingerprint: fingerprint, ...(blob ? { attachmentRedundantDeleteAfter: null } : {}) };
     const sizeBytes = thingStorageSizeBytes({ ...before, ...changed });
     // Conversion is byte-neutral; a redundant object remains fully accounted
     // until the exact version is physically removed after URL expiry.
     if (sizeBytes + (blob ? 0 : size) !== canonicalStoredBytes(before)) throw new AttachmentStoreConflictError('Sync consolidation storage changed');
     const written = await things.updateOne(fence, { $set: { ...changed, sizeBytes, updatedAt: now } }, { session });
     if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+    await assertLease?.();
     return blob ? 'aliased' : 'adopted';
   });
   try { return await attempt(); }
@@ -299,6 +302,23 @@ export const consolidateLegacySyncAttachment = async (
     return attempt();
   }
 };
+
+export async function beginRedundantAttachmentDrain(observed: AttachmentDoc, drainMs: number): Promise<Date | null> {
+  const { ownerId, shareId, objectKey, objectVersionId, attachmentBlob } = observed;
+  if (observed.attachmentRedundantDeleteAfter !== null || !attachmentBlob || !isAttachmentObjectVersionId(objectVersionId)) return null;
+  const things = await getHomeThingsCollection();
+  const fence = { ...attachmentMatch(shareId), ownerId, objectKey, objectVersionId, attachmentBlob };
+  const projection = { attachmentRedundantDeleteAfter: 1 };
+  // This update can only observe a committed alias. Use the database clock so
+  // an earlier migration snapshot or transaction retry cannot shorten the drain.
+  const started = await things.findOneAndUpdate(
+    { ...fence, attachmentRedundantDeleteAfter: { $type: 'null' } },
+    [{ $set: { attachmentRedundantDeleteAfter: { $add: ['$$NOW', drainMs] } } }],
+    { returnDocument: 'after', projection }
+  );
+  const current = started ?? await things.findOne({ ...fence, attachmentRedundantDeleteAfter: { $type: 'date' } }, { projection });
+  return current?.attachmentRedundantDeleteAfter instanceof Date ? current.attachmentRedundantDeleteAfter : null;
+}
 
 export const refundRedundantAttachmentObject = async (observed: AttachmentDoc): Promise<boolean> => withHomeMongoTransaction(async (session) => {
   const { ownerId, shareId, objectKey, objectVersionId, attachmentBlob, attachmentRedundantDeleteAfter } = observed;
@@ -403,12 +423,30 @@ export const attachmentStore: AttachmentStore = {
             existing.objectSizeBytes !== crystal.size || canonicalStoredBytes(existing) !== crystal.size ||
             data.phase !== 'ready' || data.references === Number.MAX_SAFE_INTEGER || !data.objectVersionId || !existing.detected) throw new AttachmentBlobBusyError();
           const attachmentBlob = { id: blobId, objectAttachmentId: data.originAttachmentId, objectVersionId: data.objectVersionId };
-          pending = { ...unstamped, crystal: { ...crystal, ...existing.detected }, attachmentState: 'ready', attachmentBlob,
-            objectVersionId: data.objectVersionId,
-            moderation: crystal.size === 0 ? { status: 'skipped', provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: now } : { status: 'pending' } };
-          if (isDurableRecordingUpload(pending)) delete pending.attachmentExpiresAt;
-          const ref = await things.updateOne(filter, { $inc: { 'attachmentBlobData.references': 1 }, $set: { updatedAt: now } }, { session });
-          if (ref.matchedCount !== 1) throw new AttachmentStoreConflictError();
+          const readable = {
+            thingtime: ATTACHMENT_THINGTIME, ownerId, attachmentBlob, attachmentPurpose: 'file', attachmentState: 'ready',
+            attachmentLinked: { $ne: true }, attachmentImportDraft: { $ne: true }, 'moderation.status': { $ne: 'blocked' },
+            $or: [{ targetId: { $type: 'string', $ne: '' } }, { attachmentExpiresAt: { $exists: false } },
+              { attachmentExpiresAt: { $gt: new Date() } }]
+          };
+          // The common path is the indexed original ID. A remaining owner-
+          // readable alias can authorize reuse after that reference is removed.
+          const options = { session, projection: { _id: 1 } };
+          const source = await things.findOne({ ...readable, shareId: data.originAttachmentId }, options) ??
+            await things.findOne(readable, options);
+          if (source) {
+            // Write the exact witness so concurrent moderation or deletion
+            // conflicts with this transaction before a new readable alias lands.
+            const witness = await things.updateOne({ ...readable, _id: source._id },
+              { $set: { attachmentBlobReuseFence: randomUUID() } }, { session });
+            if (witness.matchedCount !== 1) throw new AttachmentStoreConflictError();
+            pending = { ...unstamped, crystal: { ...crystal, ...existing.detected }, attachmentState: 'ready', attachmentBlob,
+              objectVersionId: data.objectVersionId,
+              moderation: crystal.size === 0 ? { status: 'skipped', provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: now } : { status: 'pending' } };
+            if (isDurableRecordingUpload(pending)) delete pending.attachmentExpiresAt;
+            const ref = await things.updateOne(filter, { $inc: { 'attachmentBlobData.references': 1 }, $set: { updatedAt: now } }, { session });
+            if (ref.matchedCount !== 1) throw new AttachmentStoreConflictError();
+          }
         } else {
           const blob: BlobDoc = {
             ...filter, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, storageClass: 'content',
@@ -692,19 +730,23 @@ export const attachmentStore: AttachmentStore = {
         if (!sameAttachmentBlobFingerprint(before.attachmentExpectedFingerprint, verifiedFingerprint, before.objectSizeBytes))
           throw new AttachmentStoreConflictError('Verified sync content fingerprint is required');
         const blobId = attachmentBlobId(ownerId, before.objectSizeBytes, before.attachmentExpectedFingerprint);
-        const filter = blobMatch(ownerId, blobId);
+        const filter = { ...blobMatch(ownerId, blobId), 'attachmentBlobData.phase': 'staging', 'attachmentBlobData.originAttachmentId': id };
         const blob = await things.findOne(filter, { session }) as BlobDoc | null;
-        if (!blob || canonicalStoredBytes(blob) !== 0 || blob.objectSizeBytes !== before.objectSizeBytes ||
-          blob.attachmentBlobData.phase !== 'staging' || blob.attachmentBlobData.originAttachmentId !== id ||
-          !sameAttachmentBlobFingerprint(before.attachmentExpectedFingerprint, blob.attachmentBlobData.fingerprint, before.objectSizeBytes))
-          throw new AttachmentStoreConflictError('Sync content reservation changed');
-        const data: AttachmentBlobData = { ...blob.attachmentBlobData, phase: 'ready', references: 1, objectVersionId };
-        const detected: NonNullable<BlobDoc['detected']> = { contentType: crystal.contentType, mediaKind: crystal.mediaKind,
-          ...(crystal.detectedContentType ? { detectedContentType: crystal.detectedContentType } : {}) };
-        blobBytes = thingStorageSizeBytes({ ...blob, attachmentBlobData: data });
-        const stored = await things.updateOne(filter, { $set: { attachmentBlobData: data, detected, sizeBytes: blobBytes, updatedAt: next.updatedAt } }, { session });
-        if (stored.matchedCount !== 1) throw new AttachmentStoreConflictError();
-        attachmentBlob = { id: blobId, objectAttachmentId: id, objectVersionId };
+        // A reservation without a readable reuse witness uploads and verifies
+        // its own bytes. Only the reservation owning the staging blob may
+        // promote it. All other verified uploads retain their own payload charge.
+        if (blob) {
+          if (canonicalStoredBytes(blob) !== 0 || blob.objectSizeBytes !== before.objectSizeBytes ||
+            !sameAttachmentBlobFingerprint(before.attachmentExpectedFingerprint, blob.attachmentBlobData.fingerprint, before.objectSizeBytes))
+            throw new AttachmentStoreConflictError('Sync content reservation changed');
+          const data: AttachmentBlobData = { ...blob.attachmentBlobData, phase: 'ready', references: 1, objectVersionId };
+          const detected: NonNullable<BlobDoc['detected']> = { contentType: crystal.contentType, mediaKind: crystal.mediaKind,
+            ...(crystal.detectedContentType ? { detectedContentType: crystal.detectedContentType } : {}) };
+          blobBytes = thingStorageSizeBytes({ ...blob, attachmentBlobData: data });
+          const stored = await things.updateOne(filter, { $set: { attachmentBlobData: data, detected, sizeBytes: blobBytes, updatedAt: next.updatedAt } }, { session });
+          if (stored.matchedCount !== 1) throw new AttachmentStoreConflictError();
+          attachmentBlob = { id: blobId, objectAttachmentId: id, objectVersionId };
+        }
       }
       const ready = { ...next, ...(attachmentBlob ? { attachmentBlob } : {}) };
 			const nextSize = thingStorageSizeBytes(ready);
@@ -895,8 +937,7 @@ export const attachmentStore: AttachmentStore = {
         if ((await things.deleteOne(filter, { session })).deletedCount !== 1) throw new AttachmentStoreConflictError();
       } else if (removed.attachmentExpectedFingerprint) {
         const filter = blobMatch(ownerId, attachmentBlobId(ownerId, removed.objectSizeBytes, removed.attachmentExpectedFingerprint));
-        const result = await things.deleteOne({ ...filter, 'attachmentBlobData.phase': 'staging', 'attachmentBlobData.originAttachmentId': id }, { session });
-        if (result.deletedCount !== 1) throw new AttachmentStoreConflictError('Sync content reservation changed');
+        await things.deleteOne({ ...filter, 'attachmentBlobData.phase': 'staging', 'attachmentBlobData.originAttachmentId': id }, { session });
       }
 			const bytes = currentContentStorageSizeBytes(removed);
 			if (bytes === null) {

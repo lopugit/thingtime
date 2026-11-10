@@ -43,14 +43,18 @@ Each logical reference preserves its identity, filename, destination, access
 checks and version history. Content reuse does not grant access to another file
 or account. Quota reserves a new payload once, transfers that charge to the
 verified content blob, and charges subsequent references for their metadata.
+Reuse requires a live, readable attachment owned by the same account. When
+all prior references are blocked or otherwise unreadable, the caller must
+upload and verify the bytes again under the normal payload charge.
 Deletion releases one reference; physical bytes are reclaimed only after the
 final reference and the relevant retained versions are released. Concurrent
 upload, completion, cancellation and deletion must maintain those invariants.
 
 The explicit `consolidate-sync-attachment-blobs` administrator migration handles
 eligible historical sync files. It preserves logical version identities, verifies
-both physical generations and drains old signed URLs before deleting duplicate
-bytes and refunding their charge. Before activation, validate compatible readers
+both physical generations. A later pass observes the committed reference switch
+and starts the signed URL drain. Duplicate versions remain billed until the
+drain expires and their exact object versions are deleted. Before activation, validate compatible readers
 and deleters for every deployment sharing the affected data plane. Migration
 registration, source tests and a saved receipt do not prove live consolidation.
 

@@ -1,5 +1,5 @@
 import { syncAttachmentDedupActive } from './attachmentBlobActivation';
-import { purgeRedundantAttachmentObject } from './attachmentBlobMaintenance';
+import { purgeRedundantAttachmentObject, startRedundantAttachmentDrain } from './attachmentBlobMaintenance';
 import { attachmentPhysicalObject, sameAttachmentBlobFingerprint } from './attachmentBlobs';
 import { attachmentPurposeAllowsEmpty } from './attachmentCore';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
@@ -465,9 +465,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return { status: 'deferred', retryAt: claimed.attachmentExpiresAt };
 		}
     if (claimed.attachmentBlob) {
-      if (claimed.attachmentRedundantDeleteAfter) {
-        const retryAt = claimed.attachmentRedundantDeleteAfter;
-        if (retryAt > dependencies.now()) {
+      if (claimed.attachmentRedundantDeleteAfter !== undefined) {
+        const retryAt = claimed.attachmentRedundantDeleteAfter ?? await startRedundantAttachmentDrain(claimed);
+        if (!retryAt) return { status: 'skipped' };
+        if (claimed.attachmentRedundantDeleteAfter === null || retryAt > dependencies.now()) {
           await dependencies.store.deferDeletingRetry(claimed.ownerId, claimed.shareId, retryAt);
           return { status: 'deferred', retryAt };
         }
