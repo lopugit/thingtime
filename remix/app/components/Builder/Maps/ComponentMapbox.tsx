@@ -87,7 +87,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, pointsSource,
 	const favourites = useThingSource({ source: favouriteBinding, cacheId: `map:favourites:${favouriteBinding?.action || ''}`, argValues: {}, interactive: sourcesEnabled, loadAllPages: true, resolvedInputs: true });
 	const selectedRoute = useThingSource({ source: routeBinding, cacheId: `map:route:${routeBinding?.action || ''}`, argValues: {}, interactive: sourcesEnabled, loadAllPages: true, resolvedInputs: true });
 	const extraPoints = useThingSource({ source: pointConfig.binding, cacheId: `map:points:${pointConfig.binding?.action || ''}`, argValues: {},
-		interactive: sourcesEnabled, pointPages: pointConfig.binding ?? undefined, resolvedInputs: true });
+		interactive: sourcesEnabled, cursorPages: pointConfig.binding ?? undefined, resolvedInputs: true });
 	const host = React.useRef<HTMLDivElement>(null);
 	const mapRef = React.useRef<any>(null);
 	const glRef = React.useRef<any>(null);

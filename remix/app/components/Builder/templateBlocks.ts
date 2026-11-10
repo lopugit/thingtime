@@ -17,10 +17,10 @@ export function templateToBlocks(template: unknown, id: (kind: string) => string
     ...(otherwise === undefined ? [] : [{ id: id('otherwise'), type: 'condition' as const, condition: { ...condition, negate: true }, children: visit(otherwise) }])];
   }
   if (node.ttEach) {
-   const { arg, node: row, empty, max } = node.ttEach;
+   const { arg, node: row, empty, max, keyArg } = node.ttEach;
    if (typeof arg !== 'string' || row === undefined) throw new Error('This repeated template cannot be expanded into blocks.');
    if (empty !== undefined && typeof empty !== 'string') throw new Error('This repeated template has an empty branch that cannot yet be expanded into editable blocks.');
-   return [{ id: id('collection'), type: 'collection', props: { itemsPath: arg, transparent: true, templateEach: true, ...(empty === undefined ? {} : { empty }), ...(max === undefined ? {} : { maxItems: max }) }, children: visit(row) }];
+   return [{ id: id('collection'), type: 'collection', props: { itemsPath: arg, ...(typeof keyArg === 'string' ? { itemsKeyArg: keyArg } : {}), transparent: true, templateEach: true, ...(empty === undefined ? {} : { empty }), ...(max === undefined ? {} : { maxItems: max }) }, children: visit(row) }];
   }
   if (node.ttFormat) return [{ id: id('value'), type: 'element', tag: 'span', format: node.ttFormat }];
   if (!node.tag || Object.keys(node).some(key => key.startsWith('tt') && !['ttAction', 'ttActionInputs'].includes(key))) throw new Error('This template operator cannot yet be expanded into blocks.');
@@ -49,8 +49,8 @@ export function templateEachRows(raw: unknown, maximum: unknown): unknown[] {
  return list.slice(0, requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP);
 }
 
-export function templateEachRowScope(scope: Record<string, unknown>, item: unknown, index: number, count: number): Record<string, unknown> {
- return { ...scope, item, index, n: index + 1, count, first: index === 0, last: index === count - 1, collection: { index, count } };
+export function templateEachRowScope(scope: Record<string, unknown>, item: unknown, index: number, count: number, total?: number): Record<string, unknown> {
+ return { ...scope, item, index, n: index + 1, count, first: index === 0, last: index === count - 1, collection: { index, count }, ...(total === undefined ? {} : { total, remaining: total - count }) };
 }
 
 /** Build the JSON-only replacement for an expanded Component block. Timeline

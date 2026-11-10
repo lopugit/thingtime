@@ -1,13 +1,18 @@
 # API endpoints and capabilities
 
 Device sync control 1.5.0 adds config-scoped activity and paged receipt history
-to the existing command/status protocol. `fileSync/remoteSyncWorker.ts` reads the
+to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
 same native receipt journal used locally; `api/utils/devices/` enforces pairing,
 owning account and private-config authorization. Closed result validation and
 client requirement maps must stay aligned. Attachment upload deduplication and
 its activation/consolidation migrations use the canonical attachment lifecycle;
 see [device sync configs](../device-sync-configs.md) for rollout and deletion
 invariants, and the `TESTING.md` checklist for real API acceptance.
+
+Owner Things archive uses additive `api.things` 1.59.0,
+`api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
+filters apply before pagination; the bulk route updates only protected private
+library metadata. See [Things and folders](things-and-folders.md).
 
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks

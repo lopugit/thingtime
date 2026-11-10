@@ -1,5 +1,11 @@
 # Things and folders
 
+Archive and Restore in the owner library use the canonical bulk endpoint to
+change protected library placement metadata only. Explicit list and search
+filters apply before pagination. The Archived view finds items across folders;
+restoring keeps the original folder, links and audience. See [the manual
+checklist](../../TESTING.md#things-library-archive).
+
 ## Thing storage choices
 
 `ThingStoragePanel` and the shared Thing context menu expose individually editable
@@ -11,6 +17,11 @@ cloud deletion or imply a completed transfer. See [Thing storage](../thing-stora
 and the Thing storage and device copies checklist in `TESTING.md`.
 
 ## Idempotent Action creation
+
+A server Action can require an exact invoker-owned folder on a `things.get`
+step before using the authorized Data Thing in a composed workflow. The step
+adds a verification flag without exposing placement metadata. See [Action authoring](../builder-browser-actions.md)
+and the real API checks in `remix/scripts/verify-actions.mjs`.
 
 Server Actions use `things.ensure` to create or reuse one owned Data Thing by
 intent. The key is scoped to the invoker and saved Action in the selected data

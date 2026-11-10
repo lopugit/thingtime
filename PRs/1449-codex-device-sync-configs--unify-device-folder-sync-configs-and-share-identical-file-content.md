@@ -33,13 +33,15 @@ source delivery.
   request-handler tests cover normal upload approval, parts, completion,
   content reads, deletion, two Files publications, cross-account refusal,
   quota/reference accounting and historical consolidation.
-- Capability coverage passed 161 tests after the main-branch integration.
+- Capability coverage passed 162 tests after integrating the latest main.
 - Final file-sync coverage passed 845 cases with zero skips; raw TypeScript
   and Nitro server build passed. Changed-file lint passed after fixing a
   test-only annotation (17 nonblocking warnings in the broad run); the worker
   regression passed again after that correction. Signed installed acceptance
   remains a release gate. Isolated byte-provider tests do not establish
   production S3 or physical iPhone acceptance.
+- The bounded Graphify semantic pass stopped before indexing the new Markdown.
+  The branch uses the structural refresh for portable graph output.
 
 ## Rollout boundary
 

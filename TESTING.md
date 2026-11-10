@@ -4306,6 +4306,24 @@ email whose link points at the attacker.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Things library archive
+
+- [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
+  Its row leaves the active view, including search. The original link, sharing
+  and content still work. Check that keyboard focus remains usable when the row
+  disappears.
+- [ ] Open **Archived**, reload, then use a Thing’s action menu to **Restore**.
+  It returns to its original folder. Repeat with a folder and a multi-selection;
+  archiving a folder leaves its descendants unchanged.
+- [ ] At 375 px, use the row’s actions button and touch to archive and restore.
+  Check both views and the open menus from top to bottom for horizontal overflow.
+- [ ] Compare an exact API read before and after archiving. The owner alone sees
+  library archive status. A scoped token, another user, or a different origin
+  cannot change it. An archive filter applies before the page limit.
+  Run `node remix/scripts/things-library-archive-acceptance.mjs` with an isolated
+  node-server build, disposable MongoDB tooling and Playwright to verify the
+  real API and desktop/touch browser paths.
+
 ## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
 
 - [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy
@@ -14230,6 +14248,17 @@ separate from deterministic discovery/lease tests.
 - Keep synthetic cloud-byte fixture evidence separate from `test:files:mac-paged` real HTTP transfers and signed installed pairing/permission/window-close acceptance. Never add a shipped autoapproval switch or modify the user's pairing store to make this lane pass.
 
 ## Editable Mapbox maps and route planning
+
+- [ ] On an authored marker with modifier selection enabled, exercise
+  Cmd-primary, Ctrl-primary, macOS Ctrl-primary context and click pairing,
+  ordinary pointer activation, secondary menu, and a keyboard/touch selection
+  button. Verify one toggle per gesture, changing groups, preserved selections
+  during source refresh, and reset after real navigation or a database switch.
+  Drain two cursor pages of keyed metadata, verify each marker gets only its
+  own rows, then fail the second page and confirm the projection is unavailable.
+  Run a selection larger than one Action chunk and check exact ordered inputs,
+  one pending indicator, a partial-failure receipt and preservation of any
+  selection made while the bulk Action was running.
 
 - [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
   untouched default without opening, refuse a required empty value, and verify

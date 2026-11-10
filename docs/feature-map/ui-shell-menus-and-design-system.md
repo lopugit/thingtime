@@ -52,6 +52,14 @@ bounded settling, while the Builder blocks remain individually editable.
 
 ## Editable map markers and connector settings
 
+Authored buttons can opt in to Ctrl/Cmd primary selection and use ordinary
+touch and keyboard selection controls. `webpageRuntime.tsx` keeps a transient
+contextual list at `page.selection`; the owner-only delegated click handler
+captures the complete selection for sequential Action batches. Named passive
+cursor sources expose grouped rows at `page.collections`. The same keyed
+repetition works in any authored subtree, including map markers.
+See [Builder browser Actions](../builder-browser-actions.md).
+
 Saved `tt-rich-text` fields/read views reuse `LongTextEditor`/`RichTextBlocks`.
 `componentFormFields.ts` captures native fields at activation and awaits trusted
 editor adapters before confirmation/dispatch; JSON plus optional plain text share
@@ -172,7 +180,9 @@ Mobile native presence is owned by `Devices/MobileDevicePresenceBootstrap` in th
    also needs the `ThingsItemAction` union and both dispatchers in
    `ThingsPage.tsx`.
 4. Feedback through `useLopu()`; mutations reauthorize server-side.
-5. Verify mouse, keyboard (arrow/Enter/Escape), touch, desktop and 375 px, and
+5. For library Archive/Restore, derive the action from the entire owned selection
+   and use the same dispatcher for the right-click and row menu.
+6. Verify mouse, keyboard (arrow/Enter/Escape), touch, desktop and 375 px, and
    that menus stay clickable (no drag start) and reachable under the nav.
 
 ## Shared navigation and Builder controls

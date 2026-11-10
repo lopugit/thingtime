@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10: Add authored page selection, cursor-backed keyed collections
+  and bounded Action batches. Check exact owner-folder placement in opted-in
+  Action reads. **Codex (AI)**
+
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
   resuming reporting; code exchange and refresh preserve the consented scopes.
@@ -156,6 +160,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and same-account shared file content with reference-safe deletion and unique
   payload accounting. Historical consolidation and shared-data-plane activation
   retain explicit rollout gates. See [the contract and acceptance checklist](../docs/device-sync-configs.md).
+  [PR 1449 validation and rollout notes](../PRs/1449-codex-device-sync-configs--unify-device-folder-sync-configs-and-share-identical-file-content.md).
   **Codex (AI)**
 
 - 2026-11-10: Document the production attachment-writer fence and rollback
