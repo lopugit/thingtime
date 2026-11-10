@@ -57,6 +57,7 @@ const markerHitTargets = `
 	div[data-tt-map-point] { pointer-events: none; }
 	div[data-tt-map-point] :where(
 		button, a[href], input, select, textarea, label, summary,
+		audio[controls], video[controls], [data-tt-menu-slot="target"],
 		[contenteditable]:not([contenteditable="false"]),
 		[data-tt-action], [draggable="true"], [tabindex]:not([tabindex="-1"]),
 		[role="button"], [role="link"], [role="menuitem"],

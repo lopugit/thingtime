@@ -496,7 +496,15 @@ async function exerciseSelection(page, profile, batches) {
 		await first.click({ modifiers: ['Control'] });
 		await page.getByText('Selection count: 1').waitFor();
 		assert.equal(await first.getAttribute('aria-pressed'), 'true');
-		await first.click({ button: 'right' });
+		const menuTarget = first.locator('xpath=..');
+		assert.equal(await menuTarget.getAttribute('data-tt-menu-slot'), 'target');
+		const point = await menuTarget.evaluate(target => {
+			const bounds = target.getBoundingClientRect();
+			return { x: bounds.left + bounds.width / 2, y: bounds.bottom - 2 };
+		});
+		assert.equal(await menuTarget.evaluate((target, { x, y }) => document.elementFromPoint(x, y) === target, point), true,
+			'plain authored menu padding remains hittable');
+		await page.mouse.click(point.x, point.y, { button: 'right' });
 		await page.getByRole('menuitem', { name: 'Toggle marker selection' }).waitFor();
 		await page.keyboard.press('Escape');
 	} else {
