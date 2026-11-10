@@ -348,7 +348,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         func documentVisibilityKick(_ web: WKWebView) {
             web.evaluateJavaScript("window.dispatchEvent(new Event('online'))", completionHandler: nil)
         }
-        func startAndAwaitUpload(background: Bool = false) async throws {
+        func startAndAwaitUpload(background: Bool = false, reopening: Bool = false) async throws {
             for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
             guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
             try await awaitTrue(web, "typeof window.__photoScans==='number'")
@@ -361,7 +361,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
             if automaticProof {
                 let connection = try XCTUnwrap(connection)
                 let device = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
-                if resumeReceipt == nil {
+                if !reopening {
                     try await awaitTrue(web, "window.__photoNativeArms>0")
                     NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
                     NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -377,7 +377,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 let scans = try await web.evaluateJavaScript("window.__photoScans"), stats = try await web.evaluateJavaScript("window.__nativeUploadStats")
                 XCTAssertEqual(scans as? Int, 0)
                 XCTAssertEqual((stats as? [String: Int])?["files"], 0)
-                if resumeReceipt == nil {
+                if !reopening {
                     print("IOS_PHOTO_AUTOMATIC_FOREGROUND_PASS: one native worker, no WebView scan or upload, no manual start after interruption")
                 }
                 return
@@ -440,9 +440,23 @@ final class PhotoBackupInstalledTests: XCTestCase {
                 let videos = Set(initialLibrary.filter { $0.assetKind == "video" }.map(\.asset)).count
                 print("IOS_PHOTO_MIXED_ORIGINALS_PASS: photos=\(photos) videos=\(videos) files=\(initialLibrary.count) bytes=\(totalBytes)")
             }
-            try await reloadFresh(); try await startAndAwaitUpload()
+            try await reloadFresh(); try await startAndAwaitUpload(reopening: true)
             let after = try await revisions()
             XCTAssertEqual(after, expected)
+            let reloaded = try await api("/api/v1/things?id=" + id)
+            let reloadedConfig = try XCTUnwrap((reloaded["thing"] as? [String: Any])?["crystal"] as? [String: Any])
+            XCTAssertEqual(reloadedConfig["paused"] as? Bool, false)
+            let paired = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
+            let runs = NativePhotoRunStore(directory: NativeDeferredUploadStore().url.deletingLastPathComponent())
+            let savedRun = try XCTUnwrap(try runs.load().first {
+                $0.scope == scope && $0.authorization.id == id && $0.rootId == grant.id &&
+                    $0.authorization.scope.deviceId == paired
+            })
+            XCTAssertFalse(savedRun.authorization.configuration.paused)
+            XCTAssertTrue(savedRun.armed)
+            XCTAssertEqual(savedRun.stage, "complete")
+            XCTAssertGreaterThan(savedRun.expiresAt, Date())
+            XCTAssertLessThan(savedRun.retryAt, savedRun.expiresAt)
             let uploadStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
             XCTAssertEqual((uploadStats as? [String: Int])?["files"], 0, "A saved backup retry must not reupload unchanged originals")
             print("IOS_PHOTO_REOPEN_RETRY_PASS: \(after.count) exact original cloud revisions retained")
@@ -554,15 +568,19 @@ final class PhotoBackupInstalledTests: XCTestCase {
                     let items = try XCTUnwrap(stream["items"] as? [String: [String: Any]])
                     let dates = ISO8601DateFormatter()
                     dates.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    let bridgeDates = ISO8601DateFormatter()
                     func captureDate(_ item: [String: Any]) -> Date? {
                         guard let date = item["capturedAt"] as? String else { return nil }
-                        return dates.date(from: date) ?? ISO8601DateFormatter().date(from: date)
+                        return dates.date(from: date) ?? bridgeDates.date(from: date)
                     }
+                    let expectedPhotoDate = try XCTUnwrap(bridgeDates.date(from: bridgeDates.string(from: fixtureDate)))
+                    let videoDate = try XCTUnwrap(first.capturedAt)
+                    let expectedVideoDate = try XCTUnwrap(bridgeDates.date(from: bridgeDates.string(from: videoDate)))
                     XCTAssertEqual(stream["hintBeforeTransfer"] as? Bool, true)
                     XCTAssertEqual(stream["indexedFiles"] as? Int, resources.count)
                     XCTAssertNotNil(items["1"], "The first discovered asset must reach the web bridge")
-                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "photo" && captureDate($0) == fixtureDate })
-                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "video" && captureDate($0) == first.capturedAt })
+                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "photo" && captureDate($0) == expectedPhotoDate })
+                    XCTAssertTrue(items.values.contains { $0["kind"] as? String == "video" && captureDate($0) == expectedVideoDate })
                     print("IOS_PHOTO_INDEX_STREAM: items=\(items.count) files=\(resources.count) partialSnapshot=\(stream["partialIndexSeen"] as? Bool == true)")
                 }
             } else {
@@ -583,12 +601,15 @@ final class PhotoBackupInstalledTests: XCTestCase {
             if automaticProof {
                 let configId = try XCTUnwrap(connection)
                 let progress = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: configId, rootId: grant.id, deviceId: paired))
-                let confirmed = try XCTUnwrap(progress["confirmed"] as? [String: Int64])
+                let confirmed = try XCTUnwrap(progress["confirmed"] as? [String: Any])
                 XCTAssertEqual(stats["files"], 0)
                 let photoCount = (mixedProof ? photoAssets : resources.count) + (uiVerified ? 0 : 1)
-                XCTAssertEqual(confirmed["photos"], Int64(photoCount))
-                if mixedProof { XCTAssertEqual(confirmed["videos"], Int64(videoAssets)) }
-                XCTAssertEqual((confirmed["wifiBytes"] ?? 0) + (confirmed["mobileBytes"] ?? 0) + (confirmed["unknownBytes"] ?? 0),
+                XCTAssertEqual(confirmed["photos"] as? Int, photoCount)
+                if mixedProof { XCTAssertEqual(confirmed["videos"] as? Int, videoAssets) }
+                let wifiBytes = try XCTUnwrap(confirmed["wifiBytes"] as? Int64)
+                let mobileBytes = try XCTUnwrap(confirmed["mobileBytes"] as? Int64)
+                let unknownBytes = try XCTUnwrap(confirmed["unknownBytes"] as? Int64)
+                XCTAssertEqual(wifiBytes + mobileBytes + unknownBytes,
                                Int64(mixedProof ? expectedMixedBytes : photoCount * bytes.count))
             } else {
                 XCTAssertEqual((stats["files"] ?? 0) + deferredCount, resources.count + (uiVerified ? 0 : 1))
@@ -606,7 +627,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
             print("IOS_NATIVE_FILE_JOB_PASS: files=\(stats["files"] ?? 0)")
             print("IOS_NATIVE_UPLOAD_PASS: parts=\(stats["parts"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
             phase = "reopen and retry saved backup"
-            try await reloadFresh(); try await startAndAwaitUpload()
+            try await reloadFresh(); try await startAndAwaitUpload(reopening: true)
             let reopened = try await cloudNodes()
             XCTAssertEqual(reopened.count, nodes.count)
             for node in nodes {
