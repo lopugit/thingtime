@@ -1,3 +1,4 @@
+import type { PageCollectionBinding } from '~/schemas/pageCollections';
 import type { WebpageActivation } from '~/schemas/webpageActivation';
 import type { SourceInputValue } from '~/schemas/sourceInputs';
 
@@ -14,6 +15,7 @@ export interface WebpageBlockSource {
 	action: string;
 	// Bind data without creating a local form, click or event boundary.
 	passive?: boolean;
+	collection?: PageCollectionBinding;
 	// Scalar values, string tokens or a ttArg binding with an optional fallback.
 	inputs?: Record<string, SourceInputValue>;
 	// 'live' subscribes to a capability-negotiated same-origin stream.

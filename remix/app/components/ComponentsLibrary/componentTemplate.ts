@@ -121,6 +121,16 @@ const argValue = (scope: ComponentScope, name: string): unknown => {
 
 export const componentScopeValue = argValue;
 
+export function keyedScopeValue(scope: ComponentScope, path: string, keyArg?: unknown): unknown {
+	const value = argValue(scope, path);
+	if (keyArg === undefined) return value;
+	if (!isPlainObject(value) || typeof keyArg !== 'string') return undefined;
+	const key = argValue(scope, keyArg);
+	if (!(typeof key === 'string' && key) && !(typeof key === 'number' && Number.isFinite(key))) return undefined;
+	const name = String(key);
+	return !BANNED_SEGMENTS.has(name) && Object.prototype.hasOwnProperty.call(value, name) ? value[name] : undefined;
+}
+
 const scalarText = (value: unknown): string => {
 	if (value === undefined || value === null) return '';
 	if (typeof value === 'string') return value;
@@ -171,10 +181,11 @@ const compareValues = (a: unknown, b: unknown): number => {
 };
 
 // ttIf conditions: `equals` (legacy, string equality) or `op` + `value`.
-const conditionHolds = (spec: Record<string, unknown>, value: unknown): boolean => {
+const conditionHolds = (spec: Record<string, unknown>, value: unknown, scope: ComponentScope): boolean => {
 	if (spec.equals !== undefined) return String(value) === String(spec.equals);
 	const op = typeof spec.op === 'string' ? spec.op : '';
-	const expected = spec.value;
+	const expected = typeof spec.valueArg === 'string' ? argValue(scope, spec.valueArg) : spec.value;
+	if (typeof spec.valueArg === 'string' && expected === undefined) return false;
 	switch (op) {
 		case 'eq':
 			return isNumeric(value) && isNumeric(expected) ? Number(value) === Number(expected) : String(value ?? '') === String(expected ?? '');
@@ -388,7 +399,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 	if ('ttIf' in template) {
 		const spec = isPlainObject(template.ttIf) ? template.ttIf : {};
 		const value = argValue(scope, String(spec.arg));
-		const hit = conditionHolds(spec, value);
+		const hit = conditionHolds(spec, value, scope);
 		const branch = hit ? spec.then : spec.else;
 		return branch === undefined ? undefined : resolveNode(branch, scope, budget);
 	}
@@ -431,7 +442,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		// (an object) iterates its own entries as { key, value } items. Falls
 		// back to `empty` when there is nothing to draw.
 		const spec = isPlainObject(template.ttEach) ? template.ttEach : {};
-		const raw = argValue(scope, String(spec.arg));
+		const raw = keyedScopeValue(scope, String(spec.arg), spec.keyArg);
 		const list: unknown[] = Array.isArray(raw) ? raw : isPlainObject(raw) ? Object.entries(raw).map(([key, value]) => ({ key, value })) : [];
 		// `max` is an optional author hint, and EACH_HARD_CAP is the bound that
 		// has to hold for markup nobody vetted. ttRepeat above floors its count
@@ -449,7 +460,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 			if (budget.left <= 0) break;
 			const resolved = resolveNode(
 				spec.node,
-				{ ...scope, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1 },
+				{ ...scope, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1, ...(spec.keyArg === undefined ? {} : { total: list.length, remaining: list.length - items.length }) },
 				budget
 			);
 			if (Array.isArray(resolved)) out.push(...resolved);
@@ -723,13 +734,14 @@ export function* iterateStoredTemplateNodes(template: unknown, scope: ComponentS
 					return;
 				}
 				if ('ttEach' in value) {
-					const spec = value.ttEach ?? {}, raw = argValue(current, String(spec.arg));
+					const spec = value.ttEach ?? {}, raw = keyedScopeValue(current, String(spec.arg), spec.keyArg);
 					const keys = isPlainObject(raw) ? Object.keys(raw) : null;
-					let count = Array.isArray(raw) ? raw.length : keys?.length ?? 0;
+					const total = Array.isArray(raw) ? raw.length : keys?.length ?? 0;
+					let count = total;
 					if (Number(spec.max) > 0) count = Math.min(count, Math.trunc(Number(spec.max)));
 					yield* one(spec.empty, current);
 					if (!count) yield* one(spec.node, { ...current, item: undefined, index: undefined, collection: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
-					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, item: keys ? { key: keys[index], value: raw[keys[index]] } : raw[index], index, n: index + 1, count, first: index === 0, last: index === count - 1 });
+					for (let index = 0; index < count; index++) yield* one(spec.node, { ...current, item: keys ? { key: keys[index], value: raw[keys[index]] } : raw[index], index, n: index + 1, count, first: index === 0, last: index === count - 1, ...(spec.keyArg === undefined ? {} : { total, remaining: total - count }) });
 					return;
 				}
 			}

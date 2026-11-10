@@ -330,6 +330,20 @@ const run = async () => {
 	const ensuredBefore = (await readEnsured(alice.cookie)).body?.thing;
 	check('ensured Thing has exact schema, private ACL and owned folder', ensuredBefore?.folderId === folderId &&
 		ensuredBefore?.crystal?.schemaId === CUSTOMER_ID && ensuredBefore?.visibility === 'private');
+	const placementReader = await createThing(alice.cookie, { thingtime: ['action'], acl: ['tt:all'], crystal: {
+		name: 'Verify owned folder', actionKey: `verify-owned-folder-${suffix}`,
+		inputs: [{ name: 'id', type: 'string', required: true }, { name: 'folder', type: 'string', required: true }],
+		capabilities: [{ capability: 'things.read', schemas: [CUSTOMER_ID] }],
+		steps: [{ op: 'things.get', id: '$input.id', ownedFolderId: '$input.folder' }, { op: 'return', value: '$step.1' }]
+	} });
+	const runPlacementRead = (cookie, folder) => runAction(cookie, {
+		action: placementReader.body?.thing?.id, inputs: { id: ensuredId, folder }
+	});
+	const placementRead = await runPlacementRead(alice.cookie, folderId);
+	check('guarded read returns its exact owned folder Thing without exposing ownership fields', placementRead.body?.status === 'ok' &&
+		placementRead.body?.result?.id === ensuredId && placementRead.body.result.ownedFolderVerified === true && !('folderId' in placementRead.body.result) && !('author' in placementRead.body.result));
+	const wrongPlacement = await runPlacementRead(alice.cookie, 'wrong-folder');
+	check('guarded read refuses another folder', /owned Data Thing in the selected folder/.test(wrongPlacement.body?.error || ''));
 	const ensuredCount = await api(`/api/v1/things?thingtime=data&count=true&schemaId=${CUSTOMER_ID}&folder=${folderId}`, { cookie: alice.cookie });
 	check('concurrent ensure persists one scoped Data row', ensuredCount.status === 200 && ensuredCount.body?.count === 1);
 	const editEnsured = await api('/api/v1/things', { cookie: alice.cookie, method: 'PATCH', body: {
@@ -355,6 +369,8 @@ const run = async () => {
 	const reuseWithChangedAudience = await runEnsure(alice.cookie);
 	check('reuse preserves an explicit audience change', audienceEdit.status === 200 && reuseWithChangedAudience.body?.result?.id === ensuredId &&
 		(await readEnsured()).body?.thing?.visibility === 'public');
+	const foreignPlacement = await runPlacementRead(bella.cookie, folderId);
+	check('guarded read refuses an accessible Thing owned by another account', /owned Data Thing in the selected folder/.test(foreignPlacement.body?.error || ''));
 	const sharedEnsure = await runEnsure(bella.cookie, { folderId: otherOwnerFolder.body?.thing?.id }, { sharedRoot: ensureActionId });
 	check('shared read-only runs cannot ensure a Thing', sharedEnsure.body?.status !== 'ok');
 

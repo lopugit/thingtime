@@ -1,3 +1,5 @@
+import { ACTION_BATCH_ATTRIBUTE } from '../Actions/actionBatches';
+import { MODIFIER_ACTION_INPUTS } from '../Actions/localUiAction';
 import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
@@ -191,6 +193,8 @@ export const ALLOWED_PROPS = new Set([
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
 	'data-tt-action-inputs',
+	MODIFIER_ACTION_INPUTS,
+	ACTION_BATCH_ATTRIBUTE,
 	// Inert composition slots adopted only by the trusted authored menu.
 	'data-tt-menu-slot',
 	'data-tt-menu-trigger',
@@ -221,6 +225,10 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 		if (isEventHandlerProp(key)) return;
 		if (!ALLOWED_PROPS.has(key)) return;
 
+		if (key === MODIFIER_ACTION_INPUTS || key === ACTION_BATCH_ATTRIBUTE) {
+			if (tag === 'button' && value && typeof value === 'object' && !Array.isArray(value)) out[key] = JSON.stringify(value);
+			return;
+		}
 		if (key === 'style') {
 			const style = sanitizeStyle(value);
 			if (style) out.style = style;
@@ -395,7 +403,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
-	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; delete props[MODIFIER_ACTION_INPUTS]; delete props[ACTION_BATCH_ATTRIBUTE]; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 	if (tag === 'option') return <HtmlSelectOption key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlSelectOption>;

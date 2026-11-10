@@ -118,8 +118,8 @@ reads a scalar from the current template scope. The fallback is another path
 in the same scope and applies only when the primary is absent. Empty strings,
 zero and false remain explicit values. These references are inert data and
 keep the source's existing authorization. Create, update and resolve clients
-negotiate `api.things` 1.58.0, `api.things-update` 1.24.0 and
-`api.webpages-resolve` 1.16.0 respectively.
+negotiate `api.things` 1.59.0, `api.things-update` 1.25.0 and
+`api.webpages-resolve` 1.17.0 respectively.
 
 ## HTML form receivers
 

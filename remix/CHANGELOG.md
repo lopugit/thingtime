@@ -149,6 +149,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   overview read adapter, with pagination-safe filtering and reusable editable
   Builder multiple-select controls. **Codex (AI)**
 
+- 2026-11-10: Add authored page selection, cursor-backed keyed collections
+  and bounded Action batches. Check exact owner-folder placement in opted-in
+  Action reads. **Codex (AI)**
+
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
   resuming reporting; code exchange and refresh preserve the consented scopes.

@@ -45,8 +45,8 @@ To author a saved default with an explicit clear value, bind the input with
 `{ "ttArg": "query.taskLevels", "fallback": "taskLevelsDefault" }` and set
 the page block argument `taskLevelsDefault` to `top-level`. An absent query key
 uses the fallback. A cleared multi-select sends `[]` to the adapter.
-For typed source input references, negotiate `api.things` **1.58.0** on create,
-`api.things-update` **1.24.0** on update and `api.webpages-resolve` **1.16.0**
+For typed source input references, negotiate `api.things` **1.59.0** on create,
+`api.things-update` **1.25.0** on update and `api.webpages-resolve` **1.17.0**
 on resolve.
 
 Use `taskLevels=top-level` for a page that opens on top-level tasks. A task
