@@ -3566,6 +3566,8 @@ email whose link points at the attacker.
       attribute or a CSS external resource. Replace the source in a second session
       before applying or resetting a stale edit: it must return 409 and preserve
       the replacement. Original uploaded bytes must match.
+      Try a linked URL with escaped characters and query parameters. Verify
+      existing escapes are preserved and unsupported URL schemes cannot render.
       The disposable real API/browser fixture is
       `remix/scripts/image-presentation-acceptance.mjs`.
 

@@ -45,6 +45,9 @@ to the object shape returned by CSS validation. The validator preserves plain
 CSS records so authored demos and behavior suites round trip unchanged.
 The workspace renderer test fixture now implements the same child and sibling
 traversal as the browser DOM, retaining its live versus inert assertions.
+The shared image renderer screens URL schemes at the image boundary and encodes
+literal angle brackets and double quotes without changing stored sources,
+existing URL escapes, or signed query parameters.
 
 The portable Graphify snapshot was refreshed structurally. The local semantic
 proxy did not finish the scoped document refresh within the task budget, so
