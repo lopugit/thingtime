@@ -136,15 +136,13 @@ export const PostList = (props: PostListProps) => {
   return (
     <Flex flexDirection="column" rowGap={4} width="100%">
       {posts.map((post) => (
-        <PostRow
-          key={post.id}
-          post={post}
-          focused={post.id === focusedPostId}
-          expandAllComments={expandAllComments}
-          onPostChanged={onPostChanged}
-          onEngagement={onEngagement}
-          observeView={observeView}
-        />
+        <Box key={post.id} data-thing-id={post.id} ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
+          <PostCard
+            post={post}
+            onChanged={(next) => onPostChanged(post.id, next)}
+            onEngagement={onEngagement}
+          />
+        </Box>
       ))}
 
       {loading && (

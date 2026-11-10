@@ -1,25 +1,74 @@
-import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
-import { Box, Center, Flex, Popover, PopoverTrigger, PopoverContent, Spinner, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Popover, PopoverAnchor, PopoverContent, Spinner, Text } from '@chakra-ui/react';
 import { Bell } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
-import { NotificationRow } from '~/components/Notifications/NotificationRow';
-import { notificationHref, type NotificationItem } from '~/components/Notifications/notificationCore';
+import { timeAgo } from '~/components/Feed/feedTypes';
+import { ProfileAvatarCircle } from '~/components/Profile/ProfilePage';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 // The nav bell 🔔: unread badge + a popover of recent notifications. The
 // badge count seeds from the per-user localCache (no flash), reconciles on
-// mount / window focus / notification events / a visible-tab poll, and zeroes optimistically when the
+// mount / window focus / a slow poll, and zeroes optimistically when the
 // popover opens (which also marks everything read server-side — X-style).
-// The full, searchable history lives at /notifications ("See all").
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
+const INK = 'var(--tt-ink, #16161a)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
-const POLL_MS = 15_000;
+const POLL_MS = 90_000;
 
+type BellNotification = {
+  id: string;
+  type: string;
+  actorId: string;
+  actorUsername: string | null;
+  actorName: string | null;
+  actorAvatarUrl: string | null;
+  targetId: string | null;
+  postId: string | null;
+  preview: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+const TYPE_EMOJI: Record<string, string> = {
+  'friend-request': '🤝',
+  'friend-accepted': '💚',
+  'new-follower': '👀',
+  'post-from-followed': '📰',
+  'post-from-friend': '🫶',
+  comment: '💬',
+  reply: '↩️',
+  reaction: '🤣',
+  share: '🔁',
+  groups: '👥'
+};
+
+const verbOf = (item: BellNotification): string => {
+  switch (item.type) {
+    case 'friend-request':
+      return 'sent you a friend request';
+    case 'friend-accepted':
+      return 'accepted your friend request';
+    case 'new-follower':
+      return 'started following you';
+    case 'post-from-followed':
+    case 'post-from-friend':
+      return 'posted';
+    case 'comment':
+      return 'commented on your post';
+    case 'reply':
+      return 'replied to your comment';
+    case 'reaction':
+      return item.preview ? `reacted ${item.preview}` : 'reacted to your post';
+    case 'share':
+      return 'reposted your post';
+    default:
+      return 'did something ✨';
+  }
+};
 
 export const NotificationsBell = () => {
   const user = useCurrentUser();
@@ -31,11 +80,7 @@ export const NotificationsBell = () => {
     cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0
   );
   const [open, setOpen] = React.useState(false);
-  const badgeGeneration = React.useRef(0);
-  const markingRead = React.useRef(false);
-  const ownerRef = React.useRef(user?.id);
-  ownerRef.current = user?.id;
-  const [items, setItems] = React.useState<NotificationItem[] | null>(null);
+  const [items, setItems] = React.useState<BellNotification[] | null>(null);
 
   const listRef = React.useRef(api.v1.notifications.list);
   listRef.current = api.v1.notifications.list;
@@ -50,111 +95,80 @@ export const NotificationsBell = () => {
     [cacheKey]
   );
 
-  // badge reconcile: mount + focus + events + visible-tab poll (cheap indexed count read)
+  // badge reconcile: mount + focus + slow poll (cheap indexed count read)
   React.useEffect(() => {
-    setOpen(false); setItems(null);
-    if (!user) { setUnread(0); return; }
-    let inFlight = false, again = false;
+    if (!user) return;
     let cancelled = false;
     const refresh = () => {
-      if (inFlight) { again = true; return; }
-      inFlight = true;
-      const generation = badgeGeneration.current;
-      return listRef.current({ limit: 1 })
+      listRef.current({ limit: 1 })
         .then((resp: any) => {
-          if (!cancelled && !markingRead.current && generation === badgeGeneration.current && typeof resp?.unreadCount === 'number') setUnreadPersisted(resp.unreadCount);
+          if (!cancelled && typeof resp?.unreadCount === 'number') setUnreadPersisted(resp.unreadCount);
         })
-        .catch(() => {})
-        .finally(() => { inFlight = false; if (again && !cancelled) { again = false; refresh(); } });
+        .catch(() => {});
     };
     setUnread(cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0);
     refresh();
-    // Poll only while the tab is actually being looked at — every other poller
-    // in the app (MessengerPage, MessengerNotifications, ChatView) gates on
-    // visibilityState, and without it a backgrounded tab keeps counting
-    // notifications forever. visibilitychange re-reconciles on return, so
-    // hiding the tab costs freshness for exactly as long as it stays hidden.
-    const interval = activityInterval('timer:components/Nav/NotificationsBell:1', 'Notification badge', () => {
-      if (document.visibilityState === 'visible') return refresh();
-    }, POLL_MS);
+    const interval = window.setInterval(refresh, POLL_MS);
     const onFocus = () => refresh();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') refresh();
-    };
-    const onRecorded = (event: Event) => {
-      if ((event as CustomEvent).detail?.userId === user.id) refresh();
-    };
-    const onNative = (event: Event) => {
-      if ((event as CustomEvent).detail?.type === 'notifications-changed') refresh();
-    };
-    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('thingtime:notification-recorded', onRecorded);
-    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('thingtime:native-message', onNative);
-    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('focus', onFocus);
-    activityEvents(document, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
     return () => {
       cancelled = true;
-      clearActivityInterval(interval);
-      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('thingtime:notification-recorded', onRecorded);
-      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('thingtime:native-message', onNative);
-      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('focus', onFocus);
-      activityEvents(document, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
     };
     // per-user: switcher swaps identity under the same mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleOpen = () => {
-    setOpen(true);
-    badgeGeneration.current += 1;
-    const ownerId = user?.id;
+    setOpen((prev) => !prev);
+    if (open) return;
+    setItems(null);
     listRef.current({ limit: 20 })
       .then((resp: any) => {
-        if (ownerRef.current !== ownerId) return;
         setItems(Array.isArray(resp?.notifications) ? resp.notifications : []);
         // opening the bell reads everything (X-style) — badge zeroes now,
         // server flips readAt in the background
         if ((resp?.unreadCount || 0) > 0) {
-          markingRead.current = true;
-          void markReadRef.current({ all: true }).catch(() => {}).finally(() => {
-            markingRead.current = false; badgeGeneration.current += 1;
-            if (ownerRef.current === ownerId) window.dispatchEvent(new CustomEvent('thingtime:notification-recorded', { detail: { userId: ownerId } }));
-          });
+          markReadRef.current({ all: true }).catch(() => {});
         }
         setUnreadPersisted(0);
       })
-      .catch(() => { if (ownerRef.current === ownerId) setItems((previous) => previous ?? []); });
+      .catch(() => setItems([]));
   };
 
-  const handleItemClick = (item: NotificationItem) => {
+  const handleItemClick = (item: BellNotification) => {
     setOpen(false);
-    const href = notificationHref(item);
-    if (href) navigate(href);
+    if (item.postId) {
+      navigate(`/post/${item.postId}`);
+      return;
+    }
+    if (item.actorUsername) {
+      navigate(`/profile/${item.actorUsername}`);
+    }
   };
 
-  if (!user || user.temporary) return <Link to="/notifications" aria-label="Notification history"><Center padding={2}><Bell size={20} /></Center></Link>;
+  if (!user) return null;
 
   return (
-    <Popover isOpen={open} onOpen={handleOpen} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
-      <PopoverTrigger>
+    <Popover isOpen={open} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
+      <PopoverAnchor>
         <Center
           as="button"
           type="button"
           position="relative"
-          width="36px"
-          height="36px"
-          flexShrink={0}
-          borderRadius="8px"
           cursor="pointer"
           aria-label={unread > 0 ? `Notifications — ${unread} unread` : 'Notifications'}
           title="Notifications 🔔"
-          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation', WebkitAppRegion: 'no-drag' }}
+          onClick={handleOpen}
+          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
-          <Bell size={16} strokeWidth={1.9} style={{ pointerEvents: 'none' }} />
+          <Bell size={16} strokeWidth={1.9} />
           {unread > 0 && (
             <Center
               position="absolute"
-              top="2px"
-              right="0px"
+              top="-6px"
+              right="-8px"
               minWidth="15px"
               height="15px"
               paddingX="4px"
@@ -170,7 +184,7 @@ export const NotificationsBell = () => {
             </Center>
           )}
         </Center>
-      </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent
         width={['calc(100vw - 24px)', '360px']}
         maxWidth="calc(100vw - 24px)"
@@ -194,12 +208,6 @@ export const NotificationsBell = () => {
             >
               Notifications 🔔
             </Text>
-            <Box flex={1} />
-            <Link to="/notifications?source=account" onClick={() => setOpen(false)}>
-              <Text as="span" fontSize="xs" fontWeight={600} color="var(--tt-accent, #7c5cff)" _hover={{ textDecoration: 'underline' }}>
-                See all →
-              </Text>
-            </Link>
           </Flex>
 
           {items === null && (
@@ -218,7 +226,48 @@ export const NotificationsBell = () => {
           )}
 
           {items?.map((item) => (
-            <NotificationRow key={item.id} item={item} dense onClick={handleItemClick} />
+            <Flex
+              key={item.id}
+              as="button"
+              type="button"
+              textAlign="left"
+              alignItems="flex-start"
+              columnGap={2.5}
+              paddingX={2}
+              paddingY={2}
+              borderRadius="var(--tt-radius-md, 12px)"
+              background={item.readAt ? 'transparent' : 'var(--tt-surface-alt, #f5f5f7)'}
+              _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+              onClick={() => handleItemClick(item)}
+            >
+              <Box position="relative" flexShrink={0}>
+                <ProfileAvatarCircle
+                  avatarUrl={item.actorAvatarUrl}
+                  name={item.actorName || item.actorUsername || '?'}
+                  size="32px"
+                  fontSize="sm"
+                />
+                <Box position="absolute" bottom="-4px" right="-4px" fontSize="11px" lineHeight="1">
+                  {TYPE_EMOJI[item.type] || '✨'}
+                </Box>
+              </Box>
+              <Box minWidth={0} whiteSpace="normal">
+                <Text fontSize="xs" color={INK}>
+                  <Text as="span" fontWeight={700}>
+                    {item.actorName || item.actorUsername || 'Someone'}
+                  </Text>{' '}
+                  {verbOf(item)}
+                </Text>
+                {item.preview && item.type !== 'reaction' && (
+                  <Text fontSize="xs" color={MUTED} noOfLines={2}>
+                    {item.preview}
+                  </Text>
+                )}
+                <Text fontSize="10px" color={MUTED} marginTop={0.5}>
+                  {timeAgo(item.createdAt)}
+                </Text>
+              </Box>
+            </Flex>
           ))}
         </Flex>
       </PopoverContent>
