@@ -1,4 +1,3 @@
-import { byKey } from './lookup';
 import type { Competitor } from './types';
 
 // Comparison subjects. Every line about a competitor is deliberately
@@ -507,7 +506,7 @@ export const COMPETITORS: Competitor[] = [
 	}
 ];
 
-export const COMPETITOR_BY_KEY: Record<string, Competitor> = byKey(COMPETITORS, (competitor) => competitor.key);
+export const COMPETITOR_BY_KEY: Record<string, Competitor> = Object.fromEntries(COMPETITORS.map((competitor) => [competitor.key, competitor]));
 
 export const getCompetitor = (key: string): Competitor => {
 	const competitor = COMPETITOR_BY_KEY[key];
