@@ -117,7 +117,6 @@ function BuilderThingActions({
 							isDisabled={!ownerId || busy || !!disabledReason}
 							onClick={() =>
 								void run(async () => {
-									if (!active.current) return false;
 									const data = await api.v1.things.fork({ id, key: linkKey });
 									const copyId = data?.id;
 									if (!data?.ok || !copyId) throw new Error(data?.error || 'Could not duplicate this Thing');

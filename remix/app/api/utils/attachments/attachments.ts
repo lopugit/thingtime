@@ -916,18 +916,6 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 			}
 			if (reserved.attachmentState === 'cancelled') return fail(409, 'This upload request was cancelled', { code: 'upload_cancelled', retryable: false });
-      // Persist provenance before returning any byte-upload authority, including
-      // retries of a pre-provenance deterministic reservation. Never infer it.
-      if (fileSyncOrigin) {
-        if (reserved.attachmentFileSyncOrigin && !sameFileSyncUploadOrigin(reserved.attachmentFileSyncOrigin, fileSyncOrigin)) return fail(409, 'Sync upload origin changed');
-        if (!reserved.attachmentFileSyncOrigin) reserved = await dependencies.store.recordFileSyncOrigin(ownerId, id, requestFingerprint, fileSyncOrigin);
-      }
-            // Empty social drafts have no multipart work to repeat. Return the
-            // original ready plan only while its ordinary draft is unbound/live.
-            if (sizeBytes === 0 && attachmentPurposeAllowsEmpty(intent.purpose) && intent.purpose !== 'file' && reserved.attachmentState === 'ready') {
-                if (reserved.targetId || !(reserved.attachmentExpiresAt instanceof Date) || reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime()) return fail(409, 'Attachment request cannot be resumed', { code: 'upload_unavailable', retryable: false });
-                return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
-            }
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (['recording', 'file', 'password'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
@@ -1440,9 +1428,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
-			if (!existing) return { ok: true, deferred: false };
-			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
-			if (existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
+			if (!existing || existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
@@ -1541,9 +1527,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(503, 'File deletion is still in progress; retry the same request', { retryable: true });
 			}
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
-			if (!existing) return { ok: true, deferred: false };
-			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
-			if (existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
+			if (!existing || existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			// Internal copy rollback may only discard unfinished uploads. The
 			// cleanup claim below CAS-fences the observed state, so a concurrent
 			// finalization cannot turn this retry into deletion of a durable file.
@@ -1669,8 +1653,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const download = async (
-		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainedVersion?: string, retainOwnedFile = false
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { purpose: 'file' | 'recording' | 'post' | 'comment'; targetId?: string; ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata } }>> => {
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainOwnedFile = false
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata & { nsfw?: true; pending?: true } } }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput, false, true, retainedVersion);
 			if (readable.ok === false) return readable;

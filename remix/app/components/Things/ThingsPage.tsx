@@ -1,20 +1,5 @@
-import { CharacterWorkspacePicker } from '../Characters/CharacterContentScope';
-import { useCharacterContentPath } from '../Characters/CharacterScope';
-import { useDataPlane } from '~/hooks/useDataPlane';
-import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
-import { useMountedRef } from '~/hooks/useMountedRef';
-import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
-import { LidarScanControls } from '../NativeBridge/LidarScanControls';
-import { openDeviceCloudFolder } from '~/fileSync/deviceFolderNavigation.client';
-import { builderAppLaunchHref } from '../Builder/builderAppNavigation';
-import { openSharePreview } from '~/components/Sharing/sharePreviewLink';
-import { BUILDER_THING_KIND } from '~/schemas/builderThing';
-import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
-import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
-import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
-import { deviceSyncedFilesHref } from '~/components/Devices/deviceSyncNavigation';
 import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
 import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
@@ -163,6 +148,11 @@ type ThingsPageProps = { builderMode?: boolean; locationPicker?: ThingsLocationP
 
 export const ThingsPage = ({ builderMode = false, locationPicker }: ThingsPageProps) => {
   const [params] = useSearchParams();
+  const scope = useWorkspaceScope();
+  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage key={scope} />;
+};
+
+const ThingsLibraryPage = () => {
   const user = useWorkspaceUser();
   const destination = readLibraryDestination(params, user);
   if (!builderMode && !locationPicker && user && !user.localOnly && !user.offline && params.get('deviceSetup') === '1') return <MobileDeviceSetupPage />;

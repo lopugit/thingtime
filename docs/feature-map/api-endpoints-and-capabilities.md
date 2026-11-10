@@ -1,14 +1,21 @@
 # API endpoints and capabilities
 
-History settings (`api.timeline-settings` 1.0.0, `GET`/`POST /api/v1/timeline/settings`,
-`app/routes/api/v1/timeline/settings/_settings.tsx` with injectable deps, the
-home-pinned `createHistoryPrefsStore` in `api/utils/auth/users.ts`, shared
-`timeline/historyPrefs.ts`, rate key `timeline.settings`) keep the sync hold,
-retention choice and per-Thing pause list on the user Thing's protected
-`secure.meta.historyPrefs` blob; `api.timeline` stays at 1.18.0. Register changes
-in `apiDocs.ts` (both version fields) and run `test:timeline`,
-`test:api-capabilities` and `test:rate-limit`. See
-[history-and-timeline.md](history-and-timeline.md).
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
+reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
 
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,

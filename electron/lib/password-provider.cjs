@@ -32,12 +32,9 @@ function runHelper(executable, action, value) {
 function createPasswordProvider({ app, root, origin, endpoint, helper = runHelper, safeStorage, context, dialog, window, BrowserWindow, ipcMain, platform = process.platform }) {
   // One serial queue keeps logout/account switches ordered after pending connects.
   let queue = Promise.resolve();
-  let retiring = false;
-  const desktop = ['linux', 'win32'].includes(platform) ? require('./native-passwords/desktop.cjs').createDesktopPasswordBridge({ app, safeStorage, context, dialog, window, BrowserWindow, ipcMain, preload: path.join(root, 'preload.cjs') }) : null;
   const executable = app.isPackaged ? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Passwords.app', 'Contents', 'MacOS', 'Thingtime Passwords') : path.join(root, 'dist', 'native', 'Thingtime Passwords.app', 'Contents', 'MacOS', 'Thingtime Passwords');
   const enqueue = work => { const pending = queue.then(work, work); queue = pending.catch(() => {}); return pending; };
   const handle = async (event, input) => {
-    if (retiring) throw new Error('Thingtime is restarting. Try again after restart.');
     const activeOrigin = new URL(origin()).origin;
     requirePasswordSender(event, activeOrigin, app.isPackaged);
     if (!['darwin', 'linux', 'win32'].includes(platform) || !['connect', 'sync', 'disconnect', 'status'].includes(input?.action)) throw new Error('Unsupported Password AutoFill request.');
@@ -59,7 +56,6 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
       throw new Error('System AutoFill requires an HTTPS account endpoint. In the macOS menu bar, choose Thingtime → API Endpoint → Production, then sign in to your account.');
     }
     const work = async () => {
-      if (retiring) throw new Error('Thingtime is restarting. Try again after restart.');
       requirePasswordSender(event, activeOrigin, app.isPackaged);
       if (new URL(origin()).origin !== activeOrigin || new URL(endpoint()).origin !== authority) throw new Error('Your Thingtime endpoint changed.');
       if (input.action === 'status' && !input.ownerId) return { ok: true, connection: 'unavailable' };
@@ -82,10 +78,7 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
     return enqueue(work);
   };
   // Endpoint changes clear the OS vault before switching the app's authority.
-  handle.disconnect = () => {
-    retiring = true;
-    return desktop ? desktop.invalidate() : platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect', { automatic: true, origin: new URL(endpoint()).origin })) : Promise.resolve();
-  };
+  handle.disconnect = () => process.platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect')) : Promise.resolve();
   return handle;
 }
 module.exports = { createPasswordProvider, requirePasswordSender };
