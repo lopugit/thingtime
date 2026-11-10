@@ -1,6 +1,3 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
-
 import { fail, isFail } from '../things/things';
 import type { Fail } from '../things/things';
 
@@ -9,8 +6,6 @@ import type { Fail } from '../things/things';
 // host, so every guard lives here:
 //   • base URLs are origins only — https required except localhost-shaped dev
 //     hosts, no embedded credentials, no path/query/hash
-//   • the host must RESOLVE to public address space, checked at dial time, not
-//     only when the link was saved (a name vets clean once and can repoint)
 //   • redirects are never followed (a redirect to an internal host would turn
 //     a vetted origin into an SSRF hop)
 //   • every call carries a timeout and a response-size cap
@@ -23,37 +18,6 @@ const REMOTE_TIMEOUT_MS = 15_000;
 // anything"
 const MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
 
-// ── bounded untrusted strings ───────────────────────────────────────────────
-//
-// MAX_RESPONSE_BYTES bounds what we READ; it does not bound what we KEEP. Two
-// kinds of remote-chosen text outlive the response:
-//   • `error` messages ride a Fail all the way into the sync report, which the
-//     route persists as the link's lastSyncSummary — i.e. inside the user
-//     thing's secure blob — and the UI renders in a toast
-//   • the identity fields below are written into the saved link itself
-// A hostile (or merely broken) deployment answering with megabytes in either
-// field would otherwise push the owner's account document at Mongo's 16MB
-// limit and make every later secure write fail. Both are bounded here, at the
-// one place remote text enters, so no caller has to remember to do it.
-const MAX_REMOTE_ERROR_CHARS = 300;
-// far above any real value (ObjectId hex is 24, usernames are short slugs) —
-// this only has to reject the absurd
-const MAX_REMOTE_IDENTITY_CHARS = 200;
-
-// Display text: truncating is the right semantic — the operator still gets the
-// useful head of the remote's complaint.
-export const remoteErrorText = (value: unknown, fallback: string): string => {
-  if (typeof value !== 'string' || !value.trim()) return fallback;
-  const text = value.trim();
-  return text.length <= MAX_REMOTE_ERROR_CHARS ? text : `${text.slice(0, MAX_REMOTE_ERROR_CHARS)}…`;
-};
-
-// Identifiers, by contrast, are never truncated: a silently shortened id would
-// still compare equal to itself on the next pass and quietly bind the link to
-// the wrong account string. An oversized identity is refused instead.
-export const isUsableRemoteIdentity = (value: unknown): value is string =>
-  typeof value === 'string' && !!value && value.length <= MAX_REMOTE_IDENTITY_CHARS;
-
 const isLocalHostname = (hostname: string): boolean => {
   const host = hostname.toLowerCase();
   return (
@@ -63,118 +27,6 @@ const isLocalHostname = (hostname: string): boolean => {
     host === '[::1]' ||
     host.endsWith('.localhost')
   );
-};
-
-// Non-public targets a linked *deployment* could never legitimately live at.
-// Without this, a signed-in user can point a link at any https host the server
-// can reach — private VPC ranges, link-local, cloud metadata — and read the
-// outcome back through the sync report. The https-only rule already blocks the
-// plain-HTTP metadata services, but it does not block internal HTTPS.
-//
-// Localhost-shaped hosts are exempt on purpose: they are the supported
-// dev-against-dev path, and reaching them needs a URL the operator typed.
-export const isBlockedDeploymentHostname = (hostname: string): boolean => {
-  if (isLocalHostname(hostname)) return false;
-  const host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-  // a real deployment is reached by name; an IP literal is either an internal
-  // address or an attempt to sidestep name-based vetting
-  if (isIP(host) !== 0) return true;
-  return host === 'metadata.google.internal' || host.endsWith('.internal') || host.endsWith('.local');
-};
-
-// ── resolved-address fence ──────────────────────────────────────────────────
-//
-// The syntactic rules above vet the STRING a user typed. They cannot see where
-// a name actually points, so `https://deploy.attacker.example` — an ordinary
-// public hostname whose A record is 169.254.169.254 or 10.0.0.5 — passes every
-// check above and still lands the server on the private network. That is the
-// exact threat the block-list comment claims to cover, so the name has to be
-// resolved and the ANSWER judged before we dial.
-//
-// It matters more here than at link time: `baseUrl` is stored and re-dialled on
-// every sync pass, so a name that vetted clean weeks ago gets a fresh verdict
-// on each call.
-//
-// Ranges below mirror `blockedTargetReason` in
-// `api/utils/connections/providers.ts` (the outbound-feed fetcher). Both fences
-// exist because both features dial user-supplied hosts; once #295 lands they
-// should converge on one shared guarded-fetch helper rather than two copies.
-const ipv4Blocked = (address: string): boolean => {
-  const parts = address.split('.').map((part) => Number(part));
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
-  const [a, b] = parts;
-  if (a === 0 || a === 10 || a === 127) return true; // this-network, private, loopback
-  if (a === 169 && b === 254) return true; // link-local — cloud metadata lives here
-  if (a === 172 && b >= 16 && b <= 31) return true; // private
-  if (a === 192 && b === 168) return true; // private
-  if (a === 192 && b === 0) return true; // IETF protocol assignments
-  if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
-  if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
-  if (a >= 224) return true; // multicast + reserved + broadcast
-  return false;
-};
-
-// Expand any textual IPv6 form to its 8 numeric groups so the range checks
-// never depend on spelling: a resolver can hand back `::ffff:7f00:1`, which a
-// check written against `::ffff:127.0.0.1` would silently miss.
-const ipv6Groups = (value: string): number[] | null => {
-  let text = value;
-  const dotted = text.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
-  if (dotted) {
-    const octets = dotted[2].split('.').map((part) => Number(part));
-    if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return null;
-    text = `${dotted[1]}${(((octets[0] << 8) | octets[1]) >>> 0).toString(16)}:${(((octets[2] << 8) | octets[3]) >>> 0).toString(16)}`;
-  }
-  const halves = text.split('::');
-  if (halves.length > 2) return null;
-  const parseGroups = (part: string): number[] => (part ? part.split(':').map((group) => Number.parseInt(group, 16)) : []);
-  const head = parseGroups(halves[0]);
-  const tail = halves.length === 2 ? parseGroups(halves[1]) : [];
-  const groups =
-    halves.length === 2 ? [...head, ...new Array(Math.max(0, 8 - head.length - tail.length)).fill(0), ...tail] : head;
-  if (groups.length !== 8 || groups.some((group) => !Number.isInteger(group) || group < 0 || group > 0xffff)) return null;
-  return groups;
-};
-
-const ipv6Blocked = (address: string): boolean => {
-  const groups = ipv6Groups(address.toLowerCase().split('%')[0]); // drop any zone index
-  if (!groups) return true; // unparseable — refuse rather than guess
-  // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d) carry a v4
-  // address in the low 32 bits; `::`/`::1` fall out of the same branch as
-  // 0.0.0.0/0.0.0.1, which the v4 rules already block.
-  if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
-    return ipv4Blocked(`${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`);
-  }
-  const head = groups[0];
-  if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
-  if ((head & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-  if ((head & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
-  if ((head & 0xff00) === 0xff00) return true; // ff00::/8 multicast
-  return false;
-};
-
-export const isBlockedDeploymentAddress = (address: string, family: number): boolean =>
-  family === 6 ? ipv6Blocked(address) : ipv4Blocked(address);
-
-// true = refuse the dial. Localhost-shaped hosts keep their documented dev
-// exemption (they resolve to loopback, which the v4 rules block by design).
-// An unresolvable name is NOT refused here: fetch() will fail on it anyway, and
-// inventing a refusal would only turn a DNS outage into a confusing "not a
-// public deployment" error.
-export const resolvedDeploymentHostBlocked = async (hostname: string): Promise<boolean> => {
-  if (isLocalHostname(hostname)) return false;
-  const host = hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
-  const literal = isIP(host);
-  if (literal) return isBlockedDeploymentAddress(host, literal);
-  let resolved: { address: string; family: number }[];
-  try {
-    resolved = await lookup(host, { all: true });
-  } catch {
-    return false;
-  }
-  // ANY answer in reserved space refuses the whole name — a round-robin record
-  // mixing one public and one private address is the classic bypass.
-  return resolved.some((entry) => isBlockedDeploymentAddress(entry.address, entry.family));
 };
 
 // Normalize + vet a user-supplied deployment URL down to a bare origin.
@@ -198,9 +50,6 @@ export const normalizeDeploymentBaseUrl = (value: unknown): string | Fail => {
   if ((url.pathname && url.pathname !== '/') || url.search || url.hash) {
     return fail(400, 'Deployment URLs are origins only — drop the path/query');
   }
-  if (isBlockedDeploymentHostname(url.hostname)) {
-    return fail(400, 'That host isn’t reachable as a deployment — link to a public deployment hostname');
-  }
   return url.origin;
 };
 
@@ -211,19 +60,6 @@ export const remoteFetch = async (
   path: string,
   options: { method?: string; token?: string | null; body?: unknown } = {}
 ): Promise<RemoteResponse | Fail> => {
-  // Re-vet at DIAL time, not just when the link was saved: `baseUrl` is stored
-  // and reused on every sync pass, so this is the only check a name that
-  // repointed after linking has to pass.
-  let target: URL;
-  try {
-    target = new URL(baseUrl);
-  } catch {
-    return fail(400, 'That deployment URL is no longer valid — re-link it');
-  }
-  if (await resolvedDeploymentHostBlocked(target.hostname)) {
-    return fail(400, 'That host isn’t reachable as a deployment — link to a public deployment hostname');
-  }
-
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -334,15 +170,13 @@ export const remoteLogin = async (
   if (response.status !== 200 || response.json?.ok !== true) {
     return fail(
       response.status === 429 ? 429 : 401,
-      remoteErrorText(response.json?.error, 'That deployment rejected the login')
+      response.json?.error || 'That deployment rejected the login'
     );
   }
   const token = authTokenFromSetCookies(response.setCookies);
   if (!token) return fail(502, 'That deployment logged in but returned no session token');
   const user = response.json?.user;
-  if (!isUsableRemoteIdentity(user?.id) || !isUsableRemoteIdentity(user?.username)) {
-    return fail(502, 'That deployment returned no account identity');
-  }
+  if (!user?.id || !user?.username) return fail(502, 'That deployment returned no account identity');
   return { ok: true, token, user };
 };
 
@@ -351,7 +185,7 @@ export const remoteMe = async (baseUrl: string, token: string): Promise<RemotePu
   const response = await remoteFetch(baseUrl, '/api/v1/auth/me', { token });
   if (isFail(response)) return response;
   const user = response.json?.user;
-  if (!isUsableRemoteIdentity(user?.id) || !isUsableRemoteIdentity(user?.username)) {
+  if (!user?.id || !user?.username) {
     return fail(401, 'That deployment no longer accepts the link’s token — re-link to refresh it');
   }
   return user;
@@ -401,10 +235,7 @@ export const remoteListThings = async (
   const response = await remoteFetch(baseUrl, `/api/v1/things?${params}`, { token });
   if (isFail(response)) return response;
   if (response.status !== 200 || response.json?.ok !== true || !Array.isArray(response.json?.things)) {
-    return fail(
-      response.status === 401 ? 401 : 502,
-      remoteErrorText(response.json?.error, 'That deployment refused to list things')
-    );
+    return fail(response.status === 401 ? 401 : 502, response.json?.error || 'That deployment refused to list things');
   }
   return { things: response.json.things, nextCursor: response.json.nextCursor ?? null };
 };
@@ -420,7 +251,7 @@ export const remotePutThing = async (
     const passThrough = [429, 401, 404, 409];
     return fail(
       passThrough.includes(response.status) ? response.status : 502,
-      remoteErrorText(response.json?.error, `That deployment rejected the write (${response.status})`)
+      response.json?.error || `That deployment rejected the write (${response.status})`
     );
   }
   return { ok: true };
@@ -434,7 +265,7 @@ export const remoteUpdateProfile = async (
   const response = await remoteFetch(baseUrl, '/api/v1/users/profile', { method: 'POST', token, body });
   if (isFail(response)) return response;
   if (response.json?.ok !== true) {
-    return fail(502, remoteErrorText(response.json?.error, 'That deployment rejected the profile update'));
+    return fail(502, response.json?.error || 'That deployment rejected the profile update');
   }
   return { ok: true };
 };
