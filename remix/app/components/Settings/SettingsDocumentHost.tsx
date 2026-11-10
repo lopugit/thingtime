@@ -175,21 +175,17 @@ function SettingsDocumentSession({ defaultDocument, upgradeDocument, title = 'Se
     save, resetToDefault: async () => { update(defaults); return { ok: true }; },
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
-  // Keep unsaved edits available for reentry without applying them to the live view.
-  const viewBlocks = !pageBuilderActive && !previewRuntimeLayoutDraft && dirty
-    ? migrateBlocks ? settingsDocumentBlocks(migrateBlocks(saved.blocks)) : saved.blocks
-    : document.blocks;
-  return <Box minW={0} data-settings-document={documentScope.documentKey} data-tt-mobile-control-workspace={clearMobileLaunchers ? true : undefined}>
-    {showControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : editLayoutLabel}</Button>
+  return <Box minW={0} data-settings-document={documentScope.documentKey}>
+    <Flex gap={2} mb={2} align="center" flexWrap="wrap">
+      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
-    </Flex>}
-    {showLayoutControls && error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {showControls && editing ? <SettingsEditor key="edit" allowMediaUploads={allowMediaUploads} draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+    </Flex>
+    {error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
+    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
       {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
-    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: viewBlocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
+    </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 

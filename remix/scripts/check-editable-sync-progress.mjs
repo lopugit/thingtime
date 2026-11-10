@@ -125,7 +125,6 @@ if (!process.env.TT_PROGRESS_WORKER) {
 		await page.getByText('file-39.txt', { exact: true }).first().waitFor();
 		await page.getByRole('button', { name: 'Previous items', exact: true }).click();
 		await page.getByRole('button', { name: 'Expand Documents', exact: true }).waitFor();
-		await enableCurrentPageBuilder(page);
 		await page.locator('[data-settings-document="file-sync-progress"]').getByRole('button', { name: 'Edit layout', exact: true }).click();
 		await page.locator('[data-block-id="sync-node-name"]').first().click();
 		for (const [id, text] of [['sync-node-name', 'Item: {item.name}'], ['sync-node-counts', 'Counts: {item.counts}'], ['sync-node-icon', '{item.icon}'], ['sync-folder-toggle', '{item.toggle}']]) {

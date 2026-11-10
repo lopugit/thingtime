@@ -3492,7 +3492,10 @@ focused shared checks;37 larger paging/recovery checks also passed. The full iOS
 app, Watch, widget and test bundle built, and26 selected simulator tests passed
 with zero failures/skips. Full project TypeScript reports91 diagnostics outside
 changed files. These fixtures use synthetic native/API grants; real home upload
-and signed installed acceptance are still required.
+and signed installed acceptance are still required. The private coordination
+comment could not be verified after Chrome control timed out; no duplicate was
+sent, and cleanup of task-created tab411841516 could not be confirmed.
+
 
 ### Live transfer speed trackers — 2026-10-19
 

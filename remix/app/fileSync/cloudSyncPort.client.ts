@@ -10,7 +10,7 @@ import { createCloudFileTransport, createCloudRetentionTransport, createCloudFol
 import { parseCloudSyncRun, parseCloudWrite, isCloudFolderWrite, type CloudWrite } from './cloudWrite';
 import type { FingerprintSource } from './contentFingerprint';
 import { sameSyncScope, sameSyncStamp, type SyncEntry, type SyncScope } from './reconcile';
-import { validateSyncReceipt, type SyncExecutionPort, type SyncOperation, type SyncRun } from './execute';
+import { validateSyncReceipt, type SyncExecutionPort, type SyncRun } from './execute';
 import type { TransferActivity } from './transferActivity';
 
 import type { CloudOperationBinding } from './cloudBinding';
@@ -28,7 +28,7 @@ export type CloudSyncPortInput = {
 	localTarget?: LocalSyncTarget;
 	/** Validated saved root for older runs without per-operation roots. */
 	cloudRootId?: string;
-	progress?: (path: string, bytes: number, total: number, direction?: 'upload' | 'download') => void;
+	progress?: (path: string, bytes: number, total: number) => void;
 	transfer?: (activity: TransferActivity) => void;
 };
 type BoundCloudSyncPort = Omit<SyncExecutionPort, 'persist'> & { deferUpload(operation: SyncOperation): Promise<import('./contentFingerprint').NativeDeferredFileResult | null> };
@@ -92,22 +92,6 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 
 	return {
 		currentScope: input.currentScope,
-		...(version === 1 && runtime.automaticStoragePlacement ? {
-			admit: async (operation: SyncOperation) => runtime.automaticStoragePlacement!.admit(operation.mutation, true)
-		} : {}),
-		deferUpload: async operation => {
-			const m = operation.mutation;
-			if (version !== 1 || operation.confirmed || m.kind !== 'copy' || m.from !== 'local' ||
-				m.source.kind !== 'file' || m.source.size <= 0 || !m.source.fingerprint || m.path.includes('/')) return null;
-			const { write } = await get(operation.id, scope);
-			if (JSON.stringify(operation) !== JSON.stringify(write.operation)) throw Error('Deferred operation changed.');
-			await runtime.automaticStoragePlacement?.admit(m, true);
-			const file = createCloudFileTransport(runtime, write, input.signal);
-			if (!sameSyncStamp(m.source, await input.readLocal(m.path)) || !sameSyncStamp(m.expectedTarget, await file.read()))
-				return null;
-			check();
-			return file.deferUpload(await input.openSource(m.source));
-		},
 		confirmed: (operation, receipt) => {
 			check(); validateSyncReceipt(operation, scope, receipt);
 			if (appliedId !== operation.id) return;
@@ -144,7 +128,6 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			const { write, trashContext } = await get(operation.id, scope);
 			if (JSON.stringify({ ...operation, confirmed: false }) !== JSON.stringify({ ...write.operation, confirmed: false }))
 				throw Error('Cloud sync operation changed.');
-			if (version === 1) await runtime.automaticStoragePlacement?.admit(operation.mutation);
 			appliedId = operation.id;
 
 			if (isLocalTrash(write)) {
@@ -166,7 +149,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				check();
 				if (source && !input.localTarget!.reportsTransferBytes) input.transfer?.({ direction: 'download', bytes: null });
 				const staged = await input.localTarget!.stage(structuredClone(operation), { ...scope }, source,
-					(bytes, received) => { check(); input.transfer?.({ direction: 'download', bytes }); input.progress?.(m.path, received, m.source.size, 'download'); });
+					(bytes, received) => { check(); input.transfer?.({ direction: 'download', bytes }); input.progress?.(m.path, received, m.source.size); });
 				check();
 				validateLocalStage(staged, operation, scope);
 				if (source) await source.verify!();
@@ -181,10 +164,9 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			}
 			if (isCloudFolderWrite(write)) return await createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
-			return await fileTransport(runtime, write, input.signal).apply(source,
-				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total, 'upload'),
+			return fileTransport(runtime, write, input.signal).apply(source,
+				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total),
 				bytes => { check(); input.transfer?.({ direction: 'upload', bytes }); });
-			} finally { release?.(); }
 		}
 	};
 }

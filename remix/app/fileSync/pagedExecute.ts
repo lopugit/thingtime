@@ -22,46 +22,12 @@ export async function executePreparedPagedSyncRun(value: PagedRunSpec, savedScop
 	};
 	check(); let state = await journal.start(spec); check();
 	while (state.phase !== 'complete') {
-		const operation = await journal.claimNext(spec); check();
-		if (!operation) throw Error('Sync run has no next operation.');
-		await options.prepare?.(operation); check();
-		let receipt: Awaited<ReturnType<typeof executeSyncOperation>>;
-		let firstDispatch = false;
-		try { receipt = await executeSyncOperation(operation, scope, port.admit ? { ...port, apply: async (op, currentScope) => {
-			firstDispatch = await journal.markStreamCanonicalDispatch(spec, op.id); check();
-			return port.apply(op, currentScope);
-		} } : port, options.signal); }
-		catch (error) {
-			check();
-			if (error instanceof AutomaticStoragePlacementExcluded) {
-				state = await journal.omitStoragePlacementOperation(spec, operation, firstDispatch); check();
-				options.omitted?.(operation); options.changed?.(state);
-				continue;
-			}
-			if (spec.photoAssetOrder && error instanceof SyncObservationChangedError && error.sourceChanged) {
-				state = await journal.omitPhotoOperation(spec, operation); check();
-				options.omitted?.(operation); options.changed?.(state);
-				continue;
-			}
-			const mutation = operation.mutation;
-			if (!spec.backgroundPhotoPublication || !spec.photoAssetOrder || spec.review ||
-				mutation.kind !== 'copy' || mutation.from !== 'local' || mutation.expectedTarget !== null ||
-				!(error instanceof ExactCloudSyncDestinationChanged || (error instanceof SyncObservationChangedError && error.targetChanged))) throw error;
-			// A native refill and this older foreground plan can both prove
-			// the same path absent. An existing matching file settles the
-			// plan without inventing a receipt for this browser operation.
-			const prior = await port.lookup(operation.id, scope); check();
-			if (prior.status === 'complete') receipt = prior.receipt;
-			else {
-				if (prior.status !== 'missing') throw error;
-				const local = await port.read('local', mutation.path); check();
-				const remote = await port.read('remote', mutation.path); check();
-				if (!sameSyncStamp(local, mutation.source) || !remote || remote.path !== mutation.path ||
-					!sameSyncContent(remote, mutation.source)) throw error;
-				state = await journal.omitPhotoOperation(spec, operation, remote); check();
-				options.omitted?.(operation); options.changed?.(state);
-				continue;
-			}
+		const page = await journal.read(spec); check();
+		if (!page.operations.length) throw Error('Sync run has no next operation.');
+		for (const operation of page.operations) {
+			check(); const receipt = await executeSyncOperation(operation, scope, port, options.signal); check();
+			state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
+			port.confirmed?.(operation, receipt);
 		}
 		check();
 		state = await journal.confirm(spec, receipt); check(); options.changed?.(state);
