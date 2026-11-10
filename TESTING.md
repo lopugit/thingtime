@@ -4310,6 +4310,24 @@ email whose link points at the attacker.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Things library archive
+
+- [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
+  Its row leaves the active view, including search. The original link, sharing
+  and content still work. Check that keyboard focus remains usable when the row
+  disappears.
+- [ ] Open **Archived**, reload, then use a Thing’s action menu to **Restore**.
+  It returns to its original folder. Repeat with a folder and a multi-selection;
+  archiving a folder leaves its descendants unchanged.
+- [ ] At 375 px, use the row’s actions button and touch to archive and restore.
+  Check both views and the open menus from top to bottom for horizontal overflow.
+- [ ] Compare an exact API read before and after archiving. The owner alone sees
+  library archive status. A scoped token, another user, or a different origin
+  cannot change it. An archive filter applies before the page limit.
+  Run `node remix/scripts/things-library-archive-acceptance.mjs` with an isolated
+  node-server build, disposable MongoDB tooling and Playwright to verify the
+  real API and desktop/touch browser paths.
+
 ## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
 
 - [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy

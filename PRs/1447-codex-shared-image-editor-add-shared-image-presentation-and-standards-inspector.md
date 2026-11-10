@@ -29,11 +29,13 @@ retain their normal rendering and validation boundaries.
   writing fixtures. See [TESTING](../TESTING.md#profile-avatar-and-banner-media-remixappcomponentsprofile)
   for the manual checklist.
 
-The branch also integrates authored selection and keyed collections from main.
-The merged origin advertises Things 1.59.0, Things-update 1.25.0, and Webpages
-resolve 1.17.0 so clients can distinguish expanded authoring from the earlier
-selection-only contracts. The merged renderer, schema, Action, and isolated
-Chrome regression batch passed 104 tests.
+The branch also integrates authored selection, keyed collections, and owner
+library archive from main. Things 1.60.0, Things-update 1.25.0, and Webpages
+resolve 1.17.0 distinguish expanded authoring from the earlier contracts.
+Things Search 1.6.0 adds optional avatar presentation alongside archive
+filtering. Existing archive callers still accept their original minimum
+versions. The selection merge passed 104 renderer, schema, Action, and
+isolated Chrome regression tests.
 
 The required build check exposed missing initial wrapping styles in the custom
 drawer. The existing wrapping assertions now pass, and a new renderer test
@@ -41,6 +43,8 @@ covers ordinary and Unicode declarations, vendor names, and exclusion of
 unsafe style attribute content. The continued CI suite also caught a change
 to the object shape returned by CSS validation. The validator preserves plain
 CSS records so authored demos and behavior suites round trip unchanged.
+The workspace renderer test fixture now implements the same child and sibling
+traversal as the browser DOM, retaining its live versus inert assertions.
 
 The portable Graphify snapshot was refreshed structurally. The local semantic
 proxy did not finish the scoped document refresh within the task budget, so

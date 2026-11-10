@@ -253,6 +253,7 @@ export const LUCIDE_FOR_EMOJI: Record<string, string> = {
 	'🧙‍♂️': 'wand-sparkles',
 	'🪄': 'wand',
 	'📦': 'package',
+	'↩️': 'package-open',
 	'📚': 'library',
 	'💬': 'message-circle',
 	'💯': 'hash',

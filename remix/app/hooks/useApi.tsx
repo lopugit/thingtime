@@ -1215,6 +1215,7 @@ export function useApi() {
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
           await requireSharedContentCapability('api.things-search', options);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things-search', '1.5.0', options?.expectedApiOrigin);
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
@@ -1282,6 +1283,7 @@ export function useApi() {
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           await requireSharedContentCapability('api.things', options);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things', '1.59.0', options?.expectedApiOrigin);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1293,7 +1295,8 @@ export function useApi() {
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId,
-              builderApp: args?.builderApp
+              builderApp: args?.builderApp,
+              libraryArchive: args?.libraryArchive
             })}`, { ...options, expectedDataPlane }
           );
         },
@@ -1407,10 +1410,12 @@ export function useApi() {
         await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
-      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      // Multi-select library operations — see /docs/api things-bulk.
       bulk: useCallback(
-        async (args) => {
-          await requireSharedContentCapability('api.things-bulk');
+        async (args, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.things-bulk', options);
+          if (args?.op === 'archive' || args?.op === 'restore')
+            await requireThingtimeCapability('api.things-bulk', '1.8.0', options?.expectedApiOrigin);
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1420,7 +1425,7 @@ export function useApi() {
               ...(args && 'acl' in args ? { acl: args.acl } : {}),
               ...(args?.recursive ? { recursive: true } : {})
             },
-            { action: '/api/v1/things/bulk' }
+            { ...options, action: '/api/v1/things/bulk' }
           );
         },
         [asyncFetcher]

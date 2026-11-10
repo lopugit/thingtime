@@ -131,6 +131,8 @@ export type ThingsItemAction =
   | 'edit'
   | 'edit-definition'
   | 'move'
+  | 'archive'
+  | 'restore'
   | 'share'
   | 'copy'
   | 'download'

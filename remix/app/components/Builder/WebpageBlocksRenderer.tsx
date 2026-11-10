@@ -108,7 +108,7 @@ function useBlockCss(ref: React.RefObject<HTMLElement>, css: Record<string, stri
   const { value, priority } = splitCssPriority(mapped);
   if (!value || priority || /[;\\]|\/\*/.test(value)) continue;
   const prop = name.startsWith('--') ? name : name.replace(/^-ms-/, 'ms-').replace(/-([a-z])/g, (_, char: string) => char.toUpperCase());
-  if (!cssStyleMembers.has(prop) && !Object.hasOwn(Object.prototype, prop)) style[prop] = value;
+  if (!cssStyleMembers.has(prop) && !Object.prototype.hasOwnProperty.call(Object.prototype, prop)) style[prop] = value;
  }
  useInlineCssDeclarations(ref, css ? declarations : undefined);
  return Object.keys(style).length ? style as React.CSSProperties : undefined;
