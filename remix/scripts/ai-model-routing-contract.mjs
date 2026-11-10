@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
+  ['app/api/utils/lopu/musing.ts', 'app/api/utils/moderation/claudeProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -38,14 +38,11 @@ assert.deepEqual(
 // TT_MODERATION_MODEL is only the provider default for the 'default' slot.
 const moderation = readFileSync(join(remixRoot, 'app/api/utils/moderation/claudeProvider.ts'), 'utf8');
 assert.match(moderation, /getAiPreferredModelWaterfall/);
-assert.match(moderation, /resolveAiPreferredAnthropicChoice/);
-assert.match(moderation, /resolveAiPreferredAnthropicChoice\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
+assert.match(moderation, /resolveAiPreferredClaudeModel/);
+assert.match(moderation, /resolveAiPreferredClaudeModel\(await getAiPreferredModelWaterfall\(\), providerDefaultModel\)/);
 assert.doesNotMatch(moderation, /model:\s*env\.TT_MODERATION_MODEL/);
 
-// Lopu musings resolve BOTH provider preferences from one waterfall read:
-// Claude runs the first Anthropic-capable entry, ChatGPT the first OpenAI
-// entry; LOPU_*_MODEL env values are only the 'default'-slot fallbacks.
-const musing = readFileSync(join(remixRoot, 'app/api/utils/lopu/musing.ts'), 'utf8');
+const musing = readFileSync(join(remixRoot, directClientFiles[0]), 'utf8');
 assert.match(musing, /getAiPreferredModelWaterfall/);
 assert.match(musing, /resolveAiPreferredAnthropicChoice/);
 assert.match(musing, /resolveAiPreferredOpenAiChoice/);

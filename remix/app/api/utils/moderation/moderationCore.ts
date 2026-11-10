@@ -5,8 +5,6 @@
 // them. Public projections expose at most a boolean `nsfw`; `blocked`
 // attachments disappear from public payloads entirely and the content route
 // refuses to serve them.
-// Upload approval remains a separate policy in auth/publicUploads; this module
-// classifies content only after the upload permission decision has been made.
 
 export const MODERATION_STATUSES = ['pending', 'skipped', 'clear', 'nsfw', 'blocked'] as const;
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
@@ -37,8 +35,8 @@ export type AttachmentModeration = {
 	// fences stale stamps and lets a block stay sticky across provider
 	// flip-flops until the text actually changes
 	textHash?: string;
-// The protected admin moderationFlag for this verdict has not landed yet;
-// attachment and text sweeps drain docs still carrying this marker.
+	// text pipeline only: the admin moderationFlag for this verdict has not
+	// landed yet; the hourly sweep drains docs still carrying this marker
 	flagPending?: boolean;
 };
 

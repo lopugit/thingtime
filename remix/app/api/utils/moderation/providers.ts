@@ -1,4 +1,3 @@
-import { claudeOAuthConfigured } from '../ai/claudeOAuthCore';
 // Moderation provider registry. The provider analyzes ONE image and returns
 // a ModerationVerdict; the orchestrator (analyzeAttachment.ts) owns loading
 // bytes, stamping results, and every attachment-shape decision.
@@ -20,14 +19,12 @@ import { claudeOAuthConfigured } from '../ai/claudeOAuthCore';
 // override the env choice: resolveConfiguredModerationProvider reads the
 // admin mediaProvider first and only falls through to the env/key logic when
 // it is 'default' (or the settings read fails).
-// An explicit 'off'/missing-key environment marks attachments skipped. When a
-// configured provider fails, the durable pending stamp stays quarantined and
-// the sweep retries it. Upload authorization remains the separate canonical
-// public/private/all scope gate; moderation never reimplements permission.
+// Fail-open note: 'off'/missing-key environments do NOT block uploads — the
+// beta admin-grant gate (PR #302) is the hard spam control; analysis is the
+// content-quality layer on top. Set the provider in prod so it actually runs.
 
 import type { ModerationVerdict } from './moderationCore';
 import { DEFAULT_MODERATION_SETTINGS, type ModerationMediaProviderId } from './moderationSettingsCore';
-import { resolveModerationEnvironment } from './moderationCredentials';
 
 export type ModerationImageInput = {
 	bytes: Uint8Array;
@@ -104,11 +101,11 @@ export const resolveModerationProvider = async (
 			`[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "${configured}" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.`
 		);
 	}
-	if (env.OPENAI_API_KEY && claudeOAuthConfigured(env)) {
+	if (env.OPENAI_API_KEY && env.ANTHROPIC_API_KEY) {
 		const { createTieredModerationProvider } = await import('./openaiProvider');
 		return { kind: 'provider', provider: createTieredModerationProvider(env) };
 	}
-	if (claudeOAuthConfigured(env)) {
+	if (env.ANTHROPIC_API_KEY) {
 		const { createClaudeModerationProvider } = await import('./claudeProvider');
 		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
 	}
@@ -131,6 +128,5 @@ export const resolveConfiguredModerationProvider = async (env: NodeJS.ProcessEnv
 	} catch (error) {
 		console.warn('[moderation] settings read failed; using env default provider:', (error as Error)?.message || error);
 	}
-	if (adminProvider === 'off') return { kind: 'off' };
-	return resolveModerationProvider(await resolveModerationEnvironment(env), adminProvider);
+	return resolveModerationProvider(env, adminProvider);
 };

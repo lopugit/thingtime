@@ -3655,84 +3655,27 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
-- [ ] Remove a second browser session for the same disposable owner while
-      a paired Photos original has an unbound reservation. Verify the still-live
-      admission signs and publishes the exact original. Revoking the issuing
-      browser session, explicit abort, or expiry must still stop its admission.
-- [ ] Paired File Sync transfer admission: run `test:files:transfer-admissions`
-      against a disposable replica and built Nitro per the
-      [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
-      two independently admitted transfers, provider checksum refusal, duplicate
-      completion, exact origin/pairing, configuration and destination changes,
-      revocation, expiry and foreground re-admission on the original upload. Check
-      staging-only refusal, v4 settings readback, exact background/foreground
-      receipt replay, six paired-only refill originals, and publication refusal
-      after pause, run revocation or unpair.
-
-- [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
-      with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
-      `remix/.env` and the dev stack restarted, run
-      `node remix/scripts/seed-fixture.mjs create --files 3 --name demo`, enable
-      uploads (admin login flags or `ADMIN_USERNAMES` + `resume`), then confirm
-      `remix/.local-attachments/objects/<id>/<version>.bin|.json` exist, the
-      post page renders the images (WebP `width=` previews return 200), the
-      content endpoint 302s to a signed `/api/v1/attachments/local-object` URL
-      that streams the bytes (Range → 206), the download-all archive unzips
-      cleanly, and `cleanup` deletes the post/folder and every object file.
-      An unsigned or expired `local-object` URL answers 403; with the variable
-      unset every request answers 404; the module throws when `VERCEL` is set.
-      `npm --prefix remix run test:attachments` covers the multipart, copy,
-      signature and traversal cases without a server. Native range targets must
-      return exact 206 bytes for the signed version and Range; altered key,
-      version, method, expiry, signature, or missing/changed Range must fail.
-      Range-only URLs must never serve a whole object or a clamped range.
-- [ ] Download all (PR: download-all attachments): a post with two or more
-      stored attachments shows a `Download all · N files · size` pill under its
-      gallery/file rows (single-file posts and linked-only galleries show none).
-      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
-      first, then saves `<post opener>.zip`; unzip it and confirm every stored
-      file is present in gallery order with duplicate names suffixed ` (2)`,
-      linked media listed in `links.txt`, and moderation-pending/blocked files
-      absent for other viewers. The post ⋯ menu shows a **Files** section with
-      `Download all files (N files)` and `Share download link`; the latter copies
-      `https://<origin>/api/v1/attachments/archive?id=<post>` (no `key`) and
-      the toast explains the audience rule. `wget` / `curl -OJ` of that URL
-      saves the same ZIP for a public or unlisted post, returns 404 JSON for a
-      private one without a session, and stops working the moment the post is
-      made private. Repeat for a comment permalink (comment-purpose media only)
-      and check the `-docs` twin plus `/.well-known/thingtime-capabilities.json`
-      advertise `api.attachment-archive` 1.0.0.
-- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
-      With post-purpose upload approval denied (or its lookup unavailable),
-      copying must reserve no quota or S3 upload. Revoke approval between parts:
-      no next part/finalization may run and only the new upload is cleaned.
-      Confirm source authorization precedes quota reservation; revocation,
-      moderation, purpose or exact-version changes stop copying; only the new
-      owner's partial upload is cleaned, with deferred cleanup still billed.
-      Repeat through `/things/fork` using real private storage and
-      verify the copied image after revoking/deleting the original. Unit mocks
-      alone do not prove that live-S3 acceptance or the Copy button works.
-      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
-      failed-copy cleanup, late root revocation and no-write template failures.
-      Cover exact attachment IDs in saved args, argument defaults, nested lists
-      and page overrides: generated URLs must use copied IDs, while labels,
-      prose and URL template strings stay unchanged. Matching `ttMap` keys and
-      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
-      must resolve to copied files in loops and inactive branches without changing
-      input data. Re-fork and check the new file IDs again; unused root media
-      bindings must grant nothing. Oversized bindings must fail before writes.
-      Copy a post/data Thing with a relational file gallery but no inline media
-      URL: all eligible files must retain their copied home target and order.
-      A file also embedded elsewhere must be copied once. Oversized galleries
-      and discovery failures must perform no upload writes; recording/message/
-      profile-purpose files must not enter this copy plan.
-      Linked gallery copies must mint new private records with the same URL
-      and annotations, never fetch external bytes or permit content redirects.
-      Invalid/flagged sources fail before minting; late URL changes or revoked
-      access clean only the new record. Confirm ordinary downloads still reject
-      linked attachments, while authorized shared copies can include them.
-      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
-
+- [ ] A freshly registered (both-scopes-withheld) account sees the 🔐
+      approval-pending card in place of the upload dropzone in the post,
+      comment, AND messenger composers (the card is purpose-aware), and a
+      direct `POST /api/v1/attachments/uploads` returns 403 with the
+      purpose-matched `public_uploads_not_approved` /
+      `private_uploads_not_approved` code — never the part/complete-only
+      `media_upload_not_granted` code. Registering records an
+      `admin.media_upload_request` email and verifying the email records an
+      `admin.new_user` alert to the admin inbox in `email_messages` (neither
+      unlocks uploads).
+- [ ] After an admin approves ONLY private uploads, the messenger composer and
+      profile media upload work while the post/comment composers still show
+      the 🔐 card (and vice-versa for public-only); approving all unlocks
+      everything after a reload/revalidation, and revoking flips surfaces back
+      while abort/delete of in-flight drafts keep working.
+- [ ] Withhold BOTH scopes while an upload is in flight: the already-started
+      `POST /api/v1/attachments/{parts,complete}` calls answer
+      `403 { code: "media_upload_not_granted" }` from the extra any-scope
+      check, mapped to the same 🔐 copy, while abort/delete of that account's
+      own drafts keep working. Withholding only one scope must NOT block the
+      other scope's in-flight parts/complete.
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
       with a red border, light red wash, centered NSFW badge, and a
@@ -3740,16 +3683,6 @@ email whose link points at the attacker.
       An image named `tt-test-illegal.png` disappears from public payloads and
       its `/api/v1/attachments/content` URL 404s for non-admins, while a
       `moderationFlag` row appears in `/admin` → Moderation.
-- [ ] Deliberately hold a just-completed attachment in `pending`: it is absent
-      from another account's attachment projection and content returns not
-      found, while its owner and an admin can still open the exact evidence.
-      Run the moderation sweep after restoring the deterministic provider and
-      confirm it releases the item to `clear`, `nsfw`, or `blocked`.
-- [ ] Generic Things create/update requests cannot set the root `moderation`
-      field or create a `thingtime: moderationFlag` record. Pre-create an
-      ordinary Thing with the deterministic `modflag-<target>` id, analyze a
-      flagged target, and confirm the ordinary Thing remains byte-for-byte
-      ordinary while the target remains `flagPending` for operator review.
 - [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
       clearly clean image stamps `clear` with provider `openai` (free omni
       screen, no Claude spend) while an explicit image stamps via provider
@@ -3761,14 +3694,6 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
-- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
-      vault separately on production and develop. A valid vault key overrides
-      a stale legacy env key for invitation avatars, media and text; clean
-      synthetic input obtains a real Omni verdict. Rotation is observed on the
-      next request, the other environment stays isolated, and a vault read or
-      decryption failure never silently falls back. Paid chat/CI credentials
-      remain unchanged. Create and then cancel a zero-credit test invitation
-      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in
@@ -3778,8 +3703,8 @@ email whose link points at the attacker.
       flags as block-worthy never appears in any feed/thread — even a refresh
       fired immediately after posting (the doc is born blocked; a `text` flag
       row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
-      unreachable) the post is born pending and owner-private until the async
-      verdict or sweep releases it.
+      unreachable) the same post appears instantly and then vanishes once the
+      async verdict lands.
 - [ ] Fail-closed pending flow: with text moderation on and omni unreachable
       (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
       NOT for other accounts; once omni is reachable again (queue retry or
@@ -3796,11 +3721,6 @@ email whose link points at the attacker.
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
       admin Run analysis sweep button) — the post gets stamped/flagged and the
       "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
-      Seed more than 25 text posts or 10 attachments and verify a full,
-      failure-free cron pass returns a `continuationRunId`; the durable runs
-      keep draining immediately until a short batch remains. Introduce one
-      provider failure and verify that surface stops its chain and waits for
-      the next hourly cron instead of retrying in a tight loop.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -6160,15 +6080,24 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
       `View` opens the raw media (blocked media opens for admins only);
       `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
-      stamp reviewedBy; exercise all three overrides on deterministic clear,
-      nsfw, and blocked uploads. `Run analysis sweep` reports
-      analyzed/flagged/skipped counts and drains pending attachments plus
-      verdicts whose flag write was interrupted.
-      Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
-      restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
-      name already on the allowlist is refused, so register FIRST). One command
-      re-checks the whole management plane end-to-end:
-      `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+      stamp reviewedBy; `Run analysis sweep` reports analyzed/flagged/skipped
+      counts and drains pending attachments.
+- [ ] `/admin` → Users shows the public-uploads state per row; the toggle
+      flips the single unified permission optimistically and reverts with a
+      Lopu toast on failure. Non-admin sessions get 403 from
+      `POST /api/v1/admin/users/public-uploads`.
+- [ ] The same row also shows the purple `media` badge for `meta.mediaUpload`
+      grantees and admins; **Grant media / Revoke media** toggles that separate
+      flag with a Lopu toast and the badge updates after refresh. That grant is
+      a record only — it never gates an upload, so flipping it alone must NOT
+      change any upload's 403. Non-admin sessions get 403 from
+      `POST /api/v1/admin/set-media-upload`.
+
+Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+name already on the allowlist is refused, so register FIRST). One command
+re-checks the whole management plane end-to-end:
+`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
 
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard for admins; `/admin/users`, `/admin/apps`,

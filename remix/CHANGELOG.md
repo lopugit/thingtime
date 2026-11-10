@@ -147,7 +147,66 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-03: Give saved password card account/type subtitles the readable card foreground, preserving individually editable layouts and custom colors while upgrading the prior default subtitle color. — Codex (AI)
 
-- 2026-11-03: Add the browser password workspace with account previews, explicit autofill, local QR scanning and exact popup return; shared timed/Never confirmation preferences and per-entry overrides; supported native verification reuse and tree/provider branding. OS-required verification remains enforced. [Release details](../PRs/1309-codex-password-verification-preferences-password-workspace.md). — Codex (AI).
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages fail open to the async pipeline —
+  moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
 
 - 2026-11-03: Group the admin MongoDB overview by deployment, separating observed in-use/idle connections from modeled monitoring and handshake overhead. Explain warm runtimes, pool retention and cumulative API-feature use through editable details; preserve custom layouts and unknown telemetry. See [connection inventory](../docs/mongodb-connections.md) and [PR 1307 verification](../PRs/1307-codex-mongodb-deployment-overview-explain-mongodb-connections-by-deployment-and-api-feature.md). **Codex (AI)**
 
@@ -3715,6 +3774,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   overrides and an explicit prune command. The semantic content-addressed cache
   remains reusable, while older snapshots stay recoverable from Git history.
   — Codex (AI), 2026-08-31
+
+### Added
+
+- **NSFW/TOS media moderation pipeline**: uploaded images are analyzed
+  asynchronously after `complete` (provider-pluggable: Claude API vision via
+  `THINGTIME_MODERATION_PROVIDER=claude`, deterministic `test` provider, or
+  `off`), stamping a protected `moderation` root field on the attachment
+  thing. NSFW media renders behind a heavy blur + red wash with a centered
+  NSFW badge and "Show Anyway" reveal; TOS/illegal verdicts quarantine the
+  media (dropped from public payloads, content route 404s for non-admins)
+  and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
+  flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
+  analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
+  [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
+  — Claude (AI), 2026-08-18
+
+- **Beta media-upload approval gate (consolidated with the #301/#310
+  hotfixes)**: uploads are governed by the scoped permissions from PR #310
+  (tri-state `meta.publicUploads` + `meta.privateUploads`; absent =
+  grandfathered, purpose-aware start gate with
+  `public_uploads_not_approved` / `private_uploads_not_approved`). This PR
+  fixes the parallel-gate double-grant hazard by removing the earlier
+  duplicate gate from the upload START path, keeps
+  `PublicUser.canUploadMedia` as the any-scope alias, and ships the composer's
+  purpose-aware 🔐 approval-pending card (public purposes check
+  publicUploadsEnabled, message/profile purposes check privateUploadsEnabled).
+  The already-started parts/complete calls keep one extra any-scope check that
+  still answers `403 { code: "media_upload_not_granted" }`, while abort/delete
+  stay open. The per-account `meta.mediaUpload` / root `secureMediaUpload`
+  grant (Grant/Revoke media on `/admin` → Users, `POST
+  /api/v1/admin/set-media-upload`, the registration request email to
+  `THINGTIME_ADMIN_EMAIL`, and the `grant-media-upload-to-existing-users`
+  grandfathering migration) is retained as an admin-visible grant record; the
+  scopes are the single enforcement path. See the
+  [PR #302 implementation notes](../PRs/302-claude-media-upload-permission-gate--beta-media-upload-permission-gate.md).
+  — Claude (AI), 2026-08-18
 
 ### Fixed
 

@@ -116,7 +116,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
-				contentViewer,
+				user ? { id: user.id, username: user.username, isAdmin: user.isAdmin } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
 				retained ? range!.version : undefined,
