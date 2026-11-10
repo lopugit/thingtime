@@ -142,15 +142,15 @@ test('private agent reporting is registered in both manifests with an independen
   assert.equal(typeof routeModules['v1/agents/reporting'], 'function');
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const manifest = thingtimeCapabilityManifest('https://reporting.example');
-  assert.equal(legacy.features['api.agent-reporting'], '1.0.0');
+  assert.equal(legacy.features['api.agent-reporting'], '1.1.0');
   assert.equal(manifest.origin, 'https://reporting.example');
-  assert.equal(manifest.features['api.agent-reporting'].version, '1.0.0');
+  assert.equal(manifest.features['api.agent-reporting'].version, '1.1.0');
   assert.equal(manifest.features['api.chatgpt-mcp'].version, '2.2.0');
   assert.equal(legacy.features['api.tokens'], '1.1.0');
   assert.equal(manifest.features['api.tokens'].version, '1.1.0');
   assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.3.0');
   assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.3.0');
-  for (const [id, version, old] of [['chatgpt-mcp', '2.2.0', '2.1.0'], ['chatgpt-oauth-authorize', '1.3.0', '1.2.0'], ['chatgpt-oauth-token', '1.1.0', '1.0.0'], ['chatgpt-oauth-register', '1.1.0', '1.0.0']]) {
+  for (const [id, version, old] of [['agent-reporting', '1.1.0', '1.0.0'], ['chatgpt-mcp', '2.2.0', '2.1.0'], ['chatgpt-oauth-authorize', '1.3.0', '1.2.0'], ['chatgpt-oauth-token', '1.1.0', '1.0.0'], ['chatgpt-oauth-register', '1.1.0', '1.0.0']]) {
     const feature = `api.${id}`;
     assert.equal(legacy.features[feature], version);
     assert.equal(manifest.features[feature].version, version);
