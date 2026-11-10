@@ -21,7 +21,7 @@ export const PASSIVE_SOURCE_REQUIREMENTS = {
 } as const;
 
 export const SOURCE_INPUT_REFERENCE_REQUIREMENTS = {
-	'api.things': '1.59.0',
+	'api.things': '1.60.0',
 	'api.things-update': '1.25.0',
 	'api.webpages-resolve': '1.17.0'
 } as const;

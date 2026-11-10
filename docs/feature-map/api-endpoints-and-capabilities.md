@@ -7,6 +7,11 @@ selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
 the new filters. See [the overview adapter](../agent-overview.md) and run
 `test:agent-overview` and `test:api-capabilities`.
 
+Owner Things archive uses additive `api.things` 1.59.0,
+`api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
+filters apply before pagination; the bulk route updates only protected private
+library metadata. See [Things and folders](things-and-folders.md).
+
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
 source ownership and per-device identity, atomically fences policy revisions,

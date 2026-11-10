@@ -9687,8 +9687,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.59.0',
-    contractVersion: '1.59.0',
+    // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
+    featureVersion: '1.60.0',
+    contractVersion: '1.60.0',
 
 
     group: 'things',
@@ -9698,7 +9699,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.59 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
+      'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
+      'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
       'Version 1.58 validates passive cursor-backed webpage collection descriptors and opt-in Action ownedFolderId predicates. ' +
       'Version 1.57 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources. Execution requires api.actions-run 1.45.0. ' +
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
@@ -10142,13 +10144,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
@@ -10403,17 +10406,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
+    // 1.8.0: first-party owners can archive and restore their library placements.
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     // 1.7.2: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
-    featureVersion: '1.7.2',
-    contractVersion: '1.7.2',
     // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
-    title: 'Bulk move / copy / delete / share',
+    title: 'Bulk organise Things',
     endpoint: '/api/v1/things/bulk',
-    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
+    summary: 'Multi-select operations for /things: move, copy, delete, share, archive, or restore owned Things.',
     detail:
+      'Archive and restore require a same-origin first-party home library owner. They toggle private library placement metadata on each selected Thing without moving it or changing its audience, links, contents, or timestamps. Folder operations do not recurse. Use libraryArchive=archived on the owner list to find archived items across folders. ' +
       'Copying a webpage omits its optional automatic Action opt-in, including pages nested inside copied folders. ' +
       'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
@@ -10450,6 +10455,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Make a folder and everything inside it friends-visible.',
         method: 'POST',
         body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
+      },
+      {
+        name: 'Archive Things',
+        description: 'Hide the selected Things from active library browsing without moving them.',
+        method: 'POST',
+        body: { op: 'archive', ids: ['thing_1', 'thing_2'] }
+      },
+      {
+        name: 'Restore Things',
+        description: 'Return archived Things to active browsing in their original folders.',
+        method: 'POST',
+        body: { op: 'restore', ids: ['thing_1', 'thing_2'] }
       },
       {
         name: 'Bulk delete',
