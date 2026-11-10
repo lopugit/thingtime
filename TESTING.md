@@ -1,3 +1,17 @@
+## Unified folder sync configs and deduplication
+
+- [ ] Add a task-owned folder, save its automatically prepared config, and reload. Confirm one source and one config with a valid cloud destination. Add a second config with a different direction/destination; edit, pause and remove each independently. Existing Downloads grants and older config labels must group under the actual source without duplicate grants/configs.
+- [ ] Inspect local and remote editors at desktop/mobile widths, scroll to the bottom, and open nested config controls. Select/edit representative nested text, controls and activity fields through Builder, save and reload. Confirm keyboard focus, no clipping/overflow and one inline busy indicator per operation.
+- [ ] Save & sync while another config runs, restart the worker, and verify durable enrollment. Exercise offline recovery, bounded interrupted strict-scan recovery, denied native writes, revoked folder access, explicit pause and account/origin changes. Never turn a refused or incomplete scan into successful sync or propagated deletion.
+- [ ] Interrupt navigation or reload after the config save and before enrollment. Recover only the exact saved revision automatically, without duplicate configs or background permission prompts. Test a busy native Photos lane, cancellation of a prior backup scanner, and remote Pause while enrollment awaits write approval.
+- [ ] Compare config last activity and sent/received history with real transfer receipts before/after reload and remote reads. A reused content blob sends zero payload bytes; unavailable measurements remain unknown. Activity from another config/account/device must not appear.
+- [ ] Through the real API and disposable data, upload identical bytes from independent sync sources, including concurrent starts. Verify one physical object generation, separate logical files, one unique-byte charge, authorized download of both and no cross-account reuse. Test different bytes, zero bytes, interrupted upload and digest mismatch.
+- [ ] Block every readable reference to a shared object and retry its known digest through upload admission. Verify a fresh checksum-verified upload and its own quota charge. Remove the original in a separate case and verify a readable surviving reference still enables reuse.
+- [ ] Delete one shared reference, download the other, retain historical versions, then delete the final reference. Verify physical deletion and quota refund exactly once. Exercise retry and concurrent attach/delete, malformed reference counts, application scopes and revoked access.
+- [ ] Run historical consolidation only after checking every deployment sharing the data plane. Confirm exact logical version identity/content before and after migration, signed-URL drain, interrupted/resumed migration and deletion/refund receipts. Record untouched ineligible files separately.
+- [ ] Sign a download against the old version while its alias transaction is uncommitted. Confirm a postcommit pass starts the full drain window and both routine deletion and migration cleanup retain the old generation and charge until that deadline.
+- [ ] Verify the built capability manifest and both updated/new clients against missing, compatible and breaking versions. Install the final signed Mac app and exercise the actual folder/config path; keep simulated mobile transport distinct from physical iOS/Android acceptance.
+
 ## Sync and backup completion counters
 
 - [ ] Run a task-only Backup connection through native batch upload. Compare its final operation/file/byte counters with the exact cloud file receipt, then rerender and reload the saved progress tree. A zero-work strict reconciliation must retain the completed early transfer counts for that run.
@@ -3059,6 +3073,10 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Remove a second browser session for the same disposable owner while
+      a paired Photos original has an unbound reservation. Verify the still-live
+      admission signs and publishes the exact original. Revoking the issuing
+      browser session, explicit abort, or expiry must still stop its admission.
 - [ ] Paired File Sync transfer admission: run `test:files:transfer-admissions`
       against a disposable replica and built Nitro per the
       [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
@@ -12397,7 +12415,27 @@ transfer, whole-account snapshots or production deployment.
   verify exact prior receipts stay intact. Leave an original unavailable across
   terminal verification, then make the same version local and retry. Run the
   installed fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1` and verify the
-  first native admissions match independently read PhotoKit metadata.
+  newest synthetic video publishes first while the scoped PhotoKit status still
+  reports a partial index. Check the discovery hint before the first upload,
+  the sample capture timestamps and indexed counts,
+  the saved original hashes and bytes, and no duplicate revisions after reopen.
+- [ ] Keep the newest iCloud original slowly progressing while at least three
+  groups of local originals are backed up in date order. Compare the editable
+  iCloud indicator and current upload stage with the real native status.
+  Interrupt and reopen the exact run, verify the deferred original is still
+  pending, then confirm its bytes when available. Give a second cloud original
+  and an available Live Photo companion a turn even when the first original
+  keeps failing. Confirm a Wi-Fi-only retry reads a newly resident original
+  locally and completion waits for the remaining originals.
+- [ ] On the mounted iPhone card, verify the first photo or video discovery
+  appears while indexing, with the captured time when available. Verify the
+  subsequent indexed asset and file counts, and that unknown counts are absent.
+  On a physical device, end an iOS continued session using its system UI.
+  Verify ordinary execution retries the exact saved queue without a new
+  continued-task request or manual resume. Then use **Pause sync** and
+  confirm it persists across reopening and replacing a local grant. Upgrade
+  from an old system-only hold and verify the exact authorized queue resumes
+  without discarding its checkpoint.
 - [ ] With ordinary Photos consent and an isolated replica, run
   `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
   Hold the first WebView upload, expire native processing after a confirmed

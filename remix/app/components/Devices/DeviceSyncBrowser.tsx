@@ -9,12 +9,13 @@ import { rootIdentity } from '~/utils/rootIdentity';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { deviceSyncOverviewBlocks, localMobileSyncBlocks } from './deviceSyncBlocks';
+import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
 import { RemoteDeviceSync } from './RemoteDeviceSync';
-import { LOCAL_MOBILE_SYNC_ID } from './MobileDeviceSetupCard';
+import { SyncDetailsSection } from './SyncDetailsSection';
+import { MobileFolderAccess } from './MobileFolderAccess';
 import { mobileDeviceScope, observeMobileDevice, readMobileDeviceObservation } from './mobileDeviceObservations';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { deviceThingsPageHref } from './deviceNavigation';
@@ -127,7 +128,7 @@ function DeviceSyncBrowserContent({
 							})),
 							status,
 							error,
-							empty: loading || error || !allowed ? 'No verified folder list is available yet.' : 'No saved sync connections for this device yet.',
+							empty: loading || error || !allowed ? 'No verified folder list is available yet.' : 'No saved sync configs for this device yet.',
 							settingsHref: deviceThingsPageHref(deviceId),
 							filesHref: deviceSyncedFilesHref(deviceId)
 						}
@@ -149,16 +150,18 @@ export function DeviceSyncPanel({
 	devicePlatform,
 	ownerId,
 	pairedDeviceIds = [],
-	ownedDeviceIds = []
+	ownedDeviceIds = [],
+	initiallyOpen = false
 }: {
 	deviceId: string;
 	devicePlatform?: string;
 	ownerId?: string;
 	pairedDeviceIds?: readonly string[];
 	ownedDeviceIds?: readonly string[];
+	initiallyOpen?: boolean;
 }) {
-	const [managing, setManaging] = React.useState(false);
-	const [visited, setVisited] = React.useState(false);
+	const [managing, setManaging] = React.useState(initiallyOpen);
+	const [visited, setVisited] = React.useState(initiallyOpen);
 	const bridge = getElectronBridge();
 	const local = bridge?.platform === 'darwin' && !!bridge.folderSyncRequest && pairedDeviceIds.includes(deviceId);
 	const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
@@ -166,32 +169,33 @@ export function DeviceSyncPanel({
 	const subscribe = React.useCallback((listener: () => void) => mobileScope ? observeMobileDevice(mobileScope, listener) : () => {}, [mobileScope]);
 	const observation = React.useSyncExternalStore(subscribe, () => mobileScope ? readMobileDeviceObservation(mobileScope) : undefined, () => undefined);
 	const localMobile = observation?.state === 'paired' && observation.deviceId === deviceId;
+	const syncedFiles = <DeviceSyncBrowser deviceId={deviceId} showResourceSummary={false} />;
+	const showDeviceActivity = !!ownerId && ownedDeviceIds.includes(deviceId) &&
+		(local || devicePlatform === 'macos' || devicePlatform === 'darwin');
 	return (
 		<Box minWidth={0}>
-			<DeviceFolderControl key={deviceId} deviceId={deviceId} /><DeviceSyncBrowser deviceId={deviceId} showResourceSummary={local || devicePlatform === 'macos' || devicePlatform === 'darwin'} />
+			<DeviceFolderControl key={deviceId} deviceId={deviceId} />
+			{!initiallyOpen && syncedFiles}
 			{ownerId && ownedDeviceIds.includes(deviceId) ? (
 				<SettingsSection
-					eyebrow="Manage sync connections"
-					description="Folders, progress, exclusions and resource limits for this device."
+					eyebrow="Manage folders & sync configs"
+					description="Manage device folders, sync directions, activity and transfer options."
 					open={managing}
 					onToggle={open => { setManaging(open); if (open) setVisited(true); }}
 				>
 					{visited && local ? (
 						<DesktopFolderAccess showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
-					) : visited ? <>
-						{localMobile && <SettingsDocumentHost documentKey="local-mobile-sync" defaultDocument={localMobileSyncBlocks} title="Local mobile sync" scopeKey={mobileScope!}>
-							{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={mobileScope!} enabled={!editing} scope={{ localSync: { href: `#${LOCAL_MOBILE_SYNC_ID}` } }} actions={{
-								'go-to-local-sync': () => {
-									const target = document.getElementById(LOCAL_MOBILE_SYNC_ID);
-									target?.focus({ preventScroll: true });
-									target?.scrollIntoView({ block: 'start' });
-								}
-							}}><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} /></TransientBlockHost>}
-						</SettingsDocumentHost>}
-						<Box hidden={localMobile}><RemoteDeviceSync showResourceSummary={false} active={managing && !localMobile} ownerId={ownerId} deviceId={deviceId} devicePlatform={devicePlatform} /></Box>
-					</> : null}
+					) : visited && localMobile ? (
+						<MobileFolderAccess active={managing} ownerId={ownerId} deviceId={deviceId} />
+					) : visited ? (
+						<RemoteDeviceSync showResourceSummary={false} active={managing} ownerId={ownerId} deviceId={deviceId} devicePlatform={devicePlatform} />
+					) : null}
 				</SettingsSection>
 			) : null}
+			{showDeviceActivity && <Box mt={3}><SyncDetailsSection title="Device activity">
+				<DeviceSyncResources deviceId={deviceId} ownerId={ownerId!} allowed={!identity.pending} />
+			</SyncDetailsSection></Box>}
+			{initiallyOpen && <Box mt={4}>{syncedFiles}</Box>}
 		</Box>
 	);
 }

@@ -56,8 +56,8 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
         const beforeSaveScans = await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures);
         await page.getByRole('button', { name: 'Edit', exact: true }).click();
         await page.getByRole('textbox', { name: 'Gitignore rules', exact: true }).fill('node_modules/\nbuild/*\n!build/keep.txt');
-        await page.getByRole('button', { name: 'Save connection', exact: true }).click();
-        await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).click();
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
         const stillOld = (await readJobs())[0]; assert.equal(stillOld.id, oldJob.id); assert.equal(stillOld.state, 'attention'); assert.equal(stillOld.reviewed.configuration.ignoreRules, undefined);
         assert.deepEqual(await readStore('sync-paged-operations'), pending);
         assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures), beforeSaveScans);
@@ -101,8 +101,8 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
         const scansBeforeEmptySave = await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures);
         await page.getByRole('button', { name: 'Edit', exact: true }).click();
         await page.getByRole('textbox', { name: 'Gitignore rules', exact: true }).fill('node_modules/\nbuild/*\n!build/keep.txt');
-        await page.getByRole('button', { name: 'Save connection', exact: true }).click();
-        await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).click();
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
         assert.equal((await readJobs())[0].id, emptyJob.id); assert.equal((await readJobs())[0].state, 'attention');
         assert.equal(await page.evaluate(() => window.syncInspectionFixture.observations.scans + window.syncInspectionFixture.observations.captures), scansBeforeEmptySave);
         await page.getByRole('button', { name: 'Stop saved transfer', exact: true }).click();

@@ -6,6 +6,9 @@ export const SYNC_JOB_FAILURES = {
  'host-changed': 'The sync host or selected server changed. Reopen this connection before retrying.',
  'account-changed': 'The active account changed. Reopen folder access before retrying.',
  'update-required': 'This sync connection requires a newer Thingtime app. Update the app before retrying.',
+ 'folder-access': 'Folder access is missing or has changed. Grant access to the selected folder again.',
+ 'write-approval': 'The device has no matching permission to write to this folder. Enable sync again on the device to review it.',
+ 'indexing-incomplete': 'Thingtime could not verify the whole folder. Check the folder’s availability and permissions before trying again.',
  'indexing-interrupted': 'Indexing was repeatedly interrupted. Check folder access and local storage before retrying.',
  'cloud-authorization': 'The cloud request was refused. Check this connection’s sign-in and access before retrying.',
  'pause-cleanup-unconfirmed': 'Sync is paused, but native indexing cleanup could not be confirmed. Reopen this connection before resuming.',
@@ -30,6 +33,10 @@ export function syncJobFailure(cause: unknown): SyncJobFailure {
   case 'Update Thingtime to continue sync outside this screen.':
   case 'Update Thingtime before using a CPU target for downloads. This connection requires scoped native signed-range downloads.':
   case 'Update Thingtime Mac before using this connection’s Gitignore rules.': return 'update-required';
+  case 'Folder access is missing. Choose the source again.': return 'folder-access';
+  case 'Native folder write approval is unavailable.': return 'write-approval';
+  case 'Indexing stopped before the whole folder was verified. Existing sync state was preserved.': return 'indexing-incomplete';
+  case 'Sync configuration or device approval changed. Review it on this device before continuing.': return 'configuration-changed';
   case 'Backup indexing was repeatedly interrupted. Check folder access and local storage before retrying.': return 'indexing-interrupted';
  }
  if (/^Cloud sync request failed \((401|403)(?:; [^)\r\n]*)?\); retain this run for retry or reconciliation\.$/.test(cause.message)) return 'cloud-authorization';

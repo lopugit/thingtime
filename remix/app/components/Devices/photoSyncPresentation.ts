@@ -1,22 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { coalescedSyncRefresh } from '~/fileSync/coalescedSyncRefresh';
 import type { ConfigurationEditorScope } from '~/fileSync/configurationEditor';
 import { openSyncJournal } from '~/fileSync/journal.client';
 import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, SYNC_JOBS_CHANGED_EVENT, type SyncJob } from '~/fileSync/syncJobJournal';
 import { rootIdentity } from '~/utils/rootIdentity';
 
-export function usePhotoSyncJobs(scope: ConfigurationEditorScope, generation: number, enabled: boolean) {
+export function useSyncJobs(scope: ConfigurationEditorScope, generation: number, enabled: boolean, currentOrigin: () => string) {
 	const [jobs, setJobs] = useState<Record<string, SyncJob>>(() => Object.create(null));
 	const { origin, ownerId, deviceId, dataPlane } = scope;
+	const originRef = useRef(currentOrigin); originRef.current = currentOrigin;
 	useEffect(() => {
 		if (!enabled) return;
 		const controller = new AbortController();
-		const bound = { origin, ownerId, deviceId, dataPlane, rootId: 'photo-sync-status' };
+		const bound = { origin, ownerId, deviceId, dataPlane, rootId: 'device-sync-status' };
 		const check = () => {
 			controller.signal.throwIfAborted();
 			const identity = rootIdentity.read();
-			if (identity.pending || identity.generation !== generation || window.location.origin !== origin)
-				throw Error('The active Photos connection changed.');
+			if (identity.pending || identity.generation !== generation || originRef.current() !== origin)
+				throw Error('The active sync config changed.');
 			return bound;
 		};
 		const refresh = coalescedSyncRefresh(async () => {
@@ -31,7 +32,7 @@ export function usePhotoSyncJobs(scope: ConfigurationEditorScope, generation: nu
 					const current = await reader.list(cursor);
 					check();
 					for (const job of current.jobs) if (job.scope.origin === origin && job.scope.deviceId === deviceId &&
-						job.scope.dataPlane === dataPlane && job.reviewed.configuration.sourceKind === 'photos') result[job.scope.rootId] = job;
+						job.scope.dataPlane === dataPlane) result[job.scope.rootId] = job;
 					if (!current.next) { setJobs(result); return; }
 					cursor = current.next;
 				}
@@ -49,9 +50,9 @@ export function usePhotoSyncJobs(scope: ConfigurationEditorScope, generation: nu
 	return jobs;
 }
 
-export function photoSyncWaitingMessage(reason: SyncJob['waitReason'], minimumPartBytes?: number) {
+export function photoSyncWaitingMessage(reason: SyncJob['waitReason'], minimumPartBytes?: number, photos = true) {
 	switch (reason) {
-		case 'inactive': return 'Waiting for Thingtime to become active. Backup resumes automatically.';
+		case 'inactive': return photos ? 'Waiting for Thingtime to become active. Backup resumes automatically.' : 'Waiting for Thingtime to become active. Sync resumes automatically.';
 		case 'data-budget': return minimumPartBytes === undefined ? 'Hourly upload budget reached.' :
 			`One upload part needs at least ${minimumPartBytes.toLocaleString()} bytes. Raise the hourly budget in Edit → Resource limits.`;
 		case 'wifi': return 'Waiting for Wi-Fi. Connect to Wi-Fi to continue. To allow mobile data, open Edit → Transfer options → Network.';

@@ -29,15 +29,20 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { execFileSync, spawnSync } from "node:child_process"
+import { gzipSync, gunzipSync } from "node:zlib"
 
 export const SNAPSHOT_SCHEMA = "thingtime.graphify-snapshot.v1"
 export const DEFAULT_SNAPSHOT_RETENTION = 1
+const MAX_PORTABLE_GRAPH_BYTES = 100 * 1024 * 1024
+const PACKED_GRAPH = "graph.json.gz"
+const HYDRATED_GRAPH = ".graphify_graph.json"
 export const PORTABLE_FILES = [
   "graph.json",
   "manifest.json",
   "GRAPH_REPORT.md",
   "cost.json",
 ]
+const PACKED_PORTABLE_FILES = [PACKED_GRAPH, ...PORTABLE_FILES.slice(1)]
 export const REQUIRED_FILES = [
   "graph.json",
   "manifest.json",
@@ -51,6 +56,8 @@ const LOCAL_DERIVED_FILES = [
 const SNAPSHOT_FILES = new Set([
   ...PORTABLE_FILES,
   ...LOCAL_DERIVED_FILES,
+  PACKED_GRAPH,
+  HYDRATED_GRAPH,
   "snapshot.json",
 ])
 
@@ -392,8 +399,18 @@ function snapshotRecord(snapshotPath) {
     !metadata ||
     metadata.schema !== SNAPSHOT_SCHEMA ||
     metadata.artifact_hash !== path.basename(snapshotPath) ||
-    REQUIRED_FILES.some((name) => !existsSync(path.join(snapshotPath, name)))
+    requiredSnapshotFiles(metadata).some((name) => !existsSync(path.join(snapshotPath, name)))
   ) {
+    return null
+  }
+  if (metadata.graph_encoding === "gzip") {
+    if (
+      !Number.isSafeInteger(metadata.graph_bytes) || metadata.graph_bytes <= 0 ||
+      typeof metadata.graph_sha256 !== "string" || !/^[0-9a-f]{64}$/.test(metadata.graph_sha256) ||
+      existsSync(path.join(snapshotPath, "graph.json")) ||
+      !lstatSync(path.join(snapshotPath, PACKED_GRAPH)).isFile()
+    ) return null
+  } else if (metadata.graph_encoding !== undefined || existsSync(path.join(snapshotPath, PACKED_GRAPH))) {
     return null
   }
   if (
@@ -404,6 +421,12 @@ function snapshotRecord(snapshotPath) {
     return null
   }
   return { path: snapshotPath, metadata }
+}
+
+function requiredSnapshotFiles(metadata) {
+  return metadata.graph_encoding === "gzip"
+    ? [PACKED_GRAPH, ...REQUIRED_FILES.slice(1)]
+    : REQUIRED_FILES
 }
 
 export function listSnapshots(root, sourceFingerprint = null) {
@@ -483,7 +506,7 @@ function snapshotRecoverableFromHead(root, snapshotPath) {
     )
 
     const portable = readdirSync(snapshotPath)
-      .filter((name) => PORTABLE_FILES.includes(name) || name === "snapshot.json")
+      .filter((name) => PORTABLE_FILES.includes(name) || name === PACKED_GRAPH || name === "snapshot.json")
       .map((name) => path.join(relative, name))
     // Any committed sidecar must match as well. Untracked derived output and
     // Graphify's known query stamp can be regenerated and do not affect recovery.
@@ -554,6 +577,12 @@ function copyWritable(source, destination) {
 
 export function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
+  if (existsSync(path.join(from, PACKED_GRAPH))) {
+    const packed = snapshotRecord(from)
+    if (!packed) fail(`Invalid compressed snapshot: ${from}`)
+    verifyPackedArtifact(packed)
+    writeFileSync(path.join(to, "graph.json"), readPackedGraph(packed))
+  }
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
     if (existsSync(source)) copyWritable(source, path.join(to, name))
@@ -747,14 +776,52 @@ function validatePortableOutput(outputPath) {
   return graph
 }
 
-function artifactHash(outputPath, version) {
+function artifactHash(outputPath, version, metadata = {}) {
   const parts = [`${SNAPSHOT_SCHEMA}\0`, version, "\0"]
-  for (const name of PORTABLE_FILES) {
+  const packed = metadata.graph_encoding === "gzip"
+  if (packed) {
+    parts.push("gzip\0", String(metadata.graph_bytes), "\0", metadata.graph_sha256, "\0")
+  }
+  const portableFiles = packed ? PACKED_PORTABLE_FILES : PORTABLE_FILES
+  for (const name of portableFiles) {
     const target = path.join(outputPath, name)
     if (!existsSync(target)) continue
     parts.push(name, "\0", readFileSync(target), "\0")
   }
   return sha256Parts(parts)
+}
+
+function verifyPackedArtifact(snapshot) {
+  const digest = artifactHash(snapshot.path, snapshot.metadata.graphify_version, snapshot.metadata)
+  if (digest !== snapshot.metadata.artifact_hash) fail(`Compressed snapshot integrity check failed: ${snapshot.path}`)
+}
+
+function readPackedGraph(snapshot) {
+  const { graph_bytes: length, graph_sha256: digest } = snapshot.metadata
+  const graph = gunzipSync(readFileSync(path.join(snapshot.path, PACKED_GRAPH)), { maxOutputLength: length })
+  if (graph.length !== length || sha256Parts([graph]) !== digest) {
+    fail(`Decoded graph integrity check failed: ${snapshot.path}`)
+  }
+  return graph
+}
+
+function hydratePackedGraph(root, snapshot) {
+  verifyPackedArtifact(snapshot)
+  const target = path.join(snapshot.path, HYDRATED_GRAPH)
+  if (existsSync(target) && lstatSync(target).isFile() &&
+    statSync(target).size === snapshot.metadata.graph_bytes &&
+    sha256Parts([readFileSync(target)]) === snapshot.metadata.graph_sha256) return
+
+  const decoded = readPackedGraph(snapshot)
+  const work = path.join(graphifyRoot(root), ".work")
+  mkdirSync(work, { recursive: true })
+  const temporary = path.join(work, `.hydrate-${randomUUID()}`)
+  try {
+    writeFileSync(temporary, decoded, { mode: 0o400, flag: "wx" })
+    renameSync(temporary, target)
+  } finally {
+    rmSync(temporary, { force: true })
+  }
 }
 
 function removeCacheLink(outputPath) {
@@ -773,6 +840,7 @@ export function finalizeSnapshot(
     version = graphifyVersion(),
     minimumNodeCount = 0,
     ingestWorkingCache = false,
+    maximumPortableGraphBytes = MAX_PORTABLE_GRAPH_BYTES,
   },
 ) {
   const graph = validatePortableOutput(workingOutput)
@@ -788,7 +856,17 @@ export function finalizeSnapshot(
     ingestSemanticCache(root, path.join(workingOutput, "cache", "semantic"))
   }
   removeCacheLink(workingOutput)
-  const digest = artifactHash(workingOutput, version)
+  const graphPath = path.join(workingOutput, "graph.json")
+  let encoding = {}
+  if (statSync(graphPath).size > maximumPortableGraphBytes) {
+    const original = readFileSync(graphPath)
+    const packed = gzipSync(original)
+    if (packed.length > maximumPortableGraphBytes) fail("Compressed Graphify graph exceeds the Git file size limit")
+    writeFileSync(path.join(workingOutput, PACKED_GRAPH), packed)
+    encoding = { graph_encoding: "gzip", graph_bytes: original.length, graph_sha256: sha256Parts([original]) }
+  }
+  const portableFiles = encoding.graph_encoding === "gzip" ? PACKED_PORTABLE_FILES : PORTABLE_FILES
+  const digest = artifactHash(workingOutput, version, encoding)
   const sourceRoot = snapshotSourceRoot(root, sourceFingerprint)
   const destination = path.join(sourceRoot, digest)
   const staging = path.join(sourceRoot, `.staging-${randomUUID()}`)
@@ -800,10 +878,11 @@ export function finalizeSnapshot(
     graphify_version: version,
     node_count: graph.nodes.length,
     link_count: graph.links.length,
+    ...encoding,
   }
 
   mkdirSync(staging, { recursive: true })
-  for (const name of [...PORTABLE_FILES, ...LOCAL_DERIVED_FILES]) {
+  for (const name of [...portableFiles, ...LOCAL_DERIVED_FILES]) {
     const source = path.join(workingOutput, name)
     if (existsSync(source)) cpSync(source, path.join(staging, name))
   }
@@ -819,6 +898,7 @@ export function finalizeSnapshot(
       const existingDigest = artifactHash(
         destination,
         existing.metadata.graphify_version,
+        existing.metadata,
       )
       if (
         existingDigest !== digest ||
@@ -876,10 +956,12 @@ export function markSnapshotReadOnly(snapshotPath) {
 export function activateSnapshot(root, snapshot) {
   const outputRoot = graphifyRoot(root)
   mkdirSync(outputRoot, { recursive: true })
+  const packed = snapshot.metadata.graph_encoding === "gzip"
+  if (packed) hydratePackedGraph(root, snapshot)
   markSnapshotReadOnly(snapshot.path)
   const names = [...PORTABLE_FILES, "graph.html"]
   for (const name of names) {
-    const source = path.join(snapshot.path, name)
+    const source = path.join(snapshot.path, packed && name === "graph.json" ? HYDRATED_GRAPH : name)
     if (!existsSync(source)) continue
     const alias = path.join(outputRoot, name)
     const relativeAlias = path.relative(root, alias)
@@ -909,6 +991,7 @@ export function activateSnapshot(root, snapshot) {
     }
     symlinkSync(path.relative(outputRoot, source), alias)
   }
+  return packed ? outputRoot : snapshot.path
 }
 
 function runMutation(root, args) {
@@ -960,9 +1043,9 @@ function ensureSnapshot(root, consume = (snapshot) => snapshot) {
     const current = computeSourceFingerprint(root)
     const existing = selectSnapshot(root, current.sourceFingerprint)
     if (existing) {
-      activateSnapshot(root, existing)
+      const outputPath = activateSnapshot(root, existing)
       pruneSnapshots(root, existing, retention)
-      return consume(existing)
+      return consume(existing, outputPath)
     }
 
     const workingOutput = prepareWorkingOutput(
@@ -984,9 +1067,9 @@ function ensureSnapshot(root, consume = (snapshot) => snapshot) {
         ...current,
         minimumNodeCount,
       })
-      activateSnapshot(root, snapshot)
+      const outputPath = activateSnapshot(root, snapshot)
       pruneSnapshots(root, snapshot, retention)
-      return consume(snapshot)
+      return consume(snapshot, outputPath)
     } catch (error) {
       rmSync(workingOutput, { recursive: true, force: true })
       throw error
@@ -1065,7 +1148,7 @@ function runRouted(root, args) {
   }
 
   // Keep the selected snapshot and its aliases pinned until the reader exits.
-  ensureSnapshot(root, (snapshot) => invokeGraphify(root, snapshot.path, args))
+  ensureSnapshot(root, (_snapshot, outputPath) => invokeGraphify(root, outputPath, args))
 }
 
 export function main(argv = process.argv.slice(2)) {

@@ -10,8 +10,7 @@ import { rootIdentity } from '~/utils/rootIdentity';
 
 import { mobileDeviceScope, readMobileDeviceObservation, observeMobileDevice, publishMobileDeviceObservation } from './mobileDeviceObservations';
 
-export const LOCAL_MOBILE_SYNC_ID = 'local-mobile-sync';
-export function MobileDeviceSetupCard({ ownerId, onPaired, syncAnchor = false }: { ownerId: string; onPaired?: () => unknown; syncAnchor?: boolean }) {
+export function MobileDeviceSetupCard({ ownerId, onPaired, showFolderEditor = true }: { ownerId: string; onPaired?: () => unknown; showFolderEditor?: boolean }) {
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	const [available, setAvailable] = useState(() => supportsMobileDevice());
 	useEffect(() => {
@@ -21,10 +20,10 @@ export function MobileDeviceSetupCard({ ownerId, onPaired, syncAnchor = false }:
 	}, []);
 	if (!available || identity.pending) return null;
 	const scope = mobileDeviceScope(window.location.origin, ownerId, identity.generation);
-	return <MobileDeviceConnection key={scope} ownerId={ownerId} onPaired={onPaired} scope={scope} generation={identity.generation} syncAnchor={syncAnchor} />;
+	return <MobileDeviceConnection key={scope} ownerId={ownerId} onPaired={onPaired} scope={scope} generation={identity.generation} showFolderEditor={showFolderEditor} />;
 }
 
-function MobileDeviceConnection({ ownerId, onPaired, scope, generation, syncAnchor }: { ownerId: string; onPaired?: () => unknown; scope: string; generation: number; syncAnchor: boolean }) {
+function MobileDeviceConnection({ ownerId, onPaired, scope, generation, showFolderEditor }: { ownerId: string; onPaired?: () => unknown; scope: string; generation: number; showFolderEditor: boolean }) {
 	const [status, setStatus] = useState<MobileDeviceStatus | null>(() => readMobileDeviceObservation(scope) ?? null);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
@@ -92,7 +91,7 @@ function MobileDeviceConnection({ ownerId, onPaired, scope, generation, syncAnch
 				</Flex>
 			</Flex>
 			{error ? <Text role="alert" color="orange.600" fontSize="12px" marginTop={2}>{error}</Text> : null}
-            {isPaired ? <Box id={syncAnchor ? LOCAL_MOBILE_SYNC_ID : undefined} tabIndex={syncAnchor ? -1 : undefined} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)"><MobileFolderAccess ownerId={ownerId} deviceId={status!.deviceId!} /></Box> : null}
+            {isPaired && showFolderEditor ? <MobileFolderAccess ownerId={ownerId} deviceId={status!.deviceId!} /> : null}
 		</Box>
 	);
 }

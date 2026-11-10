@@ -26,7 +26,7 @@ build caches:
 ```text
 graphify-out/
   snapshots/v1/<source-fingerprint>/<artifact-hash>/
-    graph.json
+    graph.json                                  # or graph.json.gz when oversized
     manifest.json
     GRAPH_REPORT.md
     cost.json
@@ -48,6 +48,19 @@ two builders produce identical output, they converge on the same path. If LLM
 or tool-version differences produce distinct valid outputs for identical
 source, both variants coexist without a merge conflict; the router
 deterministically prefers the valid variant with the most nodes and edges.
+
+When the exact `graph.json` exceeds GitHub's 100 MiB file limit, the wrapper
+stores it as deterministic `graph.json.gz` before addressing the artifact.
+The archive preserves the complete original JSON byte for byte. Activation
+checks the portable artifact hash and validates the decoded graph size and
+SHA-256 before atomically hydrating the ignored `.graphify_graph.json` file.
+The artifact hash binds both the archive and the expected decoded graph.
+The conventional `graphify-out/graph.json` alias and the wrapped commands
+continue to serve ordinary JSON. A fresh checkout can run `scripts/graphify
+ensure` to hydrate it or use the wrapped query directly. Existing plain
+snapshots stay readable under their original hashes. Stage only the portable
+archive and metadata for compressed snapshots, alongside the usual portable
+manifest and report.
 
 Graphify's upstream semantic cache is keyed by an input/chunk fingerprint, but
 real semantic runs proved that a later model response can replace the bytes at

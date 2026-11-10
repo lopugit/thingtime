@@ -34,7 +34,7 @@ export function storedAttachmentBytes(doc: AttachmentDoc, version?: string): num
   const bytes = attachmentObjectSizeBytesForAccounting(doc);
   if (bytes == null) return null;
   if (version !== undefined && attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!) !== version) return null;
-  return bytes;
+  return doc.objectSizeBytes;
 }
 
 export function summarizeThingAttachments(attachments: Iterable<number | null>): Pick<ThingMetadata,

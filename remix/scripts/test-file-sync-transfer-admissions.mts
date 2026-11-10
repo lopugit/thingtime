@@ -1,7 +1,7 @@
 /** Built Nitro and a private disposable Mongo replica. All product state is
  * created through HTTP APIs; no personal credentials or database are used. */
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { once } from 'node:events';
 import { access, chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { decodeJwt, SignJWT } from 'jose';
 import { authCookie } from '../app/api/utils/auth/authCookie';
+import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import { canonicalDevicePairingClaimBytes } from '../app/api/utils/devices/deviceAuth';
 import { contentPartPlan } from '../app/fileSync/contentFingerprint';
 
@@ -48,7 +49,7 @@ const serverEnv = {
 	THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN: base
 };
 const children = new Set<ChildProcess>();
-const start = (command: string, args: string[], env: NodeJS.ProcessEnv = clean) => {
+const start = (command: string, args: string[], env: SpawnOptions['env'] = clean) => {
 	const child = spawn(command, args, { env, stdio: 'ignore' });
 	children.add(child);
 	child.once('close', () => children.delete(child));
@@ -208,10 +209,11 @@ try {
 	await allowUploads(owner.userId, true);
 	const manifest = (await expect('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, base);
-	assert.equal(manifest.features['api.file-sync-transfer-admissions'].version, '1.3.0');
+	assert.ok(capabilitySatisfies(manifest.features['api.auth-accounts-remove']?.version, '1.0.1'));
+	assert.ok(capabilitySatisfies(manifest.features['api.file-sync-transfer-admissions']?.version, '1.3.0'));
 	assert.deepEqual(manifest.operations.find((operation: any) => operation.path === admissions).methods, ['POST']);
-	assert.equal(manifest.features['api.things'].version, '1.53.0');
-	assert.equal(manifest.features['api.things-update'].version, '1.21.0');
+	assert.ok(capabilitySatisfies(manifest.features['api.things']?.version, '1.53.0'));
+	assert.ok(capabilitySatisfies(manifest.features['api.things-update']?.version, '1.21.0'));
 	await expect(admissions + '-docs');
 	const node = await pair(owner.cookie),
 		another = await pair(owner.cookie),
@@ -444,6 +446,17 @@ try {
 		const parts = i === 4 ? multi : single, request = newOriginal(run.runId, 'refill-' + i, parts);
 		const reserved = (await expect(admissions, request, node)).data;
 		assert.equal(reserved.state, 'reserved');
+		if (i === 0) {
+			const observer = await expect('/api/v1/login', { username: ownerName, password });
+			const roster = observer.response.headers.getSetCookie().find(value => value.startsWith('tt_accounts='))?.split(';')[0];
+			assert.ok(observer.cookie && roster && observer.cookie !== owner.cookie);
+			const removed = await expect('/api/v1/auth/accounts/remove', { userId: owner.userId },
+				{ cookie: observer.cookie + '; ' + roster });
+			assert.equal(removed.data.user, null);
+			assert.deepEqual(removed.data.accounts, []);
+			assert.equal((await expect('/api/v1/auth/me', undefined, { cookie: observer.cookie })).data.user, null);
+			await expect(admissions, checkRun(run.runId), node);
+		}
 		assert.deepEqual((await expect(admissions, request, node)).data, reserved);
 		const signed = (await expect(admissions, signParts(reserved.admissionId, parts), node)).data.parts;
 		await Promise.all(signed.map((part: any, index: number) => put(part, parts[index])));

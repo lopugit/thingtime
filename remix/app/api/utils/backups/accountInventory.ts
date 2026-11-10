@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import {
 	backupDraftProjection,
 	backupDraftFromDoc,
@@ -151,9 +152,10 @@ export function createAccountInventoryProducer(
 		const heads = new Map<string, AttachmentObjectHead>();
 		const readAttachmentHead = async (doc: any) => {
 			await check();
-			const key = JSON.stringify([doc.shareId, doc.objectKey, doc.objectVersionId, doc.objectSizeBytes]);
+			const physical = attachmentPhysicalObject(doc);
+      const key = JSON.stringify([physical.objectKey, physical.versionId, doc.objectSizeBytes]);
 			if (heads.has(key)) return heads.get(key)!;
-			const value = await deps.attachmentHead({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+			const value = await deps.attachmentHead({ objectKey: physical.objectKey, versionId: physical.versionId! });
 			await check();
 			if (heads.size >= ACCOUNT_INVENTORY_PAGE_SIZE) heads.delete(heads.keys().next().value!);
 			heads.set(key, value);

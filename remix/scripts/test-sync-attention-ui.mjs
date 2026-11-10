@@ -55,7 +55,7 @@ try {
  for(const [label,width,height]of [['desktop',1440,1000],['mobile',390,844]]){
   await page.setViewportSize({width,height});await page.goto(`http://127.0.0.1:${port}/remote`);
   await page.getByRole('heading',{name:'Device sync & backup',exact:true}).waitFor();
-  await page.locator('summary').filter({hasText:'Manage sync connections'}).click();
+  await page.locator('summary').filter({hasText:'Manage folders & sync configs'}).click();
   await page.evaluate(()=>window.remoteSyncFixture.setOnline(true));
   await page.getByRole('button',{name:'Refresh device',exact:true}).click();
   const card=page.locator('article').filter({has:page.getByRole('heading',{name:'Documents backup',exact:true})});

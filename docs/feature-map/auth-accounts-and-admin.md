@@ -25,7 +25,9 @@ and show allowlisted request-feature use without per-user or command data. See
 Auth is an httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) plus a
 revocable Mongo `sessions` document; Bearer tokens (PATs, service accounts,
 app tokens) serve API clients (`FUNDAMENTALS.md` §5). Identity and control-plane
-data stay on the home data plane.
+data stay on the home data plane. Replacing or removing a browser account
+cleans its unbound browser drafts. Durable file-sync reservations remain
+subject to their own live browser, device and run checks and expiry.
 
 ## Where the code lives
 

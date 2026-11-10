@@ -135,6 +135,9 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	secure: 1,
 	updatedAt: 1,
 	attachmentEnvelopeVersion: 1,
+  attachmentBlob: 1,
+  attachmentRedundantDeleteAfter: 1,
+  attachmentBlobData: 1,
 	attachmentState: 1,
 	objectSizeBytes: 1,
 	objectKey: 1,
@@ -3257,6 +3260,30 @@ const retireLegacyThingIndexes: Migration = {
 	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
 	run: migrateLegacyThingIndexLayout
 };
+const activateSyncAttachmentBlobs: Migration = {
+  id: 'activate-sync-attachment-blobs',
+  collection: 'things',
+  fromVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  toVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  title: 'Activate shared sync file storage',
+  description: 'Confirm only after every origin sharing this home database supports shared sync attachment reads, accounting and deletion. This enables new same-account references and the separate historical consolidation. Older servers must no longer access this database before activation.',
+  destructive: true,
+  pending: async () => await (await import('../attachments/attachmentBlobActivation')).syncAttachmentDedupActive() ? 0 : 1,
+  run: async options => (await import('../attachments/attachmentBlobActivation')).activateSyncAttachmentDedup(options)
+};
+
+const consolidateSyncAttachmentBlobs: Migration = {
+  id: 'consolidate-sync-attachment-blobs',
+  collection: 'things',
+  fromVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  toVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  title: 'Consolidate identical synced file bytes',
+  description: 'Home storage only. Deploy compatible readers and cleanup to all origins sharing this database first. Dry run lists remaining eligible records. Confirmed bounded passes preserve every attachment and logical version, register exact verified bytes by account, then permanently remove redundant S3 versions after signed URLs expire. Repeat until no work remains.',
+  destructive: true,
+  pending: async () => (await import('../attachments/attachmentBlobMaintenance')).countSyncAttachmentDedupPending(),
+  run: async options => (await import('../attachments/attachmentBlobMaintenance')).runSyncAttachmentDedupMigration(options)
+};
+
 export const migrations: Migration[] = [
   subspaceMessagingMigration,
 	accidentalCatalogAccountMigration,
@@ -3277,6 +3304,8 @@ export const migrations: Migration[] = [
   stampMigration('feedAlgorithms', 'Feed algorithm docs already match the v2 shape — stamps schemaVersion.'),
 	stampMigration('lopuMusingRateLimits', 'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'),
   backfillAppNamespaceFields,
+  activateSyncAttachmentBlobs,
+  consolidateSyncAttachmentBlobs,
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,

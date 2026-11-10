@@ -31,15 +31,15 @@ try {
   const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
   const page = await context.newPage(); page.setDefaultTimeout(12_000);
   page.on('pageerror', error => errors.push(error.message));
-  const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
+  const manage = page.locator('summary').filter({ hasText: 'Manage folders & sync configs' });
   const target = origin + (native ? '?native=1' : '');
   const openManagement = async () => { if (!native) { await manage.click(); await connect(); } };
   const connect = async () => { if (!native) { await page.evaluate(() => window.remoteSyncFixture.setOnline(true)); await page.getByRole('button', { name: 'Refresh device', exact: true }).click(); } };
-  const name = page.getByRole('textbox', { name: 'Connection name', exact: true });
-  const add = page.getByRole('button', { name: 'Add connection', exact: true });
+  const name = page.getByRole('textbox', { name: 'Sync config name', exact: true });
+  const add = page.getByRole('button', { name: 'Add sync config', exact: true });
   const savedCard = title => page.locator('article').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-  const newCard = title => page.locator('[data-settings-section]').filter({ has: page.locator('summary span').filter({ hasText: title }) }).filter({ hasText: 'Unsaved connection settings' }).last();
-  const openNew = async title => { const summary = newCard(title).locator(':scope > summary'); await summary.click(); await name.waitFor(); };
+  const newCard = title => savedCard(title);
+  const openNew = async title => { const toggle = newCard(title).getByRole('button', { name: native ? 'Expand folder' : 'Edit draft', exact: true }); await toggle.click(); await name.waitFor(); };
   let journalKey;
   const journal = () => page.evaluate(expectedKey => { const key = expectedKey ?? Object.keys(localStorage).find(k => k.startsWith('tt:sync-editor:v1:')); return { key, raw: localStorage.getItem(key) }; }, journalKey);
   try {
@@ -52,12 +52,12 @@ try {
    const legacy = await page.evaluate(() => { const key = Object.keys(localStorage).find(k => k.startsWith('tt:sync-editor:v1:')); const draft = JSON.parse(localStorage.getItem(key)).drafts[0]; localStorage.setItem(key, JSON.stringify(draft)); return JSON.stringify(draft); });
    await page.reload(); await openManagement();
    assert.equal((await journal()).raw, legacy, 'read preserves legacy bytes');
-   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Add connection' && !button.disabled));
+   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Add sync config' && !button.disabled));
    assert.equal(await add.isEnabled(), true, 'restored legacy draft does not block Add');
    await add.click(); await name.fill('First new draft');
    await page.locator('summary:visible').filter({ hasText: /^Resource limits$/ }).click();
    await page.getByRole('textbox', { name: 'Upload speed', exact: true }).fill('-');
-   assert.equal(await page.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+   assert.equal(await page.getByRole('button', { name: 'Save sync config', exact: true }).isDisabled(), true);
    await add.click(); await name.fill('Second new draft');
    let state = JSON.parse((await journal()).raw);
    assert.equal(state.drafts.length, 3); assert.equal(state.drafts[0].configuration.name, 'Legacy draft retained');
@@ -65,15 +65,15 @@ try {
    await openNew('First new draft');
    await page.locator('summary:visible').filter({ hasText: /^Resource limits$/ }).click();
    assert.equal(await page.getByRole('textbox', { name: 'Upload speed', exact: true }).inputValue(), '-', 'incomplete resource input survives reload');
-   assert.equal(await page.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+   assert.equal(await page.getByRole('button', { name: 'Save sync config', exact: true }).isDisabled(), true);
    // Collapse/reopen and switch to a saved draft and back without replacing either.
-   await newCard('First new draft').locator(':scope > summary').click();
+   await savedCard('Documents backup').getByRole('button', { name: 'Expand folder', exact: true }).click();
    await openNew('First new draft'); assert.equal(await name.inputValue(), 'First new draft');
    await savedCard('Documents backup').getByRole('button', { name: 'Expand folder', exact: true }).click();
    assert.equal(await name.inputValue(), 'Legacy draft retained');
    await name.fill('Legacy edited independently');
    await savedCard('Documents backup').getByRole('button', { name: 'Collapse folder', exact: true }).click();
-   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Add connection' && !button.disabled));
+   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Add sync config' && !button.disabled));
    assert.equal(await add.isEnabled(), true, 'collapsed existing edit does not block Add');
    await openNew('Second new draft');
    await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
@@ -81,8 +81,8 @@ try {
    assert.deepEqual(state.drafts.map(d => d.configuration.name), ['Legacy edited independently', 'First new draft']);
    // Save only the old saved-connection draft; no implicit create or transfer.
    await savedCard('Documents backup').getByRole('button', { name: 'Expand folder', exact: true }).click();
-   await page.getByRole('button', { name: 'Save connection', exact: true }).click();
-   await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+   await page.getByRole('button', { name: 'Save sync config', exact: true }).click();
+   await page.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
    state = JSON.parse((await journal()).raw); assert.equal(state.drafts.length, 1); assert.equal(state.drafts[0].configuration.name, 'First new draft');
    const remote = await page.evaluate(() => window.remoteSyncFixture.state());
    assert.equal(remote.writes, 1); assert.equal(remote.commands.filter(c => c.action !== 'status').length, 0);

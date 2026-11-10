@@ -185,6 +185,18 @@ export const syncFolderQuickBlocks: WebpageBlock[] = [
   { id: 'folder-card-background-status', type: 'element', tag: 'p', text: '{folder.continuationStatus}', props: { role: 'status' },
    css: { 'font-size': '12px', 'overflow-wrap': 'anywhere' } }
  ] },
+ { id: 'folder-card-activity-indexing-state', type: 'condition', condition: { arg: 'folder.activity.indexing' }, children: [
+  { id: 'folder-card-activity-indexing', type: 'element', tag: 'div', props: { role: 'status', 'aria-atomic': true },
+   css: { display: 'grid', gap: '2px', 'font-size': '13px', 'overflow-wrap': 'anywhere' }, children: [
+    activityText('indexing-count', 'p', '{folder.activity.indexing}', activityMuted),
+    { id: 'folder-card-activity-live-indexed-state', type: 'condition', condition: { arg: 'folder.activity.indexed' }, children: [
+     activityText('live-indexed', 'p', '{folder.activity.indexed}', activityMuted)
+    ] },
+    { id: 'folder-card-activity-latest-found-state', type: 'condition', condition: { arg: 'folder.activity.latestFound' }, children: [
+     activityText('latest-found', 'p', '{folder.activity.latestFound}')
+    ] }
+   ] }
+ ] },
  syncFolderActivityBlock
 ];
 export function withSyncFolderQuickBlocks(blocks: WebpageBlock[]): WebpageBlock[] {

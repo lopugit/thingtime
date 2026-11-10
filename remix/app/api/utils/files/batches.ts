@@ -290,7 +290,7 @@ export function createFileBatchService(
 							if (!prefix && write.folderId !== write.cloudRootId) return failed(ordinal, 'conflict');
 							if (prefix && (observation.parent?.kind !== 'folder' || observation.parent.id !== write.folderId)) return failed(ordinal, 'conflict');
 							const uploadId = attachmentIdForRequest(owner, write.operation.id);
-              const originRequest = { filename: mutation.path.split('/').at(-1), contentType: 'application/octet-stream', sizeBytes: source.size, requestId: write.operation.id, purpose: 'file',
+              const originRequest = { filename: mutation.path.split('/').at(-1), contentType: 'application/octet-stream', sizeBytes: source.size, requestId: write.operation.id, purpose: 'file', contentFingerprint: source.fingerprint,
                 fileSyncOrigin: { version: 1, deviceId: d.scope.deviceId, localRootId: d.scope.rootId, ...(write.cloudRootId ? { cloudRootId: write.cloudRootId } : {}), fileId: write.before?.id ?? write.operation.id, folderId: write.folderId, path: mutation.path } };
 
 							if (input.phase === 'prepare') {
