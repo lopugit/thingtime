@@ -19,6 +19,8 @@ const generatedVariantFor = (props: { matrix?: unknown; colourMap?: unknown; ico
   return (brandingAssets.variants as GeneratedVariant[]).find((variant) => variant.slug === slug) ?? null;
 };
 
+import { LOGO_DEFAULT_COLOURS, LOGO_FULL_MATRIX, LOGO_ICON_MATRIX, LOGO_THEMES } from './logoMatrix';
+
 export const Logo = (props: any = {}) => {
   const { voxelSize = 25, unit = 'px', theme = 'pink' } = props;
 
