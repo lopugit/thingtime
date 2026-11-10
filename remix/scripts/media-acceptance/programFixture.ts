@@ -13,6 +13,8 @@ export function mediaConversionProgram(): PlatformProgram {
 		title: 'Local image and video compressor',
 		description: 'Select a local image or video, adjust settings if needed, then Start. Compression stays on this device. Actual before/after sizes are reported; smaller output is not guaranteed.',
 		parameters: [
+			{ name: 'maxOutputSize', label: 'Maximum file size', type: 'text', default: '' },
+			{ name: 'maxOutputUnit', label: 'Size unit', type: 'text', default: 'MB' },
 			{ name: 'format', label: 'Video format (mp4 or webm)', type: 'text', default: 'mp4' },
 			{ name: 'maxWidth', label: 'Maximum width', type: 'number', default: 1280 },
 			{ name: 'maxHeight', label: 'Maximum height', type: 'number', default: 720 },
@@ -66,6 +68,8 @@ export function mediaConversionProgram(): PlatformProgram {
 			preview: '#media-preview',
 			imagePreview: '#media-image-preview',
 			output: {
+				maxOutputSize: input('maxOutputSize'),
+				maxOutputUnit: input('maxOutputUnit'),
 				format: input('format'),
 				maxWidth: input('maxWidth'),
 				maxHeight: input('maxHeight'),

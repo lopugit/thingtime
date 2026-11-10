@@ -15,7 +15,8 @@ import {
 	WebMOutputFormat
 } from 'mediabunny';
 import { MediaOutput } from './mediaOutput';
-import { mediaDimensions, validateMediaSettings } from './mediaPipeline';
+import { initialVideoBudget, nextVideoBudget } from './mediaSizeBudget';
+import { assertMediaOutputSize, mediaDimensions, validateMediaSettings } from './mediaPipeline';
 
 // One selected file and one conversion per terminable worker. No URL source,
 // network, account data, authored functions, or filesystem enumeration.
@@ -43,61 +44,73 @@ self.onmessage = async (event: MessageEvent) => {
 		if (!Number.isFinite(duration) || duration <= 0) throw new Error('The video must have a positive finite duration');
 		const dimensions = mediaDimensions(await video.getDisplayWidth(), await video.getDisplayHeight(), settings);
 		const audio = await input.getPrimaryAudioTrack();
-		const buffer = new MediaOutput();
-		const target = new StreamTarget(new WritableStream({ write: ({ data, position }) => buffer.write(data, position) }), {
-			chunked: true,
-			chunkSize: 1024 * 1024
-		});
-		const output = new Output({
-			format: settings.format === 'mp4' ? new Mp4OutputFormat({ fastStart: 'fragmented' }) : new WebMOutputFormat(),
-			target
-		});
-		conversion = await Conversion.init({
-			input,
-			output,
-			tracks: 'primary',
-			tags: {},
-			showWarnings: false,
-			video: {
-				...dimensions,
-				fit: 'contain',
-				frameRate: settings.frameRate,
-				codec: settings.format === 'mp4' ? 'avc' : 'vp9',
-				quality: new Quality({ bitrate: settings.videoBitrate }),
-				forceTranscode: true
-			},
-			audio:
-				settings.audio === 'remove'
-					? { discard: true }
-					: {
-							codec: settings.format === 'mp4' ? 'aac' : 'opus',
-							quality: new Quality({ bitrate: settings.audioBitrate }),
-							forceTranscode: true
-					  }
-		});
-		const missing = conversion.discardedTracks.filter((item) => item.reason !== 'discarded_by_user');
-		if (!conversion.isValid || missing.length)
-			throw new Error(
-				'This browser cannot decode the source or encode the selected format' +
-					(missing.length ? ': ' + missing.map((x) => x.reason).join(', ') : '') +
-					'. Try another format; audio is never silently removed.'
-			);
-		let reported = -1;
-		conversion.onProgress = (progress) => {
-			const percent = Math.min(99, Math.floor(progress * 100));
-			if (percent !== reported) {
-				reported = percent;
-				self.postMessage({ type: 'progress', percent });
-			}
+		let budget = {
+			...dimensions,
+			...initialVideoBudget(duration, settings.videoBitrate, settings.audio === 'keep' && audio ? settings.audioBitrate : 0, settings.maxOutputBytes)
 		};
-		await conversion.execute();
-		const blob = buffer.blob(settings.format === 'mp4' ? 'video/mp4' : 'video/webm');
-		if (!blob.size) throw new Error('The encoder returned no output');
+		let blob!: Blob;
+		for (let attempt = 0; attempt < (settings.maxOutputBytes === undefined ? 1 : 8); attempt++) {
+			const buffer = new MediaOutput();
+			const target = new StreamTarget(new WritableStream({ write: ({ data, position }) => buffer.write(data, position) }), {
+				chunked: true,
+				chunkSize: 1024 * 1024
+			});
+			const output = new Output({
+				format: settings.format === 'mp4' ? new Mp4OutputFormat({ fastStart: 'fragmented' }) : new WebMOutputFormat(),
+				target
+			});
+			conversion = await Conversion.init({
+				input,
+				output,
+				tracks: 'primary',
+				tags: {},
+				showWarnings: false,
+				video: {
+					width: budget.width,
+					height: budget.height,
+					fit: 'contain',
+					frameRate: settings.frameRate,
+					codec: settings.format === 'mp4' ? 'avc' : 'vp9',
+					quality: new Quality({ bitrate: budget.videoBitrate }),
+					forceTranscode: true
+				},
+				audio:
+					settings.audio === 'remove'
+						? { discard: true }
+						: {
+								codec: settings.format === 'mp4' ? 'aac' : 'opus',
+								quality: new Quality({ bitrate: budget.audioBitrate || settings.audioBitrate }),
+								forceTranscode: true
+						  }
+			});
+			const missing = conversion.discardedTracks.filter((item) => item.reason !== 'discarded_by_user');
+			if (!conversion.isValid || missing.length)
+				throw new Error(
+					'This browser cannot decode the source or encode the selected format' +
+						(missing.length ? ': ' + missing.map((x) => x.reason).join(', ') : '') +
+						'. Try another format; audio is never silently removed.'
+				);
+			let reported = -1;
+			conversion.onProgress = (progress) => {
+				const percent = Math.min(99, Math.floor(progress * 100));
+				if (percent !== reported) {
+					reported = percent;
+					self.postMessage({ type: 'progress', percent });
+				}
+			};
+			await conversion.execute();
+			blob = buffer.blob(settings.format === 'mp4' ? 'video/mp4' : 'video/webm');
+			if (!blob.size) throw new Error('The encoder returned no output');
+			if (settings.maxOutputBytes === undefined || blob.size <= settings.maxOutputBytes) break;
+			if (attempt < 7) budget = nextVideoBudget(budget, blob.size, settings.maxOutputBytes);
+		}
+		assertMediaOutputSize(blob, settings.maxOutputBytes);
 		self.postMessage({
 			type: 'complete',
 			blob,
 			receipt: {
-				...dimensions,
+				width: budget.width,
+				height: budget.height,
 				duration,
 				inputBytes: file.size,
 				outputBytes: blob.size,
@@ -105,7 +118,8 @@ self.onmessage = async (event: MessageEvent) => {
 				format: settings.format,
 				audio: settings.audio === 'remove' ? 'removed' : audio ? 'retained' : 'none',
 				frameRate: settings.frameRate,
-				videoBitrate: settings.videoBitrate,
+				videoBitrate: budget.videoBitrate,
+				audioBitrate: budget.audioBitrate,
 				note:
 					blob.size < file.size
 						? 'Output is smaller than the selected source.'
@@ -114,7 +128,15 @@ self.onmessage = async (event: MessageEvent) => {
 		});
 	} catch (error) {
 		await conversion?.cancel().catch(() => {});
-		self.postMessage({ type: 'error', message: error instanceof Error ? (/@ (?:error|warning)\//.test(error.message) ? 'This image is damaged or its format is not supported by the local decoder. Try another image or output format.' : error.message.slice(0, 700)) : 'Media conversion failed' });
+		self.postMessage({
+			type: 'error',
+			message:
+				error instanceof Error
+					? /@ (?:error|warning)\//.test(error.message)
+						? 'This image is damaged or its format is not supported by the local decoder. Try another image or output format.'
+						: error.message.slice(0, 700)
+					: 'Media conversion failed'
+		});
 	} finally {
 		input?.dispose();
 	}

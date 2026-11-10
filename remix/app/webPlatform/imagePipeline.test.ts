@@ -344,3 +344,44 @@ test('static SVG renders locally while text, animation and external dependencies
 		/external images/
 	);
 });
+
+test('actual encoded image bytes meet targets, including lossless dimension reduction and impossible refusal', async () => {
+	const source = new Blob([png(true)], { type: 'image/png' });
+	const full = await compressImage(source, { ...settings, maxWidth: 32, maxHeight: 24, imageFormat: 'png' }, assets);
+	const target = Math.floor(full.blob.size * 0.95);
+	const fitted = await compressImage(source, { ...settings, maxWidth: 32, maxHeight: 24, imageFormat: 'png', maxOutputBytes: target }, assets);
+	assert.ok(fitted.blob.size <= target);
+	assert.ok(fitted.receipt.width < full.receipt.width);
+	assert.equal(fitted.receipt.hasAlpha, true);
+	assert.equal(fitted.receipt.frameCount, 1);
+	const animated = await compressImage(
+		new Blob([animation()], { type: 'image/gif' }),
+		{ ...settings, imageFormat: 'webp', maxOutputBytes: 1000 },
+		assets
+	);
+	assert.ok(animated.blob.size <= 1000);
+	assert.equal(animated.receipt.frameCount, 2);
+	assert.ok(animated.receipt.duration > 0);
+	await assert.rejects(() => compressImage(source, { ...settings, imageFormat: 'png', maxOutputBytes: 1 }, assets), /maximum output size/);
+	for (const maximum of [NaN, Infinity, -1, 0, 1.1])
+		await assert.rejects(() => compressImage(source, { ...settings, maxOutputBytes: maximum }, assets));
+});
+
+test('animated size retries retain every frame, exact delays and loop count', async () => {
+	const file = new Blob([patchAnimation()], { type: 'image/gif' });
+	const options = { maxWidth: 128, maxHeight: 128, imageFormat: 'gif' as const, imageQuality: 100 };
+	const original = await compressImage(file, options, assets);
+	const maximum = Math.floor(original.blob.size * 0.95);
+	const fitted = await compressImage(file, { ...options, maxOutputBytes: maximum }, assets);
+	assert.ok(fitted.blob.size <= maximum);
+	assert.equal(fitted.receipt.frameCount, 4);
+	assert.equal(fitted.receipt.duration, 1);
+	ImageMagick.readCollection(new Uint8Array(await fitted.blob.arrayBuffer()), (frames) => {
+		assert.equal(frames.length, 4);
+		assert.deepEqual(
+			frames.map((frame) => frame.animationDelay / frame.animationTicksPerSecond),
+			[0.1, 0.2, 0.3, 0.4]
+		);
+		assert.equal(frames[0].animationIterations, 0);
+	});
+});

@@ -127,3 +127,61 @@ test('cancel during image codec loading cannot start or publish a stale job', as
  assert.equal(received.filter(value=>value.type==='complete').length,0);
  host.dispose();
 });
+
+test('maximum size normalizes decimal units once and strictly validates authored and worker boundaries', () => {
+	const pipeline = {
+		...program.media!,
+		output: {
+			...program.media!.output,
+			maxOutputSize: { op: 'input' as const, name: 'maximum' },
+			maxOutputUnit: { op: 'input' as const, name: 'unit' }
+		}
+	};
+	for (const [maximum, unit, bytes] of [
+		[1.25, 'MB', 1250000],
+      [1.001, 'KB', 1001],
+		[4, 'KB', 4000],
+		['', 'MB', undefined]
+	] as const) {
+		const settings = resolveMediaSettings(pipeline, { ...defaults, maximum, unit });
+		assert.equal(settings.maxOutputBytes, bytes);
+		assert.equal(validateMediaSettings(settings).maxOutputBytes, bytes);
+	}
+	for (const maximum of [0, -1, NaN, Infinity, '4', true, null, {}, Number.MAX_SAFE_INTEGER, 0.00001]) {
+		assert.throws(() => resolveMediaSettings(pipeline, { ...defaults, maximum, unit: 'KB' }));
+	}
+	for (const maximum of [null, '', '4', NaN, Infinity, 0, 1.2, Number.MAX_SAFE_INTEGER + 1])
+		assert.throws(() => validateMediaSettings({ ...defaults, maxOutputBytes: maximum }));
+	assert.throws(() => validateMediaPipeline({ ...program.media!, output: { ...program.media!.output, maxOutputSize: -1 } }));
+	assert.throws(() => resolveMediaSettings(pipeline, { ...defaults, maximum: '', unit: 'GiB' }));
+});
+
+test('host refuses an oversize worker completion before any preview or download publication', async () => {
+	const { createHostMediaPipeline } = await import('./hostMediaPipeline');
+	let port: any;
+	const received: any[] = [];
+	const pipeline = { ...program.media!, output: { ...program.media!.output, maxOutputSize: 4, maxOutputUnit: 'bytes' } };
+	const host = createHostMediaPipeline(
+		pipeline,
+		defaults,
+		() =>
+			(port = {
+				postMessage() {},
+				terminate() {
+					this.stopped = true;
+				},
+				onmessage: null,
+				onerror: null
+			}),
+		(_, result) => received.push(result)
+	);
+	host.receive({ type: 'tt-platform-media-start', requestId: 1, file: new Blob(['video']) });
+	port.onmessage({ data: { type: 'complete', blob: new Blob(['12345'], { type: 'video/mp4' }) } });
+	assert.equal(port.stopped, true);
+	assert.equal(received[0].type, 'error');
+	assert.match(received[0].message, /maximum output size/);
+	host.receive({ type: 'tt-platform-media-start', requestId: 2, file: new Blob(['video']) });
+	port.onmessage({ data: { type: 'complete', blob: new Blob(['1234'], { type: 'video/mp4' }) } });
+	assert.equal(received[1].type, 'complete');
+	host.dispose();
+});

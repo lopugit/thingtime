@@ -16,6 +16,7 @@ export function mediaCompressorTemplate() {
 		color: '#18181b'
 	};
 	const options: Record<string, string[]> = {
+		maxOutputUnit: ['MB', 'KB'],
 		format: ['mp4', 'webm'],
 		imageFormat: ['auto', 'webp', 'jpeg', 'png', 'avif', 'gif'],
 		audio: ['keep', 'remove'],
@@ -48,8 +49,9 @@ export function mediaCompressorTemplate() {
 						props: {
 							name: parameter.name,
 							'aria-label': labels[parameter.name] || parameter.label,
-							type: parameter.type === 'number' ? 'number' : 'text',
+							type: parameter.type === 'number' || parameter.name === 'maxOutputSize' ? 'number' : 'text',
 							value: parameter.default,
+							...(parameter.name === 'maxOutputSize' ? { min: 0, step: 'any', placeholder: 'No limit' } : {}),
 							...(parameter.name === 'imageQuality' ? { min: 1, max: 100 } : {}),
 							style: controlStyle
 						}

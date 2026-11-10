@@ -17,9 +17,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-18 — **Codex (AI)**: Make the macOS lease-heartbeat failure test wait
-  for renewal cancellation instead of a fixed 35 ms delay, resolving the
-  unsigned-source test failure that blocked the Gmail desktop release.
+- 2026-10-23: Add optional maximum encoded output size to the reusable local image/video pipeline, with decimal KB/MB settings, complete-media bounded retries and host byte checks before preview/download. Authored media settings negotiate Things 1.42 / update 1.13 / webpage resolve 1.9. Isolated Chrome verified actual image/video byte targets, alpha, animation timing, retained audio/full duration and impossible-target refusal. **Codex (AI)**
+
+- 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
 
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub
   Actions, upload only prebuilt output, and disable native source builds. Keep
