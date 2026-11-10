@@ -1,11 +1,13 @@
 require "base64"
 require "fileutils"
+require "json"
 require "plist"
 require "shellwords"
 require "tempfile"
 require "tmpdir"
 require "yaml"
 require_relative "lib/release_version"
+require_relative "lib/testflight_upload_status"
 
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 
@@ -349,6 +351,14 @@ platform :ios do
             else
               builds.find { |candidate| candidate.version == expected_build_number }
             end
+    if !build && TestFlightUploadStatus::VERSION_NUMBER.match?(expected_build_number)
+      uploads = Spaceship::ConnectAPI::BuildUpload.all(app_id: app.id, build_number: expected_build_number)
+      statuses = uploads.filter_map { |upload| TestFlightUploadStatus.project(upload, expected_build_number) }
+      unless statuses.empty?
+        statuses.each { |status| UI.message("TESTFLIGHT_BUILD_UPLOAD_STATUS #{JSON.generate(status)}") }
+        next
+      end
+    end
     UI.user_error!("TestFlight build #{expected_build_number} was not found") unless build
 
     detail = build.build_beta_detail

@@ -145,6 +145,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
+  the build is still missing from Apple's normal build list. **Codex (AI)**
+
 - 2026-11-11: Continue date-ordered iPhone Photos backup while an iCloud
   original downloads. Retain deferred originals across interruptions and show
   measured iCloud retrieval alongside the active upload stage.
