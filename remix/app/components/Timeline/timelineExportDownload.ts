@@ -7,7 +7,8 @@ import { triggerDownload } from '../Marketing/marketingDownload';
  * (contract.ts id rule), which are not file-name safe on every platform. */
 export const TIMELINE_EXPORT_FILENAME_MAX_CHARS = 120;
 const EXTENSION = '.json';
-const safe = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '_');
+export const safeFilenamePart = (value: string) => value.replace(/[^A-Za-z0-9._-]/g, '_');
+const safe = safeFilenamePart;
 export const timelineExportFilename = (thingId: string, eventId: string) =>
 	`${`history-${safe(thingId)}-${safe(eventId)}`.slice(0, TIMELINE_EXPORT_FILENAME_MAX_CHARS - EXTENSION.length)}${EXTENSION}`;
 

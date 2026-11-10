@@ -4,6 +4,7 @@ export const SETTINGS_TABS = [
 	{ id: 'email', label: 'Email' },
 	{ id: 'profile', label: 'Profile' },
 	{ id: 'things', label: 'Things' },
+	{ id: 'history', label: 'History' },
 	{ id: 'appearance', label: 'Appearance' },
 	{ id: 'notifications', label: 'Notifications' },
 	{ id: 'security', label: 'Security' },

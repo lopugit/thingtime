@@ -1,6 +1,6 @@
 # Unified Thing history roadmap
 
-**Status:** Foundation shipped (Unified Timeline on `main`, PRs #956–#988); remaining design gaps in delivery (2026-10-13)
+**Status:** Foundation shipped (Unified Timeline on `main`, PRs #956–#988); gap-close in delivery — M4 messages shipped (PR #991), M5 versions shipped (PR #993); settings/entry points, server search, Frames polish and retention remain (2026-10-14)
 
 > **2026-10-13.** M1–M5 were delivered on `main` by the Unified Timeline
 > work (`docs/unified-timeline.md`) through a different, stronger shape than

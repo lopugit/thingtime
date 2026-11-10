@@ -3,6 +3,7 @@ import { Box, Button, Checkbox, HStack, Modal, ModalBody, ModalCloseButton, Moda
 import type { EditorHistory } from './editorHistory';
 import type { EditorJsDoc } from './editorJsValue';
 import { STYLE_CARRY_PROPERTIES, type StyleCarryPreferences } from './editorStyleCarry';
+import { openThingHistory } from '../Timeline/TimelineHost';
 
 export type HistoryAction =
 	| { type: 'select'; id: number }
@@ -14,12 +15,16 @@ export function EditorHistoryControls({
 	history,
 	act,
 	preferences,
-	onPreferences
+	onPreferences,
+	thingId = null
 }: {
 	history: EditorHistory;
 	act: (action: HistoryAction) => Promise<void>;
 	preferences: StyleCarryPreferences;
 	onPreferences: (next: StyleCarryPreferences) => void;
+	/** The saved Thing this editor edits (an existing post, for example). Set only when there is one: it adds the
+	 * ghost "History" button that opens the Thing's saved Timeline; the in-memory session history stays the undo engine. */
+	thingId?: string | null;
 }) {
 	React.useSyncExternalStore(history.subscribe, history.getVersion, history.getVersion);
 	const [open, setOpen] = React.useState(false);
@@ -87,6 +92,11 @@ export function EditorHistoryControls({
 				>
 					Changes
 				</Button>
+				{thingId ? (
+					<Button size="xs" title="Open this Thing's saved history" onClick={() => openThingHistory(thingId)}>
+						History
+					</Button>
+				) : null}
 			</HStack>
 			<Modal isOpen={open} onClose={() => setOpen(false)} size="2xl" scrollBehavior="inside">
 				<ModalOverlay zIndex={20000} />

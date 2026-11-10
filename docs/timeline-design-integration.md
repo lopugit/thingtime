@@ -60,10 +60,16 @@ is selected. The UI scope is optional and persisted in the global History URL.
   corresponding trusted metadata. Do not invent these from operation IDs,
   source enums or client clocks. Notes and Lopu explanations shipped on
   2026-10-13 as relational `timeline-note` records (see below).
-- Pin/name, version export, selective undo, retention/clear/pause and sync
-  settings require their canonical relational records, authority checks,
-  dependency retention and transactional commands. The concept's simulated
-  controls are not copied into the product.
+- Pin/name, version export and selective undo shipped on 2026-10-13 as
+  relational records and version commands. On 2026-10-14 the sync hold, the
+  stored retention choice and the per-Thing draft-capture pause shipped as
+  account preferences (`api.timeline-settings`; the user Thing's protected
+  `secure.meta.historyPrefs` blob, home-pinned): the hold stops uploads
+  account-wide while each device keeps its queue, the pause stops client draft
+  capture in the Builder page and definition editors only, and retention is
+  stored but not enforced. Server-side clear/retention enforcement, dependency
+  retention and their transactional commands still require canonical relational
+  records. The concept's simulated controls are not copied into the product.
 - Compare with the live present, compact ancestry reconstruction, nested
   dependencies and dedicated protected/attached-item recovery remain on the unified Timeline ledger.
 

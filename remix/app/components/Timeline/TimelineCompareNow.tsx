@@ -28,9 +28,11 @@ export function HistoryChangeBox({ change, labels }: { change: TimelineChange; l
  * version's full content (including split snapshots) and the live Thing, and
  * nothing is applied. The result is fenced by scope and event: a reply for an
  * earlier selection never paints over the current one. */
-export function useTimelineCompareNow(event: TimelineEvent | null) {
-	const { connection } = useTimelineSession();
+export function useTimelineCompareNow(event: TimelineEvent | null, rowStatus?: 'pending' | 'accepted') {
+	const { connection, held } = useTimelineSession();
 	const api = useApi();
+	// A pending version under the account sync hold is not on the server yet: the control stays inert with its reason instead of a 404.
+	const blocked = held && rowStatus === 'pending';
 	const key = connection && event ? `${timelineScopeKey(connection.scope)}:${event.id}` : '';
 	const [state, setState] = React.useState<{ key: string; preview: PublishedVersionPreview | null; error: string; busy: boolean }>({ key: '', preview: null, error: '', busy: false });
 	const keyRef = React.useRef(key); keyRef.current = key;
@@ -40,7 +42,7 @@ export function useTimelineCompareNow(event: TimelineEvent | null) {
 	const compare = async () => {
 		// Only the same event's comparison is debounced; selecting another event starts its own
 		// request, and the key fence below keeps an earlier reply from painting over it.
-		if (!connection || !event || pending.current === key) return;
+		if (!connection || !event || blocked || pending.current === key) return;
 		const started = key;
 		pending.current = started;
 		setState({ key: started, preview: null, error: '', busy: true });
@@ -61,7 +63,7 @@ export function useTimelineCompareNow(event: TimelineEvent | null) {
 	};
 	const clear = () => setState({ key: '', preview: null, error: '', busy: false });
 	const current = state.key === key ? state : null;
-	return { enabled: !!connection && !!event, preview: current?.preview ?? null, error: current?.error ?? '', busy: current?.busy ?? false, compare, clear };
+	return { enabled: !!connection && !!event && !blocked, caption: blocked ? 'Resume sync to compare this version' : '', preview: current?.preview ?? null, error: current?.error ?? '', busy: current?.busy ?? false, compare, clear };
 }
 
 /** Then = this version, Now = the Thing today. Page-ness comes from the
