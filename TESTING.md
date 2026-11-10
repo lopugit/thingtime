@@ -14261,6 +14261,17 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- [ ] On an authored marker with modifier selection enabled, exercise
+  Cmd-primary, Ctrl-primary, macOS Ctrl-primary context and click pairing,
+  ordinary pointer activation, secondary menu, and a keyboard/touch selection
+  button. Verify one toggle per gesture, changing groups, preserved selections
+  during source refresh, and reset after real navigation or a database switch.
+  Drain two cursor pages of keyed metadata, verify each marker gets only its
+  own rows, then fail the second page and confirm the projection is unavailable.
+  Run a selection larger than one Action chunk and check exact ordered inputs,
+  one pending indicator, a partial-failure receipt and preservation of any
+  selection made while the bulk Action was running.
+
 - [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
   untouched default without opening, refuse a required empty value, and verify
   open/type/collapse/source-refresh retains the same dirty editor. Cover both

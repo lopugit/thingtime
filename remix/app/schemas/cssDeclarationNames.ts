@@ -9,7 +9,7 @@ export const normalizeCssPropertyName = (name: string): string => {
  return trimmed.startsWith('--') ? trimmed : trimmed.toLowerCase();
 };
 
-export const EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS = { 'api.things': '1.58.0', 'api.things-update': '1.24.0', 'api.webpages-resolve': '1.16.0' } as const;
+export const EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS = { 'api.things': '1.59.0', 'api.things-update': '1.25.0', 'api.webpages-resolve': '1.17.0' } as const;
 
 /** Only block content that an older deployed writer rejected needs to gate. */
 export function usesExpandedWebpageAuthoring(blocks: unknown): boolean {

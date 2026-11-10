@@ -281,3 +281,69 @@ Authoring uses `api.things` 1.56.0 and `api.things-update` 1.22.0.
 The live map negotiates `api.webpages-resolve` 1.14.0 and
 `api.actions-run` 1.44.0. Shared composition and private copies follow
 the stored literal Action reference and apply their existing access rules.
+
+## Share a selection across a live page
+
+An authored `$ui` button can toggle one selected string or number with
+`{ "op": "toggle-member", "scope": "page", "key": "picked", "value": "{item.id}" }`.
+Use `clear-selection` with the same scope and key to clear it. The current
+`page.selection.picked` exposes `items` and `count`. Optional scalar
+`context` separates uses of the same key. Toggling in a new context starts a
+fresh list, and a context-scoped clear affects only that context. An explicit
+`$ui` page query can set `clearSelection: "picked"`. Selection clears on real
+navigation or a change of account, database or access. Page source refreshes
+preserve it.
+
+A `button type="button"` with an existing authored Action can also set
+`data-tt-modifier-action-inputs` to the same toggle object. Ctrl/Cmd primary
+activation runs the toggle once, including macOS Ctrl-primary context events.
+Ordinary click and secondary menus retain their own actions. Provide an
+ordinary `$ui` control for touch and keyboard users, and bind the selected state
+to `aria-pressed`. For a condition, `valueArg` can read an operand from the
+current scope, for example `{ "arg": "page.selection.picked.items", "op":
+"includes", "valueArg": "item.id" }`.
+
+## Process a page selection in Action batches
+
+An ordinary Action button on the owner's live page can set
+`data-tt-action-batch` to `{ "input": "ids", "size": 20, "selectionKey": "picked" }`.
+Supply the matching `context` when using a context-scoped selection. The click
+captures the complete current selection and supplies one slice at a time under
+the named Action input. Keep other inputs, such as the destination, in
+ordinary `data-tt-action-inputs`. One pending control covers the whole run.
+The handler checks identity before each slice, stops at the first uncertain
+or refused result, and reports the confirmed item count. The selection remains
+available after the result. Inspect run history before retrying and use
+idempotent writes with stable per-item keys.
+
+## Provide a keyed collection to descendants
+
+A passive ordinary block source can drain cursor pages and publish an index
+under `page.collections.<as>`. For example:
+
+```json
+{
+  "action": "read-annotations",
+  "passive": true,
+  "collection": { "as": "annotations", "groupBy": "targetId" }
+}
+```
+
+Optional `itemsPath`, `cursorPath`, `cursorInput` and `itemKey` default to
+`items`, `nextCursor`, `cursor` and `id`. Group keys are nonempty strings
+or finite numbers. The complete cursor result becomes visible together,
+and failed reads keep the collection unavailable. The saved Action and
+existing source permission checks authorize the rows.
+
+A descendant `ttEach` can set `arg: "page.collections.annotations"` and
+`keyArg: "item.id"` to repeat only the matching list. Expanded collections
+preserve this binding as `itemsPath` and `itemsKeyArg`. A keyed repeat also
+binds `total` and `remaining` for a summary when an authored `max` is used.
+
+These composition bindings use `api.things` 1.58.0, `api.things-update`
+1.24.0 and `api.webpages-resolve` 1.16.0. For Actions that must read a Data
+Thing in an exact folder owned by the invoker, set `things.get.ownedFolderId`
+to a literal ID or a reference. Require `ownedFolderVerified: true` from the
+read before dependent writes. Older executors omit the marker. Authoring
+uses the same Things versions and execution requires
+`api.actions-run` 1.46.0.

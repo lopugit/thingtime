@@ -12,6 +12,11 @@ and the Thing storage and device copies checklist in `TESTING.md`.
 
 ## Idempotent Action creation
 
+A server Action can require an exact invoker-owned folder on a `things.get`
+step before using the authorized Data Thing in a composed workflow. The step
+adds a verification flag without exposing placement metadata. See [Action authoring](../builder-browser-actions.md)
+and the real API checks in `remix/scripts/verify-actions.mjs`.
+
 Server Actions use `things.ensure` to create or reuse one owned Data Thing by
 intent. The key is scoped to the invoker and saved Action in the selected data
 plane. A protected root unique key and the canonical insert serialize

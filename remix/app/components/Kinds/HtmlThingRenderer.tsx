@@ -1,3 +1,5 @@
+import { ACTION_BATCH_ATTRIBUTE } from '../Actions/actionBatches';
+import { MODIFIER_ACTION_INPUTS } from '../Actions/localUiAction';
 import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
 import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
@@ -102,8 +104,13 @@ const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> =>
 	Object.entries(attributes).forEach(([key, value]) => {
 		// no event handlers, no dangerouslySetInnerHTML, whitelist only
 		if (isEventHandlerProp(key)) return;
+		// Structured Action descriptors use a button-only serializer, separate
+		// from the ordinary HTML attribute policy and free-form inspector.
+		if (key === MODIFIER_ACTION_INPUTS || key === ACTION_BATCH_ATTRIBUTE) {
+			if (tag === 'button' && value && typeof value === 'object' && !Array.isArray(value)) out[key] = JSON.stringify(value);
+			return;
+		}
 		if (!allowsAuthoredHtmlAttribute(key, tag)) return;
-
 		if (key === 'style') {
 			const style = sanitizeStyle(value);
 			if (style) out.style = style;
@@ -272,7 +279,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
-	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; delete props[MODIFIER_ACTION_INPUTS]; delete props[ACTION_BATCH_ATTRIBUTE]; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 

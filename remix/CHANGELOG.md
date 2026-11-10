@@ -149,6 +149,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   reversible framing, CSS and image attributes. Builder and image editing use
   the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
 
+- 2026-11-10: Add authored page selection, cursor-backed keyed collections
+  and bounded Action batches. Check exact owner-folder placement in opted-in
+  Action reads. **Codex (AI)**
+
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
   resuming reporting; code exchange and refresh preserve the consented scopes.

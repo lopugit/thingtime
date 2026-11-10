@@ -1,7 +1,7 @@
 import { isCivilTime } from '~/schemas/civilDates';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
-import { AUTHORED_CONTROL_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesPassiveSource } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesPageCollections, usesPassiveSource } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -401,7 +401,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+				if (usesPageCollections(blocks)) await requireThingtimeCapability('api.webpages-resolve', PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve']);
+				else if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
 				if (usesAuthoredControls(blocks)) {
 					await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
 					await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);

@@ -28,6 +28,12 @@ validation boundaries.
   writing fixtures. See [TESTING](../TESTING.md#profile-avatar-and-banner-media-remixappcomponentsprofile)
   for the manual checklist.
 
+The branch also integrates authored selection and keyed collections from main.
+The merged origin advertises Things 1.59.0, Things-update 1.25.0, and Webpages
+resolve 1.17.0 so clients can distinguish expanded authoring from the earlier
+selection-only contracts. The merged renderer, schema, Action, and isolated
+Chrome regression batch passed 104 tests.
+
 The portable Graphify snapshot was refreshed structurally. The local semantic
 proxy did not finish the scoped document refresh within the task budget, so
 changed documentation was not semantically reindexed.

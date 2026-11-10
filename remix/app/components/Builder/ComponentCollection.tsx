@@ -2,7 +2,7 @@ import { collectionStyles } from '../Collections/collectionStyles';
 import React from 'react';
 import { COLLECTION_SIZES, type CollectionSize } from '../Collections/collectionWindow';
 import { CollectionList } from '../Collections/CollectionList';
-import { componentScopeValue, createTemplateResolver, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
+import { componentScopeValue, keyedScopeValue, createTemplateResolver, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import { ComponentDataScope } from './ComponentSelect';
 import { useCollectionSource } from './useCollectionSource';
@@ -28,6 +28,7 @@ const searchTextForRow = (item: Record<string, any>): string => {
 };
 export function ComponentCollection({
 	itemsPath,
+	itemsKeyArg,
 	itemTemplate,
 	label,
 	empty,
@@ -54,7 +55,7 @@ export function ComponentCollection({
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
 	const paged = useCollectionSource(source);
-	const data = paged.bound ? paged.items : typeof itemsPath === 'string' ? componentScopeValue(scope, itemsPath) : undefined;
+	const data = paged.bound ? paged.items : typeof itemsPath === 'string' ? keyedScopeValue(scope, itemsPath, itemsKeyArg) : undefined;
 	const [chosenSize, setChosenSize] = React.useState<CollectionSize | undefined>();
 	React.useEffect(() => setChosenSize(undefined), [size]);
 	const enabled = React.useContext(NativeControlsEnabled);
@@ -89,8 +90,9 @@ export function ComponentCollection({
 				.filter((filter) => filter && typeof filter === 'object' && typeof filter.path === 'string' && typeof filter.label === 'string')
 		: [];
  const repeated = templateEach === true ? templateEachRows(data, maxItems) : visibleItems;
+ const keyedTotal = typeof itemsKeyArg === 'string' ? (Array.isArray(data) ? data.length : data && typeof data === 'object' ? Object.keys(data).length : 0) : undefined;
  if (transparent === true) return <>{repeated.length === 0 && typeof empty === 'string' ? resolveTemplate(empty, scope) : null}{repeated.map((item, index) => {
-  const rowScope = templateEach === true ? templateEachRowScope(scope, item, index, repeated.length) : { ...scope, item, index, collection: { index, count: repeated.length } };
+  const rowScope = templateEach === true ? templateEachRowScope(scope, item, index, repeated.length, keyedTotal) : { ...scope, item, index, collection: { index, count: repeated.length } };
   return <Nesting.Provider key={templateEach === true ? index : String((item as Record<string, unknown>).id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
    {typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={createTemplateResolver()(itemTemplate, rowScope) as any} />}
   </ComponentDataScope.Provider></Nesting.Provider>;

@@ -5,7 +5,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPageCollections, usesPassiveSource } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -1344,6 +1344,7 @@ export function useApi() {
             : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
           if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things-update', PAGE_COLLECTION_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
@@ -1433,6 +1434,7 @@ export function useApi() {
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1465,6 +1467,7 @@ export function useApi() {
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
