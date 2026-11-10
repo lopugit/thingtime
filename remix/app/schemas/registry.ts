@@ -1,3 +1,4 @@
+import { pageCollectionBinding } from './pageCollections';
 import { THING_METADATA_KIND } from '../utils/thingMetadata.ts';
 import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../utils/thingStoragePolicy.ts';
 import { MAX_STORABLE_NESTING } from './storableLimits';
@@ -5626,6 +5627,13 @@ const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true
 		return fail(400, 'Passive sources belong on ordinary webpage blocks');
 	}
 	if (rawSource.passive) source.passive = true;
+	if (rawSource.collection !== undefined) {
+		const collection = pageCollectionBinding(rawSource.collection);
+		if (!collection || !source.passive || rawSource.refresh === 'live') {
+			return fail(400, 'A keyed collection requires a passive cursor-backed webpage source.');
+		}
+		source.collection = collection;
+	}
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
 			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
@@ -6612,7 +6620,8 @@ const sanitizeActionSteps = (
 				}
 			}
 		} else if (op === 'things.get') {
-			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');
+			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read') ||
+				(raw.ownedFolderId === undefined ? null : checkRefString(raw.ownedFolderId, 'ownedFolderId'));
 		} else if (op === 'things.search') {
 			if (raw.schema !== undefined && raw.schema !== null) {
 				const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);

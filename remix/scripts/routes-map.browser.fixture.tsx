@@ -58,16 +58,19 @@ const blocks: WebpageBlock[] = [
 	}, text: 'Open a deep link' }
 ];
 
+const selectMarker = { op: 'toggle-member', scope: 'page', key: 'picked', value: '{point.id}', context: '{query.group}' };
 const markerCommand = { tag: 'button', props: { type: 'button', 'data-tt-action': '$ui',
  'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}', markerCommand: '{point.id}' } }) }, children: ['Use marker'] };
-const markerContentSlot = (tag: string) => ({ tag, props: { 'data-tt-menu-slot': 'content', style: { display: 'grid' } }, children: [markerCommand, { ttIf: { arg: 'sourceRevision', then: { tag: 'button', props: { type: 'button' }, children: ['Refreshed marker action'] } } }] });
+const markerSelectCommand = { tag: 'button', ttAction: '$ui', ttActionInputs: selectMarker, props: { type: 'button' }, children: ['Toggle marker selection'] };
+const markerContentSlot = (tag: string) => ({ tag, props: { 'data-tt-menu-slot': 'content', style: { display: 'grid' } }, children: [markerCommand, markerSelectCommand, { ttIf: { arg: 'sourceRevision', then: { tag: 'button', props: { type: 'button' }, children: ['Refreshed marker action'] } } }] });
 const markerComponents = buildComponentsByRef({
  refs: { 'saved-marker': 'resolved-marker', 'other-component': 'resolved-other', 'missing-marker': null },
  components: [
   { id: 'resolved-marker', crystal: { args: [{ name: 'badge', type: 'string', default: '' }, { name: 'menuDisabled', type: 'boolean', default: false }, { name: 'alternateSlot', type: 'boolean', default: false }, { name: 'sourceRevision', type: 'number', default: 0 }], render: {
    tag: 'tt-menu', props: { contextMenu: true, name: 'Commands for {point.label}', disabled: { ttArg: 'menuDisabled' } }, children: [
     { tag: 'div', props: { 'data-tt-menu-slot': 'target' }, children: [
-     { tag: 'button', props: { 'aria-pressed': '{point.selected}', type: 'button', 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}' } }) }, children: ['{badge} · {point.label}'] }
+     { tag: 'button', props: { 'aria-pressed': { ttIf: { arg: 'query.group', then: { ttIf: { arg: 'page.selection.picked.items', op: 'includes', valueArg: 'point.id', then: true, else: false } }, else: '{point.selected}' } }, type: 'button', 'data-tt-modifier-action-inputs': { ttIf: { arg: 'query.group', then: selectMarker } }, 'data-tt-action': '$ui', 'data-tt-action-inputs': JSON.stringify({ op: 'query', scope: 'page', params: { markerId: '{point.id}', group: '{query.group}' } }) }, children: ['{badge} · {point.label}',
+      { ttEach: { arg: 'page.collections.details', keyArg: 'point.id', node: { tag: 'span', children: ['{item.label}'] } } }] }
     ] },
     { ttIf: { arg: 'alternateSlot', then: markerContentSlot('section'), else: markerContentSlot('div') } },
     { tag: 'p', children: ['Row: {item.crystal.markerLabel}'] },
@@ -79,7 +82,7 @@ const markerComponents = buildComponentsByRef({
  ]
 });
 
-function ComposedFixture() {
+function ComposedFixture({ owned = false }: { owned?: boolean }) {
 	const parentScope = React.useContext(ComponentDataScope);
 	const [framed, setFramed] = React.useState(false);
 	const [editing, setEditing] = React.useState(false);
@@ -117,12 +120,25 @@ function ComposedFixture() {
 		{ id: 'marker-command', type: 'element', tag: 'p', text: 'Marker command: {query.markerCommand}' },
 		{ id: 'details-spacer', type: 'element', tag: 'div', css: { height: '520px' } }
 	];
-	const markerView = <WebpageBlocksRenderer blocks={authored} componentsByRef={markerComponents} interactive={!editing} chrome={editing ? {
+	const mapBlocks: WebpageBlock[] = owned ? [{ id: 'named-collection', type: 'element', tag: 'div',
+		source: { action: 'fixture-keyed-metadata', passive: true, collection: { as: 'details', groupBy: 'targetId' } }, children: authored
+	}] : authored;
+	const ownedControls: WebpageBlock[] = [
+		{ id: 'test-group', type: 'element', tag: 'button', text: 'Select a new group', props: { type: 'button', 'data-tt-action': '$ui',
+			'data-tt-action-inputs': { op: 'query', scope: 'page', params: { group: 'second' }, clearSelection: 'picked' } } },
+		{ id: 'selection-count', type: 'element', tag: 'p', text: 'Selection count: {page.selection.picked.count}' },
+		{ id: 'batch-receipt', type: 'element', tag: 'p', text: 'Batch processed: {last.result.batch.completed}' },
+		{ id: 'selection-batch', type: 'element', tag: 'button', text: 'Run selection batch', props: { type: 'button', 'data-tt-action': 'fixture-batch',
+			'data-tt-action-inputs': { group: '{query.group}' },
+			'data-tt-action-batch': { input: 'ids', size: 1, selectionKey: 'picked', context: '{query.group}' } } }
+	];
+	const markerView = <WebpageBlocksRenderer blocks={mapBlocks} componentsByRef={markerComponents} interactive={!editing} chrome={editing ? {
 		seamlessMode: 'layout', selectedId: selected, hoverId: hovered, onSelect: setSelected, onHover: setHovered,
 		onInsert: () => {}, onMove: () => {}
 	} : undefined} />;
 	return <>
   <p>Marker refresh: {pulse}; menu disabled: {String(menuDisabled)}; alternate slot: {String(alternateSlot)}</p>
+		{owned ? <WebpageBlocksRenderer blocks={ownedControls} componentsByRef={{}} interactive /> : null}
 		<button type="button" onClick={() => setShow(!show)}>{show ? 'Remove fixture markers' : 'Restore fixture markers'}</button>
 		<button type="button" onClick={() => setFramed(true)}>Render map in viewport iframe</button>
 		<button type="button" onClick={() => setEditing(!editing)}>{editing ? 'View marker composition' : 'Edit marker composition'}</button>
@@ -159,17 +175,18 @@ function ManualSourceProbe() {
 let dataPlane = 'home';
 function Fixture() {
 	const { revalidate } = useRevalidator();
+	const owned = new URLSearchParams(window.location.search).has('owned');
 	const [composed, setComposed] = React.useState(false);
 	return <ChakraProvider>
 		<button type="button" onClick={() => { dataPlane = dataPlane === 'home' ? 'custom-' + 'a'.repeat(64) : 'home'; void revalidate(); }}>Switch fixture database</button>
-		<WebpageRuntimeProvider pageId="fixture-routes" pageKey={null} suiteKey={null} source="user" shared>
+		<WebpageRuntimeProvider pageId="fixture-routes" pageKey={null} suiteKey={null} source="user" shared={!owned}>
 			<PageActionSurface actionEnabled>
 				<button type="button" onClick={() => setComposed(true)}>Open composed marker fixture</button>
-				{composed ? <ComposedFixture /> : <><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} interactive /><ManualSourceProbe /></>}
+				{owned || composed ? <ComposedFixture owned={owned} /> : <><WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} interactive /><ManualSourceProbe /></>}
 			</PageActionSurface>
 		</WebpageRuntimeProvider>
 	</ChakraProvider>;
 }
 
-const router = createBrowserRouter([{ id: 'root', path: '/p/:id', element: <Fixture />, loader: () => ({ dataPlane }) }]);
+const router = createBrowserRouter([{ id: 'root', path: '/p/:id', element: <Fixture />, loader: ({ request }) => ({ dataPlane, ...(new URL(request.url).searchParams.has('owned') ? { user: { id: 'fixture-owner', username: 'fixture-owner' } } : {}) }) }]);
 createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />);
