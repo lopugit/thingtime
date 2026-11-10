@@ -42,6 +42,7 @@ import {
 	fromBin,
 	packRecentReactions,
 	profileAttachmentRefsForUserRoot,
+	projectProfilePresentation,
 	removeLegacyUserStorageFields,
 	toBin,
 	userEmailKey,
@@ -1247,7 +1248,9 @@ const usersToThings = collectionToThingsMigration({
           displayName: doc.displayName ?? null,
           bio: doc.bio ?? null,
           avatarUrl: doc.avatarUrl ?? null,
-          bannerUrl: doc.bannerUrl ?? null
+          bannerUrl: doc.bannerUrl ?? null,
+          ...projectProfilePresentation(doc, 'avatar'),
+          ...projectProfilePresentation(doc, 'banner')
         },
         // users own themselves (insertUser convention)
         ownerId: shareId,

@@ -1,3 +1,4 @@
+import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
 import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
 import { requireSharedContentCapability, sharedContentWrite } from '~/utils/sharedContentCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
@@ -40,6 +41,7 @@ import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
 import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
 import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
+import { requireSubspaceImagePresentation } from '~/utils/subspaceMediaCapabilities';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -184,7 +186,8 @@ export function useApi() {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
+        await requireThingtimeCapability('api.webpages-resolve', usesExpandedWebpageAuthoring(blocks)
+          ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -1064,7 +1067,8 @@ export function useApi() {
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
-          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
+          if (body.mediaPresentation !== undefined) await requireSubspaceImagePresentation();
+          else if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
           return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
         },
         [asyncFetcher]
@@ -1315,6 +1319,10 @@ export function useApi() {
                 planeRef.current !== expectedDataPlane || window.location.origin !== origin)
               throw new DOMException('Storage scope changed', 'AbortError');
           };
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks)) {
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+            await requireThingtimeCapability('api.things-update', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          }
           let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
           if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
             expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
@@ -1426,6 +1434,8 @@ export function useApi() {
       upsert: useCallback(
         async (args) => {
           if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
@@ -1459,6 +1469,8 @@ export function useApi() {
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
@@ -1820,11 +1832,16 @@ export function useApi() {
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
+						'avatarPresentation',
+						'bannerPresentation',
+						'avatarPresentationSource',
+						'bannerPresentationSource',
 						'birthday',
 						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
+					if ('avatarPresentation' in body || 'bannerPresentation' in body) await requireThingtimeCapability('api.users-profile', '1.2.0');
 					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

@@ -7,7 +7,8 @@ import { CONNECTION_ICON_FEATURE, CONNECTION_ICON_PATH, CONNECTION_ICON_VERSION 
 import { FILE_SYNC_RESOURCE_REQUIREMENTS } from '~/fileSync/configuration';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { MOBILE_DEVICE_REQUIREMENTS } from '../devices/platform';
-import { SUBSPACE_MEDIA_REQUIREMENTS } from '../utils/subspaceMediaCapabilities';
+import { SUBSPACE_IMAGE_PRESENTATION_MIN_VERSION, SUBSPACE_MEDIA_REQUIREMENTS } from '../utils/subspaceMediaCapabilities';
+import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS } from '../schemas/cssDeclarationNames';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -44,8 +45,8 @@ test('atomic Thing ensure negotiates the supported write and execution routes', 
 	const source = createApiCapabilitiesManifest(Object.keys(routeModules));
 	const runtime = thingtimeCapabilityManifest('https://ensure.test');
 	for (const [feature, version, previous, path, method] of [
-		['api.things', '1.60.0', '1.55.0', '/api/v1/things', 'POST'],
-		['api.things-update', '1.25.0', '1.21.0', '/api/v1/things/update', 'POST'],
+		['api.things', '1.61.0', '1.55.0', '/api/v1/things', 'POST'],
+		['api.things-update', '1.26.0', '1.21.0', '/api/v1/things/update', 'POST'],
 		['api.actions-run', '1.46.0', '1.43.0', '/api/v1/actions/run', 'POST']
 	]) {
 		assert.equal(source.features[feature], version);
@@ -108,8 +109,8 @@ test('connector protection preferences are registered and negotiated independent
 test('exact Things counts and visible offset windows negotiate the additive contract', () => {
   const required = '1.49.0';
   const runtime = thingtimeCapabilityManifest('https://counts.test');
-  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features['api.things'], '1.60.0');
-  assert.equal(runtime.features['api.things'].version, '1.60.0');
+  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features['api.things'], '1.61.0');
+  assert.equal(runtime.features['api.things'].version, '1.61.0');
   assert.equal(capabilitySatisfies(runtime.features['api.things'].version, required), true);
   assert.equal(runtime.origin, 'https://counts.test');
   assert.ok(runtime.operations.some(operation => operation.feature === 'api.things' && operation.path === '/api/v1/things' && operation.methods.includes('GET')));
@@ -123,9 +124,9 @@ test('editable map uploads and numeric summaries require their deployed contract
   const manifest = thingtimeCapabilityManifest('https://planner.test');
   assert.equal(manifest.origin, 'https://planner.test');
   for (const [feature, minimum, previous] of [
-    ['api.things', '1.60.0', '1.46.3'],
-    ['api.things-update', '1.25.0', '1.15.1'],
-    ['api.webpages-resolve', '1.17.0', '1.8.1'],
+    ['api.things', '1.61.0', '1.46.3'],
+    ['api.things-update', '1.26.0', '1.15.1'],
+    ['api.webpages-resolve', '1.18.0', '1.8.1'],
 
     ['api.actions-run', '1.46.0', '1.38.0'],
     ['api.things-fork', '1.8.1', '1.7.0']
@@ -202,8 +203,8 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 		['api.things', '1.38.0', '1.32.0'], ['api.things-update', '1.12.0', '1.9.0'],
 		['api.actions-run', '1.46.0', '1.35.0'], ['api.webpages-suites-install', '1.6.0', '1.4.0']
 	]) {
-		assert.equal(route[feature], feature === 'api.things' ? '1.60.0' : feature === 'api.things-update' ? '1.25.0' : minimum);
-		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.60.0' : feature === 'api.things-update' ? '1.25.0' : minimum);
+		assert.equal(route[feature], feature === 'api.things' ? '1.61.0' : feature === 'api.things-update' ? '1.26.0' : minimum);
+		assert.equal(wellKnown[feature].version, feature === 'api.things' ? '1.61.0' : feature === 'api.things-update' ? '1.26.0' : minimum);
 
 
 		assert.equal(capabilitySatisfies(route[feature], minimum), true);
@@ -221,7 +222,7 @@ test('external avatar export requires the bounded-download contract on both mani
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, version] of [['api.things-export', '1.16.1'], ['api.things-import', '1.13.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.8.0']]) {
-    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.60.0' : version);
+    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.61.0' : version);
 
 
     assert.equal(capabilitySatisfies(version, version), true);
@@ -241,11 +242,11 @@ test('archive root moves negotiate the additive bulk contract on both manifests'
 test('archive library and folder export reject origins without complete archive traversal', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [feature, required, previous] of [['api.things', '1.38.0', '1.13.1'], ['api.things-export', '1.16.1', '1.9.0']]) {
-    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.60.0' : required);
+    assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.61.0' : required);
     for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, required), false);
     assert.equal(capabilitySatisfies(required, required), true);
   }
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.60.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.61.0');
   assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.16.1');
 
 
@@ -267,15 +268,15 @@ test('live-chat shared emoji export requires the additive contract on both manif
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
 	// Preserve the newer archive contracts on top of the recording and Widgets additions.
-	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.60.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.60.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.61.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.61.0');
 
 
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
 	assert.equal(capabilitySatisfies('1.8.1', '1.8.2'), false);
 	assert.equal(capabilitySatisfies('1.8.3', '1.8.2'), true);
-	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.25.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.25.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.26.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.26.0');
 
 	assert.equal(capabilitySatisfies('1.7.1', '1.7.0'), true);
 	assert.equal(capabilitySatisfies('1.7.0', '1.7.1'), false);
@@ -552,7 +553,7 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	// answers { privatePosts } (additive → minor)
 	// S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
 	// S4: the returned subspace carries removalReasons (1.2.0, additive)
-	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.2');
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-delete'], '1.3.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
@@ -568,12 +569,12 @@ test('subspace join requests + posting-approval requests publish their contract 
 	// (S3 review: join / leave answer the subspace block with the user-flair
 	// settings + viewer.userFlair — both 1.2.0, additive; S4: + removalReasons,
 	// both 1.3.0)
-	assert.equal(manifest.features['api.subspaces-leave'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-leave'], '1.4.0');
 	// S2 review: join re-requests start clean + deduped mod bells + own rate
 	// key (1.1.1), decisions on a withdrawn request answer 409 / pending-row
 	// walls / remove revokes approval (members 1.2.1), an access change
 	// resolves the queues (update 1.1.0)
-	assert.equal(manifest.features['api.subspaces-join'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-join'], '1.4.0');
 });
 
 test('subspace user flairs publish their contract versions', () => {
@@ -586,10 +587,10 @@ test('subspace user flairs publish their contract versions', () => {
 	// things-comment, things-feed, things-user contract 1.1.0 → 1.2.0)
 	// (S4 moved list / get / update on to 1.3.0 — see the removal-reasons test;
 	// S6 moved list on to 1.4.0 — sort=new|members|active)
-	assert.equal(manifest.features['api.subspaces'], '1.6.0');
+	assert.equal(manifest.features['api.subspaces'], '1.7.0');
 	// (S5 moved get on to 1.4.0 — openReportCount for moderators)
-	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
-	assert.equal(manifest.features['api.subspaces-update'], '1.5.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.7.0');
+	assert.equal(manifest.features['api.subspaces-update'], '1.6.0');
 	// S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
 	// mods may dress the owner (members 1.3.1, corrections); moderate's
 	// re-projected post carries authorFlair (1.1.0, additive) — S4 moved both
@@ -600,19 +601,19 @@ test('subspace user flairs publish their contract versions', () => {
 	// (S5 moved moderate on to 1.4.0 — remove / approve settle open reports —
 	// and feed to 1.3.0 — moderators' posts carry subspaceMod.reportCount)
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
-	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-feed'], '1.4.0');
 	// (S5 moved the shared post projection's contract on to 1.3.0 —
 	// subspaceMod.reportCount for the post's moderators; S6 moved the feed on
 	// to 1.4.0 — scope=all|subspaces)
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.11.0' : '1.8.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.12.0' : '1.9.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.60.0');
+	assert.equal(manifest.features['api.things'], '1.61.0');
 
 
-	assert.equal(manifest.features['api.things-feed'], '1.9.0');
+	assert.equal(manifest.features['api.things-feed'], '1.10.0');
 });
 
 test('subspace removal reasons + moderation modals publish their contract versions', () => {
@@ -623,12 +624,12 @@ test('subspace removal reasons + moderation modals publish their contract versio
 	// notifies the author (1.2.0, additive); ban takes a private mod-log note
 	// (members 1.4.0, additive)
 	for (const feature of ['api.subspaces-join', 'api.subspaces-leave']) {
-		assert.equal(manifest.features[feature], '1.3.0', feature);
+		assert.equal(manifest.features[feature], '1.4.0', feature);
 	}
-	assert.equal(manifest.features['api.subspaces'], '1.6.0'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
-	assert.equal(manifest.features['api.subspaces-get'], '1.6.0'); // S5: openReportCount
-	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0'); // S5: subspaceMod.reportCount
-	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.2');
+	assert.equal(manifest.features['api.subspaces'], '1.7.0'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
+	assert.equal(manifest.features['api.subspaces-get'], '1.7.0'); // S5: openReportCount
+	assert.equal(manifest.features['api.subspaces-feed'], '1.4.0'); // S5: subspaceMod.reportCount
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.3.0');
 	// S4 review: moderate remove takes ruleIndex (a cited rule composed and
 	// bounded server-side), is a no-op on an already-removed post, and the
 	// author's bell comes from the mod team with the reason's headline (1.3.0,
@@ -652,18 +653,18 @@ test('subspace reports publish their contract versions', () => {
 	// the open rows' own targetId) — compatible corrections
 	assert.equal(manifest.features['api.subspaces-report'], '1.0.1');
 	assert.equal(manifest.features['api.subspaces-reports'], '1.0.1');
-	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.7.0');
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
-	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-feed'], '1.4.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.11.0' : '1.8.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.12.0' : '1.9.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.60.0');
+	assert.equal(manifest.features['api.things'], '1.61.0');
 
 
-	assert.equal(manifest.features['api.things-feed'], '1.9.0'); // S6: scope
+	assert.equal(manifest.features['api.things-feed'], '1.10.0'); // S6: scope
 });
 
 test('subspace discovery publishes its contract versions', () => {
@@ -679,18 +680,18 @@ test('subspace discovery publishes its contract versions', () => {
 	// anon=1 (the edge-cacheable logged-out view, additive), is rate-limited
 	// (subspaces.list, 120/min) and fences a private subspace's activity to
 	// its ACTIVE members (compatible corrections) — 1.4.0 → 1.5.0.
-	assert.equal(manifest.features['api.subspaces'], '1.6.0');
-	assert.equal(manifest.features['api.things-feed'], '1.9.0');
+	assert.equal(manifest.features['api.subspaces'], '1.7.0');
+	assert.equal(manifest.features['api.things-feed'], '1.10.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.11.0' : '1.8.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-comment' ? '1.12.0' : '1.9.0', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.60.0');
+	assert.equal(manifest.features['api.things'], '1.61.0');
 
 
-	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
-	assert.equal(manifest.features['api.subspaces-get'], '1.6.0');
+	assert.equal(manifest.features['api.subspaces-feed'], '1.4.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.7.0');
 });
 
 test('marketing publishing publishes its public read and admin write contracts', () => {
@@ -743,9 +744,18 @@ test('subspace image clients negotiate both origin manifests and reject pre-uplo
 
 test('subspace rename requires the post-media additive contract', () => {
   const version = createApiCapabilitiesManifest().features['api.subspaces-update'];
-  assert.equal(version, '1.5.0');
+  assert.equal(capabilitySatisfies(version, '1.5.0'), true);
   for (const unsupported of [undefined, '1.3.0', '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.5.0'), false);
   for (const supported of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(supported, '1.5.0'), true);
+});
+
+test('subspace image edits require the compatible presentation contract on the selected origin', () => {
+  const feature = 'api.subspaces-update';
+  const minimum = SUBSPACE_IMAGE_PRESENTATION_MIN_VERSION;
+  assert.equal(createApiCapabilitiesManifest().features[feature], minimum);
+  assert.equal(thingtimeCapabilityManifest('https://subspaces.test').features[feature].version, minimum);
+  for (const version of [undefined, '1.5.9', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
+  for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, minimum), true);
 });
 
  test('exact AI workflow orders negotiate removal of the mandatory default', () => {
@@ -842,7 +852,7 @@ test('native aggregate chat activities have origin-scoped capability coverage', 
 test('service workspace clients negotiate the native builder contract', () => {
  const manifest = createApiCapabilitiesManifest();
  assert.equal(manifest.features['api.builder-workspaces'], '1.1.0');
- assert.equal(manifest.features['api.webpages-resolve'], '1.17.0');
+ assert.equal(manifest.features['api.webpages-resolve'], '1.18.0');
 
  for (const actual of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), false);
  for (const actual of ['1.0.1', '1.0.2', '1.1.0']) assert.equal(capabilitySatisfies(actual, '1.0.1'), true);
@@ -857,8 +867,8 @@ test('comment media readers require the attachment metadata projection', () => {
 test('cursor discussion clients require the additive 1.27 contract while media keeps 1.24 compatibility', () => {
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://discussion.test');
-  assert.equal(source.features['api.things'], '1.60.0');
-  assert.equal(origin.features['api.things'].version, '1.60.0');
+  assert.equal(source.features['api.things'], '1.61.0');
+  assert.equal(origin.features['api.things'].version, '1.61.0');
 
 
   for (const old of [undefined, '1.24.0', '1.25.0', '1.26.0', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.27.0'), false);
@@ -978,9 +988,9 @@ test('local ChatGPT plan capabilities cover both manifests and reject unsupporte
 test('live overview and saved source contracts exist on both origin manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const origin = thingtimeCapabilityManifest('https://thingtime.test').features;
-  for (const [feature, minimum] of [['api.agent-overview', '2.1.0'], ['api.things', '1.38.0'], ['api.things-update', '1.13.0'], ['api.webpages-resolve', '1.17.0']]) {
-    assert.equal(route[feature], feature === 'api.things' ? '1.60.0' : feature === 'api.things-update' ? '1.25.0' : minimum);
-    assert.equal(origin[feature].version, feature === 'api.things' ? '1.60.0' : feature === 'api.things-update' ? '1.25.0' : minimum);
+  for (const [feature, minimum] of [['api.agent-overview', '2.1.0'], ['api.things', '1.38.0'], ['api.things-update', '1.13.0'], ['api.webpages-resolve', '1.18.0']]) {
+    assert.equal(route[feature], feature === 'api.things' ? '1.61.0' : feature === 'api.things-update' ? '1.26.0' : minimum);
+    assert.equal(origin[feature].version, feature === 'api.things' ? '1.61.0' : feature === 'api.things-update' ? '1.26.0' : minimum);
 
 
     assert.equal(capabilitySatisfies(route[feature], minimum), true);
@@ -1001,8 +1011,9 @@ test('saved source input references negotiate only the additive write and resolv
   const route = createApiCapabilitiesManifest().features;
   const origin = thingtimeCapabilityManifest('https://thingtime.test').features;
   for (const [feature, minimum] of Object.entries(SOURCE_INPUT_REFERENCE_REQUIREMENTS)) {
-    assert.equal(route[feature], minimum);
-    assert.equal(origin[feature].version, minimum);
+    const current = EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS[feature as keyof typeof EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS];
+    assert.equal(route[feature], current);
+    assert.equal(origin[feature].version, current);
     assert.equal(capabilitySatisfies(route[feature], minimum), true);
     assert.equal(capabilitySatisfies(prior[feature as keyof typeof prior], minimum), false);
     assert.equal(capabilitySatisfies(route[feature], prior[feature as keyof typeof prior]), true);
@@ -1014,8 +1025,8 @@ test('saved source input references negotiate only the additive write and resolv
   const source = createApiCapabilitiesManifest();
   const origin = thingtimeCapabilityManifest('https://subspaces.test');
   for (const [feature, minimum] of [['api.subspaces-get', '1.6.0'], ['api.subspaces-embeds', '1.0.0']]) {
-    assert.equal(source.features[feature], minimum);
-    assert.equal(origin.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(source.features[feature], minimum), true);
+    assert.equal(capabilitySatisfies(origin.features[feature].version, minimum), true);
     assert.equal(capabilitySatisfies(undefined, minimum), false);
     assert.equal(capabilitySatisfies('2.0.0', minimum), false);
     assert.equal(capabilitySatisfies(minimum, minimum), true);
@@ -1055,7 +1066,7 @@ test('Builder provenance corrections negotiate every affected shared-content con
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://builder-marker.test').features;
 	for (const [feature, required, previous] of [
-		['api.attachment-content', '1.18.0', '1.17.0'], ['api.things', '1.60.0', '1.49.0'],
+		['api.attachment-content', '1.18.0', '1.17.0'], ['api.things', '1.61.0', '1.49.0'],
 		['api.actions-run', '1.46.0', '1.40.0'], ['api.things-fork', '1.8.1', '1.8.0'],
 		['api.things-export', '1.16.1', '1.15.0']
 
@@ -1148,7 +1159,7 @@ test('provider icons negotiate their own public route without changing OAuth con
 
 
 test('incoming share message contracts advertise uncapped content consistently', () => {
- const required = { 'api.chats-messages': '1.5.0', 'api.chats-messages-edit': '1.2.0' };
+ const required = { 'api.chats-messages': '1.6.0', 'api.chats-messages-edit': '1.3.0' };
  const route = createApiCapabilitiesManifest(Object.keys(routeModules));
  const runtime = thingtimeCapabilityManifest('https://incoming-share.test');
  for (const [feature, version] of Object.entries(required)) {
@@ -1163,7 +1174,7 @@ test('incoming share message contracts advertise uncapped content consistently',
 
 test('private backup control permission patches negotiate both manifests without breaking older compatible clients', () => {
  const docs=createApiCapabilitiesManifest().features, runtime=thingtimeCapabilityManifest('https://backup-control.test').features;
- for(const [feature,current,prior] of [['api.things','1.60.0','1.52.0'],['api.things-export','1.16.1','1.16.0'],['api.things-bulk','1.8.0','1.7.1']]){
+ for(const [feature,current,prior] of [['api.things','1.61.0','1.52.0'],['api.things-export','1.16.1','1.16.0'],['api.things-bulk','1.8.0','1.7.1']]){
   assert.equal(docs[feature],current);assert.equal(runtime[feature].version,current);
   assert.equal(capabilitySatisfies(current,prior),true);
   assert.equal(capabilitySatisfies(prior,current),false);
@@ -1176,12 +1187,24 @@ test('owner library archive negotiates every changed route in both manifests', (
   for (const [feature, minimum, prior] of [
     ['api.things', '1.59.0', '1.58.0'], ['api.things-search', '1.5.0', '1.4.0'], ['api.things-bulk', '1.8.0', '1.7.2']
   ]) {
-    const current = feature === 'api.things' ? '1.60.0' : minimum;
+    const current = feature === 'api.things' ? '1.61.0' : feature === 'api.things-search' ? '1.6.0' : minimum;
     assert.equal(docs.features[feature], current);
     assert.equal(runtime.features[feature].version, current);
     assert.equal(capabilitySatisfies(prior, minimum), false);
     assert.equal(capabilitySatisfies(undefined, minimum), false);
     assert.equal(capabilitySatisfies('2.0.0', minimum), false);
     assert.equal(capabilitySatisfies(current, minimum), true);
+  }
+});
+
+test('expanded authoring requires a Things contract newer than the source-input reference release', () => {
+  const docs = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest('https://authoring.test');
+  const previous = SOURCE_INPUT_REFERENCE_REQUIREMENTS;
+  for (const [feature, minimum] of Object.entries(EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS)) {
+    assert.equal(docs.features[feature], minimum);
+    assert.equal(runtime.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(runtime.features[feature].version, minimum), true);
+    assert.equal(capabilitySatisfies(previous[feature as keyof typeof previous], minimum), false);
+    assert.equal(capabilitySatisfies('2.0.0', minimum), false);
   }
 });

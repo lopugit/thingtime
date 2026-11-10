@@ -2,7 +2,7 @@ import { json } from '~/api/http';
 
 import { listAccountLinksForUser } from '~/api/utils/accounts/accountLinks';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { findUserById } from '~/api/utils/auth/users';
+import { findUserById, projectProfilePresentation } from '~/api/utils/auth/users';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // GET /api/v1/auth/accounts/owned — the accounts the current user OWNS via
@@ -21,6 +21,7 @@ export const loader = async ({ request }: { request: Request }) => {
 		username: doc.username,
 		displayName: typeof doc.displayName === 'string' ? doc.displayName : null,
 		avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
+		...projectProfilePresentation(doc, 'avatar'),
 		accountKind: doc.accountKind === 'service' ? ('service' as const) : ('user' as const)
     }));
 
