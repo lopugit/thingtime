@@ -24,7 +24,8 @@ import { ObjectId, type Binary } from 'mongodb';
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
-import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
+import { findUserByUsername, pushUserRecentReaction, unpackSecure, projectProfilePresentation } from '../auth/users';
+import type { ImagePresentation } from '../../../components/Media/imagePresentation';
 import { toBin } from '../auth/binary';
 import {
 	CONTROL_PLANE_STORAGE_THINGTIMES,
@@ -326,6 +327,7 @@ export type FeedAuthor = {
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  avatarPresentation?: ImagePresentation;
   // set ONLY for third-party authors of synced external posts — the honest
   // discriminator consumers use instead of routing to a dead /profile/<handle>.
   // It is the FLAG, not the url, that carries that meaning: a provider need
@@ -2090,7 +2092,8 @@ const toFeedAuthor = (doc: any): FeedAuthor => ({
   username: doc.username,
   displayName: doc.meta?.temporary === true ? ANONYMOUS_USER_NAME : doc.displayName ?? null,
   temporary: doc.meta?.temporary === true,
-	avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
+	avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
+	...projectProfilePresentation(doc, 'avatar')
 });
 
 export const resolveProfiles = async (userIds: string[]): Promise<Map<string, FeedAuthor>> => {
@@ -2104,7 +2107,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   const things = await getHomeThingsCollection();
   const userThings = await things
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
-		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, avatarAttachmentId: 1, secure: 1 })
+		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, 'crystal.avatarPresentation': 1, avatarAttachmentId: 1, secure: 1 })
     .toArray();
   for (const doc of userThings as any[]) {
     const temporary = unpackSecure(doc.secure).meta?.temporary === true;
@@ -2113,7 +2116,8 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
       username: doc.crystal?.username,
       displayName: temporary ? ANONYMOUS_USER_NAME : doc.crystal?.displayName ?? null,
       temporary,
-			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
+			avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
+			...projectProfilePresentation(doc, 'avatar')
     });
   }
 
@@ -2122,7 +2126,7 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
     const users = await getUsersCollection();
     const docs = await users
       .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
-			.project({ username: 1, displayName: 1, avatarUrl: 1, avatarAttachmentId: 1, meta: 1 })
+			.project({ username: 1, displayName: 1, avatarUrl: 1, avatarPresentation: 1, avatarAttachmentId: 1, meta: 1 })
       .toArray();
     for (const doc of docs as any[]) profiles.set(String(doc._id), toFeedAuthor(doc));
   }
@@ -3475,7 +3479,8 @@ export const appShapeProjections = async (
               ? sandboxDisplayName(username)
 							: item.author?.displayName ?? null
             : null,
-					avatarUrl: scopeCovers(scopes, 'profile.avatar') ? item.author?.avatarUrl ?? null : null
+					avatarUrl: scopeCovers(scopes, 'profile.avatar') ? item.author?.avatarUrl ?? null : null,
+					...(scopeCovers(scopes, 'profile.avatar') && item.author?.avatarPresentation ? { avatarPresentation: item.author.avatarPresentation } : {})
         }
       : null;
     if (Array.isArray(item.acl)) {

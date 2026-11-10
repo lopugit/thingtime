@@ -1025,3 +1025,45 @@ saving/reloading the complete Component and reusing it on another Builder page.
 Sources: [DOM traversal](https://dom.spec.whatwg.org/#traversal) and
 [Web IDL callback invocation](https://webidl.spec.whatwg.org/#call-a-user-objects-operation),
 checked 27 September 2026 (updated 24 and 23 September respectively).
+
+
+## HTML and CSS inspector
+
+Builder element blocks and image presentation use the same inspector controls.
+For HTML, the selected tag determines the standard attributes and enumerated
+values. Existing values are read from the selected element's saved fields.
+For CSS, the inspector offers property names, value grammar, examples for
+open-ended types, CSS-wide keywords, and references to custom properties on
+the same element. The initial value from the standard and a consumer's
+effective default are labelled separately from saved values. Choosing a
+suggestion is optional; valid compound, vendor and custom values can be typed
+or pasted. Browser support feedback is advisory, since a browser may lag a
+standard or draft.
+
+The catalog is a lazily loaded projection of the existing W3C WebRef inventory
+and pinned `@webref/css@8.7.5` data, plus attribute context and enumerated
+values from WHATWG's HTML index and input element and WAI-ARIA 1.2. WebRef's
+package is MIT licensed. The generated snapshot records the source URLs and
+hashes and the WebRef commit/version. The normal standards refresh updates
+both the full inventory and this projection. To refresh only the projection
+using the checked-in CSS inventory and the matching pinned grammar:
+
+```sh
+npm install --prefix /tmp/tt-standards-tools --ignore-scripts @webref/css@8.7.5
+node remix/scripts/sync-web-standards.mjs --inspector-only --tools=/tmp/tt-standards-tools/node_modules
+```
+
+Suggestions do not change the rendering policy. Inline declaration editors do
+not accept rules or execute scripts. Builder's raw HTML is sanitized before
+rendering; authorable DOM attributes remain governed by its renderer,
+including its URL and event restrictions. Reserved Thingtime data attributes
+keep their existing typed or dedicated controls. Image presentation cannot
+replace its attachment URL via HTML or CSS. The CSS vocabulary includes
+drafts and vendor aliases; browser support and the active surface's
+permissions still apply.
+
+Origin-scoped writes using expanded Builder CSS or HTML require
+`api.things` 1.58.0 and `api.things-update` 1.24.0 as applicable. Draft component
+preview additionally negotiates `api.webpages-resolve` 1.16.0 for that content
+and retains its request budget. Document storage and the safe HTML renderer's
+resource budgets still apply.

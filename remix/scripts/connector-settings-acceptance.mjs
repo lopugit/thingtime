@@ -151,8 +151,8 @@ try {
   await selector.selectOption('connector-protections-create-label');
   await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Confirm creating Things');
   await selector.selectOption('connector-protections-create-input');
-  await page.getByRole('textbox',{name:'Element title',exact:true}).fill('Editable create checkbox');
-  await page.getByRole('textbox',{name:'Element title',exact:true}).blur();
+  await page.getByLabel('Element title', { exact: true }).fill('Editable create checkbox');
+  await page.getByLabel('Element title', { exact: true }).blur();
   await page.getByRole('button',{name:'Close builder',exact:true}).click();
   const [layoutResponse] = await Promise.all([
     page.waitForResponse(response => {

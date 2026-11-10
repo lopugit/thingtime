@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MAX_WEBPAGE_HTML_CHARS, validateThingtimeCrystal } from './registry.ts';
+import { validateThingtimeCrystal } from './registry.ts';
 
 // The Figma-layer block fields (css / tag / html, media + html block types):
 // custom styling round-trips through the write gate while the classic css/url
@@ -112,10 +112,10 @@ test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 't2', type: 'text', text: 'hi', tag: 'iframe' }]).ok, false);
 });
 
-test('html payloads are bounded', () => {
-	assert.equal(page([{ id: 'h1', type: 'html', html: 'a'.repeat(MAX_WEBPAGE_HTML_CHARS + 1) }]).ok, false);
+test('HTML source remains complete and a blank HTML block is refused', () => {
+	assert.equal(page([{ id: 'h1', type: 'html', html: 'a'.repeat(22_000) }]).ok, true);
 	assert.equal(page([{ id: 'h2', type: 'html', html: '' }]).ok, false);
-	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(MAX_WEBPAGE_HTML_CHARS + 1) }]).ok, false);
+	assert.equal(page([{ id: 'h3', type: 'text', text: 'hi', html: 'b'.repeat(22_000) }]).ok, true);
 });
 
 // previewBg is drawn on /p/<id>, where the viewer is not the author, so it has

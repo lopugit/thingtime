@@ -444,6 +444,12 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 				return;
 			}
 		}
+		if (field.tagName === 'SELECT' && (field as HTMLSelectElement).multiple) {
+			out[name] = Array.from((field as HTMLSelectElement).selectedOptions)
+				.filter((option) => !option.matches(':disabled'))
+				.map((option) => option.value);
+			return;
+		}
 		if (typeof field.value === 'string') {
 			if (field.getAttribute('data-tt-input-type') === 'json') {
 				try { out[name] = parseActionJson(field.value); }

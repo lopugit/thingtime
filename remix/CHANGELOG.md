@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-10: Edit profile and subspace images in the shared picker with
+  reversible framing, CSS and image attributes. Builder and image editing use
+  the same standards-based property and attribute inspector. **Codex (AI)**
+
 - 2026-11-10: Let the existing Thingtime MCP request independent private
   reporting access through the host's OAuth prompt. Verify the owner before
   resuming reporting; code exchange and refresh preserve the consented scopes.
