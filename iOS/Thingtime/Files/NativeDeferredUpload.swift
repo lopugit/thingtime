@@ -471,9 +471,14 @@ final class NativeDeferredUpload {
                 self?.holdContinuedRun(requestedRun, request: id)
             })
         guard let lease else { recordBackgroundRequest(run, .declined); return "declined" }
-        guard self.executionLease === executionLease, activePhotoRun?.sameRun(run) == true, executionLease.attachContinued(lease) else {
+        // The owner can pause, revoke or replace the run while iOS decides
+        // whether to grant this lease. Recheck the durable authorization.
+        let latest = try? photoRuns.lookup(run)
+        guard let latest, latest.sameRun(run), latest.armed, latest.expiresAt > Date(),
+              background?.isCancelled == false, self.executionLease === executionLease,
+              activePhotoRun?.sameRun(run) == true, executionLease.attachContinued(lease) else {
             lease.finish(success: false)
-            if (try? photoRuns.lookup(run))?.stage == "complete" { return "complete" }
+            if latest?.sameRun(run) == true, latest?.stage == "complete" { return "complete" }
             recordBackgroundRequest(run, .declined); return "declined"
         }
         continuedRun = requestedRun; continuedCompleted = 0; continuedPartial = 0
