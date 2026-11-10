@@ -9,8 +9,9 @@ import {
   getUsersCollection
 } from '../mongodb/collections';
 import { getUserNotificationPrefs } from '../auth/users';
-import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, normalizeNotificationPrefs } from '~/schemas/registry';
 import type { NotificationType } from '~/schemas/registry';
+import { emailNotificationsBulk, maybeEmailNotification } from './emails';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
 // PROTECTED_THINGTIME): ownerId = recipient, targetId = the subject thing
@@ -56,7 +57,7 @@ export type PublicNotification = {
   createdAt: string;
 };
 
-const clampPreview = (value: unknown): string | null => {
+export const clampPreview = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const text = value.replace(/\s+/g, ' ').trim();
   if (!text) return null;
@@ -107,11 +108,16 @@ const trimRecipient = async (recipientId: string) => {
 export const emitNotification = async (input: EmitNotificationInput): Promise<void> => {
   try {
     if (!input.recipientId || input.recipientId === input.actor.id) return;
-    const prefs = await getUserNotificationPrefs(input.recipientId);
-    if (prefs[input.type] === false) return;
-    const things = await getThingsCollection();
-    await things.insertOne(notificationDoc(input, new Date()) as any);
-    void trimRecipient(input.recipientId).catch(() => {});
+    const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
+    const pushOn = prefs.masters.push && prefs.push[input.type] !== false;
+    if (pushOn) {
+      const things = await getThingsCollection();
+      await things.insertOne(notificationDoc(input, new Date()) as any);
+      void trimRecipient(input.recipientId).catch(() => {});
+    }
+    // The email channel rides the same emit but is fire-and-forget — the
+    // social action never waits on SES (emails.ts re-checks its own gates).
+    void maybeEmailNotification(input).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] emit failed:', err?.message || err);
   }
@@ -137,6 +143,12 @@ export const emitNotificationsBulk = async (
     if (!docs.length) return;
     const things = await getThingsCollection();
     await things.insertMany(docs as any, { ordered: false });
+    const deduped = docs.map((doc) => ({
+      recipientId: String(doc.ownerId),
+      type: doc.crystal.type as NotificationType
+    }));
+    // email pass is fire-and-forget for the same reason as single emits
+    void emailNotificationsBulk(deduped, base).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] bulk emit failed:', err?.message || err);
   }
@@ -201,8 +213,13 @@ export const listNotifications = async (
       ? new Date(options.before)
       : null;
 
-  const prefs = await getUserNotificationPrefs(userId);
-  const disabled = Object.entries(prefs)
+  const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(userId));
+  // Push master off = the bell goes quiet entirely (list AND badge), without
+  // touching the stored per-type switches.
+  if (!prefs.masters.push) {
+    return { ok: true, notifications: [], unreadCount: 0, nextBefore: null };
+  }
+  const disabled = Object.entries(prefs.push)
     .filter(([, enabled]) => enabled === false)
     .map(([type]) => type);
 
