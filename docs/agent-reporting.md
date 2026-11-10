@@ -80,7 +80,10 @@ access are checked again on later work.
 Coordination uses the existing private-subspace audience rules. The gateway
 never changes subspace visibility and refuses further work if it is no longer
 private. An owner deliberately changing visibility later retains the normal
-product behavior; reporting does not add a separate visibility lock.
+product behavior; reporting does not add a separate visibility lock. A
+private-only reporting token can read this exact bound post through reporting
+even though its base audience is `tt:all` within the private subspace. This
+does not grant access through the general Things API.
 
 Each report requires a UUID-v4 `requestId`. Retrying an uncertain response must
 reuse both that ID and the immutable inputs. A different payload with the same
@@ -105,8 +108,23 @@ specific dependency is unavailable.
 Readback exposes safe operation state when a request was interrupted. A failure
 proved to precede any data mutation releases its task lock; an ambiguous write
 retains its receipt and lock. Do not change its request ID to retry or directly
-delete protected records. Inspect the exact candidate records and report the
-remaining recovery requirement before continuing dependent writes.
+delete protected records.
+
+With compatible `api.agent-reporting` 1.1.0 or later, a coordination receipt can
+reconcile a saved post after text moderation releases it. Inspect `activeOperation`
+and retry the original `coordinate_thingtime_agent_task` arguments, including the
+same request ID, title, text and renderer. The server does not create or update
+the post on this retry. It checks the saved post's exact Character, normalized
+content and private subspace projection, confirms authorized reads and anonymous
+refusal, and releases the task lock only when the binding and receipt are complete.
+A still-pending, blocked, changed, or unverifiable post leaves the operation
+unresolved. Readback still reports the active operation even if moderation
+temporarily makes a previously bound post unreadable. An interrupted update
+without a saved write confirmation stays pending even if the previous post
+has the same content. Older initial creates lack that confirmation; only the
+deterministic first post created at or after the receipt can qualify, while
+the task still holds that request's lock and has no bound post. Saved Action
+mutations do not use this coordination recovery path.
 
 ## Verification
 
