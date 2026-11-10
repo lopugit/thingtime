@@ -15,10 +15,32 @@ incompatible manifest. A failed check can be retried after the origin is fixed.
 
 Reporting requires the independent `agents.report` PAT permission. Existing
 `things` or `things.read` grants do not include it and are never upgraded
-silently. In the normal Thingtime connection authorization, select this
-permission in Advanced settings and reconnect once. A reporting-only connection
-can omit the general Things permissions. Keep the resulting credential within
-the host's OAuth connection; never paste it into a chat or a source file.
+silently. In the current host, list accounts and verify the connected profile.
+Call `login_thingtime` with the exact `accountId` and
+`requiredScopes: ["agents.report"]`, or call a reporting tool with the exact
+account ID. For the same Thingtime origin, an account missing the permission
+returns an `insufficient_scope` tool challenge. The host opens its registered
+OAuth flow; authorize **Private agent reporting** for the verified signed-in
+Thingtime account. Additional Things access is optional and explicit. Cancel
+leaves the existing grant unchanged and creates no reporting credential.
+Reopening the same scoped OAuth attempt after approval or cancellation is
+refused during its replay retention window; start a fresh host authorization.
+
+OAuth approval can return a new named account ID in the host. Previous grants
+are not changed or copied to that connection. After approval, list accounts and
+verify the owner, origin and live `agents.report` scope with
+`get_thingtime_profile`. Use that exact account ID before resuming any reporting
+write. The stable reporting identity stays bound to its owner, origin and
+`externalTaskId`; a new named account ID for the same owner and origin does not
+require a new task. Keep credentials within the host's connection. Existing
+grants that already explicitly included the reporting PAT permission still work.
+
+The upgrade contract requires `api.chatgpt-mcp` 2.2.0,
+`api.chatgpt-oauth-authorize` 1.3.0 and `api.chatgpt-oauth-token` 1.1.0, or
+compatible versions at the exact host origin. For a host that does not act on
+the challenge, use its supported OAuth connection controls and the existing
+Advanced connection settings permission selector; verify the resulting profile
+before doing any reporting.
 
 The permission delegates only the closed private reporting workflow. Public-only
 and creation-only sandbox tokens cannot use it. The account must own the exact
@@ -90,8 +112,11 @@ remaining recovery requirement before continuing dependent writes.
 
 Run `test:chatgpt`, `test:agent-reporting`, `test:characters`, `test:pat-scopes`
 and `test:api-capabilities` from `remix`. The HTTP acceptance runner is
-`node remix/scripts/agent-reporting-acceptance.mjs` after a Node-server build.
-Supply `AGENT_REPORTING_AUTHORED_THINGS` as an external synthetic saved-workspace
+`node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect` after a
+Node-server build. It verifies actual reporting through the upgraded MCP grant
+using synthetic workspace Things created through the API. To test the broader
+reporting lifecycle, omit `--scoped-reconnect` and supply
+`AGENT_REPORTING_AUTHORED_THINGS` as an external synthetic saved-workspace
 fixture. It uses a disposable replica set, synthetic accounts, normal API
 fixture writes and a real OAuth/MCP exchange; no production credential or
 personal browser profile belongs in this test.
