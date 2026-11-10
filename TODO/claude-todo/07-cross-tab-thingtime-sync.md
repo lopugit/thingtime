@@ -1,13 +1,13 @@
 # 07 — Cross-tab sync for persisted thingtime state
 
-> **Status (reconciled with current `develop` on 2026-08-18): 🟢 Built.**
-> `remix/app/Providers/thingtimeSyncChannel.ts` broadcasts successfully applied
-> local writes on `BroadcastChannel('thingtime')`. Values use the active safe
-> codec in `thingtimeSerialization.ts`; remote writes use the normal mutation
-> queue with `{ ignoreUndoRedo: true, fromRemote: true }`. Unit coverage runs in
-> `test:autosave`; live two-tab results are recorded below. Remaining optional
-> hardening: cold-tab revision reconciliation (implementation item 5) and
-> same-path concurrent-write resolution (implementation item 6).
+> **Status (2026-07-21): 🟢 Built.** `remix/app/Providers/thingtimeSyncChannel.ts`
+> broadcasts every local `setThingtime` write on `BroadcastChannel('thingtime')`
+> using the persist path's flatted codec; other tabs apply it through the normal
+> mutation queue with `{ ignoreUndoRedo: true, fromRemote: true }` (no echo, no
+> undo pollution, pre-hydration messages held in order). Live-verified in two
+> tabs both directions, incl. the stale-tab clobber scenario and a 20-write
+> burst. Unit tests: `thingtimeSyncChannel.test.ts` (runs in `test:autosave`).
+> Remaining optional hardening: the cold-tab revision diff below (plan step 5).
 
 ## What it's for
 
