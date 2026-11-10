@@ -312,7 +312,7 @@ if (photoRecovery || mobilePanel) {
  };
 }
 const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedAt: new Date().toISOString(),
- roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: params.has('iosResources') ? 'ios' : 'macos', fileAccessVersion: '1.16.0', ...(params.has('iosResources') ? {} : { fileResourceLimitsVersion: '1.1.0' }), fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null, resourceUsage: { deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }, resources: { version: 1, cpuPercent: 3, cpuStatus: 'measured', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, currentUploadBytesPerSecond: 1000, currentDownloadBytesPerSecond: 2000, scanBytesPerSecond: 3000, memoryBytes: 1048576, measuredAt: Date.now() } } });
+ roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, folderEnrollmentVersion: '1.0.0', capabilities: { platform: params.has('iosResources') ? 'ios' : 'macos', fileAccessVersion: '1.16.0', ...(params.has('iosResources') ? {} : { fileResourceLimitsVersion: '1.1.0' }), fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null, resourceUsage: { deviceResourceLimits: { transferBytesPerSecond: 625000, scanBytesPerSecond: 625000, cpuPercent: 15 }, resources: { version: 1, cpuPercent: 3, cpuStatus: 'measured', effectiveTransferConcurrency: 1, effectiveIndexingConcurrency: 1, currentUploadBytesPerSecond: 1000, currentDownloadBytesPerSecond: 2000, scanBytesPerSecond: 3000, memoryBytes: 1048576, measuredAt: Date.now() } } });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, connectionLists = 0, holdNextStart = false;
 let priorities = { revision: 0, paths: [] as string[] };
 const desktopFolderTest = params.get('desktopFolder');
@@ -324,6 +324,7 @@ if (desktopFolderTest) Object.assign(window, {
  thingtimeDesktop: { platform: 'darwin', getInfo: async () => ({ contentOrigin: location.origin, apiOrigin: selectedDesktopApi + '/' }) }
 });
 let resumeFault: string | null = null; const resumeWrites: any[] = [];
+const fixtureSyncActivity = new Map<string, { id: string; startedAt: number; endedAt: number; lastActivityAt: number; status: 'complete'; sentBytes: number; receivedBytes: null }>();
 const commands: any[] = [], replies = new Map<string, any>();
 const heldStarts = new Set<string>();
 const snapshot = () => ({ ...structuredClone(status), observedAt: new Date().toISOString() });
@@ -331,6 +332,15 @@ const json = (data: unknown, status = 200) => Response.json(data, { status });
 Object.assign(window, { remoteSyncFixture: {
  failResume(value: string) { resumeFault = value; },
  setOnline(value: boolean) { offline = !value; },
+ finishConfig(id: string) {
+  const job = status.jobs.find(row => row.connectionId === id);
+  if (!job || status.task?.connectionId !== id) throw Error('The requested fixture sync has not started');
+  const endedAt = Date.now();
+  const record = { id: 'latest-test-run', startedAt: endedAt - 2000, endedAt, lastActivityAt: endedAt,
+   status: 'complete' as const, sentBytes: 1540, receivedBytes: null };
+  fixtureSyncActivity.set(id, record);
+  status.connectionActivityVersion = '1.0.0'; status.task = null; job.state = 'scheduled'; job.activity = record;
+ },
  failNext(value: string) { failure = value; },
  holdStartAcknowledgement() { holdNextStart = true; },
  releaseStartAcknowledgements() { for (const requestId of heldStarts) replies.set(requestId, { ok: true, status: 'complete', result: { accepted: true } }); heldStarts.clear(); },
@@ -409,6 +419,13 @@ window.fetch = async (input, init) => {
  }
  if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
   return json({ ok: false, error: 'Fixture scope headers missing' }, 409);
+ if (url.pathname === '/api/v1/things/storage-policy' && (init?.method || 'GET') === 'GET') {
+  const id = url.searchParams.get('id');
+  const row = rows.find(value => value.id === id && value.author.id === ownerId);
+  if (!row) return json({ ok: false, error: 'Thing not found' }, 404);
+  return json({ ok: true, canEdit: true, source: { id, revision: row.updatedAt || 'fixture-v1', sourceHash: 'a'.repeat(64) },
+   policy: { revision: null, cloudSync: true, defaultLocalAvailability: 'inherit', automaticDownloadDeviceId: null }, device: null });
+ }
  if (url.pathname === '/api/v1/devices/folders') {
   const method = init?.method || 'GET';
   const expectedApiOrigin = headers.get('X-Thingtime-Expected-Api-Origin');
@@ -451,6 +468,8 @@ window.fetch = async (input, init) => {
      return json({ ok: false, error: 'Saved connection changed. Refresh settings.' }, 409);
     status.jobs = [{ connectionId: saved.id, state: 'runnable', ...(command.intervalMs ? { intervalMs: command.intervalMs } : {}) }];
     status.task = { connectionId: saved.id, active: true, status: 'running', progress: { stage: 'transferring', confirmed: 2, total: 7, bytes: 1024, size: 4096 } };
+   } else if (command.action === 'folders' && command.request.action === 'choose' && params.has('addDownloads')) {
+    if (!status.roots.some(root => root.id === 'local-downloads')) status.roots.push({ id: 'local-downloads', name: 'Downloads', sourcePath: '/Users/example/Downloads' });
    } else if (command.action === 'pause') {
     status.jobs = [{ connectionId: command.connectionId, state: 'paused' }];
     if (status.task) status.task = { ...status.task, active: false, status: 'paused' };
@@ -459,6 +478,9 @@ window.fetch = async (input, init) => {
     priorities = { revision: priorities.revision + 1, paths: command.paths };
    }
    reply = { ok: true, status: 'complete', result: command.action === 'resources' ? status.resourceUsage : command.action === 'folders' ? { roots: status.roots } : command.action === 'status' ? snapshot() :
+    command.action === 'connection-activity' ? { connectionId: command.connectionId, records: fixtureSyncActivity.has(command.connectionId) ? [fixtureSyncActivity.get(command.connectionId)] : [], next: null } :
+    command.action === 'start' && command.intervalMs !== undefined ? { accepted: true, folderEnrollmentVersion: '1.0.0',
+     connectionId: command.connectionId, expectedUpdatedAt: command.expectedUpdatedAt, intervalMs: command.intervalMs, pendingFolderValidation: false } :
     command.action === 'details' ? {} : command.action === 'priorities' ? structuredClone(priorities) : { accepted: true } };
    if (command.action === 'start' && holdNextStart) {
     holdNextStart = false; heldStarts.add(requestId); reply = { ok: true, status: 'processing' };
@@ -557,6 +579,6 @@ const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ use
    <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={photoRoots} />}</Box>
  </> : params.has('native') ? <MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={initialStatus().roots} host={nativeFixtureHost} /> : <>
   <DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} devicePlatform={mobile ? 'ios' : 'macos'} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} />
-  {mobilePanel && <MobileDeviceSetupCard ownerId={ownerId} syncAnchor />}
+  {mobilePanel && <MobileDeviceSetupCard ownerId={ownerId} showFolderEditor={false} />}
  </>}<SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider></CurrentPageBuilderFixture> }, { path: '/things', element: <h1>Folder opened</h1> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

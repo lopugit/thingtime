@@ -9,10 +9,13 @@ export function SyncEditorPlacement({ targetId, children }: { targetId?: string;
  const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
  React.useLayoutEffect(() => {
   const element = stableContainer.current ??= document.createElement('div');
-  const target = (targetId && document.getElementById(targetId)) || fallback.current;
-  target?.appendChild(element);
   setContainer(element);
   return () => element.remove();
- }, [targetId]);
+ }, []);
+ React.useLayoutEffect(() => {
+  const element = stableContainer.current;
+  const target = (targetId && document.getElementById(targetId)) || fallback.current;
+  if (element && target && element.parentNode !== target) target.appendChild(element);
+ });
  return <><div ref={fallback} />{container ? createPortal(children, container) : null}</>;
 }

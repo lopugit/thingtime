@@ -136,13 +136,13 @@ import {ThingParentPaths,parentPathBlocks} from '../app/components/Things/ThingP
 			const expanded = await sections.evaluateAll((elements) => elements.filter((e) => e.getAttribute('aria-expanded') === 'true').length);
 			assert.equal(expanded, 0);
 			await page.getByRole('button', { name: 'Expand File sync & backup', exact: true }).click();
-			const syncLink = page.getByRole('link', { name: 'Open device sync & backup', exact: true });
+			const syncLink = page.getByRole('link', { name: 'Manage folders & sync configs', exact: true });
 			assert.equal(new URL(await syncLink.getAttribute('href'), 'http://fixture').searchParams.get('deviceView'), 'sync');
 			await page.getByRole('button', { name: 'All Things test entry', exact: true }).click();
 			await page.getByRole('button', { name: 'Open dedicated sync page', exact: true }).click();
 			await page.getByRole('heading', { name: 'Device sync & backup', exact: true }).waitFor();
 			await page.getByRole('link', { name: 'Activity manager', exact: true }).waitFor();
-			const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
+			const manage = page.locator('summary').filter({ hasText: 'Manage folders & sync configs' });
 			assert.equal(await manage.locator('..').evaluate((el) => el.open), false);
 			await manage.click();
 			assert.equal(await manage.locator('..').evaluate((el) => el.open), true);

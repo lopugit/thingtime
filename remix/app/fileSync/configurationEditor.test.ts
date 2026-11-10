@@ -10,6 +10,8 @@ import {
 	readConfigurationDrafts,
 	readConfigurationDraft,
 	readOwnedSyncFolder,
+	readPendingSyncEnrollment,
+	readSavedSyncEnrollment,
 	saveConfigurationDraft,
 	type ConfigurationDraft,
 	type ConfigurationEditorTransport
@@ -86,6 +88,28 @@ test('persisted fixed identity recovers an accepted create with a lost reply wit
 	await saveConfigurationDraft(pending, scope, f.api);
 	assert.deepEqual(f.stats(), { creates: 1, updates: 0, verifies: 1 });
 });
+test('interrupted automatic setup preserves its exact cloud revision and cadence across reload', async () => {
+	const original = row(), api = fixture(original);
+	const pending = readConfigurationDraft(JSON.stringify({ ...fresh(), enrollment: { intervalMs: 900_000, savedRevision: original.updatedAt } }), scope.deviceId)!;
+	assert.equal(pending.enrollment?.intervalMs, 900_000);
+	assert.equal((await readPendingSyncEnrollment(pending, scope, api.api)).updatedAt, original.updatedAt);
+	assert.deepEqual(api.stats(), { creates: 0, updates: 0, verifies: 0 });
+	for (const changed of [row(config, '2026-10-17T00:00:02Z'), row({ ...config, name: 'Changed' }), null])
+		await assert.rejects(readPendingSyncEnrollment(pending, scope, fixture(changed).api), ConfigurationConflict);
+	api.switch();
+	await assert.rejects(readPendingSyncEnrollment(pending, scope, api.api), /identity changed/);
+	assert.throws(() => readConfigurationDraft(JSON.stringify({ ...pending, pending: false }), scope.deviceId), /automatic sync request/);
+});
+
+test('startup checks a lost save by fixed identity without writing or accepting a different policy', async () => {
+	const pending = { ...fresh(), enrollment: { intervalMs: 300_000 } };
+	const f = fixture();
+	assert.equal(await readSavedSyncEnrollment(pending, scope, f.api), null);
+	assert.deepEqual(f.stats(), { creates: 0, updates: 0, verifies: 0 });
+	assert.equal((await readSavedSyncEnrollment(pending, scope, fixture(row()).api))?.id, pending.id);
+	await assert.rejects(readSavedSyncEnrollment(pending, scope, fixture(row({ ...config, name: 'New settings' })).api), ConfigurationConflict);
+});
+
 test('accepted update with lost response recovers exact current state and never repeats mutation', async () => {
 	const original = row(),
 		f = fixture(original);

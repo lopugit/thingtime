@@ -98,8 +98,8 @@ if (!process.env.TT_DESKTOP_SYNC_WORKER) {
         await layout.getByRole('button', { name: 'Save layout', exact: true }).click();
         await layout.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
         await layout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
-        await page.getByRole('button', { name: 'Save connection', exact: true }).click();
-        await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).click();
+        await page.getByRole('button', { name: 'Save sync config', exact: true }).waitFor({ state: 'hidden' });
         const saved = await page.evaluate(() => window.syncInspectionFixture.savedRows().find(row => row.thingtime.includes('file-sync'))?.crystal);
         assert.equal(saved.mode, 'backup'); assert.equal(saved.paused, false);
         assert.equal(await page.getByRole('button', { name: 'Upload now', exact: true }).isEnabled(), true);

@@ -1,4 +1,5 @@
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
+export const ATTACHMENT_BLOB_THINGTIME = 'attachment-content-blob' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
 export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
@@ -99,6 +100,15 @@ export type AttachmentPrivateObjectFields = {
 	attachmentLinked?: true;
 };
 
+export type AttachmentBlobRef = { id: string; objectAttachmentId: string; objectVersionId: string };
+export const validAttachmentBlobRef = (value: unknown): value is AttachmentBlobRef => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const ref = value as AttachmentBlobRef;
+  return Object.keys(ref).length === 3 && typeof ref.id === 'string' && /^blob-[a-f0-9]{64}$/.test(ref.id) &&
+    typeof ref.objectAttachmentId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(ref.objectAttachmentId) &&
+    isAttachmentObjectVersionId(ref.objectVersionId);
+};
+
 export type AttachmentStorageCandidate = {
 	thingtime?: unknown;
 	crystal?: unknown;
@@ -117,6 +127,8 @@ export type AttachmentStorageCandidate = {
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
 	attachmentLinked?: unknown;
+	attachmentBlob?: unknown;
+	attachmentRedundantDeleteAfter?: unknown;
 };
 
 export type AttachmentMetadataResult = { ok: true; crystal: AttachmentCrystal } | { ok: false; error: string };
@@ -720,6 +732,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (looksLinked) {
 		if (
 			doc.attachmentLinked !== true ||
+      doc.attachmentBlob !== undefined ||
 			typeof doc.objectKey !== 'string' ||
 			!doc.objectKey.startsWith(LINKED_ATTACHMENT_OBJECT_KEY_PREFIX) ||
 			doc.objectSizeBytes !== 0 ||
@@ -748,5 +761,14 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	}
 	const crystal = canonicalAttachmentCrystal(doc.crystal);
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
+  if (doc.attachmentRedundantDeleteAfter !== undefined && (!validAttachmentBlobRef(doc.attachmentBlob) ||
+    !(doc.attachmentRedundantDeleteAfter instanceof Date) || !Number.isFinite(doc.attachmentRedundantDeleteAfter.getTime()) ||
+    doc.objectKey === 'objects/' + doc.attachmentBlob.objectAttachmentId)) return null;
+  if (doc.attachmentBlob !== undefined) {
+    if (!validAttachmentBlobRef(doc.attachmentBlob) || doc.attachmentPurpose !== 'file' ||
+      !['ready', 'deleting'].includes(doc.attachmentState as string) ||
+      !isAttachmentObjectVersionId(doc.objectVersionId) || doc.uploadId !== undefined) return null;
+    return doc.attachmentRedundantDeleteAfter === undefined ? 0 : Number(doc.objectSizeBytes);
+  }
 	return Number(doc.objectSizeBytes);
 };

@@ -2573,6 +2573,48 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Shared storage for synced files
+
+Synced files with an identical verified fingerprint share one private object
+within an account. Each file retains its own permissions, filename, history and
+logical version. Account storage charges for the shared object once and still
+accounts for each file’s metadata. Trash and retained versions keep their
+references. The ordinary cleanup removes and refunds the exact physical object
+only after the final eligible reference and retention hold are gone.
+
+Shared writes start disabled on each home database. Use the existing private
+attachment bucket and version permissions described above, or the local storage
+stand-in for development. No extra deployment variable is needed. Before
+activation, inventory every API deployment, preview, worker and cleanup job with
+access to the home database. Upgrade them or revoke their access. Confirm that
+all remaining origins advertise compatible `api.attachment-uploads` 1.11.0,
+`api.attachment-upload-complete` 1.8.0, `api.attachment-content` 1.19.0 and
+`api.attachment-upload-abort`, `api.attachment-delete` and
+`api.attachment-cleanup` 1.3.0. Check the actual callers and database routing as
+well as the manifests. An older cleanup runtime can delete bytes that a newer
+runtime has shared.
+
+In Admin → Migrations, dry-run and then confirm `activate-sync-attachment-blobs`
+for that home database. After activation, use an authorized test account to
+upload the same file from two sync configurations and verify that both logical
+versions download correctly and only one object allocation is charged. Check
+deletion with disposable references before touching existing files.
+
+The separate `consolidate-sync-attachment-blobs` migration applies to existing
+files with recorded sync provenance. Start with a dry run to count the remaining
+candidates. Confirm a bounded pass and repeat after the signed download URL
+window has elapsed. The migration verifies both exact objects before switching
+the reference, preserves the logical version, and refunds the redundant bytes
+only after deleting the original redundant object version. Review skips and
+remaining work between passes. Use a compatible build for any rollback after
+activation because existing shared references still require compatible reads,
+accounting and cleanup.
+
+Run `npm --prefix remix run test:attachments:retention` to exercise activation,
+version retention, same-account reuse, isolation across accounts, and exact
+quota refunds against the local private object provider and a disposable MongoDB
+replica.
+
 ### Local attachment storage (laptop stand-in for the private bucket)
 
 The private bucket is reached only through Vercel's OIDC role, so a checkout

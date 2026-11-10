@@ -12,7 +12,7 @@ export function syncConnectionGlance(input: { progress?: ForegroundSyncProgress 
   const total: SyncDirectionTotal | undefined = directions?.[name], reading = input.rates?.[name];
   const title = name === 'upload' ? 'Thingtime · uploads received' : `${input.deviceLabel ?? 'Mac'} · downloads received`;
   const excluded = name === 'download' ? input.mode === 'upload' || input.mode === 'backup' : input.mode === 'download';
-  if (excluded) return { title, rate: 'Off for this connection', progress: '', bytes: '', inflight: '', remaining: '', operations: '', percent: 0, unknown: true };
+  if (excluded) return { title, rate: 'Off for this sync config', progress: '', bytes: '', inflight: '', remaining: '', operations: '', percent: 0, unknown: true };
   const transferring = input.progress?.stage === 'transferring' || input.progress?.stage === 'retaining';
   const rate = !input.online ? 'Unavailable · device offline' : input.waiting ? 'Unavailable · waiting' :
    input.paused || !input.active ? '0 Mbps · ' + (input.paused ? 'paused' : 'idle') :

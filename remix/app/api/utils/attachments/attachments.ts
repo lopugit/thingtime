@@ -1,9 +1,12 @@
+import { syncAttachmentDedupActive } from './attachmentBlobActivation';
+import { purgeRedundantAttachmentObject } from './attachmentBlobMaintenance';
+import { attachmentPhysicalObject, sameAttachmentBlobFingerprint } from './attachmentBlobs';
 import { attachmentPurposeAllowsEmpty } from './attachmentCore';
 import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { logFinalizationFailure, type AttachmentFinalizationStage } from './finalizationDiagnostic';
 import { activeAttachmentRetention, attachmentRetention } from './attachmentRetention';
 import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
-import { contentPartPlan, equalContentFingerprints, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
+import { contentPartPlan, equalContentFingerprints, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, validContentFingerprint, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
@@ -26,6 +29,7 @@ import { canViewHomeAttachmentTarget, type AttachmentAccessViewer } from './atta
 import { canViewSharedCompositionAttachment } from '../actions/sharedComposition';
 import {
 	AttachmentStoreConflictError,
+	AttachmentBlobBusyError,
 	ATTACHMENT_DELETING_RETRY_DELAY_MS,
 	ATTACHMENT_FINALIZING_DELETE_GRACE_MS,
 	ATTACHMENT_MPU_EMPTY_RECHECK_MS,
@@ -92,6 +96,7 @@ type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
 	closeRetention: typeof attachmentRetention.closeForDeletion;
+  dedupActive: typeof syncAttachmentDedupActive;
 	// Only the full-session password endpoint constructs this internal adapter.
 	passwordVault?: boolean;
   ownedMediaDraftIds: typeof ownedMediaDraftIds;
@@ -223,6 +228,7 @@ export const validateCompletedAttachmentParts = (
 };
 
 const knownFailure = (error: unknown): AttachmentFail | null => {
+  if (error instanceof AttachmentBlobBusyError) return fail(409, error.message, { code: 'upload_initializing', retryable: true });
 	if (error instanceof StorageMutationError) {
 		return fail(error.status, error.message, {
 			code: error.code,
@@ -286,6 +292,7 @@ const exactPartRequest = (value: unknown, partCount: number) => {
 
 const defaultDependencies: AttachmentServiceDependencies = {
 	closeRetention: attachmentRetention.closeForDeletion,
+  dedupActive: syncAttachmentDedupActive,
   ownedMediaDraftIds,
 	store: attachmentStore,
 	getS3: getPrivateS3,
@@ -312,19 +319,33 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const verifiedHeadForDoc = async (s3: AttachmentS3, doc: AttachmentDoc, versionId?: string): Promise<AttachmentObjectHead> => {
-		const head = await s3.headObject({ objectKey: doc.objectKey, ...(versionId ? { versionId } : {}) });
+    const physical = attachmentPhysicalObject(doc);
+    const exactVersion = doc.attachmentBlob ? physical.versionId : versionId;
+		const head = await s3.headObject({ objectKey: physical.objectKey, ...(exactVersion ? { versionId: exactVersion } : {}) });
 		if (
 			head.sizeBytes !== doc.objectSizeBytes ||
-			head.attachmentId !== doc.shareId ||
+			head.attachmentId !== physical.attachmentId ||
 			!isAttachmentObjectVersionId(head.versionId) ||
-			(versionId && head.versionId !== versionId)
+			(exactVersion && head.versionId !== exactVersion)
 		) {
 			throw new AttachmentServiceError(409, 'Uploaded object failed integrity verification');
 		}
 		return head;
 	};
 
-	const deleteS3ForDoc = async (s3: AttachmentS3, inputDoc: AttachmentDoc) => {
+  const tagReady = (s3: AttachmentS3, doc: AttachmentDoc) => {
+    const physical = attachmentPhysicalObject(doc);
+    if (!isAttachmentObjectVersionId(physical.versionId)) throw new AttachmentServiceError(409, 'Attachment object version is unavailable');
+    return s3.markObjectReady({ objectKey: physical.objectKey, versionId: physical.versionId });
+  };
+
+	const deleteS3ForDoc = async (s3: AttachmentS3, inputDoc: AttachmentDoc, finalSharedReference = false) => {
+    if (inputDoc.attachmentBlob) {
+      if (!finalSharedReference) throw new AttachmentServiceError(409, 'Shared object deletion requires the final-reference claim');
+      const physical = attachmentPhysicalObject(inputDoc);
+      await s3.deleteObject({ objectKey: physical.objectKey, versionId: physical.versionId! });
+      return;
+    }
 		let doc = inputDoc;
 
 		let versionId = doc.objectVersionId;
@@ -443,9 +464,22 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			return { status: 'deferred', retryAt: claimed.attachmentExpiresAt };
 		}
+    if (claimed.attachmentBlob) {
+      if (claimed.attachmentRedundantDeleteAfter) {
+        const retryAt = claimed.attachmentRedundantDeleteAfter;
+        if (retryAt > dependencies.now()) {
+          await dependencies.store.deferDeletingRetry(claimed.ownerId, claimed.shareId, retryAt);
+          return { status: 'deferred', retryAt };
+        }
+        await purgeRedundantAttachmentObject(s3, claimed, dependencies.now());
+      }
+      if (!dependencies.store.prepareBlobDeletion) throw new AttachmentServiceError(503, 'Shared content cleanup is unavailable');
+      const outcome = await dependencies.store.prepareBlobDeletion(claimed.ownerId, claimed.shareId);
+      if (outcome !== 'last') return { status: outcome };
+    }
 		const multipartDeferred = await verifyMultipartCleanupPass(s3, claimed);
 		if (multipartDeferred) return multipartDeferred;
-		await deleteS3ForDoc(s3, claimed);
+		await deleteS3ForDoc(s3, claimed, !!claimed.attachmentBlob);
 		return (await dependencies.store.removeDeleting(claimed.ownerId, claimed.shareId)) ? { status: 'deleted' } : { status: 'skipped' };
 	};
 
@@ -706,7 +740,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 							versionId = head.versionId;
 							if (!dryRun) doc = await dependencies.store.setObjectVersionId(doc.ownerId, doc.shareId, versionId);
 						}
-						const detected = detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId }), doc.crystal.name);
+            const physical = attachmentPhysicalObject(doc);
+						const detected = detectedAttachmentType(await s3.detectContentType({ objectKey: physical.objectKey, versionId: physical.versionId ?? versionId }), doc.crystal.name);
 						if (detected.contentType === 'application/octet-stream' && !detected.detectedContentType) {
 							undetected += 1;
 							continue;
@@ -773,7 +808,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment upload request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose', 'fileSyncOrigin'].includes(key))) {
+			if (Object.keys(raw).some((key) => !['filename', 'contentType', 'sizeBytes', 'requestId', 'purpose', 'fileSyncOrigin', 'contentFingerprint'].includes(key))) {
 				return fail(400, 'Invalid attachment upload request');
 			}
 			const intent = attachmentUploadIntent(raw.purpose);
@@ -792,6 +827,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0 || (sizeBytes === 0 && (!attachmentPurposeAllowsEmpty(intent.purpose) || raw.sizeBytes !== 0)) || sizeBytes > ATTACHMENT_MAX_OBJECT_BYTES) {
 				return fail(400, `Attachment size must be between ${attachmentPurposeAllowsEmpty(intent.purpose) ? '0 bytes' : '1 byte'} and the S3 multipart ceiling of ${ATTACHMENT_MAX_OBJECT_BYTES} bytes (10000 parts of at most 5 GiB)`);
 			}
+      const expectedFingerprint = raw.contentFingerprint === undefined ? undefined
+        : fileSyncOrigin && validContentFingerprint(raw.contentFingerprint, sizeBytes) &&
+          Object.keys(raw.contentFingerprint).length === 4
+          ? { algorithm: raw.contentFingerprint.algorithm, partSizeBytes: raw.contentFingerprint.partSizeBytes,
+              partCount: raw.contentFingerprint.partCount, sha256: raw.contentFingerprint.sha256 }
+          : null;
+      if (expectedFingerprint === null) return fail(400, 'An exact sync upload origin and canonical content fingerprint are required');
 			const sanitized = sanitizeAttachmentPublicMetadata({
 				name: raw.filename,
 				size: sizeBytes,
@@ -858,6 +900,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						requestFingerprint,
 						purpose: intent.purpose,
 						...(fileSyncOrigin ? { fileSyncOrigin } : {}),
+            ...(expectedFingerprint && await dependencies.dedupActive() ? { expectedFingerprint } : {}),
 						profileSlot: intent.profileSlot,
 						...(intent.recordingImportDraft ? { recordingImportDraft: true as const } : {}),
 						expiresAt: expires
@@ -874,6 +917,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					reserved = raced;
 				}
 			}
+      if (expectedFingerprint && reserved.attachmentExpectedFingerprint &&
+        !equalContentFingerprints(expectedFingerprint, reserved.attachmentExpectedFingerprint)) return fail(409, 'Sync upload fingerprint changed');
       // Persist provenance before returning any byte-upload authority, including
       // retries of a pre-provenance deterministic reservation. Never infer it.
       if (fileSyncOrigin) {
@@ -889,6 +934,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (['recording', 'file', 'password'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
+        if (reserved.attachmentBlob) {
+          const head = await verifiedHeadForDoc(s3, reserved, reserved.objectVersionId);
+          if (!reserved.attachmentExpectedFingerprint ||
+            !sameAttachmentBlobFingerprint(reserved.attachmentExpectedFingerprint, fingerprintFromVerifiedHead(head), reserved.objectSizeBytes))
+            return fail(409, 'Stored bytes do not match the sync upload fingerprint');
+          await tagReady(s3, reserved);
+          if (reserved.objectSizeBytes > 0) dependencies.queueModeration?.(reserved.shareId);
+        }
 				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
 					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
 					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
@@ -1009,8 +1062,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (expiresInSeconds !== undefined && expiresInSeconds < 1) return fail(410, 'Transfer admission expired');
 			// A one-part object's entire committed source can be verified before
 			// giving storage any URL. Multipart objects are verified before Complete.
-			if (authority && plan.partCount === 1 && createHash('sha256').update(Buffer.from(requested[0].checksumSha256, 'base64')).digest('hex') !== authority.expectedFingerprint.sha256) {
-				return fail(409, 'Upload part does not match the admitted source');
+			if (plan.partCount === 1 && (authority || doc.attachmentExpectedFingerprint)) {
+        const fingerprint = createHash('sha256').update(Buffer.from(requested[0].checksumSha256, 'base64')).digest('hex');
+        if ((authority && fingerprint !== authority.expectedFingerprint.sha256) ||
+          (doc.attachmentExpectedFingerprint && fingerprint !== doc.attachmentExpectedFingerprint.sha256))
+          return fail(409, 'Upload part does not match the admitted source');
 			}
 			const s3 = dependencies.getS3();
 			const parts = await Promise.all(
@@ -1081,11 +1137,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					if (!raced.objectVersionId) {
 						const recovered = completedVersionId ? await verifiedHeadForDoc(s3, raced, completedVersionId) : await verifiedHeadForDoc(s3, raced);
 						raced = await dependencies.store.setObjectVersionId(ownerId, id, recovered.versionId);
-					} else if (completedVersionId && raced.objectVersionId !== completedVersionId) {
+					} else if (doc.attachmentPurpose !== 'file' && !raced.attachmentBlob && completedVersionId && raced.objectVersionId !== completedVersionId) {
 						await s3.deleteObject({ objectKey: doc.objectKey, versionId: completedVersionId });
 					}
 					if (!isAttachmentObjectVersionId(raced.objectVersionId)) return finalizationInProgress();
-					await s3.markObjectReady({ objectKey: raced.objectKey, versionId: raced.objectVersionId });
+					await tagReady(s3, raced);
 					const refused = await authority?.check();
 					if (refused) return refused;
 					return { ok: true, attachment: attachmentPublicProjection(raced.shareId, raced.crystal) };
@@ -1098,7 +1154,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				}
 
 				if (raced?.attachmentState === 'deleting') {
-					if (completedVersionId) {
+					if (completedVersionId && doc.attachmentPurpose !== 'file' && !raced.attachmentBlob) {
 						if (!raced.objectVersionId) {
 							raced = await dependencies.store.setObjectVersionId(ownerId, id, completedVersionId);
 						} else if (raced.objectVersionId !== completedVersionId) {
@@ -1113,7 +1169,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					});
 				}
 
-				if (completedVersionId) {
+        // An older file finalizer may outlive migration and deletion of the
+        // original logical reference, while aliases still own its bytes. Only
+        // the canonical file cleanup may remove a file version in this race.
+				if (completedVersionId && doc.attachmentPurpose !== 'file') {
 					// A different lease may have safely reverted to pending, or cleanup
 					// may have removed the row. This exact noncanonical version is ours
 					// to remove; the surviving billed row remains retryable/cleanable.
@@ -1145,7 +1204,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					return fail(409, 'Attachment object version is unavailable');
 				}
 				stage = 'tag-ready';
-				await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+				await tagReady(s3, doc);
 				stage = 'queue-moderation';
 				if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
 				const changed = await authority?.check();
@@ -1192,15 +1251,17 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
                 stage = 'verify-object';
                 const head = await verifiedHeadForDoc(s3, doc, doc.objectVersionId);
                 const lost = await renewFinalizationLease(head.versionId); if (lost) return lost;
-                if (!fingerprintFromVerifiedHead(head)) return fail(409, 'Empty object failed integrity verification');
+                const fingerprint = fingerprintFromVerifiedHead(head);
+                if (!fingerprint || (doc.attachmentExpectedFingerprint && !equalContentFingerprints(fingerprint, doc.attachmentExpectedFingerprint)))
+                  return fail(409, 'Empty object failed integrity verification');
                 const crystal: AttachmentCrystal = { ...doc.crystal, contentType: 'application/octet-stream', mediaKind: 'file' };
                 stage = 'persist-ready';
                 try { doc = await dependencies.store.markReady(ownerId, id, crystal, head.versionId,
-                    new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS), finalizationLeaseId); }
+                    new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS), finalizationLeaseId, fingerprint); }
                 catch (error) { if (!(error instanceof AttachmentStoreConflictError)) throw error; return settleLostFinalizationLease(head.versionId); }
                 if (!isAttachmentObjectVersionId(doc.objectVersionId)) return fail(409, 'Empty object version is unavailable');
                 stage = 'tag-ready';
-                await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+                await tagReady(s3, doc);
                 return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
             }
 			let uploadStillOpen = true;
@@ -1233,11 +1294,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						retryable: true
 					};
 				}
-				if (authority) {
+				if (authority || doc.attachmentExpectedFingerprint) {
 					const digest = createHash('sha256');
 					for (const part of verified.parts) digest.update(Buffer.from(part.checksumSha256, 'base64'));
-					const changed = await authority.check();
-					if (changed || digest.digest('hex') !== authority.expectedFingerprint.sha256) {
+					const changed = await authority?.check();
+          const sha256 = digest.digest('hex');
+					if (changed || (authority && sha256 !== authority.expectedFingerprint.sha256) ||
+            (doc.attachmentExpectedFingerprint && sha256 !== doc.attachmentExpectedFingerprint.sha256)) {
 						await dependencies.store.revertFinalizing(ownerId, id, finalizationLeaseId);
 						return changed ?? fail(409, 'Uploaded parts do not match the admitted source', { code: 'upload_parts_retryable', retryable: true });
 					}
@@ -1290,6 +1353,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Uploaded object failed integrity verification');
 			}
 			if (authority && !matchesTransferFingerprint(head, authority)) return fail(409, 'Stored bytes do not match the admitted source');
+      if (doc.attachmentExpectedFingerprint &&
+        !sameAttachmentBlobFingerprint(doc.attachmentExpectedFingerprint, fingerprintFromVerifiedHead(head), doc.objectSizeBytes))
+        return fail(409, 'Stored bytes do not match the sync upload fingerprint');
 
 			stage = 'detect-content';
 			const detected = doc.attachmentPurpose === 'password' ? { contentType: 'application/octet-stream', mediaKind: 'file' as const } : detectedAttachmentType(await s3.detectContentType({ objectKey: doc.objectKey, versionId: head.versionId }), doc.crystal.name);
@@ -1306,7 +1372,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					readyCrystal,
 					head.versionId,
 					new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS),
-					finalizationLeaseId
+					finalizationLeaseId,
+          fingerprintFromVerifiedHead(head) ?? undefined
 				);
 			} catch (error) {
 				if (!(error instanceof AttachmentStoreConflictError)) throw error;
@@ -1316,7 +1383,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Attachment object version is unavailable');
 			}
 			stage = 'tag-ready';
-			await s3.markObjectReady({ objectKey: doc.objectKey, versionId: doc.objectVersionId });
+			await tagReady(s3, doc);
 			// Moderation runs AFTER the upload is durable and never affects the
 			// response — the analyzer stamps the protected root field async and the
 			// admin sweep retries anything that misses this kickoff.
@@ -1521,12 +1588,24 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const { doc } = readable;
 			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
+      const physical = attachmentPhysicalObject(doc);
 			const signed = await s3.signDownload({
-				objectKey: doc.objectKey,
-				versionId: doc.objectVersionId!,
+				objectKey: physical.objectKey,
+				versionId: physical.versionId!,
 				contentDisposition: attachmentContentDisposition(doc.crystal.name, inline),
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream'
 			});
+      // During historical consolidation a logical version keeps its identity
+      // but can move to another exact object. Do not release a URL from before
+      // the switch (the backfill drains the previously issued URLs).
+      if (doc.attachmentFileSyncOrigin) {
+        const fresh = await readableStoredAttachment(viewer, idInput, false, false, retainedVersion);
+        if (fresh.ok === false) return fresh;
+        const current = attachmentPhysicalObject(fresh.doc);
+        if (current.objectKey !== physical.objectKey || current.versionId !== physical.versionId)
+          return fail(409, 'Attachment changed while signing; retry the same version');
+      }
+
 			return {
 				ok: true,
 				...signed,
@@ -1558,8 +1637,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// deleted attachment cannot yield a fresh comparison receipt.
 			const current = await readableStoredAttachment(viewer, idInput, false, false);
 			if (current.ok === false) return current;
-			if (current.doc.objectVersionId !== head.versionId || current.doc.objectKey !== doc.objectKey) return fail(409, 'Attachment changed during fingerprint verification');
-			const version = attachmentContentVersion(doc.shareId, doc.objectKey, head.versionId);
+      const physical = attachmentPhysicalObject(current.doc);
+			if (current.doc.objectVersionId !== doc.objectVersionId || current.doc.objectKey !== doc.objectKey ||
+        physical.versionId !== head.versionId || physical.attachmentId !== head.attachmentId) return fail(409, 'Attachment changed during fingerprint verification');
+			const version = attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!);
 			return { ok: true, id: doc.shareId, version, size: head.sizeBytes, fingerprint: value };
 		} catch (error) { return knownFailure(error) || unavailable('fingerprint', error); }
 	};
@@ -1581,13 +1662,17 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const receipt = await fingerprint(viewer, idInput);
 			if (receipt.ok === false) return receipt;
 			if (receipt.version !== range.version || receipt.size !== doc.objectSizeBytes) return fail(409, 'Attachment changed during target verification');
-			const signed = await s3.signDownloadRange({ objectKey: doc.objectKey, versionId: doc.objectVersionId!, offset: range.offset, length: range.length });
+      const physical = attachmentPhysicalObject(doc);
+			const signed = await s3.signDownloadRange({ objectKey: physical.objectKey, versionId: physical.versionId!, offset: range.offset, length: range.length });
 			const expires = Date.parse(signed.expiresAt), now = dependencies.now().getTime();
 			let targetUrl: URL; try { targetUrl = new URL(signed.url); } catch { return fail(503, 'Signed range download target unavailable'); }
 			if (targetUrl.protocol !== 'https:' || targetUrl.username || targetUrl.password || targetUrl.hash || !Number.isFinite(expires) || expires <= now || expires > now + 60_000) return fail(503, 'Signed range download target unavailable');
 			const fresh = await readableStoredAttachment(viewer, idInput, false, false);
 			if (fresh.ok === false) return fresh;
-			if (fresh.doc.ownerId !== viewer.id || fresh.doc.objectKey !== doc.objectKey || fresh.doc.objectVersionId !== doc.objectVersionId) return fail(409, 'Attachment changed during target verification');
+      const currentPhysical = attachmentPhysicalObject(fresh.doc);
+			if (fresh.doc.ownerId !== viewer.id || fresh.doc.objectKey !== doc.objectKey || fresh.doc.objectVersionId !== doc.objectVersionId ||
+        currentPhysical.objectKey !== physical.objectKey || currentPhysical.versionId !== physical.versionId)
+        return fail(409, 'Attachment changed during target verification');
 			return { ok: true as const, target: { version: 1 as const, ownerId: viewer.id, attachmentId: doc.shareId, contentVersion: range.version, size: receipt.size, offset: range.offset, length: range.length, fingerprint: receipt.fingerprint, url: signed.url, expiresAt: signed.expiresAt, headers: { Range: `bytes=${range.offset}-${range.offset + range.length - 1}` } } };
 		} catch (error) { return knownFailure(error) || unavailable('download-target', error); }
 	};

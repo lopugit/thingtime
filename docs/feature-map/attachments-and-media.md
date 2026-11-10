@@ -1,5 +1,13 @@
 # Attachments and media
 
+Folder management and its sync configs share the editable device UI. Enrollment
+and config-scoped activity live in `fileSync/`; shared file payloads use the
+protected `attachments/attachmentBlobs.ts` lifecycle and
+`attachments/attachmentBlobMaintenance.ts` historical migration. Logical reads
+still authorize the attachment before resolving physical content. See
+[device sync configs](../device-sync-configs.md) and the matching `TESTING.md`
+checklist for quota, concurrent reference/deletion and installed-app acceptance.
+
 Paired-device background staging uses the existing private file reservation and
 multipart provider. `files/transferAdmissions.ts` verifies the browser session,
 exact pairing, saved configuration and private destination. It authorizes signing and

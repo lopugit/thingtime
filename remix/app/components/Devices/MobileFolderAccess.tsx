@@ -1,14 +1,12 @@
-import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
 import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 import { SyncConditionsWait } from '~/fileSync/foregroundSyncContext';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
 import { rootIdentity } from '~/utils/rootIdentity';
-import { SyncFolderCard } from './SyncFolderCard';
 import { MobileSyncConnections } from './MobileSyncConnections';
+import { newlyGrantedFolder } from './syncFolderEditor';
 const cached = new Map<string, MobileFolder[]>();
 type FolderAccessProps = { ownerId: string; deviceId: string; host?: FolderHost; active?: boolean };
 export function MobileFolderAccess({ ownerId, deviceId, host, active = true }: FolderAccessProps) {
@@ -29,12 +27,13 @@ export function MobileFolderAccess({ ownerId, deviceId, host, active = true }: F
 }
 function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, generation }: FolderAccessProps & { scopeKey: string; generation: number }) {
 	const requestFolders = host?.request ?? requestMobileFolders;
-	const cardTransport = React.useMemo(() => host ? { origin: host.origin(), fetch: host.fetch, currentOrigin: host.origin } : undefined, [host]);
 	const [roots, setRoots] = useState<MobileFolder[]>(() => cached.get(key) ?? []),
 		[busy, setBusy] = useState(false),
 		[error, setError] = useState(''),
 		[waiting, setWaiting] = useState(false);
 	const [rootsReady, setRootsReady] = useState(() => cached.has(key));
+	const [picked, setPicked] = useState<MobileFolder>();
+	const rootsRef = useRef(roots);
 	const [checked, setChecked] = useState<Record<string, string>>({});
 	const pending = useRef<AbortController | null>(null);
 	const needsForegroundRead = useRef(true);
@@ -43,9 +42,11 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
 	const [nativePhotoActive, setNativePhotoActive] = useState(false);
 	const transferring = !!task?.active || nativePhotoActive;
+	const transferBusy = useRef(transferring);
+	transferBusy.current = transferring;
 	const run = useCallback(
 		async function checkFolders(request: FolderRequest, retryAfterWake = true): Promise<void> {
-			if (pending.current || nativeSyncTasks.read()?.active || nativePhotoActive || (mobile && document.visibilityState === 'hidden')) return;
+			if (pending.current || (request.action !== 'list' && (nativeSyncTasks.read()?.active || transferBusy.current)) || (mobile && document.visibilityState === 'hidden')) return;
 			const controller = new AbortController();
 			pending.current = controller;
 			foregroundDuringRequest.current = false;
@@ -58,7 +59,10 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 				const identity = rootIdentity.read();
 				if (controller.signal.aborted || identity.pending || identity.generation !== generation) return;
 				needsForegroundRead.current = false;
+				const added = request.action === 'choose' && newlyGrantedFolder(rootsRef.current, result.roots);
+				rootsRef.current = result.roots;
 				setRoots(result.roots);
+				if (added) setPicked(added);
 				setRootsReady(true);
 				cached.set(key, result.roots);
 				if (cached.size > 32) cached.delete(cached.keys().next().value!);
@@ -91,13 +95,13 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 			}
 			if (retry && !controller.signal.aborted) await checkFolders({ action: 'list' }, false);
 		},
-		[ownerId, key, requestFolders, mobile, generation, nativePhotoActive]
+		[ownerId, key, requestFolders, mobile, generation]
 	);
 	useEffect(() => {
 		setBusy(false);
-		if (!transferring) void run({ action: 'list' });
+		if (!transferBusy.current) void run({ action: 'list' });
 		const wake = () => {
-			if (document.visibilityState !== 'visible' || transferring) return;
+			if (document.visibilityState !== 'visible' || transferBusy.current) return;
 			if (pending.current) foregroundDuringRequest.current = true;
 			else if (needsForegroundRead.current) void run({ action: 'list' });
 		};
@@ -114,53 +118,11 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 			pending.current = null;
 			controller?.abort();
 		};
-	}, [run, transferring, mobile]);
-	return (
-		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={3} paddingTop={3}>
-			<Flex align="center" justify="space-between" gap={2} wrap="wrap">
-				<Box flex="1" minWidth={{ base: '100%', sm: '180px' }}>
-					<Text fontSize="13px" fontWeight={700}>
-						Folder access {busy ? <Spinner as="span" size="xs" marginLeft={2} role="status" aria-label="Refreshing folder access" /> : null}
-					</Text>
-					<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-						Choose folders this account can use on this device. Selection alone does not start uploads.
-					</Text>
-				</Box>
-				<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || transferring} onClick={() => void run({ action: 'choose' })}>
-					Choose folder
-				</Button>
-			</Flex>
-			{roots.map((root) => (
-				<SyncFolderCard key={root.id} title={root.name} scopeKey={`${key}:${root.id}`} accountTransport={cardTransport}
-                    description="Folder access granted · configure a sync connection below"
-                    path={root.sourceKind === 'photos' ? root.name : supportsNativeSourcePaths(host?.capabilities ?? getNativeBridge()) && validNativeSourcePath(root.sourcePath) && root.sourceKind !== 'photos' ? root.sourcePath : 'Folder path unavailable'}
-                    stats={checked[root.id] || 'Not checked'}>
-                <Flex gap={2} align="center" wrap="wrap">
-					<Box flex="1" minWidth="140px" overflowWrap="anywhere">
-						<Text fontSize="13px">{root.name}</Text>
-						{checked[root.id] ? (
-							<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-								{checked[root.id]}
-							</Text>
-						) : null}
-					</Box>
-					<Flex gap={2}>
-						<Button size="xs" minHeight="40px" variant="outline" isDisabled={busy || transferring} onClick={() => void run({ action: 'scan', rootId: root.id })}>
-							Check folder
-						</Button>
-						<Button size="xs" minHeight="40px" variant="ghost" isDisabled={busy || transferring} onClick={() => void run({ action: 'remove', rootId: root.id })}>
-							Remove access
-						</Button>
-					</Flex>
-				</Flex></SyncFolderCard>
-			))}
-			{waiting && !busy && <Text role="status" fontSize="12px" marginTop={2}>Folder access will refresh when Thingtime is active.</Text>}
-			{error ? (
-				<Text role="alert" color="orange.600" fontSize="12px" marginTop={2}>
-					{error}
-				</Text>
-			) : null}
-			<MobileSyncConnections active={active} ownerId={ownerId} deviceId={deviceId} roots={roots} rootsReady={rootsReady} host={host} onNativePhotoActivity={setNativePhotoActive} />
-		</Box>
-	);
+	}, [run, mobile]);
+	useEffect(() => {
+		if (!transferring && needsForegroundRead.current) void run({ action: 'list' });
+	}, [transferring, run]);
+	return <MobileSyncConnections active={active} ownerId={ownerId} deviceId={deviceId} roots={roots}
+		rootsReady={rootsReady} host={host} onNativePhotoActivity={setNativePhotoActive}
+		folderManagement={{ run, busy, transferring, error, waiting, checked, picked }} />;
 }

@@ -1,3 +1,4 @@
+import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 import { createHash } from 'node:crypto';
 import { Timestamp } from 'mongodb';
 import { getHomeThingsCollection, getHomeThingtimeDb, THINGS_OWNER_IDENTITY_INDEX } from '../mongodb/collections';
@@ -251,7 +252,8 @@ export function createAccountInventoryStepper(
 		const attachment = async (doc: any) =>
 			backupAttachmentFromDoc(doc, scope.ownerId, Date.parse(timestamp), async (value: any) => {
 				await check();
-				const head = await deps.attachmentHead({ objectKey: value.objectKey, versionId: value.objectVersionId });
+				const physical = attachmentPhysicalObject(value);
+        const head = await deps.attachmentHead({ objectKey: physical.objectKey, versionId: physical.versionId! });
 				await check();
 				return head;
 			});

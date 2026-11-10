@@ -39,7 +39,7 @@ try {
    let name;
    if(kind==='scheduled'){
     await page.getByRole('button',{name:'Edit',exact:true}).first().click();
-    name=page.getByRole('textbox',{name:'Connection name',exact:true});
+    name=page.getByRole('textbox',{name:'Sync config name',exact:true});
     await name.fill(`${label} ${kind} preserved`);await name.focus();assert.equal(await name.evaluate(node=>node===document.activeElement),true,'input is focused before scheduled discovery');await name.evaluate(node=>{window.continuityDraftNode=node;});
    }
    const y=await page.evaluate(()=>scrollY);
@@ -47,7 +47,7 @@ try {
    if(kind==='retry')await panel.getByRole('button',{name:'Retry automatic sync',exact:true}).click();
    else await page.evaluate(()=>window.continuityFixture.schedule());
    await page.waitForFunction(before=>window.continuityFixture.state().held>before,before);
-   if(name)assert.equal(await page.getByRole('button',{name:'Save connection',exact:true}).isDisabled(),true,'active saved configuration cannot be changed');
+   if(name)assert.equal(await page.getByRole('button',{name:'Save sync config',exact:true}).isDisabled(),true,'active saved configuration cannot be changed');
    const currentY=await page.evaluate(()=>scrollY);
    await page.evaluate(()=>window.continuityFixture.release());
    await page.waitForFunction(()=>window.continuityFixture.state().task?.active===false);
@@ -70,7 +70,7 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.evaluate(()=>{localStorage.clear();window.continuityFixture.invalidate();});
   await page.getByText('Folders on this Mac',{exact:true}).waitFor({state:'hidden'});
-  assert.equal(await page.getByRole('textbox',{name:'Connection name',exact:true}).count(),0);
+  assert.equal(await page.getByRole('textbox',{name:'Sync config name',exact:true}).count(),0);
   results.push({viewport:label,actualExplicitRetry:true,actualScheduledDiscovery:true,sameInputNode:true,expansionDraftFocusScrollPreserved:true,identityClear:true,noOverflow:true});
  }
  assert.deepEqual(errors,[]);await writeFile(join(evidence,'results.json'),JSON.stringify({results,errors},null,2));console.log(JSON.stringify({ok:true,results,evidence}));

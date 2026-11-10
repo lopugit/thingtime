@@ -15,6 +15,13 @@ test('remote sync accepts management controls but never arbitrary native file tr
 	assert.throws(() => validateRemoteSyncCommand({ action: 'start', connectionId: 'connection', expectedUpdatedAt: '2026-10-23T00:00:00Z', intervalMs: '300000' }));
 });
 
+test('queue-only remote enrollment accepts only an exact timed start', () => {
+	const start = { action: 'start', connectionId: 'connection', expectedUpdatedAt: '2026-10-23T00:00:00Z', intervalMs: 300_000, queueOnly: true };
+	assert.deepEqual(validateRemoteSyncCommand(start), start);
+	for (const fields of [{ intervalMs: undefined }, { queueOnly: false }, { queueOnly: 'true' }, { ownerId: 'foreign' }])
+		assert.throws(() => validateRemoteSyncCommand({ ...start, ...fields }), /Invalid remote sync command/);
+});
+
 test('remote conflict approvals bind the exact review and observed revision', () => {
 	const base = { action: 'review', connectionId: 'connection', reviewId: 'review' };
 	assert.deepEqual(validateRemoteSyncCommand({ ...base, operation: 'finish', resolution: 'resolve', revision: 4 }), { ...base, operation: 'finish', resolution: 'resolve', revision: 4 });

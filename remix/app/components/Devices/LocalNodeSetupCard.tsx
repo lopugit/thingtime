@@ -155,7 +155,7 @@ export const LocalNodeSetupCard = ({
 			{registered ? (
 				<Flex align="center" color="var(--tt-muted, #71717a)" fontSize="10px" gap={1.5} marginTop={3}>
 					<FolderPlus aria-hidden size={13} />
-					Folder access is granted on this Mac. Sync connections can retain each folder’s absolute path in your private Things.
+					Review approved folders on this Mac in Folders & sync configs.
 				</Flex>
 			) : null}
 			{registered ? (

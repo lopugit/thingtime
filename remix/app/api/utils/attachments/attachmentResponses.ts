@@ -137,7 +137,8 @@ export const createAttachmentMutationAction = (
 			const result = await options.service(user.id, body);
 			if (result.ok === false) {
 				const { status, ...bodyResult } = result;
-				return json(bodyResult, { status });
+				return json(bodyResult, { status,
+          ...(result.retryable && result.code === 'upload_initializing' ? { headers: { 'Retry-After': '30' } } : {}) });
 			}
 			return json(result);
 		});

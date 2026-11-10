@@ -58,7 +58,7 @@ function speed(name: 'upload' | 'download', label: string): WebpageBlock {
 }
 export const syncResourceControlsBlocks: WebpageBlock[] = [{ id: 'sync-resources', type: 'element', tag: 'fieldset', props: { 'aria-label': 'Sync resource limits' }, css: { 'min-width': '0', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', display: 'grid', gap: '8px' }, children: [
  text('resources-title', 'legend', 'Resource limits'),
- text('resources-help', 'p', 'Optional ceilings apply to this connection across all its files and folders. Leave a field blank for unlimited speed or the existing concurrency and CPU defaults.'),
+ text('resources-help', 'p', 'Optional ceilings apply to this sync config across all its files and folders. Leave a field blank for unlimited speed or the existing concurrency and CPU defaults.'),
  speed('upload', 'Upload speed'), speed('download', 'Download speed'),
  text('speed-help', 'p', 'Kbps, Mbps and Gbps use decimal bits per second: 1 Mbps = 1,000,000 bits/s = 125,000 bytes/s. Limits cover aggregate transferred payload.'),
  ...syncResourceField('transferConcurrency', 'Maximum simultaneous file and folder transfers', 'Default'),
