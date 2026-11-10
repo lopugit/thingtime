@@ -1,3 +1,4 @@
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
@@ -129,6 +130,7 @@ export type SearchGroup = {
 };
 
 export type SearchQuery = {
+  libraryArchive?: unknown;
   near?: unknown;
   radiusKm?: unknown;
   q?: unknown;
@@ -412,7 +414,7 @@ const projectVisiblePage = async (
   const lookup = batchedThingLookup();
   const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
-  const things = await toPublicThings(visible, viewer);
+  const things = await toPublicThings(visible, viewer, false, true);
   const postDocs = visible.filter((doc) => isPostThing(doc));
   const reactionTargets = await Promise.all(
     visible.map(async (doc) =>
@@ -451,6 +453,11 @@ export const searchThings = async (
   if (sort === 'relevance' && !q) return fail(400, 'Relevance sorting needs a text query (q)');
 
   const clauses: Record<string, any>[] = [];
+  if (query.libraryArchive !== undefined) {
+    if (query.libraryArchive !== 'active' && query.libraryArchive !== 'archived') return fail(400, 'Invalid owner library archive filter');
+    if (!viewer?.id || viewer.pat || app || isCustomMongoEndpointActive()) return fail(403, 'The library archive filter requires the owner in their home Things library');
+    clauses.push({ ownerId: viewer.id, ...(query.libraryArchive === 'archived' ? { appId: null, libraryArchived: true } : { libraryArchived: { $ne: true } }) });
+  }
   if (query.near !== undefined) {
     const point = parseGeo(query.near);
     const radius = query.radiusKm === undefined ? 50 : query.radiusKm;

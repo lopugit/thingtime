@@ -1730,6 +1730,14 @@ is fixed, and cite the checklist you ran in the PR description.
       the granted scopes; an unchanged old grant and a revoked new PAT cannot
       report. The isolated built check is
       `node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect`.
+- [ ] Coordinate as the upgraded task Character in a private subspace.
+      Verify the exact Post projection reports that private subspace and the
+      author and owner can read it. Anonymous and signed-in nonmembers cannot
+      read it. If text moderation holds the post, retain its pending receipt
+      and repeat the original request ID and payload after release. Verify
+      the same post ID, completed receipt and cleared task lock, then update
+      that post. `test:agent-reporting` covers pending and blocked moderation,
+      changed content or audience, and concurrent retries without a second write.
 - [ ] With a known Thing ID outside the first recent/list page,
       `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
       stable `thing_not_found` error; it never falls back to list/search. With a
@@ -4293,6 +4301,24 @@ email whose link points at the attacker.
 - [ ] The design-system anatomy stories (/docs/design-system →
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
+
+## Things library archive
+
+- [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
+  Its row leaves the active view, including search. The original link, sharing
+  and content still work. Check that keyboard focus remains usable when the row
+  disappears.
+- [ ] Open **Archived**, reload, then use a Thing’s action menu to **Restore**.
+  It returns to its original folder. Repeat with a folder and a multi-selection;
+  archiving a folder leaves its descendants unchanged.
+- [ ] At 375 px, use the row’s actions button and touch to archive and restore.
+  Check both views and the open menus from top to bottom for horizontal overflow.
+- [ ] Compare an exact API read before and after archiving. The owner alone sees
+  library archive status. A scoped token, another user, or a different origin
+  cannot change it. An archive filter applies before the page limit.
+  Run `node remix/scripts/things-library-archive-acceptance.mjs` with an isolated
+  node-server build, disposable MongoDB tooling and Playwright to verify the
+  real API and desktop/touch browser paths.
 
 ## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
 

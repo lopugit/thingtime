@@ -813,10 +813,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
   }),
   endpoint({
-    id: 'agent-reporting', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things',
+    id: 'agent-reporting', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things',
     title: 'Private agent task reporting', endpoint: '/api/v1/agents/reporting',
     summary: 'Delegate a distinct task Character to an existing private saved workspace and report through its saved Actions.',
-    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes; replay uses the same requestId and inputs. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
+    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. As of 1.1.0, repeating the same coordinate requestId and immutable payload can reconcile an existing post after text moderation releases it. Reconciliation verifies the exact post and private audience without repeating the post write. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
     auth: { mode: 'session-or-bearer', description: 'Owning account session or a PAT explicitly granted agents.report; restricted audience/creation-only PATs and app tokens cannot expand their authority.' },
     methods: ['POST'], steps: ['Negotiate api.agent-reporting 1.0.0, api.auth-characters 1.0.0 and api.agent-overview 2.0.0 at the exact selected origin.', 'Prepare once using stable task identity and exact saved workspace references.', 'Report with stable request identities and verify through get.'],
     requestExamples: [{ name: 'Read an existing task binding', description: 'Read only the authorized task at this origin.', method: 'POST', body: { operation: 'get', origin: 'https://thingtime.example', externalTaskId: '<stable-chat-id>' } }],
@@ -9687,8 +9687,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.58.0',
-    contractVersion: '1.58.0',
+    // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
+    featureVersion: '1.59.0',
+    contractVersion: '1.59.0',
 
 
     group: 'things',
@@ -9698,6 +9699,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
       'Version 1.58 validates passive cursor-backed webpage collection descriptors and opt-in Action ownedFolderId predicates. ' +
       'Version 1.57 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources. Execution requires api.actions-run 1.45.0. ' +
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
@@ -10141,13 +10143,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
@@ -10402,17 +10405,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
+    // 1.8.0: first-party owners can archive and restore their library placements.
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     // 1.7.2: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
-    featureVersion: '1.7.2',
-    contractVersion: '1.7.2',
     // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
-    title: 'Bulk move / copy / delete / share',
+    title: 'Bulk organise Things',
     endpoint: '/api/v1/things/bulk',
-    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
+    summary: 'Multi-select operations for /things: move, copy, delete, share, archive, or restore owned Things.',
     detail:
+      'Archive and restore require a same-origin first-party home library owner. They toggle private library placement metadata on each selected Thing without moving it or changing its audience, links, contents, or timestamps. Folder operations do not recurse. Use libraryArchive=archived on the owner list to find archived items across folders. ' +
       'Copying a webpage omits its optional automatic Action opt-in, including pages nested inside copied folders. ' +
       'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
@@ -10449,6 +10454,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Make a folder and everything inside it friends-visible.',
         method: 'POST',
         body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
+      },
+      {
+        name: 'Archive Things',
+        description: 'Hide the selected Things from active library browsing without moving them.',
+        method: 'POST',
+        body: { op: 'archive', ids: ['thing_1', 'thing_2'] }
+      },
+      {
+        name: 'Restore Things',
+        description: 'Return archived Things to active browsing in their original folders.',
+        method: 'POST',
+        body: { op: 'restore', ids: ['thing_1', 'thing_2'] }
       },
       {
         name: 'Bulk delete',
