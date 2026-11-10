@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { canView, withThingLink, canViewInherited, resolvePublicAudiences, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, type ThingDoc } from './things.ts';
+import { canView, withThingLink, canViewInherited, resolvePublicAudiences, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, appShapeProjections, type ThingDoc, type FeedAuthor } from './things.ts';
+
+test('app author projection keeps avatar presentation within the avatar grant', async () => {
+  const presentation = { zoom: 140, attributes: { alt: 'Public avatar description' } };
+  const author: FeedAuthor = { id: 'owner', username: 'owner', displayName: 'Owner', avatarUrl: 'https://example.test/avatar.png', avatarPresentation: presentation };
+  const doc = { ownerId: 'owner' } as ThingDoc;
+  for (const granted of [false, true]) {
+    const items = [{ author: { ...author } as FeedAuthor | null }];
+    await appShapeProjections({ appId: 'app', ownerId: 'owner', username: 'owner', scopes: granted ? ['profile.avatar'] : [] } as any, [doc], items);
+    assert.equal(items[0].author?.avatarUrl, granted ? author.avatarUrl : null);
+    assert.deepEqual(items[0].author?.avatarPresentation, granted ? presentation : undefined);
+  }
+});
 
 test('related child projection preserves rich comment media layouts', () => {
   assert.equal(RELATED_CHILD_PROJECTION['crystal.mediaLayout'], 1);

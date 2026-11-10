@@ -61,15 +61,25 @@ export function HtmlMultipleSelect({ props, editing = false, children }: { props
 	const { id, name, style, value, defaultValue, placeholder, disabled, required, multiple: _multiple, 'aria-label': ariaLabel, ...outerProps } = props;
 	const [options, setOptions] = React.useState<Option[]>([]);
 	const boundValues = selectValues(value ?? defaultValue ?? options.filter(option => option.selected).map(option => option.value));
-	const binding = JSON.stringify(boundValues);
-	const [draft, setDraft] = React.useState({ binding, values: boundValues });
-	if (draft.binding !== binding) setDraft({ binding, values: boundValues });
+	const authoritative = value != null;
+	const binding = JSON.stringify([authoritative, boundValues]);
+	const [draft, setDraft] = React.useState({ binding, authoritative, baseline: boundValues, values: boundValues });
 	const [open, setOpen] = React.useState(false);
 	const [requiredError, setRequiredError] = React.useState(false);
-	const selectedValues = draft.binding === binding ? draft.values : boundValues;
+	let selectedValues = draft.values;
+	if (draft.binding !== binding) {
+		const previousDefaults = new Set(draft.baseline);
+		const unchanged = draft.values.length === previousDefaults.size && draft.values.every(entry => previousDefaults.has(entry));
+		if (authoritative || draft.authoritative || unchanged) selectedValues = boundValues;
+		setDraft({ binding, authoritative, baseline: boundValues, values: selectedValues });
+	}
 	const selected = new Set(selectedValues);
+	const optionValues = new Set(options.map(option => option.value));
 	const disabledOptions = new Set(options.filter(option => option.disabled).map(option => option.value));
-	const submittedValues = selectedValues.filter(entry => !disabledOptions.has(entry));
+	const submittedValues = Array.from(new Set([
+		...options.filter(option => selected.has(option.value)).map(option => option.value),
+		...selectedValues.filter(entry => !optionValues.has(entry))
+	])).filter(entry => !disabledOptions.has(entry));
 	const selectedKey = selectedValues.length < 2 ? selectedValues[0] ?? '' : undefined;
 	const trigger = React.useRef<HTMLButtonElement>(null);
 	const popup = React.useRef<HTMLDivElement>(null);
@@ -79,8 +89,8 @@ export function HtmlMultipleSelect({ props, editing = false, children }: { props
 	const invalid = !!required && !disabled && !submittedValues.length && requiredError;
 	const change = (choice: string, checked: boolean) => {
 		setRequiredError(false);
-		if (choice === '') { if (checked) setDraft({ binding, values: [] }); return; }
-		setDraft({ binding, values: checked ? [...selected, choice] : selectedValues.filter(entry => entry !== choice) });
+		if (choice === '') { if (checked) setDraft({ binding, authoritative, baseline: boundValues, values: [] }); return; }
+		setDraft({ binding, authoritative, baseline: boundValues, values: checked ? [...selected, choice] : selectedValues.filter(entry => entry !== choice) });
 	};
 	React.useLayoutEffect(() => {
 		const content = popup.current;

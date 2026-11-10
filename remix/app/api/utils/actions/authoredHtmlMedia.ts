@@ -1,6 +1,5 @@
 import { parse, type DefaultTreeAdapterMap } from 'parse5';
 import { parse as parseCss } from 'postcss';
-import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 import { HTML_ALLOWED_TAGS, HTML_MARKUP_DROP_TAGS, HTML_VOID_TAGS, HTML_MAX_NODES, HTML_MAX_DEPTH } from '../../../components/Kinds/htmlRenderPolicy';
 import { isSafeCssText } from '../../../components/Kinds/safeUrl';
 import { mapCssMediaUrls } from '../../../components/Sharing/renderMediaCore';
@@ -26,7 +25,7 @@ const mapStyleMedia = (style: string, mapUrl: (url: string) => string, options: 
 // raw-text containers and browser tree repair determine rendering positions.
 // This is dependency discovery, not a replacement for renderer sanitization.
 export const mapAuthoredHtmlMedia = (html: string, mapUrl: (url: string) => string, options: { stored?: boolean; signal?: AbortSignal } = {}): string => {
-	if (!html || (!options.stored && html.length > MAX_WEBPAGE_HTML_CHARS)) return html;
+	if (!html) return html;
 	// Match DOMParser.parseFromString: the detached document has scripting
 	// disabled (not parse5's default), which changes noscript tree repair.
 	const document = parse(html, { scriptingEnabled: false, sourceCodeLocationInfo: true });

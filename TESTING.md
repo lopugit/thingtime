@@ -3569,6 +3569,24 @@ email whose link points at the attacker.
 
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
 
+- [ ] In Edit profile, Settings → Profile, and subspace moderation settings,
+      open **Edit image** on a saved image or completed draft. Verify contain,
+      crop, anchor, offsets, padding and zoom against the original at desktop
+      and phone widths; open CSS and HTML and use both suggestions and free
+      typing. Tab through the dialog, scroll to the last row, and verify Escape
+      closes only the image editor and returns focus to its trigger.
+- [ ] Apply custom CSS and an image alt attribute, save the outer form, and
+      compare anonymous profile/subspace rendering and authenticated avatar
+      placements against exact API readback after reload. Check Reset, Cancel,
+      image replacement, source removal and an attempt to set a source
+      attribute or a CSS external resource. Replace the source in a second session
+      before applying or resetting a stale edit: it must return 409 and preserve
+      the replacement. Original uploaded bytes must match.
+      Try a linked URL with escaped characters and query parameters. Verify
+      existing escapes are preserved and unsupported URL schemes cannot render.
+      The disposable real API/browser fixture is
+      `remix/scripts/image-presentation-acceptance.mjs`.
+
 - [ ] Open both Edit profile and Settings → Profile. With no saved image, each
       avatar/banner field shows a responsive `🏞️ Add Media` tile and a separate
       “Use public image URL” fallback; all controls remain at least 44px.
@@ -4533,7 +4551,8 @@ email whose link points at the attacker.
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
       Custom drawer items, immediate reload once Save closes, and account
-      separation. Editing must prefill every field. Locally bound rows must render
+      separation. Use a long unbroken title at phone width and confirm it wraps
+      within the drawer on first paint. Editing must prefill every field. Locally bound rows must render
       their template without database Collection controls. Failed writes must
       retain the draft or restore the removed item; changing accounts or editing
       layouts during a save must not leave stuck controls or write another
@@ -10678,6 +10697,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Run platform, capability, schema, Action, Component and page suites, native
   regression audit, lint, typecheck comparison and production build. Verify both
   1.33.0 manifests and exact deployed runtime in preview and production.
+
+
+### Shared Builder element inspector
+
+- Select an element with saved CSS and HTML values. Confirm those fields are
+  populated; the labelled initial/default values do not enter the saved record
+  until selected or typed. Pick a standard property and value with Arrow and
+  Enter, add a Unicode custom property, and reference it from a second value.
+- On an image block, check the `loading` dropdown, alternative text, and an
+  ARIA attribute. Attachment-backed source editing still goes through the
+  upload/URL control. A script handler, source-set URL and reserved data
+  marker cannot enter through the HTML attribute editor.
+- Repeat at desktop and narrow widths; scroll to the bottom and check the
+  keyboard and pointer dropdowns, focus, and absence of horizontal overflow.
+  Switch between two blocks and verify that unsaved CSS source does not bleed
+  across their selections. Save, read the exact private Webpage, reload, and
+  compare one CSS computed value and HTML attribute to the saved declarations.
+- On an authored multiple select, choose two values and run its Action.
+  Confirm the input contains both values in option order and clearing the
+  selection sends an empty array. Change only the second selection before
+  a source refresh. Edited selections stay intact and untouched fields
+  adopt the refreshed default array.
+- With compatible origin capabilities, save more than 40 declarations on one
+  block and more than 20,000 source characters. Check exact-ID readback;
+  the existing HTML sanitizing and render work limits still apply.
+
 
 ## Public schema copies, durable chat files and Lopu instructions (2026-09-27)
 

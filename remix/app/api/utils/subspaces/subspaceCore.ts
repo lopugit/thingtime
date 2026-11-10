@@ -2,6 +2,7 @@
 // subspace projection shape, and the feed ranking — with no mongo/things
 // imports so they unit-test in isolation and can be shared by the server
 // util (subspaces.ts), the posting gate (gate.ts) and the read path.
+import type { ImagePresentation } from '../../../components/Media/imagePresentation';
 import {
 	ACL_OWNER,
 	MAX_SUBSPACE_ACCENT_CHARS,
@@ -41,7 +42,14 @@ const isFail = (value: unknown): value is Fail => !!value && typeof value === 'o
 
 export type SubspaceRule = { title: string; text: string | null };
 export type SubspaceFlair = { id: string; label: string; emoji: string | null; color: string | null; modOnly: boolean };
-export type SubspaceBranding = { icon: string | null; iconUrl: string | null; bannerUrl: string | null; accent: string | null };
+export type SubspaceBranding = {
+	icon: string | null;
+	iconUrl: string | null;
+	bannerUrl: string | null;
+	accent: string | null;
+	iconPresentation?: ImagePresentation | null;
+	bannerPresentation?: ImagePresentation | null;
+};
 
 // Slugs a subspace can't claim: route words under /s/* and things that would
 // read as system pages. Lowercase, compared after normalization.

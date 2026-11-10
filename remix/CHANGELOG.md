@@ -155,6 +155,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   native upload. Explicit cancellation and expiry still apply.
   [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
 
+- 2026-11-10: Edit profile and subspace images in the shared picker with
+  reversible framing, CSS and image attributes. Builder and image editing use
+  the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
+
 - 2026-11-10: Add task-level, status and project multi-selection to the Agent
   overview read adapter, with pagination-safe filtering and reusable editable
   Builder multiple-select controls. **Codex (AI)**

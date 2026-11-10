@@ -173,6 +173,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
+	editorScope?: string;
 	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; componentNotice?: string; useCurrentComponents?: boolean; setUseCurrentComponents?: (value: boolean) => void; retryComponents?: () => void; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
 	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
@@ -611,6 +612,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	}, [resolved, dirty]);
 
 	return {
+		editorScope: scopeKey,
 		history: {
 			error: history.error, saving: history.saving, recoverable: history.recoverable,
 			dismiss: history.dismissRecovery,
