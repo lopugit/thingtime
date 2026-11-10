@@ -51,6 +51,19 @@ type MapProps = {
 	routeId?: unknown;
 };
 
+// The SDK positions the unscaled anchor. Its empty area can overlap another
+// marker or the map after scaling. Only authored interaction targets hit-test.
+const markerHitTargets = `
+	div[data-tt-map-point] { pointer-events: none; }
+	div[data-tt-map-point] :where(
+		button, a[href], input, select, textarea, label, summary,
+		[contenteditable]:not([contenteditable="false"]),
+		[data-tt-action], [draggable="true"], [tabindex]:not([tabindex="-1"]),
+		[role="button"], [role="link"], [role="menuitem"],
+		:popover-open, dialog[open]
+	) { pointer-events: auto; }
+`;
+
 const number = (value: unknown, min: number, max: number, fallback: number) =>
 	typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : fallback;
 
@@ -250,6 +263,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, pointsSource,
 	const sourceError = favouriteConfig.error || routeConfig.error || pointConfig.error || favourites.scope.error || selectedRoute.scope.error ||
 		(pointConfig.binding?.showError !== false && extraPoints.scope.error);
 	return <div style={{ width: '100%', minWidth: 0, ...(height === '100%' ? { height: '100%' } : {}) }}>
+		<style>{markerHitTargets}</style>
 		{error ? <p role="alert" style={{ color: 'var(--tt-muted, #5a5a66)' }}>{error}</p> : null}
 		{sourceError ? <p role="alert">Map records could not refresh. {sourceError}</p> : null}
 		<div ref={host} role="region" aria-label={label} tabIndex={0}

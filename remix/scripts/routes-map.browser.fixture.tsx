@@ -105,7 +105,7 @@ function ComposedFixture({ owned = false }: { owned?: boolean }) {
  }, []);
 	const authored: WebpageBlock[] = [{
 		id: 'composed-map', type: 'element', tag: 'tt-mapbox', props: {
-			title: 'Composed fixture map', height: 430, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
+			title: 'Composed fixture map', height: 430, markerScale: owned ? 0.5 : 1, vaultId: 'synthetic-vault', favouritesSource: { action: 'fixture-favourites' },
 			showFavourites: show, selectedFavouriteId: '{query.markerId}'
 		}, children: [
 			{ id: 'marker-note', type: 'element', tag: 'p', text: note },
