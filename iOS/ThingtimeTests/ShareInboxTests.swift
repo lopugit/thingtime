@@ -306,6 +306,33 @@ final class ShareInboxTests: XCTestCase {
         XCTAssertThrowsError(try ShareComposerSession(inbox: inbox, id: id, origin: URL(string: "https://other.example")!))
         XCTAssertThrowsError(try ShareComposerSession(inbox: inbox, id: id, origin: origin), "A second composer must not take over the same share")
     }
+    func testDismissedComposerReminderPersistsWithoutDeletingDraftOrFiles() async throws {
+        let origin = URL(string: "https://thingtime.com")!
+        let otherOrigin = URL(string: "https://other.example")!
+        let id = try await ShareItemImporter(inbox: inbox).save([], additionalText: ["Keep this draft"], composerOrigin: origin) { _, _ in }
+        let directory = try inbox.composerDirectory(id: id)
+        let metadataBefore = try Data(contentsOf: directory.appendingPathComponent("composer.json"))
+        XCTAssertThrowsError(try inbox.dismissComposerReminder(id: id, origin: otherOrigin))
+        XCTAssertEqual(try inbox.pendingComposers(origin: origin, includeDismissed: false), [id])
+
+        try inbox.dismissComposerReminder(id: id, origin: origin)
+        try inbox.dismissComposerReminder(id: id, origin: origin)
+        let reopened = ShareInbox(root: root.appendingPathComponent("Inbox"))
+        XCTAssertEqual(try reopened.pendingComposers(origin: origin, includeDismissed: false), [])
+        XCTAssertEqual(try reopened.pendingComposers(origin: origin), [id], "Shared drafts must still offer recovery")
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("composer.json")), metadataBefore)
+        XCTAssertEqual(try reopened.pendingComposers(origin: otherOrigin), [])
+        let session = try ShareComposerSession(inbox: reopened, id: id, origin: origin)
+        XCTAssertEqual(try session.incoming(accountId: "test-owner")["text"] as? String, "Keep this draft")
+        try reopened.drain(to: root.appendingPathComponent("Shared"))
+        let copiedFiles = try sharedFiles()
+        XCTAssertTrue(try copiedFiles.contains { try String(contentsOf: $0, encoding: .utf8) == "Keep this draft" })
+        XCTAssertEqual(try reopened.pendingComposers(origin: origin, includeDismissed: false), [], "Composer metadata writes and Files drain must preserve dismissal")
+        let next = try await ShareItemImporter(inbox: reopened).save([], additionalText: ["New share"], composerOrigin: origin) { _, _ in }
+        XCTAssertEqual(try reopened.pendingComposers(origin: origin, includeDismissed: false), [next])
+        XCTAssertEqual(Set(try reopened.pendingComposers(origin: origin)), Set([id, next]))
+        XCTAssertThrowsError(try reopened.dismissComposerReminder(id: UUID(), origin: origin))
+    }
     func testComposerRetainsUnfinishedBatchAcrossDrainAndBindsAccountAcrossRestart() async throws {
         let origin = URL(string: "https://thingtime.com")!
         let id = try await ShareItemImporter(inbox: inbox).save([], additionalText: ["Unfinished"], composerOrigin: origin) { _, _ in }

@@ -21,11 +21,22 @@ struct NativeDeferredUploadRecord: Codable, Equatable, Sendable {
     var ready = false
     var retryAt = Date.distantPast
     var transferBytes: NativePhotoTransferBytes?
+    var lastTransferSettlement: UUID?
     var publishStarted: Bool?
     var photoRunId: String?
 
     var configuration: NativeUploadAuthorization.Configuration { request.authorization.configuration }
     var rootId: String { configuration.localRootId }
+
+    /// Each admission processes parts serially. A confirmed part already
+    /// crossed accounting+job settlement, so an older orphan cannot recount it.
+    @discardableResult
+    mutating func accountTransfer(_ bytes: NativePhotoTransferBytes, settlement: UUID?, partNumber: Int) -> Bool {
+        guard partNumber > confirmedParts, settlement == nil || lastTransferSettlement != settlement else { return false }
+        var transfer = transferBytes ?? .init(); transfer.add(bytes); transferBytes = transfer
+        if let settlement { lastTransferSettlement = settlement }
+        return true
+    }
 
     func validate() throws {
         guard scope == (try FileSyncOwnerScope(ownerId: scope.ownerId, url: scope.origin)),
@@ -68,7 +79,7 @@ struct NativeDeferredUploadStore {
         url = directory.appendingPathComponent("NativeDeferredUpload-v1.json")
         self.beforeWrite = beforeWrite
     }
-    static let lookahead = 4
+    static let lookahead = 5
     private var recoveryDirectory: URL { url.deletingLastPathComponent().appendingPathComponent("NativeDeferredUploadRecovery-v1", isDirectory: true) }
     private func recoveryURL(scope: FileSyncOwnerScope, request: NativeUploadFileRequest, grantRevision: String) -> URL {
         // Include the immutable reservation plus its verified scope and grant.
@@ -150,6 +161,8 @@ struct NativeDeferredUploadStore {
     }
 }
 
+extension NativeDeferredUploadSystemTask { var available: Bool { true } }
+
 @MainActor
 protocol NativeDeferredUploadScheduling {
     func register(_ handle: @escaping (NativeDeferredUploadSystemTask) -> Void) -> Bool
@@ -159,6 +172,7 @@ protocol NativeDeferredUploadScheduling {
 
 @MainActor
 protocol NativeDeferredUploadSystemTask: AnyObject {
+    var available: Bool { get }
     var expiration: (() -> Void)? { get set }
     func complete(_ success: Bool)
 }
@@ -210,7 +224,8 @@ final class NativeDeferredUpload {
     private let network = NWPathMonitor()
     private let conditions = NativePhotoDownloadConditions()
     private var registered = false, activated = false, scheduled = false
-    private var operation: UUID?
+    private var operations: [String: UUID] = [:]
+    private var verifiedScope: FileSyncOwnerScope?
     private var revoking = Set<String>()
     private var persistenceUncertain = false
     private var background: Task<Void, Never>?
@@ -223,7 +238,8 @@ final class NativeDeferredUpload {
     private var nativeExecution = false
     private var activePhotoRun: NativePhotoRunRecord?
     private var photoActivity: (run: NativePhotoRunRecord, value: NativePhotoRunActivity)?
-    private var currentFile: (run: NativePhotoRunRecord, confirmed: Int64, total: Int64)?
+    private var currentFile: (run: NativePhotoRunRecord, confirmed: Int64, sent: Int64, total: Int64)?
+    private var fileWork: [String: (confirmed: Int64, sent: Int64, total: Int64)] = [:]
     private var continuedRun: NativePhotoRunRecord?
     private var continuedRequest: UUID?
     private var activeContinuedRequest: UUID?
@@ -297,14 +313,16 @@ final class NativeDeferredUpload {
         }
         // A fresh foreground process waits for its web identity; ordinary
         // app switching no longer destroys a healthy admitted checkpoint.
-        if foreground { disarm(clearSummaries: false) }
-        else { schedule() }
+        // Hold new work for verified foreground identity without canceling an
+        // already-authorized daemon PUT on an ordinary same-account relaunch.
+        if !foreground { schedule() }
     }
 
     /// A foreground context change prevents a previous account's queued work
     /// from starting. Only a fresh exact owner/admission handoff re-arms it.
     func disarm(matching scope: FileSyncOwnerScope? = nil, configurationId: String? = nil, rootId: String? = nil,
                 clearSummaries: Bool = true) {
+        if scope == nil || scope == verifiedScope { verifiedScope = nil }
         NativeManagedPhotoPartTransfer.shared.cancel(matching: scope, configurationId: configurationId, rootId: rootId)
         if clearSummaries { NativePhotoBackupSummaries.shared.clear(matching: scope, configurationId: configurationId, rootId: rootId) }
         do {
@@ -330,6 +348,7 @@ final class NativeDeferredUpload {
         if let runs = try? photoRuns.load() {
             for other in runs where other.armed && other.scope != scope { disarm(matching: other.scope) }
         }
+        verifiedScope = scope
         NativePhotoBackupSummaries.shared.resume(verified: scope)
     }
 
@@ -364,7 +383,7 @@ final class NativeDeferredUpload {
             next.epoch = current.epoch; next.captureId = current.captureId; next.batch = current.batch
             next.retryAt = current.retryAt; next.retryCloudGaps = current.retryCloudGaps
             next.stage = current.stage; next.syncWait = current.syncWait; next.minimumPartBytes = current.minimumPartBytes
-            next.pendingOriginals = current.pendingOriginals; next.unavailableOriginals = current.unavailableOriginals
+            next.pendingOriginals = current.pendingOriginals; next.unavailableOriginals = current.unavailableOriginals; next.unavailableReasons = current.unavailableReasons
             next.foregroundOwner = current.nativeOwnsRun || proposed.nativeOwnsRun
             next.activity = current.activity
         }
@@ -422,6 +441,7 @@ final class NativeDeferredUpload {
         if let minimum = run.minimumPartBytes, stage == "waiting" { result["minimumPartBytes"] = minimum }
         if let pending = run.pendingOriginals { result["pendingOriginals"] = pending }
         if let unavailable = run.unavailableOriginals { result["unavailableOriginals"] = unavailable }
+        if let reasons = run.unavailableReasons { result["unavailableReasons"] = reasons }
         if continuedRun?.sameRun(run) == true && executionLease?.continuedActive == true { result["continuation"] = "active" }
         if var activity = activity(for: run)?.snapshot() ?? run.activity {
             if activePhotoRun?.sameRun(run) != true { activity.cloudPreparationFraction = nil }
@@ -439,7 +459,7 @@ final class NativeDeferredUpload {
         if let current = currentFile, current.run.sameRun(run), stage == "uploading" {
             let active = NativeManagedPhotoPartTransfer.shared.activeMeasurement(scope: scope, configurationId: configurationId,
                 rootId: rootId, deviceId: deviceId)
-            result["currentFile"] = ["confirmedBytes": current.confirmed, "sentBytes": min(current.total, current.confirmed + (active?.sent ?? 0)), "totalBytes": current.total]
+            result["currentFile"] = ["confirmedBytes": current.confirmed, "sentBytes": min(current.total, current.sent), "totalBytes": current.total]
             if let rate = active?.uploadBytesPerSecond { result["uploadBytesPerSecond"] = rate }
         }
         return result
@@ -535,7 +555,7 @@ final class NativeDeferredUpload {
         // callback. End this lease, retaining the saved automatic policy.
         do { try photoRuns.write(live) } catch { failClosed(); return }
         NativeManagedPhotoPartTransfer.shared.cancel(matching: live.scope, configurationId: live.authorization.id,
-            rootId: live.rootId, deviceId: live.authorization.scope.deviceId)
+            rootId: live.rootId, deviceId: live.authorization.scope.deviceId, preserveBackground: true)
         executionLease?.finishContinued(false); continuedRun = nil; activeContinuedRequest = nil
         stopScheduler()
         schedule(minimumDelay: 300); reportPhotoProgress(live)
@@ -558,14 +578,16 @@ final class NativeDeferredUpload {
     private func reportContinuedBytes(_ run: NativePhotoRunRecord, sent: Int64, size: Int64) {
         guard continuedRun?.sameRun(run) == true, size > 0 else { return }
         let fraction = min(1, max(0, Double(sent) / Double(size)))
-        continuedPartial = max(continuedPartial, min(9_999, Int64(fraction * 10_000)))
+        continuedPartial = fileWork.isEmpty ? min(9_999, Int64(fraction * 10_000)) : fileWork.values.reduce(0) { sum, value in
+            sum + min(9_999, Int64(min(1, Double(value.sent) / Double(max(1, value.total))) * 10_000))
+        }
         let display = ByteCountFormatter.string(fromByteCount: sent, countStyle: .decimal)
         reportContinuedWork(run, subtitle: "\(continuedCompleted) originals checked · \(display) sent")
     }
 
-    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool) {
+    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool, settledSubtitle: String? = nil) {
         guard continuedRun?.sameRun(run) == true else { return }
-        executionLease?.finishContinued(success); continuedRun = nil; activeContinuedRequest = nil
+        executionLease?.finishContinued(success, settledSubtitle: settledSubtitle); continuedRun = nil; activeContinuedRequest = nil
         reportPhotoProgress(run)
     }
 
@@ -674,7 +696,7 @@ final class NativeDeferredUpload {
                   !records.contains(where: { $0.admissionId == proposed.admissionId }) else { return false }
             var next = proposed
             if let prior {
-                next.confirmedParts = prior.confirmedParts; next.transferBytes = prior.transferBytes
+                next.confirmedParts = prior.confirmedParts; next.transferBytes = prior.transferBytes; next.lastTransferSettlement = prior.lastTransferSettlement
                 next.publishStarted = prior.publishStarted
             }
             records.append(next)
@@ -743,6 +765,7 @@ final class NativeDeferredUpload {
     }
 
     func run(_ task: NativeDeferredUploadSystemTask, checkExecution: (() throws -> Void)? = nil) {
+        guard task.available else { task.complete(false); schedule(); return }
         scheduled = false
         if nativeExecution, let executionLease {
             if !executionLease.attach(task) { task.complete(false) }
@@ -751,7 +774,7 @@ final class NativeDeferredUpload {
         }
         let ready = pending().filter { $0.photoRunId == nil && $0.retryAt <= Date() }
         let runs = pendingRuns().filter { $0.retryAt <= Date() }.sorted { $0.retryAt < $1.retryAt }
-        guard background == nil, operation == nil, !ready.isEmpty || !runs.isEmpty else {
+        guard background == nil, operations.isEmpty, !ready.isEmpty || !runs.isEmpty else {
             task.complete(false); schedule(); return
         }
         let soleNative = ready.isEmpty && !runs.isEmpty && runs.allSatisfy(\.nativeOwnsRun)
@@ -759,9 +782,9 @@ final class NativeDeferredUpload {
     }
 
     private func startNativeForegroundIfNeeded(prioritizing preferred: NativePhotoRunRecord? = nil) {
-        guard activated, UIApplication.shared.applicationState != .background, background == nil, operation == nil else { return }
+        guard activated, let verifiedScope, UIApplication.shared.applicationState != .background, background == nil, operations.isEmpty else { return }
         nativeWake?.cancel(); nativeWake = nil
-        let now = Date(), eligible = pendingRuns().filter(\.nativeOwnsRun).sorted { $0.retryAt < $1.retryAt }
+        let now = Date(), eligible = pendingRuns().filter { $0.nativeOwnsRun && $0.scope == verifiedScope }.sorted { $0.retryAt < $1.retryAt }
         var runs = eligible.filter { $0.retryAt <= now }
         if let preferred, let index = runs.firstIndex(where: { $0.sameRun(preferred) }), index != runs.startIndex {
             let selected = runs.remove(at: index)
@@ -779,6 +802,7 @@ final class NativeDeferredUpload {
     }
 
     private func wakeForLiveConditions() {
+        NativeBackgroundPhotoUpload.shared.enforce(conditions)
         if let runs = try? photoRuns.load() {
             for var run in runs where run.armed && run.nativeOwnsRun && ["offline", "network", "wifi", "charging"].contains(run.syncWait ?? "") {
                 if (try? conditions.verify(run.authorization)) != nil {
@@ -788,6 +812,16 @@ final class NativeDeferredUpload {
             }
         }
         startNativeForegroundIfNeeded()
+    }
+
+    func backgroundPartsFinished(completion: @escaping () -> Void) {
+        let receipts = NativeBackgroundPhotoUpload.shared.completedRecords()
+        for var run in pendingRuns() where receipts.contains(where: { $0.scope == run.scope && $0.photoRunId == run.runId &&
+            $0.request.authorization == run.authorization && $0.grantRevision == run.grantRevision }) {
+            run.retryAt = .distantPast
+            try? photoRuns.update(run)
+        }
+        run(NativeBackgroundUploadCompletionTask(completion: completion))
     }
 
     private func launch(ready: [NativeDeferredUploadRecord], runs: [NativePhotoRunRecord], nativeOnly: Bool,
@@ -843,7 +877,11 @@ final class NativeDeferredUpload {
                 do {
                     try await self.advancePhotoRun(run, checkExecution: check)
                     let latest = try self.photoRuns.lookup(run)
-                    self.finishContinuedRun(run, success: latest?.stage == "complete")
+                    // This return follows the durable queue checkpoint, not a caught
+                    // failure. An exhausted available pass may retain cloud gaps.
+                    let deferred = latest.map { $0.sameRun(run) && $0.armed && $0.stage == "waiting" && $0.retryAt < $0.expiresAt } == true
+                    self.finishContinuedRun(run, success: latest?.stage == "complete" || deferred,
+                        settledSubtitle: deferred ? "Available originals saved · remaining originals will retry" : nil)
                 }
                 catch {
                     success = false
@@ -881,13 +919,13 @@ final class NativeDeferredUpload {
                          check: @escaping () throws -> Void, photoPhase: (NativePhotoRunActivity.Phase) -> Void = { _ in },
                          photoPulse: ((Int64) -> Void)? = nil,
                          progress: (Int64) -> Void) async throws {
-        guard operation == nil, var current = try store.lookup(proposed) else { throw CancellationError() }
+        guard operations[proposed.admissionId] == nil, var current = try store.lookup(proposed) else { throw CancellationError() }
         if current.ready { progress(current.request.source.size); return }
-        let id = UUID(); operation = id
-        defer { if operation == id { operation = nil } }
+        let id = UUID(); operations[proposed.admissionId] = id
+        defer { if operations[proposed.admissionId] == id { operations.removeValue(forKey: proposed.admissionId) } }
         let validate = {
             try Task.checkCancellation(); try check()
-            guard !self.persistenceUncertain, self.operation == id, let live = try self.store.lookup(proposed), live.armed, !live.ready,
+            guard !self.persistenceUncertain, self.operations[proposed.admissionId] == id, let live = try self.store.lookup(proposed), live.armed, !live.ready,
                   live.expiresAt > Date() else { throw CancellationError() }
             let grant = try self.grants.grant(proposed.scope, id: proposed.rootId)
             guard grant.sourceKind == staging.grant.sourceKind, NativeUploadPartStaging.grantRevision(grant) == proposed.grantRevision,
@@ -918,23 +956,23 @@ final class NativeDeferredUpload {
                         do { try await Task.sleep(for: .seconds(1)) } catch { return }
                         if let measured = NativeManagedPhotoPartTransfer.shared.activeMeasurement(scope: proposed.scope,
                             configurationId: proposed.request.authorization.id, rootId: proposed.rootId,
-                            deviceId: proposed.request.authorization.scope.deviceId) {
+                            deviceId: proposed.request.authorization.scope.deviceId, admissionId: proposed.admissionId) {
                             observer(request.offset + min(request.length, measured.sent))
                         }
                     }
                 }
             }
             defer { pulse?.cancel() }
-            try await client.send(part: part, partNumber: request.partNumber, conditions: conditions, check: validate) { bytes in
+            try await client.send(part: part, partNumber: request.partNumber, conditions: conditions, check: validate) { bytes, settlement in
                 guard var live = try self.store.lookup(proposed) else { return }
-                var transfer = live.transferBytes ?? .init(); transfer.add(bytes)
-                live.transferBytes = transfer
-                try self.store.update(live)
-                current.transferBytes = transfer
+                if live.accountTransfer(bytes, settlement: settlement, partNumber: request.partNumber) { try self.store.update(live) }
+                current.transferBytes = live.transferBytes
+                current.lastTransferSettlement = live.lastTransferSettlement
             }
             try validate(); try await staging.verify(proposed.request.source); try validate()
             current.confirmedParts = request.partNumber
             try store.update(current)
+            NativeBackgroundPhotoUpload.shared.acknowledge(record: proposed, part: request.partNumber)
             try await staging.release(retained)
             progress(request.offset + request.length)
         }
@@ -964,10 +1002,20 @@ final class NativeDeferredUpload {
         if pending().isEmpty && pendingRuns().isEmpty { scheduler.cancel(); scheduled = false }
     }
 
+    private func fileProgress(_ run: NativePhotoRunRecord, id: String, confirmed: Int64? = nil, sent: Int64? = nil, size: Int64? = nil) {
+        if let size { fileWork[id] = (0, 0, size) }
+        else if var value = fileWork[id] {
+            if let confirmed { value.confirmed = confirmed; value.sent = max(value.sent, confirmed) }
+            if let sent { value.sent = max(value.confirmed, min(value.total, sent)) }
+            fileWork[id] = value
+        } else { return }
+        currentFile = (run, fileWork.values.reduce(0) { $0 + $1.confirmed }, fileWork.values.reduce(0) { $0 + $1.sent }, fileWork.values.reduce(0) { $0 + $1.total })
+    }
+
     private func advancePhotoRun(_ proposed: NativePhotoRunRecord, checkExecution: @escaping () throws -> Void) async throws {
         guard var run = try photoRuns.lookup(proposed), run.sameRun(proposed), run.armed else { throw CancellationError() }
         activePhotoRun = proposed
-        defer { activePhotoRun = nil; currentFile = nil; originalsRemaining = nil }
+        defer { activePhotoRun = nil; currentFile = nil; fileWork.removeAll(); originalsRemaining = nil }
         let activity = NativePhotoRunActivity(run.activity)
         photoActivity = (proposed, activity)
         _ = activity.cloudPreparation(nil)
@@ -1150,6 +1198,7 @@ final class NativeDeferredUpload {
                 run.batch = batch
                 run.pendingOriginals = batch.remainingKnown == false ? nil : batch.pending
                 run.unavailableOriginals = batch.unavailable
+                run.unavailableReasons = batch.unavailableReasons
                 try checkpoint()
             }
             guard let batch = run.batch, let id = run.captureId else { throw MobileFolderStore.Failure.invalid }
@@ -1160,7 +1209,16 @@ final class NativeDeferredUpload {
             originalsRemaining = batch.remainingKnown == false ? nil : Int64(batch.pending) + Int64(originals.count)
             activity.backlog(originalsRemaining)
             reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
-            for source in originals {
+            var lookahead: Task<Void, Error>?
+            defer { lookahead?.cancel() }
+            func startLookahead() {
+                guard lookahead == nil else { return }
+                lookahead = Task.detached(priority: .utility) {
+                    try photos.prepareQueueLookahead(scope: photoScope, request: queue, batchId: batch.id,
+                        authorize: { try conditions.verify(authorization) })
+                }
+            }
+            let process: @MainActor (MobileFolderReader.Entry) async throws -> Void = { [self] source in
                 _ = try check()
                 activity.phase(.checkingCloud)
                 reportPhotoProgress(run)
@@ -1173,16 +1231,18 @@ final class NativeDeferredUpload {
                     if !next.ready {
                         if retained == nil, try !enqueue(next) { throw NativeDeferredUploadClient.Failure.unavailable }
                         run.stage = "uploading"; try checkpoint()
-                        currentFile = (proposed, 0, source.size)
+                        self.fileProgress(proposed, id: source.path, size: source.size)
                         reportPhotoProgress(run)
-                        defer { currentFile = nil }
+                        defer { self.fileWork.removeValue(forKey: source.path) }
                         try await advance(next, staging: staging, check: { _ = try check() }, photoPhase: { phase in
                             if activity.phase(phase) { announce(false) }
+                            if phase == .uploading { startLookahead() }
                         }, photoPulse: { bytes in
+                            self.fileProgress(proposed, id: source.path, sent: bytes)
                             self.reportPhotoProgress(proposed)
                             self.reportContinuedBytes(proposed, sent: bytes, size: source.size)
                         }, progress: { bytes in
-                            self.currentFile = (proposed, bytes, source.size)
+                            self.fileProgress(proposed, id: source.path, confirmed: bytes)
                             self.reportPhotoProgress(proposed)
                             self.reportContinuedBytes(proposed, sent: bytes, size: source.size)
                         })
@@ -1197,6 +1257,26 @@ final class NativeDeferredUpload {
                 }
                 if continuedRun?.sameRun(proposed) == true { continuedCompleted += 1; continuedPartial = 0 }
                 reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
+            }
+            // At most five originals occupy staging/transport concurrently.
+            // Start in date order and refill from the same canonical selection;
+            // acknowledgement still waits for every companion's exact receipt.
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                var next = originals.makeIterator()
+                for _ in 0..<min(5, originals.count) {
+                    if let source = next.next() { group.addTask { @MainActor in try await process(source) } }
+                }
+                do {
+                    while try await group.next() != nil {
+                        if let source = next.next() { group.addTask { @MainActor in try await process(source) } }
+                    }
+                } catch { group.cancelAll(); throw error }
+            }
+            if let lookahead {
+                // A changed library invalidates warm observations, not saved
+                // current receipts. The real next selection revalidates itself.
+                lookahead.cancel()
+                _ = await withTaskCancellationHandler(operation: { await lookahead.result }, onCancel: { lookahead.cancel() })
             }
             try await authorize()
             let finish = Task.detached { try photos.finishQueueBatch(scope: photoScope, request: queue, batchId: batch.id) }
@@ -1214,7 +1294,8 @@ final class NativeDeferredUpload {
                 run.retryAt = Date(timeIntervalSinceNow: 300)
                 run.retryCloudGaps = !complete
                 run.stage = complete ? "complete" : "waiting"
-                activity.phase(complete ? .complete : .waiting, reason: cloudFailure.flatMap(NativePhotoRunActivity.reason(for:)))
+                activity.phase(complete ? .complete : .waiting, reason: cloudFailure.flatMap(NativePhotoRunActivity.reason(for:)) ??
+                    ((run.unavailableReasons?["photo-read"] ?? 0) > 0 ? .photoRead : nil))
                 if activity.snapshot().backgroundRequest == .active && (complete || cloudWork == nil && preparedCloud == nil) {
                     activity.background(complete ? .complete : .waiting)
                 }
