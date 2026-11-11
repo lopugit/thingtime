@@ -179,6 +179,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   restriction with fixed safe copy while preserving confirmed grants and
   permission-denied diagnostics. Feed 2.0.2 / diagnostics 1.0.1. **Codex (AI)**
 
+- 2026-11-11: Correct private S3 setup examples to permit exact-origin signed GET/HEAD downloads alongside PUT uploads, and add a browser regression for encrypted attachment CORS failure and successful byte-verified download. — Codex (AI)
+
 - 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
   grant diagnostics and Claude effort corrections into one release; negotiate
   personal replies against the active same-origin API before sending. **Codex (AI)**

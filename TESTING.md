@@ -16036,3 +16036,16 @@ reply 1.23.1 with an older same-origin active API 1.23.0 must refuse omitted or
 explicit personal providers before POST. After active API 1.23.1 is available,
 retry must send exactly the selected provider. Preserve separate credits,
 device and ChatGPT-plan requirements.
+
+
+### Encrypted password attachment browser downloads
+
+Run `node remix/scripts/test-password-file-download.mjs <evidence-directory>` with
+the existing Playwright/browser executable overrides when needed. It uses the
+real password attachment UI and client decryption with synthetic encrypted bytes
+from a second HTTP origin: missing GET CORS must show the inline error; allowing
+only the exact fixture origin must produce a download whose bytes and SHA-256
+match the source at desktop and mobile widths. This does not prove production
+bucket configuration. For deployed acceptance, upload a synthetic attachment,
+reload, download and compare its bytes. Inspect HTTP status/CORS errors only;
+never print the file-download JSON, encryption metadata or signed URL.
