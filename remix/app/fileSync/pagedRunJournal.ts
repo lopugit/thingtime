@@ -3,7 +3,7 @@ import { parseSymbolicLink } from './symbolicLink';
 import { emptySyncDirections, parseSyncDirections, addSyncDirection, removeUnconfirmedSyncDirection, type SyncDirectionalTotals } from './directionalProgress';
 import { eligibleFolderBatchWrite, parseFolderBatchDescriptor, type FolderBatchDescriptor, type FolderParentRef } from './folderBatch';
 import type { FolderBatchGate, PriorityReadiness } from './priorityReadiness';
-import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
+import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor, type UploadBatchFailure } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
@@ -1762,6 +1762,92 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				// mode prevents immediately regrouping a failed or unsupported batch.
 				schedule.recovery = schedule.batch; delete schedule.batch;
 				h.revision++; save(h, tx); done(undefined);
+			});
+		},
+		/** Native source-change results can release only exact members proven never
+		 * dispatched. Every marked or ambiguous member keeps its original receipt-first
+		 * recovery, including when a reply was lost after canonical publication. */
+		async retireUndispatchedUploadBatchFailures(value: PagedRunSpec, supplied: UploadBatchDescriptor, failures: UploadBatchFailure[]): Promise<number> {
+			const spec = parsePagedRunSpec(value), batch = parseUploadBatchDescriptor(supplied);
+			const ordinals = failures.filter(f => f.status === 'failed' && f.code === 'source-changed' && f.retryable === false).map(f => f.ordinal);
+			if (!ordinals.length) return 0;
+			if (ordinals.length > UPLOAD_BATCH_FILES || new Set(ordinals).size !== ordinals.length ||
+				ordinals.some(n => !Number.isInteger(n) || n < 0 || n >= batch.members.length)) throw Error('Invalid source-changed batch members.');
+			return withHeader<number>(spec, 'readwrite', (h, tx, done, fail) => {
+				const schedule = h.scheduling, recovery = schedule?.recovery;
+				if (!h.stream || spec.streaming?.source !== 'local' ||
+					!sameSyncScope(batch.scope, scope) || JSON.stringify(batch.configuration.configuration) !== JSON.stringify(spec.configuration))
+					throw Error('Original upload batch recovery changed.');
+				const review = tx.objectStore(REVIEW_STORE), ops = tx.objectStore(PAGED_RUN_STORES[1]);
+				const verifyRetired = (ordinal: number, next: () => void) => {
+					const member = batch.members[ordinal], get = review.get([key, spec.id, 'history', member.write.operation.id]);
+					get.onsuccess = () => { try {
+						check(); const saved = get.result;
+						if (!saved || saved.scope !== key || saved.run !== spec.id || saved.operation?.id !== member.write.operation.id ||
+							saved.canonicalDispatched !== false || saved.receipt !== null || saved.operation.confirmed ||
+							JSON.stringify(saved.cloud?.write) !== JSON.stringify(member.write) ||
+							JSON.stringify(saved.sourceChanged) !== JSON.stringify({ batchId: batch.batchId, ordinal, instance: h.instance }))
+							throw Error('Retired source-change evidence changed.');
+						next();
+					} catch (error) { fail(error); } };
+				};
+				if (!recovery) {
+					// An interrupted reply may arrive after the last retirement removed
+					// the batch metadata. Only its exact retained history permits a no-op.
+					let verified = 0;
+					const next = () => verified === ordinals.length ? done(0) : verifyRetired(ordinals[verified++], next);
+					next(); return;
+				}
+				if (recovery.kind || schedule?.batch || schedule?.reserved !== null || recovery.id !== batch.batchId || recovery.count !== batch.members.length)
+					throw Error('Original upload batch recovery changed.');
+				let index = 0, retired = 0;
+				const finish = () => {
+					if (!recovery.remaining) {
+						review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]);
+						delete schedule.recovery;
+					}
+					if (retired) {
+						h.confirmedThrough = null;
+						if (h.stream!.terminal && h.operations === h.confirmed) h.phase = 'complete';
+						h.revision++; save(h, tx);
+					}
+					done(retired);
+				};
+				const next = () => { try {
+					check(); if (index === ordinals.length) { finish(); return; }
+					const ordinal = ordinals[index++], member = batch.members[ordinal], operationId = member.write.operation.id;
+					const memberKey = [key, spec.id, 'batch-member', recovery.id, ordinal], get = review.get(memberKey);
+					get.onsuccess = () => { try {
+						check(); const m = get.result;
+						if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.batchId !== recovery.id ||
+							m.ordinal !== ordinal || m.operationId !== operationId || m.deferred) throw Error('Source-changed member recovery evidence changed.');
+						if (m.retired) { verifyRetired(ordinal, next); return; }
+						const pointer = review.get([key, spec.id, 'batch-operation', operationId]);
+						pointer.onsuccess = () => { try {
+							check(); const p = pointer.result;
+							if (!p || p.instance !== h.instance || p.batchId !== recovery.id || p.ordinal !== ordinal)
+								throw Error('Source-changed member lost its original batch pointer.');
+							const rowGet = ops.index('operation').get([key, operationId]);
+							rowGet.onsuccess = () => { try {
+								check(); const r = row(rowGet.result, spec);
+								if (r.operation.id !== operationId || !r.cloud || JSON.stringify(r.cloud.write) !== JSON.stringify(member.write))
+									throw Error('Source-changed member lost its immutable cloud binding.');
+								if (m.confirmed || r.operation.confirmed || r.receipt !== null || m.canonicalDispatched !== false || r.canonicalDispatched !== false) { next(); return; }
+								review.add({ ...r, unpublished: true, conflict: false, sourceChanged: { batchId: batch.batchId, ordinal, instance: h.instance } }, [key, spec.id, 'history', operationId]);
+								ops.delete([key, spec.id, ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending-path', r.path]);
+								review.delete([key, spec.id, 'batch-operation', operationId]);
+								m.retired = true; review.put(m, memberKey);
+								if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation);
+								h.operations--; h.cloud!.prepared--; recovery.remaining--; retired++;
+								if (!h.operations) h.cloud!.after = null;
+								next();
+							} catch (error) { fail(error); } };
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+				next();
 			});
 		},
 		async claimUploadBatch(value: PagedRunSpec, configuration: SavedFileSyncConfiguration): Promise<UploadBatchDescriptor | null> {

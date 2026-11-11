@@ -4,7 +4,7 @@ import { executeCloudFolderBatch, folderBatchFailure } from './cloudFolderBatch.
 import { eligibleFolderBatchEntry } from './folderBatch';
 import type { PriorityReadiness } from './priorityReadiness';
 import { executeCloudUploadBatch, uploadBatchFailure } from './cloudUploadBatch.client';
-import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES } from './uploadBatch';
+import { eligibleUploadBatchEntry, parseUploadBatchObservations, UPLOAD_BATCH_FILES, UPLOAD_BATCH_METADATA_BYTES, type UploadBatchFailure } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import { foregroundSyncContext } from './foregroundSyncContext';
@@ -554,6 +554,8 @@ export async function streamForegroundSync(
 						});
 						if (failures.length) {
 							await runs.recoverUploadBatch(spec);
+							if (!('kind' in batch) && failures.some(f => f.code === 'source-changed' && f.retryable === false))
+								await runs.retireUndispatchedUploadBatchFailures(spec, batch, failures as UploadBatchFailure[]);
 							const stop = failures.find(f => f.retryable || f.code === 'authority-changed' || f.code === 'invalid-member' || f.code === 'cancelled');
 							if (stop) throw 'kind' in batch ? folderBatchFailure(stop as import('./folderBatch').FolderBatchFailure) : uploadBatchFailure(stop as import('./uploadBatch').UploadBatchFailure);
 						}
