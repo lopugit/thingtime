@@ -1,5 +1,5 @@
 import { rootIdentity } from '../utils/rootIdentity';
-import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS } from './configuration';
+import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
 import { assertConfiguredSyncApproval, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { openSyncJournal, syncScopeKey, withSyncRootLock } from './journal.client';
@@ -10,6 +10,7 @@ import { samePhotoBackupSource } from './photoSettingsPolicy';
 import type { SyncScope } from './reconcile';
 
 const pendingArms = new Map<string, AbortController>();
+const authorityRetryAt = new Map<string, number>();
 export function cancelAllPendingNativePhotoArms() { for (const arm of pendingArms.values()) arm.abort(); }
 export function cancelPendingNativePhotoArm(scope: SyncScope) { pendingArms.get(syncScopeKey(scope))?.abort(); }
 
@@ -59,7 +60,19 @@ export async function armNativePhotoRun(input: {
 						// idempotent, and native retains the same checkpoint on renewal.
 						const needsAuthorityCheck = progress.stage === 'waiting' && progress.retryAt === undefined &&
 							progress.minimumPartBytes === undefined && progress.continuation === undefined;
-						if (progress.continuation === 'held' || (progress.stage !== 'paused' && !needsAuthorityCheck)) return;
+						// A saved-settings hold describes lost authority, not a user
+						// decision. Recheck the current grant and saved Thing below;
+						// native/server authorization still decides whether it may run.
+						const savedSettingsHold = progress.stage === 'needs-review' && progress.activity?.reason === 'saved-settings';
+						if (progress.continuation === 'held' || (progress.stage !== 'paused' && !needsAuthorityCheck && !savedSettingsHold)) return;
+						if (savedSettingsHold) {
+							const now = Date.now();
+							if (now < (authorityRetryAt.get(key) ?? 0) || (progress.retryAt && now < Date.parse(progress.retryAt))) return;
+							// Condition/page wakes must not turn a persistent refusal into
+							// a tight authorization loop. Failed checks retain this cooldown.
+							for (const [scopeKey, retryAt] of authorityRetryAt) if (retryAt <= now) authorityRetryAt.delete(scopeKey);
+							authorityRetryAt.set(key, now + PHOTO_AUTOMATION_INTERVAL_MS);
+						}
 					}
 				}
 				const { roots } = await host.request(scope.ownerId, { action: 'list' }, signal); check();

@@ -1,4 +1,5 @@
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
+import type { NativePhotoUnavailableReasons } from '~/fileSync/nativePhotoRunProgress';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 
 /** A shared editable summary, never inferred from a Home/name/type alias. */
@@ -29,7 +30,7 @@ export function photoDownloadPreparation(download?: { fraction: number }): SyncF
    'repeating-linear-gradient(135deg, transparent 0 6px, var(--tt-surface, #fafafb) 6px 12px)' };
 }
 
-export type PhotoQueueProgress = { pending: number; unavailable: number };
+export type PhotoQueueProgress = { pending?: number; unavailable?: number; unavailableReasons?: NativePhotoUnavailableReasons };
 
 const activityMuted = { color: 'var(--tt-muted, #71717a)' };
 const activityText = (id: string, tag: string, text: string, css?: Record<string, string>): WebpageBlock =>
@@ -83,12 +84,18 @@ const syncFolderActivityBlock: WebpageBlock = {
 };
 
 export function photoQueueDisplay(queue?: PhotoQueueProgress) {
- if (!queue || !Number.isSafeInteger(queue.pending) || queue.pending < 0 ||
-  !Number.isSafeInteger(queue.unavailable) || queue.unavailable < 0) return undefined;
+ if (!queue || [queue.pending, queue.unavailable].some(value => value !== undefined && (!Number.isSafeInteger(value) || value < 0))) return undefined;
+ const reasons = queue.unavailableReasons;
+ const knownReasons = reasons && [reasons['cloud-download'], reasons['photo-read']].every(value => Number.isSafeInteger(value) && value >= 0) &&
+  reasons['cloud-download'] + reasons['photo-read'] === queue.unavailable;
+ const unavailable = knownReasons && queue.unavailable ? [
+  reasons['cloud-download'] ? `${reasons['cloud-download'].toLocaleString()} awaiting download` : '',
+  reasons['photo-read'] ? `${reasons['photo-read'].toLocaleString()} awaiting Photos read retry` : ''
+ ].filter(Boolean).join(' · ') : `${queue.unavailable?.toLocaleString() ?? '—'} ${queue.unavailable === 1 ? 'original' : 'originals'} waiting for Photos`;
  return {
   order: 'Photos queue · newest first',
-  pending: queue.pending > 0 ? `${queue.pending.toLocaleString()} ${queue.pending === 1 ? 'original' : 'originals'} pending` : '',
-  unavailable: queue.unavailable > 0 ? `${queue.unavailable.toLocaleString()} ${queue.unavailable === 1 ? 'original' : 'originals'} unavailable` : ''
+  pending: `${queue.pending?.toLocaleString() ?? '—'} ${queue.pending === 1 ? 'original' : 'originals'} pending`,
+  unavailable
  };
 }
 
@@ -124,8 +131,8 @@ export function syncFolderActivityLabel(state: {
   }
  }
  if (progress?.stage === 'complete') {
-  if (queue?.pending) return 'More Photos originals are queued.';
-  if (queue?.unavailable) return 'Partial backup · some originals are unavailable.';
+  if (queue && (progress.photoQueue?.pending ?? 0) > 0) return 'More Photos originals are queued.';
+  if (queue && (progress.photoQueue?.unavailable ?? 0) > 0) return 'Partial backup · waiting for Photos originals.';
   if (progress.coverage === 'partial') {
    const count = progress.skipped?.toLocaleString();
    return `Partial backup · ${count ? `${count} ${progress.skipped === 1 ? 'item needs' : 'items need'}` : 'Some items need'} review.`;
@@ -199,7 +206,43 @@ export const syncFolderQuickBlocks: WebpageBlock[] = [
  ] },
  syncFolderActivityBlock
 ];
+const legacyQuickBlocks = structuredClone(syncFolderQuickBlocks);
+const stableIds = new Set(['folder-card-activity-indexing-state', 'folder-card-activity-live-indexed-state',
+ 'folder-card-activity-latest-found-state', 'folder-card-activity-indexed-state', 'folder-card-activity-prepared-state',
+ 'folder-card-activity-backlog-state', 'folder-card-activity-download-state', 'folder-card-activity-reason-state',
+ 'folder-card-photo-queue-pending-state', 'folder-card-photo-unavailable-state']);
+function reserveActivity(block: WebpageBlock): void {
+ if (stableIds.has(block.id)) { block.type = 'element'; block.tag = 'div'; delete block.condition; }
+ if (block.id === 'folder-card-activity') { block.tag = 'details'; block.props = { ...block.props, open: true }; }
+ if (block.id === 'folder-card-activity-summary') block.tag = 'summary';
+ if (['folder-card-automation', 'folder-card-background-status'].includes(block.id)) block.css = { ...block.css, 'min-height': '2.8em' };
+ if (block.id === 'folder-card-photo-queue') block.css = { ...block.css, display: 'grid', 'font-variant-numeric': 'tabular-nums' };
+ if (block.id === 'folder-card-photo-unavailable-state') block.css = { ...block.css, 'min-height': '4.2em' };
+ if (block.id === 'folder-card-activity-download-state') block.children = block.children?.map(child => child.id === 'folder-card-activity-download-progress' ? {
+  id: 'folder-card-activity-download-meter-slot', type: 'element', tag: 'div', css: { height: '8px' }, children: [
+   { ...child, props: { ...child.props, hidden: '{folder.activityDownloadHidden}' } }
+  ]
+ } : child);
+ if (block.id === 'folder-card-activity-phase') block.text = 'Latest reported library and transfer details';
+ if (block.id === 'folder-card-activity-indexing') block.children = block.children?.filter(child => child.id !== 'folder-card-activity-live-indexed-state');
+ if (block.id === 'folder-card-activity-counts') block.children?.push(activityText('unavailable-help', 'p',
+  'Originals waiting for Photos retry automatically when your transfer settings allow. Available originals continue backing up.', activityMuted));
+ if (block.id === 'folder-card-activity-download-label') block.text = '{folder.activity.downloadLabel}';
+ if (['folder-card-activity-reason', 'folder-card-activity-indexing-count', 'folder-card-activity-live-indexed', 'folder-card-activity-latest-found', 'folder-card-activity-download-label'].includes(block.id)) block.css = { ...block.css, 'min-height': '2.8em' };
+ if (block.id === 'folder-card-activity') block.children = block.children?.map(child => child.id === 'folder-card-activity-history' ? {
+  id: 'folder-card-activity-history-viewport', type: 'element', tag: 'div', css: { height: '160px', overflow: 'auto' }, children: [child]
+ } : child);
+ for (const child of block.children ?? []) reserveActivity(child);
+}
+for (const block of syncFolderQuickBlocks) reserveActivity(block);
+
+/** Only exact stock branches migrate. A customized branch keeps all of its edits. */
 export function withSyncFolderQuickBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
- const existing = JSON.stringify(blocks);
- return [...blocks, ...syncFolderQuickBlocks.filter(block => !existing.includes(`"id":"${block.id}"`))];
+ const migrated = blocks.map(block => {
+  const legacy = legacyQuickBlocks.find(stock => stock.id === block.id);
+  return legacy && JSON.stringify(legacy) === JSON.stringify(block)
+   ? syncFolderQuickBlocks.find(stock => stock.id === block.id)! : block;
+ });
+ const existing = JSON.stringify(migrated);
+ return [...migrated, ...syncFolderQuickBlocks.filter(block => !existing.includes(`"id":"${block.id}"`))];
 }
