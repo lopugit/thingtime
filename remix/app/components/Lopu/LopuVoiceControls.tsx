@@ -1,3 +1,4 @@
+import { useDesktopUpdateBlocker } from '~/utils/useDesktopUpdateBlocker';
 import { DEFAULT_DICTATION_SILENCE_SECONDS, DictationSilence } from './dictationSilence';
 import { LopuDictationSettings } from './LopuDictationSettings';
 import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
@@ -189,6 +190,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const [captureError, setCaptureError] = React.useState('');
     const [nativeCapturePending, setNativeCapturePending] = React.useState(0);
     const [nativeCaptureError, setNativeCaptureError] = React.useState('');
+    useDesktopUpdateBlocker(Boolean(active || direct || busy || interim || capturePending || captureError || nativeCapturePending || nativeCaptureError));
     const nativeStartGeneration = React.useRef(0);
     const nativeCaptureSession = React.useRef<string | null>(null);
 

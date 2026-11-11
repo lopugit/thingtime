@@ -44,3 +44,13 @@ test('a fresh check after transient failure retries in the same process and clea
   const recovered = await updates.checkAndStage();
   assert.equal(recovered.status, 'current'); assert.equal(recovered.error, null); assert.equal(checks, 2);
 });
+
+test('automatic preference opt-out aborts delivery while allowing a later authorized check', async () => {
+  let started, checks = 0;
+  const began = new Promise(resolve => { started = resolve; });
+  const updates = createWebBundleUpdates({ store: { inspect: async () => ({ highestSequence: 0 }) }, downloader: {
+    check: async ({ signal }) => { checks++; if (checks > 1) return null; started(); return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })); }
+  } });
+  const first = updates.checkAndStage(); await began; updates.cancel(); assert.equal((await first).status, 'interrupted');
+  assert.equal((await updates.checkAndStage()).status, 'current'); await updates.close();
+});

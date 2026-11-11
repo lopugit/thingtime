@@ -74,15 +74,27 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
     // An explicitly selected local API or recovered legacy origin owns its exact
     // address. Keep the older automatic-origin record untouched for recovery.
     const savedPort = selectedPort ?? await readPort(stateFile);
-    let middleware;
+    let middleware, reservation = null, closed = false, active = 0;
+    const upgradedSockets = new Set();
+    const isIdle = () => !closed && active === 0 && upgradedSockets.size === 0;
+    const unavailable = response => {
+        response.writeHead(503, { 'Cache-Control': 'no-store', 'Retry-After': '1' }); response.end();
+    };
     const server = http.createServer((request, response) => {
-        if (!middleware) {
-            response.writeHead(503, { 'Cache-Control': 'no-store' }); response.end(); return;
-        }
+        if (!middleware || reservation || closed) { unavailable(response); return; }
+        // Middleware may return before a streamed response ends, or finish
+        // durable cleanup after the client disconnects. Wait for both halves.
+        active++;
+        let settled = false, ended = false, released = false;
+        const release = () => { if (settled && ended && !released) { released = true; active--; } };
+        const onEnd = () => {
+            ended = true; response.removeListener('finish', onEnd); response.removeListener('close', onEnd); release();
+        };
+        response.once('finish', onEnd); response.once('close', onEnd);
         Promise.resolve().then(() => middleware(request, response)).catch(() => {
             if (!response.headersSent) response.writeHead(500, { 'Cache-Control': 'no-store' });
             response.end();
-        });
+        }).finally(() => { settled = true; release(); });
     });
     try {
         await new Promise((resolve, reject) => {
@@ -99,8 +111,26 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
             throw new Error('The bundled web server is incompatible. Rebuild Desktop with the node_middleware Nitro preset.');
         }
         middleware = application.middleware;
-        if (typeof application.handleUpgrade === 'function') server.on('upgrade', application.handleUpgrade);
-        return { origin, server, close: () => closeServer(server) };
+        if (typeof application.handleUpgrade === 'function') server.on('upgrade', (request, socket, head) => {
+            if (reservation || closed) { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 1\r\n\r\n'); return; }
+            active++; upgradedSockets.add(socket);
+            socket.once('close', () => upgradedSockets.delete(socket));
+            Promise.resolve().then(() => application.handleUpgrade(request, socket, head))
+                .catch(() => socket.destroy()).finally(() => { active--; });
+        });
+        return { origin, server, isIdle,
+            reserveShutdown: () => {
+                if (reservation || !isIdle()) return null;
+                const own = reservation = {};
+                return { isCurrent: () => reservation === own && isIdle(),
+                    release: () => { if (reservation === own) reservation = null; } };
+            },
+            close: () => {
+                closed = true;
+                for (const socket of upgradedSockets) socket.destroy();
+                return closeServer(server);
+            }
+        };
     } catch (error) {
         await closeServer(server);
         if (error.code === 'EADDRINUSE') {

@@ -1,5 +1,7 @@
 import React, { createContext } from 'react';
 import { Subject } from 'rxjs';
+import { desktopBundleSafety } from '~/utils/desktopBundleSafety';
+import { getElectronAutoUpdateEnabled } from '~/utils/electronBridge';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
@@ -346,6 +348,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				namespace: 'default'
 			}
 		) => {
+			desktopBundleSafety.changed();
 			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
 			if (setThingtimeFlushScheduledRef.current) return;
 			setThingtimeFlushScheduledRef.current = true;
@@ -377,6 +380,21 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
    flush: async () => { await persistenceRef.current?.flush(); }
   });
  }, [storageKey, persistLocal, loading, flushSetThingtimeQueue]);
+
+ React.useLayoutEffect(() => {
+  if (!persistLocal) return;
+  return desktopBundleSafety.register({ kind: 'persistence',
+   ready: () => providerActiveRef.current && !loading && persistenceReadyRef.current && storageKeyRef.current === storageKey,
+   automaticUpdates: sessionHash => getElectronAutoUpdateEnabled(thingtimeRef.current, sessionHash),
+   checkpoint: async signal => {
+    await flushThingtimePersistence(signal);
+    const revision = persistenceRevisionRef.current, snapshot = thingtimeRef.current, storage = storageRef.current;
+    return () => !signal.aborted && providerActiveRef.current && storageKeyRef.current === storageKey &&
+      storageRef.current === storage && persistenceRevisionRef.current === revision && thingtimeRef.current === snapshot &&
+      setThingtimeQueueRef.current.length === 0 && persistenceRef.current?.getState().dirty === false;
+   }
+  });
+ }, [persistLocal, loading, storageKey, flushThingtimePersistence]);
 
 	const getThingtime = React.useCallback(
 		(...args) => {

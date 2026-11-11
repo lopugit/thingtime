@@ -33,6 +33,18 @@ PINS = {
 }
 IDENTITY = 'com.thingtime.nodeprobe.pr1000'
 
+def probe_scene_manifest():
+    """Shared single-scene UIKit lifecycle for both disposable simulator lanes."""
+    return {
+        'UIApplicationSupportsMultipleScenes': False,
+        'UISceneConfigurations': {
+            'UIWindowSceneSessionRoleApplication': [{
+                'UISceneConfigurationName': 'Probe Scene',
+                'UISceneDelegateClassName': 'ProbeSceneDelegate'
+            }]
+        }
+    }
+
 def digest(path):
     with open(path, 'rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -105,7 +117,8 @@ def execute(args):
             'CFBundleIdentifier': IDENTITY, 'CFBundleName': 'Thingtime Node Probe',
             'CFBundleExecutable': 'ThingtimeNodeProbe', 'CFBundlePackageType': 'APPL',
             'CFBundleVersion': '1', 'CFBundleShortVersionString': '1.0',
-            'LSRequiresIPhoneOS': True, 'MinimumOSVersion': '18.0', 'UIDeviceFamily': [1, 2], 'UILaunchScreen': {}
+            'LSRequiresIPhoneOS': True, 'MinimumOSVersion': '18.0', 'UIDeviceFamily': [1, 2], 'UILaunchScreen': {},
+            'UIApplicationSceneManifest': probe_scene_manifest()
         }))
         sdk = run(['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-path'])
         common = ['xcrun', 'clang++', '-arch', 'arm64', '-isysroot', sdk, '-mios-simulator-version-min=18.0']

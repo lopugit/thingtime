@@ -1,0 +1,1 @@
+2026-11-11 20:51:19.136 E  ThingtimeImageProbe[37351:381ab5] (UIKitCore) failure in void _UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption(void)_block_invoke (UIApplication_RuntimeIssues.m:106) : Application failed to launch: UIScene life cycle is required for apps built with this SDK. See Technote TN3187 for more information on migration.

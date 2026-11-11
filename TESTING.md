@@ -19055,3 +19055,14 @@ match the source at desktop and mobile widths. This does not prove production
 bucket configuration. For deployed acceptance, upload a synthetic attachment,
 reload, download and compare its bytes. Inspect HTTP status/CORS errors only;
 never print the file-download JSON, encryption metadata or signed URL.
+
+### Native update activity reservations
+
+- Keep a staged update pending during an active HTTP response, websocket,
+  deferred middleware cleanup, OAuth callback or queued ChatGPT credential/model
+  operation. Close-veto must release admission; a stalled close retains one
+  observer and must not trigger a second attempt or force close.
+- After accepted close, trigger application activation/second instance during
+  delayed service teardown and verify no replacement window opens before restart.
+- Full local API mode remains pending until detached stream/background work has
+  its own shutdown admission proof. An idle socket count is insufficient.

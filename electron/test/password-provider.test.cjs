@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createPasswordProvider, requirePasswordSender } = require('../lib/password-provider.cjs');
+const { queueDesktopRelaunch } = require('../lib/web-bundle-activation.cjs');
 test('password bridge only accepts the active main frame at the configured HTTPS origin', () => {
  const mainFrame = { url: 'https://thingtime.example/passwords' }, event = { senderFrame: mainFrame, sender: { mainFrame } };
  assert.doesNotThrow(() => requirePasswordSender(event, 'https://thingtime.example'));
@@ -55,12 +56,12 @@ test('native provider uses the running authority and restarts await disconnect',
  assert.match(source,/localRuntime\.configure\(request, \(\) => passwordProvider\.disconnect\(\)\)/);
  assert.match(source,/localRuntime\.snapshot\(\)\.enabled && !parallelDevMode\) await passwordProvider\.disconnect\(\)/);
  assert.match(source,/await passwordProvider\.disconnect\(\);\n await settings\.selectEndpoint\(target\.id\)/);
- const restart = source.match(/async function restartDesktopRuntime\(\) \{[\s\S]*?\n\}/)[0];
+ const restart = source.match(/async function restartDesktopRuntime\([^\n]*\) \{[\s\S]*?\n\}/)[0];
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
  const calls=[]; let finish;
- const running=vm.runInNewContext(relaunch+'\n'+restart+'; restartDesktopRuntime()', {authorityTransition:{retainUntilRestart(){calls.push('retain');}},mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
+ const running=vm.runInNewContext(relaunch+'\n'+restart+'; restartDesktopRuntime()', {queueDesktopRelaunch,process:{},authorityTransition:{retainUntilRestart(){calls.push('retain');}},mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
  assert.deepEqual(calls,['stop','disconnect']); finish(); await running;
- assert.deepEqual(calls,['stop','disconnect','retain','relaunch','quit']);
+ assert.deepEqual(calls,['stop','disconnect','relaunch','retain','quit']);
  assert.match(source,/restart-runtime', async \(event\) => \{[^\n]*await restartDesktopRuntime\(\)/);
 });
 

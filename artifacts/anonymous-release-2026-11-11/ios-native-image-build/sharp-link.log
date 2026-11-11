@@ -1,0 +1,6 @@
+ld: warning: ignoring duplicate libraries: '-lm', '-lz'
+Undefined symbols for architecture arm64:
+  "_mallctl", referenced from:
+      _isUsingJemalloc(Napi::CallbackInfo const&) in utilities-ac5bae.o
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)

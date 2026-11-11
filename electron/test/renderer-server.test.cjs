@@ -18,6 +18,86 @@ const start = async (t, profilePath, loadApplication = application) => {
     t.after(renderer.close);
     return renderer;
 };
+const gate = () => {
+    let release;
+    const promise = new Promise(resolve => { release = resolve; });
+    return { promise, release };
+};
+const eventuallyIdle = async renderer => {
+    for (let i = 0; i < 100 && !renderer.isIdle(); i++) await new Promise(resolve => setImmediate(resolve));
+    assert.equal(renderer.isIdle(), true);
+};
+
+test('shutdown reserves HTTP admission, retains its owner, and permits ordinary retry after release', async t => {
+    let calls = 0;
+    const renderer = await start(t, await profile(t), async () => ({ middleware: (_request, response) => { calls++; response.end('owned'); } }));
+    const held = renderer.reserveShutdown(); assert.ok(held);
+    assert.equal(renderer.reserveShutdown(), null);
+    const refused = await fetch(renderer.origin);
+    assert.equal(refused.status, 503); assert.equal(refused.headers.get('retry-after'), '1'); await refused.text();
+    assert.equal(calls, 0); assert.equal(held.isCurrent(), true);
+    held.release(); assert.equal(held.isCurrent(), false);
+    const next = renderer.reserveShutdown(); assert.ok(next);
+    held.release(); assert.equal(next.isCurrent(), true);
+    next.release(); assert.equal(await (await fetch(renderer.origin)).text(), 'owned'); assert.equal(calls, 1);
+});
+
+test('a streaming response remains busy after middleware returns', async t => {
+    let finish;
+    const renderer = await start(t, await profile(t), async () => ({ middleware: (_request, response) => {
+        response.writeHead(200); response.write('first'); finish = () => response.end('last');
+    } }));
+    const response = await fetch(renderer.origin);
+    assert.equal(renderer.reserveShutdown(), null);
+    finish(); assert.equal(await response.text(), 'firstlast');
+    await eventuallyIdle(renderer);
+    assert.ok(renderer.reserveShutdown());
+});
+
+test('a completed response does not hide pending middleware cleanup', async t => {
+    const entered = gate(), waiting = gate();
+    const renderer = await start(t, await profile(t), async () => ({ middleware: async (_request, response) => {
+        response.end('done'); entered.release(); await waiting.promise;
+    } }));
+    const response = await fetch(renderer.origin); await entered.promise;
+    assert.equal(await response.text(), 'done');
+    assert.equal(renderer.reserveShutdown(), null);
+    waiting.release(); await eventuallyIdle(renderer);
+    const held = renderer.reserveShutdown(); assert.ok(held);
+    await renderer.close(); assert.equal(held.isCurrent(), false);
+});
+
+test('a client disconnect cannot release a handler still finishing durable work', async t => {
+    const entered = gate(), waiting = gate();
+    const renderer = await start(t, await profile(t), async () => ({ middleware: async (_request, response) => {
+        response.writeHead(200); response.write('partial'); entered.release(); await waiting.promise; response.end();
+    } }));
+    const request = http.get(renderer.origin);
+    request.on('error', () => {});
+    await entered.promise;
+    const disconnected = new Promise(resolve => request.once('close', resolve)); request.destroy(); await disconnected;
+    assert.equal(renderer.reserveShutdown(), null);
+    waiting.release(); await eventuallyIdle(renderer);
+    assert.ok(renderer.reserveShutdown());
+});
+
+test('websocket lifetimes and upgrade admission are fenced without invoking the application', async t => {
+    let calls = 0, peer;
+    const renderer = await start(t, await profile(t), async () => ({ middleware: (_request, response) => response.end(),
+        handleUpgrade: (_request, socket) => { calls++; peer = socket; socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: fixture\r\n\r\n'); } }));
+    const connect = () => new Promise((resolve, reject) => {
+        const request = http.get(renderer.origin, { headers: { Connection: 'Upgrade', Upgrade: 'fixture' } });
+        request.on('error', reject); request.on('upgrade', (_response, socket) => resolve(socket));
+        request.on('response', response => { response.resume(); resolve(response.statusCode); });
+    });
+    const socket = await connect(); t.after(() => socket.destroy());
+    assert.equal(renderer.reserveShutdown(), null);
+    const closed = new Promise(resolve => peer.once('close', resolve)); peer.destroy(); socket.destroy(); await closed;
+    await eventuallyIdle(renderer);
+    const held = renderer.reserveShutdown(); assert.ok(held);
+    assert.equal(await connect(), 503); assert.equal(calls, 1);
+    held.release();
+});
 
 test('bind once, persist privately, and reuse the exact origin after server restart', async t => {
     const directory = await profile(t);

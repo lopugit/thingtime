@@ -135,6 +135,8 @@ export class ChatGPTPlanRuntime {
 	private store!: Store;
 	private ready?: Promise<void>;
 	private queue: Promise<unknown> = Promise.resolve();
+	private pendingWork = 0;
+	private shutdownReservation: object | null = null;
 	private attempts = new Map<string, Attempt>();
 	private controllers = new Map<string, AbortController>();
 	private closed = false;
@@ -272,13 +274,29 @@ export class ChatGPTPlanRuntime {
 		}
 	}
 	private exclusive<T>(work: () => Promise<T>): Promise<T> {
+		if (this.shutdownReservation) return Promise.reject(new ChatGPTPlanRuntimeError('runtime_updating', 'Thingtime is finishing an update. Retry after it reopens.', 503));
+		this.pendingWork++;
 		const result = this.queue.then(async () => {
 			await this.initialize();
 			if (this.deps.storage) await this.deps.storage.assertAuthority();
 			return work();
-		});
+		}).finally(() => { this.pendingWork--; });
 		this.queue = result.catch(() => undefined);
 		return result;
+	}
+	/** Account revocation controllers persist while idle; they are not jobs.
+	 * HTTP response lifetimes are separately fenced by the embedded server. */
+	isIdle() {
+		return !this.closed && !this.storageFailed && this.pendingWork === 0 &&
+			![...this.attempts.values()].some(attempt => attempt.status === 'pending' || attempt.status === 'connecting');
+	}
+	reserveShutdown() {
+		if (this.shutdownReservation || !this.isIdle()) return null;
+		const reservation = this.shutdownReservation = {};
+		return {
+			isCurrent: () => this.shutdownReservation === reservation && this.isIdle(),
+			release: () => { if (this.shutdownReservation === reservation) this.shutdownReservation = null; }
+		};
 	}
 	private account(key: string, id: string) {
 		const account = this.store.accounts.find((value) => value.scope === key && value.id === id);
@@ -820,16 +838,39 @@ type DesktopProtectedRuntime = NonNullable<Dependencies['protectedFile']> & {
 };
 const desktopProtectedRuntimeKey = Symbol.for('thingtime.desktop.protected-runtime');
 let desktopSingleton: ChatGPTPlanRuntime | undefined;
+let shutdownReservation: object | null = null;
+export function isChatGPTPlanRuntimeIdle() {
+	return (!singleton || singleton.isIdle()) && (!desktopSingleton || desktopSingleton.isIdle());
+}
+/** Main-process-only reservation; no renderer input or credentials cross it.
+ * Factory admission and existing runtimes close synchronously in one turn. */
+export function reserveChatGPTPlanRuntimeShutdown() {
+	if (shutdownReservation || !isChatGPTPlanRuntimeIdle()) return null;
+	const handles = [singleton, desktopSingleton].filter((runtime): runtime is ChatGPTPlanRuntime => !!runtime)
+		.map(runtime => runtime.reserveShutdown());
+	if (handles.some(handle => !handle)) { for (const handle of handles) handle?.release(); return null; }
+	const reservation = shutdownReservation = {};
+	return {
+		isCurrent: () => shutdownReservation === reservation && handles.every(handle => handle!.isCurrent()),
+		release: () => {
+			if (shutdownReservation !== reservation) return;
+			for (const handle of handles) handle!.release();
+			shutdownReservation = null;
+		}
+	};
+}
 export function getDesktopProtectedRuntime(): DesktopProtectedRuntime | undefined {
 	if (process.env.THINGTIME_DESKTOP !== '1' || process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return;
 	return Reflect.get(globalThis, desktopProtectedRuntimeKey) as DesktopProtectedRuntime | undefined;
 }
 export function getDesktopChatGPTPlanRuntime(): ChatGPTPlanRuntime | null {
+	if (shutdownReservation) return null;
 	const protectedFile = getDesktopProtectedRuntime();
 	if (!protectedFile?.available()) return null;
 	return (desktopSingleton ??= new ChatGPTPlanRuntime(protectedFile.directory, { protectedFile, allowLoopbackAuthorization: true }));
 }
 export function getChatGPTPlanRuntime(): ChatGPTPlanRuntime | null {
+	if (shutdownReservation) return null;
 	// This filesystem/loopback adapter requires one durable process. Serverless
 	// execution needs a database-backed credential and refresh-lease adapter.
 	const directory = process.env.THINGTIME_CHATGPT_PLAN_DIR;

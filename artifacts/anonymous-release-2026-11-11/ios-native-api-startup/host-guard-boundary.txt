@@ -1,0 +1,1 @@
+Host-only setup boundary before simulator creation: Darwin rejected getsockopt(SOL_SOCKET, SO_ACCEPTCONN) with OSError42 / Protocol not available. Recovered using lsof scoped to the runner PID and its exclusively bound non-listening port. No native API or database request occurred in this setup attempt.

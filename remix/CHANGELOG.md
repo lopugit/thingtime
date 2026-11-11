@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add guarded desktop bundle activation with durable renderer checkpoints,
+  native request/runtime shutdown reservations and close-veto recovery. Full local
+  API background-work admission and installed automatic-restart acceptance remain
+  open. Preserve genuine iOS Sharp/libvips and Nitro experiments separately from
+  device storage/distribution acceptance. See [PR1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-11-11: Reconcile shared Archive/Restore and sync receipt recovery from
   main `eab815805` with anonymous/local workspaces. Separate the combined Things
   1.64/search 1.8 contracts from both older variants. Reconcile background folder

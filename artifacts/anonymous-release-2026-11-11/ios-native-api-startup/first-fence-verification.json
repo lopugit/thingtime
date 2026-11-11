@@ -1,0 +1,38 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": false,
+  "storageTested": false,
+  "databaseFence": {
+    "host": "127.0.0.1",
+    "port": 64326,
+    "reservedNonListening": true
+  },
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "apiStarted": false,
+    "storageTested": false,
+    "dataWritesAttempted": false,
+    "databaseFence": {
+      "host": "127.0.0.1",
+      "port": 64326,
+      "defaultPort": false,
+      "listenerAbsent": false
+    },
+    "sqlite": {
+      "databaseOpened": false
+    },
+    "requests": [],
+    "error": {
+      "name": "Error",
+      "code": null,
+      "message": "Database fence status timed out",
+      "stack": "Error: Database fence status timed out\n    at Socket.<anonymous> (file://<APP_BUNDLE>/probe.mjs:24:56)\n    at Socket.wrapper (node:events:639:12)\n    at Socket.emit (node:events:514:28)\n    at Socket._onTimeout (node:net:886:8)\n    at Timeout.onStreamTimeout (node:internal/stream_base_commons:242:10)\n    at listOnTimeout (node:internal/timers:687:11)\n    at process.processTimers (node:internal/timers:618:7)"
+    }
+  }
+}

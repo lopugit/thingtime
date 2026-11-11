@@ -1,0 +1,12 @@
+{
+  "optionalDynamicLookup": [
+    "_mallctl"
+  ],
+  "addonLinked": true,
+  "sharpExecuted": false,
+  "nitroImported": false,
+  "dynamicLookupSymbols": [
+    "                 (undefined) weak external _mallctl (dynamically looked up)"
+  ],
+  "napiImportsBoundToNodeMobile": 53
+}

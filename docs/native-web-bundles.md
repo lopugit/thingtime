@@ -122,6 +122,30 @@ provisioning. The existing whole-app updater remains responsible for shell and
 native ABI changes. Keep deployed-origin discovery, actual API download and
 installed acceptance distinct from the recorded startup/rollback receipt.
 
+## Automatic activation work in progress
+
+The renderer now supports a nonce-bound durable persistence checkpoint through
+`native.web-bundle-activation` 1.0.0. The existing automatic-update preference
+controls it. An unfocused window must be idle for 30 seconds; dirty or unknown
+editors, active media, failed persistence and identity changes keep the candidate
+pending. This source checkpoint still requires final installed-app acceptance.
+
+The main process reserves both the embedded HTTP server and ChatGPT runtime
+before starting close. Existing requests, streamed responses, websocket sessions,
+queued storage/model work and pending OAuth refuse the reservation. New requests
+receive retryable 503 while held. A veto releases it; a stalled close retains one
+observer and its reservation. Electron cannot cancel an already dispatched
+`beforeunload`, so this path never forces close or queues a second attempt. An
+accepted close fences `activate` and `second-instance` window recreation until
+canonical restart/recovery. No renderer-supplied value grants shutdown authority.
+
+Automatic activation remains pending in full local API mode. Its detached Lopu
+stream cleanup and notification/background tasks can outlive an HTTP response;
+a generic background-work admission contract is still needed before this mode
+can honestly certify idle. The remote-account desktop bridge awaits protected
+reply persistence within its request. Unknown/missing bridges also remain pending.
+Normal restart still selects a staged update through the verified boot path.
+
 ## Remaining integration and acceptance
 
 1. **P0 — publication, trust and deployed acceptance.** Provision real public
@@ -133,11 +157,12 @@ installed acceptance distinct from the recorded startup/rollback receipt.
 2. **P0 — interruption and editor safety.** Verify resumable network interruption,
    cancellation, retry and independent staging against the actual selected API.
    Preserve origin/profile and unsaved work. Next-normal-start activation is
-   implemented; safe live-editor reload and external frozen-process recovery
-   remain open.
+   implemented. Automatic activation has a guarded source implementation, but
+   installed acceptance, full local API background-work admission and external
+   frozen-process recovery remain open.
 3. **P1 — iOS runtime and storage.** Continue from the actual simulator result:
-   Node 24 and genuine bcrypt work, but canonical Nitro import fails at sharp.
-   Resolve compatible image processing, then prove the full API and in-process
+   Node 24, genuine bcrypt and Sharp/libvips now import the canonical Nitro
+   bundle in a disposable simulator. Prove the full API and in-process
    transactional storage, stable local origin and lifecycle. Do not substitute
    a static shell or weaken the Node/transaction contract.
 4. **P1 — complete platform acceptance.** Verify cold offline startup, durable
@@ -159,6 +184,19 @@ it deliberately does not execute the server or access account data. The
 Node 24.18.0 and native module ABI 148, then removed its temporary resources.
 
 ## iOS evidence and constraints
+
+The [latest isolated HTTP probe](../artifacts/anonymous-release-2026-11-11/ios-native-api-startup/README.md)
+starts the genuine compiled Nitro middleware and serves its exact-origin manifest
+with HTTP 200 (367 features / 729 operations) through `node:http`. It uses the
+previous pinned source snapshot (`39be8cf1…`), whose Things/search versions are
+1.63/1.7, not the current merged 1.64/1.8 contract. Global `fetch` fails on an
+unsupported WebAssembly instruction (`0xFD`); direct HTTP succeeds against the
+same route. This runtime compatibility defect must be resolved before full API
+acceptance. `node:sqlite` exposes `DatabaseSync`, but no database was opened or
+transaction contract tested. A reserved non-listening loopback destination fences
+Mongo; no data writes or credentials are used. The server and owned simulator
+were cleaned up. This is API startup/discovery evidence, not full offline storage.
+
 
 On 11 November, the official [Node.js Mobile release catalogue](https://github.com/nodejs-mobile/nodejs-mobile/releases)
 reported `v18.20.4` as latest, while this checkout's Remix engine is `24.x`.
@@ -184,8 +222,10 @@ implementation/libvips >=8.18.7. The API never started and storage was not teste
 Both task-owned simulators were deleted. The reusable
 [probe lane](../iOS/scripts/native-runtime-probe/README.md) and
 [sanitized original receipts](../artifacts/anonymous-release-2026-11-11/ios-native-runtime/README.md)
-retain source hashes, commands and limits. The reusable runner itself has only
-syntax/input/refusal validation; it has not been rerun end to end. Distribution
+retain source hashes, commands and limits. The checked-in reusable runner has now been run end to end against the actual
+`bab94d1d9` Nitro output: genuine bcrypt passed, Sharp import failed, and owned
+simulator cleanup passed. [Runner acceptance](../artifacts/anonymous-release-2026-11-11/ios-native-runtime/reusable-probe-bab94d1d/README.md)
+remains partial runtime evidence, not API startup. Distribution
 integrity matches the published SHA-256, while source-to-binary reproducibility
 is unproven. Simulator dynamic addon success does not establish physical-device
 linking, production target integration or App Store distribution acceptance.
@@ -194,7 +234,9 @@ The largest independent gap is persistence: desktop starts `mongod`, while the
 API relies on Mongo collections and transactions. iOS needs an in-process device
 storage boundary preserving identities, authorization, uniqueness, atomic
 mutations/accounting and recovery. The tested simulator bcrypt addon does not remove the need for physical-device
-linking; sharp still needs a compatible build or equivalent reusable adapter. A static shell or a mock database
+linking; the separately retained Sharp/libvips simulator experiment now passes
+real image operations and canonical Nitro import. It remains separate from the
+production target and physical-device integration. A static shell or a mock database
 would not establish the requested offline API capabilities.
 
 Apple's [current review guidelines](https://developer.apple.com/app-store/review/guidelines/#software-requirements)

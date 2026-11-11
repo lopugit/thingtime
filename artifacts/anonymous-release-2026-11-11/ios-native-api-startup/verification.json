@@ -1,0 +1,71 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": true,
+  "storageTested": false,
+  "databaseFence": {
+    "host": "127.0.0.1",
+    "port": 65021,
+    "reservedNonListening": true,
+    "nonListeningAtCleanup": true
+  },
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "apiStarted": true,
+    "storageTested": false,
+    "dataWritesAttempted": false,
+    "databaseFence": {
+      "host": "127.0.0.1",
+      "port": 65021,
+      "defaultPort": false,
+      "unreachable": true,
+      "connectionOutcome": "timeout"
+    },
+    "sqlite": {
+      "databaseOpened": false,
+      "available": true
+    },
+    "requests": [
+      {
+        "transport": "fetch",
+        "method": "GET",
+        "path": "/.well-known/thingtime-capabilities.json",
+        "error": {
+          "name": "TypeError",
+          "message": "fetch failed",
+          "code": null,
+          "cause": {
+            "name": "Error",
+            "code": null,
+            "message": "Unsupported instruction: 0xFD"
+          }
+        }
+      },
+      {
+        "transport": "node:http",
+        "method": "GET",
+        "path": "/.well-known/thingtime-capabilities.json",
+        "status": 200
+      }
+    ],
+    "nitroImported": true,
+    "origin": "http://127.0.0.1:65193",
+    "manifest": {
+      "origin": "http://127.0.0.1:65193",
+      "schemaVersion": 1,
+      "featureCount": 367,
+      "operationCount": 729,
+      "things": "1.63.0",
+      "search": "1.7.0",
+      "originMatched": true,
+      "operationRegistered": true
+    },
+    "manifestPassed": true,
+    "serverClosed": true
+  }
+}

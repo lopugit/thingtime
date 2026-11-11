@@ -1,0 +1,30 @@
+{
+  "recipeCommit": "987c467028a20f4813523f6c821a037adc1f8ae0",
+  "target": "arm64-apple-ios15.0-simulator",
+  "libvips": "8.18.7",
+  "sharp": "0.35.5",
+  "completedSteps": [
+    "tool-venv",
+    "tool-install",
+    "build-expat",
+    "build-libffi",
+    "build-pcre2",
+    "build-libjpeg-turbo",
+    "build-libpng",
+    "build-libwebp",
+    "build-glib",
+    "build-libexif",
+    "build-lcms2",
+    "build-libvips"
+  ],
+  "sharpExecuted": false,
+  "nitroImported": false,
+  "storageTested": false,
+  "productionParity": false,
+  "sourceToBinaryReproducibility": "unproven",
+  "activeStep": "build-libvips",
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "clang": "Apple clang version 21.0.0 (clang-2100.3.20.102)",
+  "dependencyBuildPassed": true,
+  "observedAt": "2026-11-11T09:43:38.108308+00:00"
+}

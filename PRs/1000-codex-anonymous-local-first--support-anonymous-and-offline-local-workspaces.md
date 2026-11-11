@@ -2,6 +2,31 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native activation and iOS API checkpoint — 11 November 2026
+
+Build on pushed `830da4a56` (main through `4650f5af2`). The automatic desktop
+activation source now checkpoints durable renderer state, requires idle/unfocused
+UI, reserves embedded HTTP and ChatGPT work admission, respects close vetoes, and
+fences replacement windows until relaunch. HTTP streams, websocket sessions,
+queued work and OAuth block shutdown; new work cannot race an accepted reservation.
+Full local API mode deliberately remains pending because detached transcript and
+notification work needs its own admission lifecycle. Installed automatic restart
+acceptance remains open; ordinary startup/rollback evidence is separate.
+
+The iOS experiment now runs genuine Sharp/libvips and serves the actual Nitro
+capability manifest over loopback HTTP (367 features / 729 operations). Its
+pinned prior source advertises Things 1.63/search 1.7. Global Fetch fails with
+`Unsupported instruction: 0xFD`, while Node HTTP succeeds. No database was opened,
+no account data was written, and its server/simulator were cleaned up. Current
+source parity, working Fetch, in-process transactional storage, WebView integration
+and physical-device acceptance remain required. [Probe evidence](../artifacts/anonymous-release-2026-11-11/ios-native-api-startup/README.md).
+
+[Activation checks and remaining gates](../artifacts/anonymous-release-2026-11-11/native-activation/README.md)
+separate authored source, unit checks, actual installed startup and unproven live
+activation. The progress plan is browser-checked at 1440, 390 and 320px with full
+scroll/filter/navigation coverage. The canonical connected tool catalogue still
+has no render/export tool; hosted artifact delivery remains the original P0.
+
 ## Final documentation-only refresh — 11 November 2026
 
 Also merge fetched main `4650f5af2ebeb7e32d7e9e58339b0b3a8bf851d1` (PR #1474):

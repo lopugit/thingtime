@@ -1,0 +1,44 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": true,
+  "storageTested": false,
+  "databaseFence": {
+    "host": "127.0.0.1",
+    "port": 64753,
+    "reservedNonListening": true,
+    "nonListeningAtCleanup": true
+  },
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "apiStarted": true,
+    "storageTested": false,
+    "dataWritesAttempted": false,
+    "databaseFence": {
+      "host": "127.0.0.1",
+      "port": 64753,
+      "defaultPort": false,
+      "unreachable": true,
+      "connectionOutcome": "timeout"
+    },
+    "sqlite": {
+      "databaseOpened": false,
+      "available": true
+    },
+    "requests": [],
+    "nitroImported": true,
+    "origin": "http://127.0.0.1:64934",
+    "error": {
+      "name": "TypeError",
+      "code": null,
+      "message": "fetch failed",
+      "stack": "TypeError: fetch failed"
+    },
+    "serverClosed": true
+  }
+}

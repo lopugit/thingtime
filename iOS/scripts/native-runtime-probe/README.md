@@ -12,6 +12,13 @@ made cost-10 hash/compare pass, then the identical Nitro entry failed at sharp
 0.35.5's missing `ios-arm64` implementation. Stop there; this lane does not retry
 sharp or test local persistence. See the [sanitized receipts](../../../artifacts/anonymous-release-2026-11-11/ios-native-runtime/README.md).
 
+The checked-in runner was subsequently executed successfully on source
+`bab94d1d9`: its exact canonical Nitro entry hash was
+`39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde`.
+The bcrypt success and Sharp import failure were reproduced, and the fresh
+simulator was deleted. [Reusable-runner acceptance](../../../artifacts/anonymous-release-2026-11-11/ios-native-runtime/reusable-probe-bab94d1d/README.md)
+proves this diagnostic lane; it does not establish API/storage acceptance.
+
 ## Prerequisites and provenance
 
 - Apple Silicon macOS, Python 3.11+, Xcode with an installed iOS simulator runtime,

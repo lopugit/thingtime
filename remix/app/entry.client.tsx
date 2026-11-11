@@ -13,6 +13,7 @@ import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
 import { PersistedThingMenuLoaderContext } from './components/Thingtime/ContextMenu/PersistedThingContextMenu';
 import { bindRootIdentityChannel, rootIdentity } from './utils/rootIdentity';
+import { watchDesktopBundleActivation } from './utils/desktopBundleActivation';
 import { getElectronBridge } from './utils/electronBridge';
 import { createDesktopRendererBootHealth, watchDesktopRendererReady } from './utils/desktopRendererReady';
 import {
@@ -78,6 +79,7 @@ if (!root) {
 const desktopBootHealth = createDesktopRendererBootHealth();
 function DesktopRendererReady() {
   React.useEffect(() => watchDesktopRendererReady({ router, root: root!, bridge: getElectronBridge(), isHealthy: desktopBootHealth.isHealthy }), []);
+  React.useEffect(() => watchDesktopBundleActivation({ router, bridge: getElectronBridge(), isHealthy: desktopBootHealth.isHealthy }), []);
   return null;
 }
 

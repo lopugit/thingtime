@@ -3,22 +3,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { queueDesktopRelaunch, presentBundleWindow } = require('../lib/web-bundle-activation.cjs');
 const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
 const closeServices = source.match(/async function closeDesktopServices\(\) \{[\s\S]*?\n\}/)[0];
 const gate = () => { let finish; const promise = new Promise(resolve => { finish=resolve; }); return {promise, finish}; };
 
 test('immediate service cleanup retries Quit after the native quit dispatch unwinds', async () => {
  const listener = source.match(/app\.on\('before-quit', \(event\) => \{[\s\S]*?\n\}\);/)[0];
- let beforeQuit, nativeDispatch = true, completed = 0, prevented = false, launchClosed = false;
+ let beforeQuit, nativeDispatch = true, completed = 0, prevented = false, launchClosed = false, activationClosed = false, timerCleared = false;
+ const timer = {};
  vm.runInNewContext(listener, {
   app: { on: (_name, fn) => { beforeQuit = fn; }, quit: () => { if (!nativeDispatch) completed++; } },
   desktopServicesClosed: false, desktopServicesClosing: false,
   localRuntime: {}, agentBrowsersPromise: undefined, webBundleUpdates: null,
   webBundleLaunch: { close: () => { launchClosed = true; } },
+  webBundleActivation: { close: () => { activationClosed = true; } }, bundleActivationTimer: timer,
+  clearInterval: value => { assert.equal(value, timer); timerCleared = true; },
   closeDesktopServices: () => Promise.resolve(), setImmediate
  });
  beforeQuit({ preventDefault: () => { prevented = true; } });
- assert.equal(launchClosed, true);
+ assert.equal(launchClosed, true); assert.equal(activationClosed, true); assert.equal(timerCleared, true);
  await Promise.resolve(); await Promise.resolve();
  assert.equal(prevented, true); assert.equal(completed, 0);
  nativeDispatch = false;
@@ -28,12 +32,25 @@ test('immediate service cleanup retries Quit after the native quit dispatch unwi
 
 test('activation during or after service shutdown cannot create another window', () => {
  const create = source.match(/function createWindow\(\) \{[\s\S]*?\n\}/)[0];
- for (const [desktopServicesClosing, desktopServicesClosed] of [[true, false], [true, true], [false, true]]) {
-  assert.doesNotThrow(() => vm.runInNewContext(create + '; createWindow()', {
-   desktopServicesClosing, desktopServicesClosed,
-   BrowserWindow: class { constructor() { throw new Error('Unexpected window during Quit'); } }
-  }));
+ const blocked = source.match(/function desktopWindowPresentationBlocked\(\) \{[\s\S]*?\n\}/)[0];
+ const present = source.match(/function presentMainWindow\(\) \{[\s\S]*?\n\}/)[0];
+ const phases = [
+  { desktopServicesClosing: true, desktopServicesClosed: false },
+  { desktopServicesClosing: true, desktopServicesClosed: true },
+  { desktopServicesClosing: false, desktopServicesClosed: true },
+  { automaticBundleClosing: true }, { bundleClosePending: true }, { bundleCloseAccepted: true },
+  { authorityTransition: { restarting: true } }
+ ];
+ for (const phase of phases) {
+  const context = { desktopServicesClosing: false, desktopServicesClosed: false, automaticBundleClosing: false,
+   bundleClosePending: false, bundleCloseAccepted: false, authorityTransition: { restarting: false },
+   mainWindow: null, appOrigin: 'http://127.0.0.1:28631', presentBundleWindow,
+   BrowserWindow: class { constructor() { throw new Error('Unexpected window during Quit'); } }, ...phase };
+  assert.doesNotThrow(() => vm.runInNewContext(blocked + '\n' + create + '; createWindow()', context));
+  assert.equal(vm.runInNewContext(blocked + '\n' + create + '\n' + present + '; presentMainWindow()', context), false);
  }
+ assert.match(source, /app\.on\('activate', presentMainWindow\)/);
+ assert.match(source, /app\.on\('second-instance', presentMainWindow\)/);
 });
 
 test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
@@ -88,7 +105,7 @@ test('failed bundle startup restarts before a page or password session exists', 
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
  const calls = []; let onFailure;
  const context = {
-  parallelDevMode: true, process: { env: {}, versions: {}, connected: true,
+  queueDesktopRelaunch, parallelDevMode: true, process: { env: {}, versions: {}, connected: true,
    send: (message, callback) => { calls.push(message.type); callback(); } },
   app: { getPath: () => '/isolated-profile', getVersion: () => '1.0.0', quit: () => calls.push('quit') },
   __dirname: '/shell', path: require('node:path'), fs: { readFileSync: () => '{}' },
@@ -104,17 +121,17 @@ test('failed bundle startup restarts before a page or password session exists', 
  };
  await vm.runInNewContext(relaunch + '\n' + initialize + '; initializeWebBundleLaunch()', context);
  await onFailure(new Error('Nitro import failed'));
- assert.deepEqual(calls, ['authority-fenced', 'thingtime-dev-restart', 'quit']);
+ assert.deepEqual(calls, ['thingtime-dev-restart', 'authority-fenced', 'quit']);
 });
 
 test('relaunch requires supervisor acceptance and preserves native application relaunch', async () => {
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
- let quits = 0, relaunches = 0;
- const context = {parallelDevMode: true, process: {connected: true, send: (_message, callback) => callback(new Error('IPC closed'))},
-  app: {quit: () => quits++, relaunch: () => relaunches++}, authorityTransition: {retainUntilRestart() {}}};
+ let quits = 0, relaunches = 0, retained = 0;
+ const context = {queueDesktopRelaunch, parallelDevMode: true, process: {connected: true, send: (_message, callback) => callback(new Error('IPC closed'))},
+  app: {quit: () => quits++, relaunch: () => relaunches++}, authorityTransition: {retainUntilRestart() { retained++; }}};
  await assert.rejects(vm.runInNewContext(relaunch + '; relaunchDesktopProcess()', context), /did not accept/);
- assert.equal(quits, 0); assert.equal(relaunches, 0);
+ assert.equal(quits, 0); assert.equal(relaunches, 0); assert.equal(retained, 0);
  context.parallelDevMode = false;
  await vm.runInNewContext(relaunch + '; relaunchDesktopProcess()', context);
- assert.equal(quits, 1); assert.equal(relaunches, 1);
+ assert.equal(quits, 1); assert.equal(relaunches, 1); assert.equal(retained, 1);
 });

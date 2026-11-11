@@ -1,18 +1,18 @@
 'use strict';
-/** Download in the background after healthy renderer startup. Staging never
- * reloads a live editor: the existing launch gate applies it on the next normal
- * process start. A later explicit safe-reload flow can use the same receipt. */
+/** Download and stage after healthy startup. Activation runs separately after
+ * this operation settles, so shutdown never waits recursively on its relaunch. */
 function createWebBundleUpdates({ store, downloader, timeoutMs = 10 * 60 * 1000 }) {
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60 * 60 * 1000) throw new Error('Invalid update operation deadline');
   const controller = new AbortController();
-  let operation, closed = false;
+  let operation, operationController, closed = false;
   let state = { status: 'idle', releaseId: null, version: null, completeBytes: 0, error: null };
   const snapshot = () => ({ ...state });
   function checkAndStage() {
     if (closed) return Promise.resolve(snapshot());
     if (operation) return operation;
     state = { status: 'checking', releaseId: null, version: null, completeBytes: 0, error: null };
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(timeoutMs)]);
+    operationController = new AbortController();
+    const signal = AbortSignal.any([controller.signal, operationController.signal, AbortSignal.timeout(timeoutMs)]);
     operation = (async () => {
       try {
         const current = await store.inspect(); signal.throwIfAborted();
@@ -33,9 +33,9 @@ function createWebBundleUpdates({ store, downloader, timeoutMs = 10 * 60 * 1000 
           error: signal.aborted ? 'The bundle update was interrupted; verified partial bytes are retained.' : 'The bundle update could not be verified. The running app is unchanged.' };
       }
       return snapshot();
-    })().finally(() => { operation = null; });
+    })().finally(() => { operation = null; operationController = null; });
     return operation;
   }
-  return { snapshot, checkAndStage, close: async () => { closed = true; controller.abort(); await operation; } };
+  return { snapshot, checkAndStage, cancel: () => operationController?.abort(), close: async () => { closed = true; controller.abort(); await operation; } };
 }
 module.exports = { createWebBundleUpdates };

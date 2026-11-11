@@ -1,3 +1,4 @@
+import { useDesktopUpdateBlocker } from '~/utils/useDesktopUpdateBlocker';
 import React from 'react';
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
@@ -70,6 +71,8 @@ export const Composer = (props: ComposerProps) => {
 	const pendingSubmissionRef = React.useRef<MessageSubmission | null>(props.initialSubmission || null);
   const initialSubmissionSent = React.useRef(false);
   const preparingSubmission = React.useRef(false);
+  useDesktopUpdateBlocker(Boolean(text || sending || sharedFilesPending || attachmentSnapshot.blocking ||
+    attachmentSnapshot.attachments.length || submissionUncertain || pendingSubmissionRef.current || preparingSubmission.current));
   const admission = React.useRef(new ComposerDraftAdmission(props.initialDraft));
   const draftRef = React.useRef(props.initialDraft);
   draftRef.current = props.initialDraft;

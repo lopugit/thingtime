@@ -26,8 +26,8 @@ background download until supported provisioning.
 
 `iOS/scripts/native-runtime-probe/` preserves the isolated actual Node 24/Nitro
 experiment: genuine simulator bcrypt passes, then sharp fails to load; no API or
-storage acceptance follows. Its reusable runner has syntax/input/refusal checks,
-not an end-to-end rerun. See the [probe runbook](../../iOS/scripts/native-runtime-probe/README.md).
+storage acceptance follows. The checked-in reusable runner was exercised end to end against source
+`bab94d1d9`, reproducing that compatibility boundary with verified simulator cleanup. See the [probe runbook](../../iOS/scripts/native-runtime-probe/README.md).
 
 ## Agent browser runtime
 
@@ -293,3 +293,15 @@ Swift sources, authorization, rates and native active-slot policy are unchanged.
 attachment UI against a separate synthetic storage origin. It rejects missing
 GET CORS, then verifies an exact-origin response downloads decrypted bytes at
 desktop and mobile widths. See TESTING.md for invocation and production checks.
+
+### Native bundle activation verification
+
+`electron/lib/web-bundle-activation.cjs` owns close/relaunch reservations;
+`renderer-server.cjs` fences live HTTP/stream/websocket work and the Nitro
+ChatGPT runtime plugin exposes an in-process queue/OAuth reservation. Renderer
+persistence participants live in `desktopBundleSafety.ts`. Full local API mode
+remains pending until detached background work participates. Run the Electron
+unit suite, renderer safety/persistence and ChatGPT runtime tests, then the
+separate development startup verifier. Positive remote-mode automatic activation
+still needs its own real downloader/dirty-edit/relaunch acceptance fixture; see
+`docs/native-web-bundles.md`.

@@ -4,7 +4,7 @@ import test, { type TestContext } from 'node:test';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChatGPTPlanRuntime, ChatGPTPlanRuntimeError, getChatGPTPlanRuntime } from './chatgptPlanRuntime';
+import { ChatGPTPlanRuntime, ChatGPTPlanRuntimeError, getChatGPTPlanRuntime, isChatGPTPlanRuntimeIdle, reserveChatGPTPlanRuntimeShutdown } from './chatgptPlanRuntime';
 import type { ChatGPTStorageRecord, ChatGPTPlanStorage } from './chatgptPlanStorage';
 import { ChatGPTPlanError, SCOPES, type ChatGPTAuthorizationAttempt, type ChatGPTCredentials } from './chatgptPlanProtocol';
 
@@ -62,6 +62,61 @@ async function connect(runtime: ChatGPTPlanRuntime) {
 	assert.equal(result.status, 200);
 	return (await runtime.list(scope)).accounts[0];
 }
+
+test('shutdown reservation refuses queued work and OAuth, then fences new work until its owner releases', async t => {
+	const waiting = gate();
+	const { runtime } = await fixture(t);
+	assert.equal(runtime.isIdle(), true);
+	const start = runtime.begin(scope, async () => { await waiting.promise; return true; });
+	const queued = runtime.list(scope);
+	assert.equal(runtime.isIdle(), false, 'queued work must count before its first await');
+	assert.equal(runtime.reserveShutdown(), null);
+	waiting.release();
+	const { attemptId } = await start;
+	await queued;
+	assert.equal(runtime.reserveShutdown(), null, 'OAuth remains active between requests');
+	await runtime.cancel(scope, attemptId);
+	const held = runtime.reserveShutdown();
+	assert.ok(held); assert.equal(held.isCurrent(), true);
+	assert.equal(runtime.reserveShutdown(), null);
+	await assert.rejects(runtime.list(scope), (error: unknown) => error instanceof ChatGPTPlanRuntimeError && error.code === 'runtime_updating' && error.status === 503);
+	held.release(); assert.equal(held.isCurrent(), false);
+	const next = runtime.reserveShutdown(); assert.ok(next);
+	held.release(); assert.equal(next.isCurrent(), true, 'stale release cannot clear a new reservation');
+	next.release(); await runtime.list(scope);
+});
+
+test('connected account revocation handles are idle but in-flight refresh remains busy', async t => {
+	let blocking = false;
+	const entered = gate(), waiting = gate();
+	const { runtime } = await fixture(t, { models: async () => {
+		if (blocking) { entered.release(); await waiting.promise; }
+		return models;
+	} });
+	const account = await connect(runtime);
+	assert.equal(runtime.isIdle(), true);
+	await runtime.resolveProvider(scope, account.id);
+	assert.equal(runtime.isIdle(), true, 'a retained account controller is not an active response');
+	blocking = true;
+	const refresh = runtime.refreshModels(scope, account.id);
+	await entered.promise;
+	assert.equal(runtime.reserveShutdown(), null);
+	waiting.release(); await refresh;
+	const held = runtime.reserveShutdown(); assert.ok(held);
+	await runtime.close(); assert.equal(held.isCurrent(), false);
+	held.release();
+});
+
+test('an idle process with no plan instance can reserve shutdown without creating one', () => {
+	assert.equal(isChatGPTPlanRuntimeIdle(), true);
+	const held = reserveChatGPTPlanRuntimeShutdown(); assert.ok(held);
+	try {
+		assert.equal(held.isCurrent(), true);
+		assert.equal(getChatGPTPlanRuntime(), null);
+		assert.equal(reserveChatGPTPlanRuntimeShutdown(), null);
+	} finally { held.release(); }
+	assert.equal(held.isCurrent(), false);
+});
 
 test('private files and public projections preserve owner and origin isolation', async (t) => {
 	const { runtime, directory } = await fixture(t);
