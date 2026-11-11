@@ -1311,7 +1311,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				const review = tx.objectStore(REVIEW_STORE), ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try {
 					check(); const r = row(get.result, spec), w = rebindWrite(r, spec);
-					if (r.canonicalDispatched !== false || r.operation.confirmed || !w || w.operation.mutation.kind !== 'copy') throw Error('Dependent operation may have an unresolved effect.');
+					if (r.canonicalDispatched !== false || r.operation.confirmed || r.receipt !== null || !w || w.operation.mutation.kind !== 'copy') throw Error('Dependent operation may have an unresolved effect.');
 					const cause = review.get([key, spec.id, 'folder-supersession', w.folderId!]);
 					cause.onsuccess = () => { try {
 						check(); if (cause.result?.instance !== h.instance || cause.result.operation?.id !== w.folderId) throw Error('Missing proven parent supersession.');
@@ -1322,7 +1322,9 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						};
 						const recovery = h.scheduling!.recovery;
 						if (!recovery) { finish(); return; }
-						if (recovery.kind !== 'folders') throw Error('Preserve original file batch recovery ordering.');
+						// File and folder recovery both retain their original member order.
+						// Release only this proven undispatched dependent; every other
+						// member keeps its original operation and receipt-first claim.
 						const pointer = review.get([key, spec.id, 'batch-operation', operationId]);
 						pointer.onsuccess = () => { try {
 							check(); const p = pointer.result;
@@ -1330,7 +1332,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							const memberKey = [key, spec.id, 'batch-member', recovery.id, p.ordinal], get = review.get(memberKey);
 							get.onsuccess = () => { try {
 								check(); const member = get.result;
-								if (!member || member.instance !== h.instance || member.operationId !== operationId || member.confirmed || member.retired || member.deferred || member.canonicalDispatched !== false) throw Error('Dependent canonical publication remains uncertain.');
+								if (!member || member.scope !== key || member.run !== spec.id || member.instance !== h.instance || member.batchId !== recovery.id || member.ordinal !== p.ordinal || member.operationId !== operationId || member.confirmed || member.retired || member.deferred || member.canonicalDispatched !== false) throw Error('Dependent canonical publication remains uncertain.');
 								member.deferred = true; review.put(member, memberKey); review.add({ ...member, parentSupersession: w.folderId }, [key, spec.id, 'dependency-deferred', operationId]); review.delete([key, spec.id, 'batch-operation', operationId]);
 								if (!--recovery.remaining) { review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]); delete h.scheduling!.recovery; }
 								finish();

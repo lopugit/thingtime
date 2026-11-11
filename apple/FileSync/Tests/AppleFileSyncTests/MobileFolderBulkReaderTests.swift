@@ -2,6 +2,13 @@
 import CryptoKit
 import XCTest
 
+private final class ReadGuardCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observed: [MobileFolderBulkReader.ReadGuard] = []
+    func record(_ value: MobileFolderBulkReader.ReadGuard) { lock.lock(); observed.append(value); lock.unlock() }
+    var values: [MobileFolderBulkReader.ReadGuard] { lock.lock(); defer { lock.unlock() }; return observed }
+}
+
 @MainActor final class MobileFolderBulkReaderTests: XCTestCase {
     private func fixture() throws -> (URL, Data, MobileFolderReader.Entry) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -22,6 +29,34 @@ import XCTest
         XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry, sha256: String(repeating: "0", count: 64)))
         try Data("replacement".utf8).write(to: root.appendingPathComponent("file"), options: .atomic)
         XCTAssertThrowsError(try MobileFolderBulkReader.read(bookmark: bookmark, expected: entry, sha256: payload.sha256))
+    }
+    func testReadGuardReportsOnlyProvenFailureWithoutChangingThrownError() throws {
+        let (root, bookmark, entry) = try fixture()
+        func expect(_ source: MobileFolderReader.Entry, _ guardFailure: MobileFolderBulkReader.ReadGuard,
+                    sha256: String? = nil, failure: MobileFolderStore.Failure = .changed) {
+            let capture = ReadGuardCapture()
+            do { _ = try MobileFolderBulkReader.read(bookmark: bookmark, expected: source, sha256: sha256, observer: capture.record); XCTFail("Source accepted") }
+            catch MobileFolderStore.Failure.changed { if case .changed = failure {} else { XCTFail("Wrong error") } }
+            catch MobileFolderStore.Failure.invalid { if case .invalid = failure {} else { XCTFail("Wrong error") } }
+            catch MobileFolderStore.Failure.limit { if case .limit = failure {} else { XCTFail("Wrong error") } }
+            catch { XCTFail("Unexpected error type for \(guardFailure.rawValue): \(type(of: error))") }
+            XCTAssertEqual(capture.values, [guardFailure])
+        }
+        let invalid = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: entry.version, kind: entry.kind,
+            size: 262_145, sha256: entry.sha256, fingerprint: entry.fingerprint)
+        expect(invalid, .invalidShape, failure: .invalid)
+        let older = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: "0:0:0:0:0:0:0", kind: entry.kind,
+            size: entry.size, sha256: entry.sha256, fingerprint: entry.fingerprint)
+        expect(older, .firstInspectVersion)
+        let wrongFingerprint = MobileFolderReader.Entry(path: entry.path, id: entry.id, version: entry.version, kind: entry.kind,
+            size: entry.size, sha256: entry.sha256,
+            fingerprint: .init(partSizeBytes: entry.fingerprint!.partSizeBytes, partCount: 1, sha256: String(repeating: "0", count: 64)))
+        expect(wrongFingerprint, .firstInspectFingerprint)
+        expect(entry, .rawDigest, sha256: String(repeating: "0", count: 64))
+        try Data("replacement".utf8).write(to: root.appendingPathComponent("file"), options: .atomic)
+        expect(entry, .firstInspectIdentity)
+        try FileManager.default.removeItem(at: root.appendingPathComponent("file"))
+        expect(entry, .firstInspectAbsent)
     }
     func testAliasesAndResourceBoundsFailClosed() throws {
         let (_, _, entry) = try fixture()
