@@ -10,10 +10,22 @@ const collection = (id: string, itemsPath: string, children: WebpageBlock[], tra
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock =>
   ({ id, type: 'condition', condition: { arg, equals: true }, children });
 
+
+const serviceOperationBlocks = (): WebpageBlock[] => [
+  when('named-service-resource', 'item.resourceRequired', [
+    element('named-resource-label', 'label', '{item.resourceLabel}', { htmlFor: 'service-resource-{item.id}' }),
+    element('named-resource-input', 'input', '', { id: 'service-resource-{item.id}', name: 'service-resource-{item.id}',
+      'aria-label': '{item.resourceLabel}', type: 'text', autoComplete: 'off', spellCheck: false, pattern: '[A-Za-z0-9_-]+', required: true },
+      { 'min-height': '44px', width: '100%', 'min-width': '0', 'box-sizing': 'border-box', padding: '6px 8px', border: '1px solid var(--tt-border, #ddd)' })
+  ]),
+  button('named-run-operation', '{item.label}', 'use', { id: '{item.id}' }),
+  when('named-service-next', 'item.hasNext', [button('named-next-page', 'Read next page', 'use', { id: '{item.id}', next: true })])
+];
+
 export const namedConnectionBlocks: WebpageBlock[] = [
   element('named-heading', 'h2', 'Named auth connections', {}, { 'font-weight': '700' }),
   element('named-about', 'p', 'Save a separate sign-in for each use. Removing a connection here does not revoke access at the provider.'),
-  element('named-supported', 'p', 'Google account supports profile and email reads. Other provider cards support saved account identity here.', {},
+  element('named-supported', 'p', 'Google account supports profile and email reads. Google service connections support the read actions you explicitly allow.', {},
     { 'font-size': '14px', color: 'var(--tt-muted, #6b7280)' }),
   collection('named-list', 'named.rows', [{
     id: 'named-card', type: 'element', tag: 'article',
@@ -82,7 +94,24 @@ export const namedConnectionBlocks: WebpageBlock[] = [
       css: { width: '100%', 'min-width': '0', 'max-width': '100%', 'min-height': '44px' },
       children: [collection('named-consumer-options', 'named.rows', [element('named-consumer-option', 'option', '{item.name}', { value: '{item.id}' })], true)] },
     element('named-consumer-selected-name', 'p', '{named.activeName}', {}, { 'overflow-wrap': 'anywhere', 'font-size': '14px' }),
-    collection('named-consumer-operations', 'named.operations', [button('named-run-operation', '{item.label}', 'use', { id: '{item.id}' })], true),
-    element('named-result', 'p', '{named.result}', { role: 'status' }, { 'overflow-wrap': 'anywhere' })
+    collection('named-consumer-operations', 'named.operations', serviceOperationBlocks(), true),
+    when('named-operation-busy', 'named.using', [element('named-operation-status', 'span', '◌', { role: 'status', 'aria-label': 'Reading selected connection' })]),
+    element('named-result', 'pre', '{named.result}', {}, { 'white-space': 'pre-wrap', 'overflow-wrap': 'anywhere', 'min-width': '0', 'max-height': '480px', overflow: 'auto', 'font-size': '13px' })
   ])
 ];
+
+/** Add controls only to the existing authored operation template; preserve
+ * custom layouts, edited buttons and deliberate removal of the whole region. */
+export function migrateNamedServiceBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
+  return blocks.map(block => {
+    if (block.id === 'named-consumer-operations') {
+      const children = block.children || [];
+      if (children.some(child => child.id === 'named-service-resource')) return block;
+      const [resource, , next] = serviceOperationBlocks();
+      return { ...block, children: [resource, ...children, next] };
+    }
+    if (block.id === 'named-result') return { ...block, tag: 'pre', props: { ...block.props, role: undefined },
+      css: { 'white-space': 'pre-wrap', 'min-width': '0', 'max-height': '480px', overflow: 'auto', ...block.css } };
+    return block.children ? { ...block, children: migrateNamedServiceBlocks(block.children) } : block;
+  });
+}

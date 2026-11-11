@@ -15831,3 +15831,16 @@ private readback while an unrelated Home fixture remains paused.
   memory. Growth must remain bounded across the entire archive, with exact
   fingerprints and unchanged original bytes. Keep simulator/build evidence,
   a physical app exit, and an actual iOS crash/termination report distinct.
+
+
+### Google saved-service actions
+
+Use the focused `googleServiceRequests.test.ts` and `namedServiceActions.test.mts`
+suites, then Connections, capability, and compiled manifest smoke checks. In a
+task-owned isolated browser, verify editable resource-ID controls, complete
+results, next-page behavior and clearing across connection/account changes at
+desktop and mobile sizes. Real acceptance separately uses each service's
+selected Google grant: Drive/Gmail/Calendar/Contacts first and next pages; Docs
+and Sheets known IDs. Verify a foreign ID, missing scope, consent cancellation,
+expired-token refresh and removal/reconnect isolation without changing siblings.
+Enable the service API in the authorized Google Cloud project before calling it.

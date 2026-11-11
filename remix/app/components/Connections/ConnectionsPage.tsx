@@ -525,8 +525,8 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
             if (provider) void openConnect(provider, named);
           }}
           remove={unlink}
-          use={async (id, operation) => {
-            const response = await api.v1.connections.useNamed({ id, operation, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
+          use={async (id, operation, args) => {
+            const response = await api.v1.connections.useNamed({ id, operation, ...args, expectedOwnerId: ownerId, expectedApiOrigin: apiOrigin });
             return isCurrent() ? response?.result : undefined;
           }}
           onError={(error: any) => lopu({ title: error?.error || error?.message || 'Could not use the connection.', status: 'error' })}

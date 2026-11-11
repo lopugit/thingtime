@@ -1121,8 +1121,8 @@ test('owner-private connections publish their breaking vault contract on both ma
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const manifest = thingtimeCapabilityManifest('https://connections.example');
   const versions = { connections: '2.1.0', 'connections-providers': '2.0.0', 'connections-unlink': '2.1.0',
-    'connections-feed': '2.0.0', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
-    'connections-oauth-callback': '2.1.0', 'connections-named': '1.0.0' };
+    'connections-feed': '2.0.0', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.2.0',
+    'connections-oauth-callback': '2.2.0', 'connections-named': '1.1.0' };
   for (const [id, version] of Object.entries(versions)) {
     const doc = apiEndpointDocs.find(doc => doc.id === id)!;
     assert.equal(legacy.features[`api.${id}`], version);
@@ -1218,4 +1218,19 @@ test('Console API-key mode is independently negotiated on both origin manifests'
   assert.equal(capabilitySatisfies('2.0.0', minimum), false);
   assert.equal(capabilitySatisfies(undefined, minimum), false);
  }
+});
+
+
+test('Google service clients require the additive named-action and consent contracts', () => {
+  const manifest = thingtimeCapabilityManifest('https://connections.example');
+  for (const [feature, version, previous] of [
+    ['api.connections-named', '1.1.0', '1.0.0'],
+    ['api.connections-oauth-begin', '2.2.0', '2.1.0'],
+    ['api.connections-oauth-callback', '2.2.0', '2.1.0']
+  ]) {
+    assert.equal(capabilitySatisfies(manifest.features[feature].version, version), true);
+    assert.equal(capabilitySatisfies(previous, version), false);
+    assert.equal(capabilitySatisfies('3.0.0', version), false);
+    assert.equal(capabilitySatisfies(undefined, version), false);
+  }
 });

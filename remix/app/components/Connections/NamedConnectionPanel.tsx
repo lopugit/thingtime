@@ -3,7 +3,8 @@ import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { namedAccess, namedFacebookProvider, namedGoogleProvider, namedOperationsFor, namedProviderPermissions, type NamedConnectionInput, type NamedOperation } from '~/connections/namedAccess';
-import { namedConnectionBlocks } from './namedConnectionBlocks';
+import { googleServiceAccess, googleServiceOperation, type NamedOperationArguments, type NamedOperationResult } from '~/connections/googleServiceActions';
+import { namedConnectionBlocks, migrateNamedServiceBlocks } from './namedConnectionBlocks';
 import type { Connection } from './shared';
 
 type Provider = { id: string; name: string; auth: string; configured: boolean };
@@ -13,14 +14,14 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   scopeKey: string; providers: Provider[]; connections: Connection[]; busy: boolean;
   start(provider: string, input: NamedConnectionInput): void;
   remove(connection: Connection): Promise<void>;
-  use(id: string, operation: NamedOperation): Promise<Record<string, string | null> | undefined>;
+  use(id: string, operation: NamedOperation, args: NamedOperationArguments): Promise<NamedOperationResult | undefined>;
   onError(error: unknown): void;
 }) {
   const candidates = providers.filter(provider => provider.auth !== 'none' && provider.configured);
   const named = connections.filter(connection => connection.named);
   const [draft, setDraft] = React.useState<Draft | null>(null);
   const [active, setActive] = React.useState('');
-  const [result, setResult] = React.useState<{ signature: string; text: string } | null>(null);
+  const [result, setResult] = React.useState<{ signature: string; text: string; operation: NamedOperation; resourceId?: string; nextPageToken?: string } | null>(null);
   const [using, setUsing] = React.useState(false);
   const useGeneration = React.useRef(0);
   const selected = named.find(connection => connection.id === active) || named[0];
@@ -47,11 +48,16 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
     granted: connection.named!.grantedScopes === null ? 'Provider did not report OAuth scopes' : connection.named!.grantedScopes.join(', ') || 'None',
     allowed: connection.named!.allowedOperations.map(operation => namedAccess[operation].label).join(', ')
   }));
-  return <SettingsDocumentHost documentKey="named-auth-connections" title="Named auth connections layout" defaultDocument={namedConnectionBlocks} scopeKey={scopeKey}>
-    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${scopeKey}:${draft?.requestId || 'view'}`} enabled={!editing}
+  return <SettingsDocumentHost documentKey="named-auth-connections" title="Named auth connections layout" defaultDocument={namedConnectionBlocks} migrateBlocks={migrateNamedServiceBlocks} scopeKey={scopeKey}>
+    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${scopeKey}:${draft?.requestId || selectionSignature}`} enabled={!editing}
       onError={() => onError(new Error('Could not run that connection action.'))}
       scope={{ named: {
-        rows, canUse: !!selected, active: selected?.id || '', activeName: selected?.named?.name || '', operations: selected?.named?.allowedOperations.map(id => ({ id, label: namedAccess[id].label })) || [],
+        rows, canUse: !!selected, active: selected?.id || '', activeName: selected?.named?.name || '', operations: selected?.named?.allowedOperations.map(id => {
+          const service = googleServiceOperation(id);
+          const spec = service ? googleServiceAccess[service] : null;
+          return { id, label: namedAccess[id].label, resourceRequired: !!spec?.resource, resourceLabel: spec?.resource || '',
+            hasNext: result?.signature === selectionSignature && result.operation === id && !!result.nextPageToken };
+        }) || [], using,
         result: result?.signature === selectionSignature ? result.text : '', providers: candidates.map(provider => ({ id: provider.id, label: provider.name })),
         permissionOptions: permissions.map(({ scope, label }) => ({ id: scope, label,
           selected: draft?.requestedScopes.includes(scope) || false, required: scope === 'public_profile' })),
@@ -112,15 +118,25 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           setDraft(null);
         },
         select: ({ value }) => { if (typeof value === 'string' && named.some(item => item.id === value)) { useGeneration.current++; setActive(value); setResult(null); } },
-        use: async ({ inputs, signal }) => {
+        use: async ({ inputs, signal, readField }) => {
           const operation = inputs.id as NamedOperation;
           if (using || busy || !selected?.named?.allowedOperations.includes(operation)) return;
+          const service = googleServiceOperation(operation);
+          const spec = service ? googleServiceAccess[service] : null;
+          const next = inputs.next === true && result?.signature === selectionSignature && result.operation === operation ? result : null;
+          const rawId = spec?.resource ? readField(`service-resource-${operation}`) : undefined;
+          const resourceId = next?.resourceId ?? (typeof rawId === 'string' ? rawId.trim() : undefined);
+          if (spec?.resource && (!resourceId || !/^[A-Za-z0-9_-]+$/.test(resourceId))) {
+            onError(new Error(`Enter a valid ${spec.resource.toLowerCase()}.`)); return;
+          }
+          if (inputs.next === true && !next?.nextPageToken) return;
           const generation = ++useGeneration.current;
           setUsing(true);
           try {
-            const response = await use(selected.id, operation);
+            const response = await use(selected.id, operation, { ...(resourceId ? { resourceId } : {}), ...(next?.nextPageToken ? { pageToken: next.nextPageToken } : {}) });
             if (!signal.aborted && generation === useGeneration.current && activeSignature.current === selectionSignature && response)
-              setResult({ signature: selectionSignature, text: Object.entries(response).map(([key, value]) => `${key}: ${value ?? 'Unavailable'}`).join(' · ') });
+              setResult({ signature: selectionSignature, operation, resourceId, nextPageToken: spec?.paginated && typeof response.nextPageToken === 'string' ? response.nextPageToken : undefined,
+                text: service ? JSON.stringify(response, null, 2) : Object.entries(response).map(([key, value]) => `${key}: ${value ?? 'Unavailable'}`).join(' · ') });
           } catch (error) { if (!signal.aborted && generation === useGeneration.current && activeSignature.current === selectionSignature) onError(error); }
           finally { setUsing(false); }
         }

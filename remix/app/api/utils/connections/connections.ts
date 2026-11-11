@@ -1,3 +1,5 @@
+import { googleServiceOperation } from '../../../connections/googleServiceActions';
+import { googleServiceRequest, redactServiceResult } from './googleServiceRequests';
 import { oauthGrantMatches } from './oauthConfig';
 import { NAMED_CONNECTION_KIND, prepareNamedIntent, saveNamedConnection } from './namedConnections';
 import { namedAccess, namedOperationsFor, verifiedNamedScope, type NamedOperation } from '../../../connections/namedAccess';
@@ -16,6 +18,7 @@ import {
   type PublicPost
 } from '../things/things';
 import {
+  authedJson,
   connectionProviderById,
   oauthCredsFor,
   publicProviders,
@@ -714,10 +717,15 @@ export const resolveConnectionCredential = async (user: SessionUser, connectionI
   return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
 };
 
-export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown }, origin: string) {
+export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown; resourceId?: unknown; pageToken?: unknown }, origin: string, signal?: AbortSignal) {
   const id = typeof input.id === 'string' ? input.id : '';
   const operation = typeof input.operation === 'string' ? input.operation as NamedOperation : null;
   if (!id || !operation || !Object.prototype.hasOwnProperty.call(namedAccess, operation)) return fail(400, 'Choose a connection and a supported operation.');
+  const service = googleServiceOperation(operation);
+  const request = service ? googleServiceRequest(service, input) : null;
+  if (request?.ok === false) return request;
+  if (!service && (input.resourceId !== undefined || input.pageToken !== undefined)) return fail(400, 'This operation does not accept service inputs.');
+  signal?.throwIfAborted();
   const [pair] = await linksWithAccounts(user.id, id, true);
   const environment = getDeploymentDataEnvironment();
   if (!pair?.account || pair.account.ownerId !== user.id || !pair.link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
@@ -739,6 +747,14 @@ export async function useNamedConnection(user: SessionUser, input: { id?: unknow
     'crystal.grantRevision': pair.link.crystal.grantRevision,
     ...(scope ? { 'crystal.grantedScopes': { $in: [scope, `https://www.googleapis.com/auth/userinfo.${scope}`] } } : {}) });
   if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+  signal?.throwIfAborted();
+  if (request?.ok) {
+    const response = await authedJson(request.url, { token: tokens.accessToken, completeResponse: true, signal });
+    if (response.ok === false) return response;
+    signal?.throwIfAborted();
+    if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+    return { ok: true as const, result: redactServiceResult(response.data, [tokens.accessToken, tokens.refreshToken, tokens.idToken]) };
+  }
   if (operation === 'account.identity') return { ok: true as const, result: { provider: provider.id, accountId: pair.account.shareId } };
   const profile = await readConnectionGoogleUserInfo(tokens);
   if (profile.ok === false || profile.data?.sub !== pair.account.crystal.providerAccountId)

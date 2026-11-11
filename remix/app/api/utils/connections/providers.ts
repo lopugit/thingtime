@@ -480,7 +480,8 @@ const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
 // One guarded fetch for every outbound provider call: validates the target,
 // then walks redirects by hand re-validating each hop.
 const guardedFetch = async (url: string, init: RequestInit & { method?: string }): Promise<Response> => {
-  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
   const method = init.method || 'GET';
   let target = url;
   let headers = new Headers(init.headers);
@@ -627,11 +628,13 @@ export const authedJson = async (
   url: string,
   opts: {
     token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>;
+    completeResponse?: boolean; signal?: AbortSignal;
   } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
   try {
     const resp = await guardedFetch(url, {
       method: opts.method || 'GET',
+      signal: opts.signal,
       headers: {
         'User-Agent': USER_AGENT,
         Accept: 'application/json',
@@ -647,7 +650,8 @@ export const authedJson = async (
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
       return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
     }
-    const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    // Only fixed service actions opt in; user-supplied feed URLs retain the bounded reader.
+    const text = opts.completeResponse ? await resp.text() : await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
     try {
       return { ok: true, data: JSON.parse(text) };
