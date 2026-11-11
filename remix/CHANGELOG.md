@@ -162,6 +162,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   requested/confirmed permissions separately and add exact-owner, read-only
   Connections access diagnostics for basic posts and optional engagement fields.
   Saved content and credentials remain untouched by inspection. **Codex (AI)**
+- 2026-11-11: Normalize personal-provider chat effort against the resolved saved
+  model catalog, preventing unsupported High effort on Claude Haiku 4.5 while
+  preserving supported tuning, the selected key and BYO billing. Advertise reply
+  PATCH 1.23.1 and require it for personal-provider chat clients. **Codex (AI)**
 
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
   settings. Add the explicit canonical background-file transfer contract,

@@ -15951,3 +15951,13 @@ projection, which requires 2.3. Retain both actual preview manifests separately.
   refresh/migrate credentials, sync content, follow provider pagination or emit
   tokens, raw errors or post content. Run Connections and capability suites and
   the compiled Connections manifest smoke after the canonical build.
+### Personal Claude saved-model effort
+
+- The Console SDK streaming fixture must run a saved `claude-haiku-4-5` connection
+  with inherited High effort and assert the actual HTTP request omits effort and
+  thinking fields, keeps the exact model and credential, completes one response
+  and never reads the shared-provider waterfall. Verify a supported Opus effort
+  remains unchanged and custom-model tuning is preserved.
+- Negotiate reply 1.23.1, then repeat the authorized minimal live Haiku prompt on
+  the selected personal connection. Verify a real reply and BYO attribution;
+  synthetic SSE acceptance does not establish live provider acceptance.

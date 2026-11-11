@@ -528,3 +528,11 @@ actual grant names or unknown and separates minimal posts from engagement fields
 Connections 2.2 exposes requested/confirmed grant evidence; callbacks 2.1.1 verify
 both default and named Facebook grants. Run `test:connections`, capability tests
 and compiled Connections smoke; live provider acceptance is separate.
+Personal-provider Lopu chat normalizes effort against the resolved saved model's
+`providerModelFor` catalog in `userVaultCore.ts`, before metadata and SDK request
+construction in `chat.ts`. Reply contract 1.23.1 preserves the selected credential
+and BYO billing; Haiku 4.5's empty effort list omits `output_config.effort` rather
+than mapping it to an invented thinking mode. Console SDK streaming regression:
+`api/utils/lopu/chat.streaming.test.mts`; both manifest generators and personal
+provider client requirements advertise the compatible reply PATCH. Voice retains
+its existing strict tuning guard.
