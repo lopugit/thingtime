@@ -36,6 +36,9 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const permissions = draft ? namedProviderPermissions(draft.provider) : [];
   const initialScopes = (provider: string) => namedFacebookProvider(provider) ? ['public_profile'] : [];
   const begin = (provider: string, connection?: Connection) => {
+    if (connection?.named?.allowedOperations.some(id => !Object.prototype.hasOwnProperty.call(namedAccess, id))) {
+      onError(new Error('Update Thingtime before reconnecting this connection with newer operations.')); return;
+    }
     if (connection) { useGeneration.current++; setResult(null); }
     setDraft({ provider, requestId: crypto.randomUUID(), name: connection?.named?.name || '',
       allowedOperations: connection?.named?.allowedOperations || ['account.identity'],
@@ -46,13 +49,13 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
     id: connection.id, name: connection.named!.name, account: `${connection.providerName} · Account ${connection.account.id.slice(-8)}`,
     requested: connection.named!.requestedScopes.join(', ') || 'No selectable OAuth scopes reported',
     granted: connection.named!.grantedScopes === null ? 'Provider did not report OAuth scopes' : connection.named!.grantedScopes.join(', ') || 'None',
-    allowed: connection.named!.allowedOperations.map(operation => namedAccess[operation].label).join(', ')
+    allowed: connection.named!.allowedOperations.map(operation => namedAccess[operation]?.label || 'Newer operation (update Thingtime to use)').join(', ')
   }));
   return <SettingsDocumentHost documentKey="named-auth-connections" title="Named auth connections layout" defaultDocument={namedConnectionBlocks} migrateBlocks={migrateNamedServiceBlocks} scopeKey={scopeKey}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${scopeKey}:${draft?.requestId || selectionSignature}`} enabled={!editing}
       onError={() => onError(new Error('Could not run that connection action.'))}
       scope={{ named: {
-        rows, canUse: !!selected, active: selected?.id || '', activeName: selected?.named?.name || '', operations: selected?.named?.allowedOperations.map(id => {
+        rows, canUse: !!selected, active: selected?.id || '', activeName: selected?.named?.name || '', operations: selected?.named?.allowedOperations.filter(id => Object.prototype.hasOwnProperty.call(namedAccess, id)).map(id => {
           const service = googleServiceOperation(id);
           const spec = service ? googleServiceAccess[service] : null;
           return { id, label: namedAccess[id].label, resourceRequired: !!spec?.resource, resourceLabel: spec?.resource || '',

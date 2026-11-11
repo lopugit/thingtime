@@ -14602,7 +14602,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections', contractVersion: '2.1.0', featureVersion: '2.1.0',
+    id: 'connections', contractVersion: '2.2.0', featureVersion: '2.2.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
@@ -14611,7 +14611,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
       'channel, a Mastodon account, …). Public sources are shared many-to-many. Authenticated identities and encrypted credentials are owner-scoped; the same third-party identity ' +
       'can be linked independently from several Thingtime accounts without sharing credentials. Legacy shared grants require reconnect; relinking preserves the caller’s existing connection ID. Once linked, the feed is ' +
-      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
+      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top. GET includeNamed=1 includes named grants. Add includeServiceOperations=1 after negotiating api.connections 2.2.0 to expose the expanded Google operation IDs; original clients receive only identity/profile/email operation IDs to preserve their exhaustive label maps.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'

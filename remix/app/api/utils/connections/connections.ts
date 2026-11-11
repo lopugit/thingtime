@@ -371,16 +371,21 @@ const linksWithAccounts = async (userId: string, linkId?: string | null, include
   return links.map((link: any) => ({ link, account: accountsById.get(String(link?.crystal?.accountId || '')) || null }));
 };
 
-export const listConnections = async (user: SessionUser, origin?: string): Promise<{ ok: true; connections: PublicConnection[] }> => {
+export const listConnections = async (user: SessionUser, origin?: string, includeServiceOperations = false): Promise<{ ok: true; connections: PublicConnection[] }> => {
   const environment = origin ? getDeploymentDataEnvironment() : null;
   const pairs = await linksWithAccounts(user.id, null, !!environment);
   return {
     ok: true,
     connections: pairs.filter(({ link }) => !link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
       (link.crystal?.origin === origin && link.crystal?.environment === environment?.id))
-      .map(({ link, account }) =>
-      toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider))
-    )
+      .map(({ link, account }) => {
+        const result = toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider));
+        // Original named clients index operation labels exhaustively. They
+        // must never receive new enum members unless explicitly negotiated.
+        if (result.named && !includeServiceOperations) result.named.allowedOperations = result.named.allowedOperations.filter(operation =>
+          ['account.identity', 'google.profile', 'google.email'].includes(operation));
+        return result;
+      })
   };
 };
 

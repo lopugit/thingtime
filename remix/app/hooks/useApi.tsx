@@ -1585,8 +1585,8 @@ export function useApi() {
     connections: {
       providers: useCallback(async (options?: ThingRequestOptions) => { await requireThingtimeCapability('api.connections-providers', '2.0.0'); return getJson('/api/v1/connections/providers', options); }, [getJson]),
       list: useCallback(async (options?: ThingRequestOptions, includeNamed = false) => {
-        await requireThingtimeCapability('api.connections', includeNamed ? '2.1.0' : '2.0.0');
-        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1' : ''), options);
+        await requireThingtimeCapability('api.connections', includeNamed ? '2.2.0' : '2.0.0', options?.expectedApiOrigin);
+        return getJson('/api/v1/connections' + (includeNamed ? '?includeNamed=1&includeServiceOperations=1' : ''), options);
       }, [getJson]),
       connect: useCallback(
         async (args) => { await requireThingtimeCapability('api.connections', args?.named ? '2.1.0' : '2.0.0'); return asyncFetcher.submit({

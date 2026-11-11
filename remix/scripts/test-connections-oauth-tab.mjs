@@ -64,16 +64,16 @@ try {
           body: `<a href="${origin}${callbackPath}?code=fixture-code">Continue</a> <a href="${origin}${callbackPath}?error=access_denied">Decline</a>`
         });
       }
-      if (url.origin !== origin) return route.abort();
+      if (url.origin !== origin && !(url.origin === selectedOrigin && url.pathname.endsWith('thingtime-capabilities.json'))) return route.abort();
       if (url.pathname.endsWith('thingtime-capabilities.json')) {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
-          'api.connections': { version: '2.1.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.2.0' },
+          'api.connections': { version: '2.2.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.2.0' },
           'api.connections-oauth-callback': { version: '2.2.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.1.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
-        return json(route, { schemaVersion: 1, origin, features });
+        return json(route, { schemaVersion: 1, origin: url.origin, features });
       }
       if (url.pathname === '/connection-provider-fallback.svg') return route.fulfill({ path: join(root, 'public/connection-provider-fallback.svg'), contentType: 'image/svg+xml' });
       if (url.pathname === '/fixture-brand-override.png') {

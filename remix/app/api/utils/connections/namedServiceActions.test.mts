@@ -76,7 +76,7 @@ mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
 });
 
 const { saveNamedConnection } = await import('./namedConnections.ts');
-const { useNamedConnection, unlinkConnection } = await import('./connections.ts');
+const { useNamedConnection, unlinkConnection, listConnections } = await import('./connections.ts');
 const { connectionProviderById, oauthCredsFor } = await import('./providers.ts');
 const { toBin } = await import('../auth/users.ts');
 const { googleServiceAccess } = await import('../../../connections/googleServiceActions.ts');
@@ -166,4 +166,14 @@ test('refresh losing confirmed permission cannot run the selected service action
     const result = await useNamedConnection(owner, { id: a.connection.id, operation: 'drive.list-files' }, origin);
     assert.equal(result.ok, false); assert.equal(refreshed, 1); assert.equal(requests.length, 0);
   } finally { provider.oauth!.refreshTokens = original; }
+});
+
+
+test('older named clients never receive new exhaustive operation IDs', async () => {
+  const a = await saved(); assert.ok(a.ok);
+  const oldClient = await listConnections(owner, origin);
+  assert.deepEqual(oldClient.connections.find(row => row.id === a.connection.id)?.named?.allowedOperations, []);
+  const newClient = await listConnections(owner, origin, true);
+  assert.deepEqual(newClient.connections.find(row => row.id === a.connection.id)?.named?.allowedOperations, ['drive.list-files']);
+  assert.equal((await useNamedConnection(owner, { id: a.connection.id, operation: 'drive.list-files' }, origin)).ok, true, 'Projection never changes saved permissions');
 });

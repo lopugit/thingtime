@@ -173,7 +173,7 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     ];
     if (ownerId) {
       const options = { signal, expectedActor: ownerId, expectedApiOrigin: apiOrigin, expectedDataPlane: dataPlane };
-      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION)
+      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, apiOrigin)
         .then(() => true, () => false).then(includeNamed => {
           if (!active()) return null;
           setNamedAvailable(includeNamed);

@@ -7,7 +7,7 @@ connection under “Use a saved connection”. Existing authorizations do not ga
 new operations automatically: reconnect the same external identity and explicitly
 allow the operation. Removing one authorization preserves its siblings.
 
-The client requires selected-origin `api.connections-named` 1.1.0 and compatible
+The client requires selected-origin `api.connections` 2.2.0 and `api.connections-named` 1.1.0 and compatible
 `api.connections-oauth-begin` / `api.connections-oauth-callback` 2.2.0 before
 starting the expanded flow. Both capability manifests derive these versions
 from the canonical endpoint registry in `apiDocs.ts`.
@@ -84,3 +84,10 @@ refresh did not produce an updated snapshot; its writer PID had exited. A heavy
 fresh extraction is deferred on the overloaded host. Structural/semantic freshness
 is not claimed; the parent coordinates the final shared refresh and real provider
 acceptance independently.
+
+
+Compatibility: current clients explicitly request `includeServiceOperations=1`
+with `includeNamed=1` after negotiating Connections 2.2.0. Older named clients
+receive only original identity/profile/email operation IDs, avoiding crashes in
+their exhaustive label maps. This is a read projection; stored grant permissions
+and exact-action authorization remain unchanged.
