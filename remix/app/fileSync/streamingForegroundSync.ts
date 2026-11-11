@@ -15,7 +15,7 @@ import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
 import { prepareCloudOperationBinding } from './cloudBinding';
-import { executeSyncOperation, SyncObservationChangedError, type SyncOperation } from './execute';
+import { executeSyncOperation, SyncObservationChangedError, SyncTerminalOperationError, type SyncOperation } from './execute';
 import { decideSyncPath, sameSyncStamp, syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncIgnorePolicy } from './syncIgnore';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
@@ -167,6 +167,32 @@ export async function streamForegroundSync(
 		},
 		{ ...runtime, beforeFilePublication: markPublication }
 	);
+	/** A saved dispatch marker may represent a late in-flight POST. Only the
+	 * canonical terminal receipt can release that original identity. */
+	const retireChanged = async (operation: SyncOperation, conflict: boolean) => {
+		const reserved = await runs.reservedPublication(spec);
+		check();
+		if (!reserved || reserved.operationId !== operation.id) throw Error('Reserved publication changed during recovery.');
+		if (reserved.canonicalDispatched === false) {
+			state = await runs.skipUnpublishedStreamOperation(spec, operation.id, conflict);
+			return;
+		}
+		if (reserved.receiptPresent || reserved.confirmed || reserved.direction !== 'upload' || reserved.kind !== 'file' || !reserved.fileId || !port.fence)
+			throw Error('Preserve the published or uncertain revision receipt.');
+		const prior = await port.lookup(operation.id, scope);
+		check();
+		if (prior.status === 'pending') throw Error('Original file publication remains pending; retain its operation.');
+		const settled = prior.status === 'missing' ? (await authorize(), await port.fence(operation.id, scope)) : prior;
+		check();
+		if (settled.status === 'complete') {
+			state = await runs.confirm(spec, settled.receipt);
+			port.confirmed?.(operation, settled.receipt);
+			return;
+		}
+		if (settled.status !== 'terminal' || settled.fence.id !== reserved.fileId)
+			throw Error('Original file publication has no terminal receipt.');
+		state = await runs.skipUnpublishedStreamOperation(spec, operation.id, conflict, false, false, settled.fence);
+	};
 	// A revision counter closes the lost-wakeup race around durable reads.
 	let wakeRevision = 0;
 	const waiters = new Set<() => void>();
@@ -549,6 +575,8 @@ export async function streamForegroundSync(
 					if (prior.status === 'pending') throw Error('Original dependent publication is still pending; retain its identity.');
 					if (prior.status === 'complete') {
 						state = await runs.confirm(spec, prior.receipt); port.confirmed?.(operation, prior.receipt);
+					} else if (prior.status === 'terminal') {
+						state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, false, false, prior.fence);
 					} else if (!rebind.undispatched) {
 						throw Error('Original child publication may still be in flight; preserve its identity for reconciliation.');
 					} else if (rebind.recovery || !rebind.parentId) {
@@ -574,15 +602,23 @@ export async function streamForegroundSync(
 				state = await runs.confirm(spec, receipt);
 				port.confirmed?.(operation, receipt);
 			} catch (error) {
-				// An explicit, transactional rejection of the first guarded
+				// A crash after the server fence but before journal retirement must
+				// consume that exact receipt without issuing another fence request.
+				if (error instanceof SyncTerminalOperationError) {
+					await authorize(); check();
+					const mutation = operation.mutation, targetSide = mutation.kind === 'copy' && mutation.from === 'local' ? 'remote' : 'local';
+					const targetChanged = mutation.kind === 'copy' && !sameSyncStamp(mutation.expectedTarget, await port.read(targetSide, mutation.path));
+					check();
+					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged, false, false, error.fence);
+				} else if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
+					// An explicit, transactional rejection of the first guarded
 				// dispatch proves no effect. A previous uncertain attempt still
 				// owns its original ID even if this retry is refused.
-				if (twoWay && dispatching.first && error instanceof ExactCloudSyncDestinationChanged) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, true, true);
 				} else if (error instanceof AutomaticStoragePlacementExcluded && (!dispatching.marked || dispatching.first)) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false, false, dispatching.first);
 				} else if (error instanceof SyncObservationChangedError) {
-					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, error.targetChanged);
+					await retireChanged(operation, error.targetChanged);
 				} else if (applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
 					// Staging bytes has no live effect. A source or target may
 					// change mid-transfer in either one-way or two-way sync. Exact
@@ -596,7 +632,7 @@ export async function streamForegroundSync(
 						targetChanged = !sameSyncStamp(m.expectedTarget, await port.read(targetSide, m.path));
 					} catch { check(); throw error; }
 					if (!sourceChanged && !targetChanged) throw error;
-					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, targetChanged);
+					await retireChanged(operation, targetChanged);
 				} else throw error;
 			} finally {
 				dispatching = undefined; activeFile = undefined;
@@ -629,7 +665,7 @@ export async function streamForegroundSync(
 		const after = status.indexedSequence ?? status.sequence;
 		const source = local
 			? recoverRemountedNativeFeed(input.streamLocalChanges!(spec.streaming!.captureId, after, signal, readyToFinish, waitForFinish), async () => {
-				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+				await authorize(); check(); await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(spec.streaming!.captureId, after, signal, readyToFinish, {
@@ -684,7 +720,7 @@ export async function streamForegroundSync(
 		// shared journal assigns an ordered input position on each append.
 		const source = replica === 'local'
 			? recoverRemountedNativeFeed(input.streamLocalChanges!(captureId, after, signal, readyToFinish, waitForFinish), async () => {
-				await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
+				await authorize(); check(); await runs.endRemountedLocalFeed(spec); check(); remounted = true; wake();
 			}, signal)
 			: input.streamRemoteChanges
 			? input.streamRemoteChanges(captureId, after, signal, readyToFinish, {

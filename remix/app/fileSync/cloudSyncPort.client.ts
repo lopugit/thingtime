@@ -122,6 +122,14 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			return transport(binding).read();
 		},
 		lookup: async (id, requestedScope) => { appliedId = undefined; return transport(await get(id, requestedScope)).lookup(); },
+		fence: async (id, requestedScope) => {
+			appliedId = undefined;
+			if (version !== 1) throw Error('Retention is not a file upload publication.');
+			const { write } = await get(id, requestedScope), m = write.operation.mutation;
+			if (m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || isCloudFolderWrite(write))
+				throw Error('Only the original file upload can be terminally fenced.');
+			return createCloudFileTransport(runtime, write, input.signal).fence();
+		},
 		trashExpected: async (operation, scope) => {
 			const { write, trashContext: context } = await get(operation.id, scope),
 				m = operation.mutation;

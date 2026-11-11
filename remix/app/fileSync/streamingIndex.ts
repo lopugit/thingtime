@@ -21,6 +21,9 @@ export type NativeIndexChangesPage = {
 	totalEntries?: number;
 	totalSkipped?: number;
 };
+/** The native producer has stopped, so its append-only prefix must be drained
+ * and reconciled against a fresh sealed scan instead of restarting its generation. */
+export class NativeStreamingIndexInterrupted extends NativeInventoryRetryWait {}
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 /** A stream tail is a watermark, never a complete inventory. Native producers
@@ -147,7 +150,7 @@ export async function* readNativeIndexChanges(input: {
 		if (page.changes.some((c) => isNativeScanExcluded(c.entry.path, exclusions) || ignore.ignored(c.entry.path, c.entry.kind)))
 			throw Error('Native streaming index included an excluded path.');
 		if (page.state === 'interrupted')
-			throw new NativeInventoryRetryWait('Streaming indexing was interrupted. Its durable cursor has been preserved.');
+			throw new NativeStreamingIndexInterrupted('Streaming indexing was interrupted. Its durable cursor has been preserved.');
 		yield page;
 		afterSequence = page.nextSequence;
 		if (page.state === 'complete' && !page.hasMore) return;

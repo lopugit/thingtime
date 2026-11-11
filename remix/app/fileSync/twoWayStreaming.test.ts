@@ -14,6 +14,8 @@ import { sameSyncStamp, type SyncEntry } from './reconcile';
 import { streamingFileFixture } from './streamingFile.fixture';
 import { INVENTORY_PAGE_ENTRIES } from './inventoryJournal';
 import { streamForegroundSync } from './streamingForegroundSync';
+import { NativeInventoryRetryWait } from './nativeInventory';
+import { readNativeIndexChanges, NativeStreamingIndexInterrupted } from './streamingIndex';
 import type { NativeIndexChangesPage } from './streamingIndex';
 import { SyncVolumeRemounted } from './syncConnectionWait';
 
@@ -106,6 +108,67 @@ test('verified local remount preserves bidirectional receipts and finishes with 
 		assert.deepEqual([...x.downloads.values()].at(-1), new Uint8Array([5, 6, 7]));
 		assert.ok(await x.checkpoints().current());
 		assert.equal(await x.runs().active(), null);
+	} finally { x.f.journal().close(); }
+});
+
+test('previously cancelled native generation drains original receipts then requires a fresh complete scan', { timeout: 10000 }, async () => {
+	const x = await fixture(), published = deferred();
+	x.input.progress = value => { if (value.confirmed >= 1) published.resolve(); };
+	x.input.streamLocalChanges = async function* (id) {
+		yield frame(id, [x.f.entry()], 0);
+		await published.promise;
+		throw new NativeInventoryRetryWait('Native transport ended before its capture was cancelled.');
+	};
+	x.input.streamRemoteChanges = async function* (id) { yield frame(id, [], 0, true); };
+	try {
+		await assert.rejects(x.stream(), NativeInventoryRetryWait);
+		assert.equal(x.f.publications(), 1);
+		const old = await x.runs().active();
+		assert.equal(old?.progress.confirmed, 1);
+		assert.equal(await x.checkpoints().current(), null);
+		let freshScans = 0;
+		x.input.streamLocalChanges = (id, after, signal) => readNativeIndexChanges({
+			ownerId: scope.ownerId, deviceId: scope.deviceId, rootId: twoWay.configuration.localRootId,
+			captureId: id, afterSequence: after, signal,
+			request: async (_owner, request) => {
+				if (request.action === 'scan-stream') return { roots: [], changesPage: frame(id, [], after) };
+				assert.equal(request.action, 'scan-changes');
+				assert.equal(request.afterSequence, after);
+				return { roots: [], changesPage: { ...frame(id, [], after), state: 'interrupted' } };
+			}
+		});
+		x.input.scanLocalPages = async function* () {
+			freshScans++;
+			const entries = [x.f.entry(), ...x.native.values()];
+			yield { generation: crypto.randomUUID(), ordinal: 0, entries,
+				...(freshScans === 1 ? {} : { totalEntries: entries.length }) };
+		};
+		await assert.rejects(x.run(), /Native inventory has no final page/);
+		assert.equal(await x.checkpoints().current(), null, 'an incomplete fresh scan cannot publish agreement');
+		assert.equal(x.f.publications(), 1);
+		await x.run();
+		assert.equal(freshScans, 3, 'retry and checkpoint require fresh complete scans');
+		assert.equal(x.f.publications(), 1, 'the original confirmed upload cannot publish twice');
+		assert.ok(await x.checkpoints().current());
+		assert.equal(await x.runs().active(), null);
+	} finally { x.f.journal().close(); }
+});
+
+test('changed authority refuses to retire an interrupted feed with confirmed receipts', { timeout: 10000 }, async () => {
+	const x = await fixture(), published = deferred(), read = x.input.readConfiguration;
+	x.input.progress = value => { if (value.confirmed >= 1) published.resolve(); };
+	x.input.streamLocalChanges = async function* (id) {
+		yield frame(id, [x.f.entry()], 0);
+		await published.promise;
+		x.input.readConfiguration = async () => ({ ...(await read() as object), updatedAt: '2026-11-11T00:00:00.000Z' });
+		throw new NativeStreamingIndexInterrupted('Old native capture stopped.');
+	};
+	x.input.streamRemoteChanges = async function* (id) { yield frame(id, [], 0, true); };
+	try {
+		await assert.rejects(x.stream(), /changed|settings|revision/i);
+		assert.equal(x.f.publications(), 1);
+		assert.equal((await x.runs().active())?.progress.confirmed, 1);
+		assert.equal(await x.checkpoints().current(), null);
 	} finally { x.f.journal().close(); }
 });
 

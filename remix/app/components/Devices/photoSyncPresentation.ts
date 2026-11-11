@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { coalescedSyncRefresh } from '~/fileSync/coalescedSyncRefresh';
 import type { ConfigurationEditorScope } from '~/fileSync/configurationEditor';
 import { openSyncJournal } from '~/fileSync/journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, SYNC_JOBS_CHANGED_EVENT, type SyncJob } from '~/fileSync/syncJobJournal';
+import { SYNC_JOBS_CHANGED_EVENT, type SyncJob } from '~/fileSync/syncJobJournal';
 import { rootIdentity } from '~/utils/rootIdentity';
 
 export function useSyncJobs(scope: ConfigurationEditorScope, generation: number, enabled: boolean, currentOrigin: () => string) {
@@ -28,12 +28,13 @@ export function useSyncJobs(scope: ConfigurationEditorScope, generation: number,
 				const reader = journal.jobs({ scope: bound, currentScope: check, signal: controller.signal });
 				const result: Record<string, SyncJob> = Object.create(null);
 				let cursor: string | undefined;
-				for (let page = 0; page <= MAX_SYNC_JOBS_PER_ACCOUNT / SYNC_JOB_PAGE_SIZE; page++) {
+				for (;;) {
 					const current = await reader.list(cursor);
 					check();
 					for (const job of current.jobs) if (job.scope.origin === origin && job.scope.deviceId === deviceId &&
 						job.scope.dataPlane === dataPlane) result[job.scope.rootId] = job;
 					if (!current.next) { setJobs(result); return; }
+					if (current.jobs.length === 0 || (cursor !== undefined && current.next <= cursor)) throw Error('Saved sync job status cursor did not advance.');
 					cursor = current.next;
 				}
 			} catch { /* Keep same-scope status during a journal refresh failure. */ }

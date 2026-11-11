@@ -62,6 +62,39 @@ test('real transport joins executor and durable journal, recovering a lost commi
  const result = await executeSyncRun(restored, f.port(restored, journal.persist)); assert.ok(result.operations.every(op => op.confirmed));
  assert.deepEqual(f.counts(), { puts: 1, starts: 1, commits: 1, opens: 1 }); assert.equal(f.file()!.id, run.operations[0].id); journal.close();
 });
+test('file terminal fence negotiates the additive contract and accepts only the original canonical outcome', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0], transport = createCloudFileTransport(f.runtime, write);
+ const input = { kind: 'terminal-no-effect', id: write.operation.id, operationId: write.operation.id, expectedRevision: null };
+ const requested: string[] = [];
+ f.runtime.requireCapability = async (feature, version) => { requested.push(`${feature}:${version}`); };
+ f.hook((path, body) => path === '/api/v1/files' ? body
+  ? Response.json({ ok: true, status: 'terminal', fence: input, replayed: false })
+  : Response.json({ ok: true, receipt: null, terminal: input }) : null);
+ assert.deepEqual(await transport.fence(), { status: 'terminal', fence: input });
+ assert.deepEqual(await transport.lookup(), { status: 'terminal', fence: input });
+ assert.ok(requested.includes('api.files:1.13.0'));
+ assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
+ f.hook((path, body) => path === '/api/v1/files' && body
+  ? Response.json({ ok: true, status: 'terminal', fence: { ...input, operationId: randomUUID() } }) : null);
+ await assert.rejects(transport.fence(), /changed the original operation/);
+ f.runtime.requireCapability = async (feature, version) => { if (feature === 'api.files' && version === '1.13.0') throw Error('old origin'); };
+ await assert.rejects(transport.fence(), /old origin/);
+ f.hook((path, body) => path === '/api/v1/files' && !body
+  ? Response.json({ ok: true, receipt: null, terminal: input }) : null);
+ await assert.rejects(transport.lookup(), /old origin/, 'a retained terminal response needs the new selected-origin capability too');
+ assert.deepEqual(f.counts(), { puts: 0, starts: 0, commits: 0, opens: 0 });
+});
+test('complete-first terminal fence replays the immutable original file receipt', async () => {
+ const f = await fixture(), run = f.make();
+ await executeSyncRun(run, f.port(run, async () => {}));
+ const write = run.cloudWrites[0], file = f.file()!;
+ f.hook((path, body) => path === '/api/v1/files' && body?.kind === 'terminal-no-effect'
+  ? Response.json({ ok: true, status: 'complete', receipt: { file }, replayed: true }) : null);
+ const result = await createCloudFileTransport(f.runtime, write).fence();
+ assert.equal(result.status, 'complete');
+ if (result.status === 'complete') assert.equal(result.receipt.operationId, write.operation.id);
+ assert.equal(f.counts().commits, 1);
+});
 test('upload lease conflicts wait and resume the original durable operation without publishing twice', async () => {
  const f = await fixture(), factory = new IDBFactory(); let journal = await openSyncJournal(factory); const run = f.make();
  const requestIds: string[] = []; let held = true;
@@ -275,6 +308,49 @@ test('whole-file handoff independently verifies stored bytes before canonical pu
    await createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(native);
   }
   assert.equal(jobs,1);assert.equal(completes,0);assert.equal(f.counts().puts,0);assert.equal(f.counts().commits,mismatch?0:1);
+ }
+});
+test('native Photos publication marks the original ID before native dispatch and never double marks', async () => {
+ for (const failure of ['none', 'lost-reply', 'source-change'] as const) {
+  const f = await fixture(), write = f.make().cloudWrites[0], path = 'a'.repeat(64) + '-0-photo.jpg';
+  write.operation.mutation.path = path;
+  if (write.operation.mutation.kind !== 'copy') throw Error('Expected a file copy');
+  write.operation.mutation.source.path = path;
+  write.guardDestination = true; write.cloudRootId = 'cloud'; write.folderId = 'cloud';
+  f.runtime.nativeUploadApproval = { id: scope.rootId, updatedAt: '2026-11-06T00:00:00Z', scope,
+   configuration: { configurationVersion: 1, name: 'Photos', deviceId: scope.deviceId, localRootId: 'local', remoteFolderId: 'cloud',
+    sourceKind: 'photos', mode: 'backup', paused: false, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] } };
+  let marks = 0, nativeCalls = 0, checks = 0;
+  f.runtime.beforeFilePublication = async id => { assert.equal(id, write.operation.id); marks++; };
+  const native = { ...source(), read: async () => { throw Error('Native bytes must stay native'); },
+   check: () => { if (++checks >= 3 && failure === 'source-change') throw Error('Source changed after native publication'); },
+   uploadFile: async (request: any) => {
+    nativeCalls++; assert.equal(marks, 1, 'the saved original ID is guarded before native publication');
+    assert.deepEqual(request.publication, { expectedRevision: null });
+    if (failure === 'lost-reply') throw Error('Native publication reply lost');
+    return { fingerprint: f.entry.fingerprint! };
+   } };
+  const transport = createCloudFileTransport(f.runtime, write);
+  if (failure === 'none') {
+   await transport.apply(native); assert.equal(marks, 1, 'JS receipt commit cannot reenter the same publication hook');
+   assert.equal(f.counts().commits, 1);
+  } else {
+   await assert.rejects(transport.apply(native), /reply lost|Source changed/);
+   assert.equal(marks, 1);
+   assert.equal(f.counts().commits, 0);
+   const accepted: CloudFile = { id: write.operation.id, revision: randomUUID(), name: path, folderId: 'cloud', trashed: false,
+    content: { attachmentId: 'att1', version: 'a'.repeat(64), size: f.entry.size, fingerprint: f.entry.fingerprint! } };
+   let replays = 0;
+   f.hook((route, body) => route === '/api/v1/files' ? body
+    ? (replays++, Response.json({ ok: true, file: accepted, replayed: true }))
+    : Response.json({ ok: true, receipt: { file: accepted } }) : null);
+   const recovered = await createCloudFileTransport(f.runtime, write).lookup();
+   assert.equal(recovered.status, 'complete');
+   assert.equal(replays, 1, 'only original immutable metadata is replayed');
+   assert.equal(marks, 1);
+   assert.equal(f.counts().commits, 0);
+  }
+  assert.equal(nativeCalls, 1);
  }
 });
 

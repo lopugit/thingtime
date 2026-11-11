@@ -46,6 +46,16 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("scan-changes", changed)) }
         let stopped = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
         XCTAssertEqual(try stopped["changesPage"]?.decode([String: JSONValue].self)["state"], .string("interrupted"))
+        // The JS worker may defer one config immediately after stopping its
+        // scanner. Another root must then enter the single native stream lane.
+        let other = folder.appendingPathComponent("other", isDirectory: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: false)
+        let otherGrant = try store.add(owner, selected: other)
+        var otherFields = backupFields(otherGrant.id)
+        otherFields["capturePolicy"] = .string("one-way-supported")
+        let otherStart = try await service.handle(request("scan-stream", otherFields)).decode([String: JSONValue].self)
+        XCTAssertNotNil(otherStart["changesPage"])
+        _ = try await service.handle(request("scan-cancel", otherFields))
         try store.remove(owner, id: grant.id)
         await rejects { try await service.handle(self.request("scan-changes", fields)) }
     }

@@ -12,6 +12,17 @@ the final native/cloud publication hooks in `cloudSyncPort.client.ts` and
 `cloudTransport.ts`, after staging. `nativeSyncTasks.client.ts` queues exact
 saved-job recovery under the root lock; `syncJobJournal.ts` preserves the job ID
 and requires the normal worker validation before effects.
+An approved native Photos upload that carries direct publication marks the
+original ID immediately before that native request, after its source and
+authority checks. A later browser metadata replay does not mark it twice.
+Ordinary byte-only native staging retains the final publication hook.
+For a legacy marked file upload whose source changed, `files.ts` can occupy its
+original Timeline operation ID with a terminal no-effect receipt. The client
+requires `api.files` 1.13.0, validates the exact file ID, operation ID and
+expected revision, and retains the journal on missing, pending or refused
+responses. The fence is owner-authorized and accounted through the normal
+Timeline transaction; it does not bind staged bytes or create a file revision.
+Only an exact terminal or completed receipt permits the old row to advance.
 
 **Image presentation.** The shared upload-first `ProfileMediaField` opens
 `ImagePresentationDialog` for profile avatar/banner and subspace icon/banner.

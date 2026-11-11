@@ -11,6 +11,11 @@ import {
 	type SyncScope,
 	type SyncSide
 } from './reconcile';
+import type { CloudFileNoEffectFence } from './cloudFile';
+
+export class SyncTerminalOperationError extends Error {
+	constructor(readonly fence: CloudFileNoEffectFence) { super('Original file publication was terminally fenced.'); }
+}
 
 /** Raised only after receipt lookup proved no published or pending effect. */
 export class SyncObservationChangedError extends Error {
@@ -20,7 +25,7 @@ export type SyncMutation = Extract<SyncDecision, { kind: 'copy' | 'trash' }>;
 export type SyncOperation = { id: string; mutation: SyncMutation; confirmed: boolean };
 export type SyncRun = { version: 1 | 2; intent?: 'retain-conflicts'; id: string; scope: SyncScope; operations: SyncOperation[] };
 export type SyncReceipt = { operationId: string; scope: SyncScope; entry: SyncEntry | null };
-export type SyncReceiptLookup = { status: 'missing' } | { status: 'pending' } | { status: 'complete'; receipt: SyncReceipt };
+export type SyncReceiptLookup = { status: 'missing' } | { status: 'pending' } | { status: 'complete'; receipt: SyncReceipt } | { status: 'terminal'; fence: CloudFileNoEffectFence };
 
 /** Native adapters must durably deduplicate IDs, enforce destination CAS and
  * source version/hash checks, stage verified bytes before publication, and
@@ -32,6 +37,8 @@ export type SyncExecutionPort = {
 	currentScope(): SyncScope;
 	read(side: SyncSide, path: string): Promise<SyncEntry | null>;
 	lookup(operationId: string, scope: SyncScope): Promise<SyncReceiptLookup>;
+	/** Only a canonical server receipt can terminally fence an original file upload. */
+	fence?(operationId: string, scope: SyncScope): Promise<SyncReceiptLookup>;
 	/** Admission runs only after receipt lookup proved no existing effect. */
 	admit?(operation: SyncOperation): Promise<void>;
 	apply(operation: SyncOperation, scope: SyncScope): Promise<SyncReceipt>;
@@ -176,6 +183,7 @@ export async function executeSyncOperation(saved: SyncOperation, savedScope: Syn
 	const previous = await port.lookup(operation.id, scope);
 	check();
 	if (previous.status === 'pending') throw new Error('Sync operation is still pending; resume this run later.');
+	if (previous.status === 'terminal') throw new SyncTerminalOperationError(previous.fence);
 	let receipt: SyncReceipt;
 	if (previous.status === 'complete') receipt = previous.receipt;
 	else {
