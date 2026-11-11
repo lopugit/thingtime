@@ -25,6 +25,20 @@ or cloud publication, after staging and source checks have passed.
 
 ## Background recovery and activity
 
+An exact saved local setup with an unscheduled attention job and retained
+strict capture waits for the current transfer when the same device lane is
+occupied. The editor shows that waiting state only after an exact private
+saved-config readback matches the retained intent and job policy; the journal
+and current account, origin, device, Activity settings and Pause must agree.
+The ordinary Retry action is omitted only for a typed incomplete-indexing
+recovery, while its previous failure detail stays visible. An exact pending
+intent with an unknown or actionable failure can explain that the device lane
+is occupied, while retaining attention, failure details and recovery controls.
+Missing or stale saved data and Pause retain their ordinary attention or paused
+states.
+The idle worker still performs all grant, authority, scanner cleanup and
+receipt checks before any transfer; this message grants no admission.
+
 Offline and typed transient transport failures defer with backoff. An interrupted
 strict inventory gets one fresh verification attempt; repeated incomplete scans
 need attention and cannot publish deletions. Missing folder access, revoked

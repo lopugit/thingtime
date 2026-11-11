@@ -11,6 +11,7 @@ import { openSyncJournal } from './journal.client';
 import { createRemoteSyncClient } from './remoteSyncClient.client';
 import { assertRemoteFolderEnrollment, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS, type RemoteSyncStatus } from './remoteSyncProtocol';
 import { validateSyncScope } from './reconcile';
+import { savedLocalStrictRecoveryEligible } from './savedIntentRecoveryEligibility';
 
 const retryAfter = new Map<string, number>();
 const BATCH = 2;
@@ -119,8 +120,7 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 						const journal = await openSyncJournal();
 						try {
 							const prior = await journal.jobs({ scope: binding, currentScope: () => { current(); return binding; }, signal: deadline }).read();
-							recoverSavedIntent = prior?.state === 'attention' && prior.nextRunAt === undefined && !!prior.strictCaptureId &&
-								!prior.folderSetupPaused && prior.intervalMs === intent.intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(saved);
+							recoverSavedIntent = savedLocalStrictRecoveryEligible(prior ?? undefined, saved, binding, intent.intervalMs);
 						} finally { journal.close(); }
 					}
 					current();
