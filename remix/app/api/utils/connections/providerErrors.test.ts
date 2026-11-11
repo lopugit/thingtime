@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { authedJson, connectionProviderById } from './providers';
-import { safeProviderError } from './providerErrors';
+import { FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR, safeProviderError } from './providerErrors';
 const youtube = 'https://www.googleapis.com/youtube/v3/subscriptions';
 const facebook = 'https://graph.facebook.com/v23.0/me/posts';
 const privateText = 'synthetic-token https://private.example/account';
+
+test('Facebook New Pages restriction requires the exact numeric codes, HTTP status and Graph origin', () => {
+ const payload = { error: { code: 200, error_subcode: 2069030, message: privateText, error_user_title: privateText, fbtrace_id: privateText } };
+ assert.equal(safeProviderError(facebook, 400, payload), FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR);
+ assert.doesNotMatch(FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR, /synthetic-token|private\.example|Reconnect|permission/);
+ for (const status of [200, 401, 403, 429, 500]) assert.notEqual(safeProviderError(facebook, status, payload), FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR);
+ for (const error of [{ code: '200', error_subcode: 2069030 }, { code: 200, error_subcode: '2069030' }, { code: 10, error_subcode: 2069030 }, { code: 200, error_subcode: 2069031 }])
+  assert.notEqual(safeProviderError(facebook, 400, { error }), FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR);
+ for (const url of ['https://graph.facebook.com.attacker.test/v23.0/me/posts', 'http://graph.facebook.com/v23.0/me/posts', 'https://graph.facebook.com:444/v23.0/me/posts', 'https://graph.facebook.com/other'])
+  assert.equal(safeProviderError(url, 400, payload), null);
+ assert.match(safeProviderError(facebook, 400, { error: { code: 200, message: privateText } })!, /posts permission/);
+});
+
+test('Facebook New Pages restriction keeps fixed copy through the authenticated HTTP adapter', async t => {
+ t.mock.method(globalThis, 'fetch', async () => Response.json({ error: { code: 200, error_subcode: 2069030, message: privateText, fbtrace_id: privateText } }, { status: 400 }));
+ assert.deepEqual(await authedJson(facebook), { ok: false, status: 502, error: FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR });
+});
 
 test('provider reasons select only fixed copy from verified hosts and typed codes', () => {
   for (const reason of ['SERVICE_DISABLED', 'accessNotConfigured'])

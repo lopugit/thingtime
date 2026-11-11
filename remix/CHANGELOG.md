@@ -155,6 +155,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   observations to sealed indexing, and use Mac 1.22 exact source stamps to
   avoid hashing a captured upload twice while retaining byte-digest proof.
   [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
+- 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
+  unsupported-parameter responses into fixed safe chat diagnostics. Unknown
+  responses retain status-only messages; upstream text and credential/request
+  echoes remain private. Reply capability 1.23.2; live rejection cause remains
+  unverified until the authorized real-account retry. **Codex (AI)**
+- 2026-11-11: Explain Facebook's exact New Pages Experience endpoint/account
+  restriction with fixed safe copy while preserving confirmed grants and
+  permission-denied diagnostics. Feed 2.0.2 / diagnostics 1.0.1. **Codex (AI)**
 
 - 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
   grant diagnostics and Claude effort corrections into one release; negotiate

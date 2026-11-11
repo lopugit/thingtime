@@ -11,6 +11,7 @@
 // completion voice uses) lives in ./vaultProviderClient.ts.
 
 import type { LopuProviderKind, LopuRealtimeModelPublic } from './userVaultCore';
+import { AiTransportFailure } from '../ai/providerWaterfall';
 
 // The SDK surface a vault kind speaks: Anthropic's Messages API, or an
 // OpenAI-compatible chat.completions endpoint (OpenAI, OpenRouter, xAI,
@@ -212,6 +213,7 @@ export const isVaultGuardError = (error: unknown): boolean => !!error && typeof 
 export const friendlyVaultProviderError = (providerName: string, model: string | null, error: unknown): string => {
 	const name = providerName.trim() || 'Your provider';
 	if (isVaultGuardError(error)) return String((error as Error).message);
+	if (error instanceof AiTransportFailure && error.reason) return `${name}: ${error.message}`;
 	const status = statusOf(error);
 	if (status === 401 || status === 403) return `${name} rejected the saved key (HTTP ${status}). Check the token in Settings → Secure Vault.`;
 	if (status === 404) return `${name} does not know the model${model ? ` "${model}"` : ''} (HTTP 404). Check the model name in Settings → Secure Vault.`;

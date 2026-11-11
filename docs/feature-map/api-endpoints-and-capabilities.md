@@ -1,5 +1,18 @@
 # API endpoints and capabilities
 
+`api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
+for recognized structured billing, spend-limit, model-access and unsupported
+parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;
+unknown errors retain status only. No raw upstream body is returned or logged.
+Personal-provider chat clients negotiate this patch. Run `test:anthropic-api-key`,
+`test:lopu-chat-streaming`, and `test:api-capabilities`.
+
+Connections feed 2.0.2 identifies exact Facebook Graph HTTP 400 code 200/subcode
+2069030 as a New Pages Experience endpoint/account restriction using fixed copy.
+Diagnostics 1.0.1 retains `permission-denied` for that restriction independently
+of confirmed grants. Existing client shapes and minimum ranges remain compatible.
+Run `test:connections` and the compiled Connections smoke after building.
+
 Device sync control 1.5.0 adds config-scoped activity and paged receipt history
 to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
 same native receipt journal used locally; `api/utils/devices/` enforces pairing,
