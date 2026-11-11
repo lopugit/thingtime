@@ -14,7 +14,7 @@ import { SyncEditorPlacement } from './SyncEditorPlacement';
 import { newSyncConfigDraft, useRevealNewSyncDraft } from './syncFolderEditor';
 import { SyncConfigActivity } from './SyncConfigActivity';
 import { syncJobAttentionMessage } from '~/fileSync/syncJobFailure';
-import { savedLocalRecoveryPendingOnLane, savedLocalRecoveryProofCurrent, savedLocalRecoveryWaitsForLane, savedLocalStrictRecoveryEligible, settleSavedLocalRecoveryProof, verifySavedLocalRecoveryCandidate, type SavedLocalRecoveryProof } from '~/fileSync/savedIntentRecoveryEligibility';
+import { savedLocalRecoveryPendingOnLane, savedLocalRecoveryProofCurrent, savedLocalRecoveryRetryQueuedOnLane, savedLocalRecoveryWaitsForLane, savedLocalStrictRecoveryEligible, settleSavedLocalRecoveryProof, verifySavedLocalRecoveryCandidate, type SavedLocalRecoveryProof } from '~/fileSync/savedIntentRecoveryEligibility';
 import { SyncEditorBlocks, syncConfigBasicsBlocks, syncConfigDirectionBlocks, syncConfigTransferBlocks, syncConfigExclusionBlocks, syncConfigModes, syncConfigEditBlocks, syncFolderEditorBlocks, syncLocalEditorActionBlocks, syncSourceBlocks } from './SyncEditorBlocks';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
@@ -966,6 +966,8 @@ function Connections({
 		savedLocalRecoveryPendingOnLane(selectedLaneInput));
 	const selectedQueuedRecovery = !!(selectedPendingLane && selectedLaneInput && draft && !error && !storageError &&
 		!transferErrors[draft.id] && !admissionFailed[draft.id] && savedLocalRecoveryWaitsForLane(selectedLaneInput));
+	const selectedRoutineRetryQueued = !!(selectedPendingLane && selectedLaneInput && draft && !error && !storageError &&
+		!transferErrors[draft.id] && !admissionFailed[draft.id] && savedLocalRecoveryRetryQueuedOnLane(selectedLaneInput));
 	const renderHeader = () => <SyncEditorBlocks documentKey="file-sync-folder-editor" title="Folders & sync configs" blocks={syncFolderEditorBlocks}
 		scopeKey={key} accountTransport={reviewTransport} scope={{ editor: {
 			canChoose: !!folderManagement, chooseDisabled: !rootsReady || !loaded || busy || !!folderManagement?.busy || !!folderManagement?.transferring,
@@ -1004,6 +1006,8 @@ function Connections({
 					savedLocalRecoveryPendingOnLane(laneInput);
 				const queuedRecovery = pendingLane && !error && !storageError && !transferErrors[saved.id] && !admissionFailed[saved.id] &&
 					savedLocalRecoveryWaitsForLane(laneInput);
+				const routineRetryQueued = pendingLane && !error && !storageError && !transferErrors[saved.id] && !admissionFailed[saved.id] &&
+					savedLocalRecoveryRetryQueuedOnLane(laneInput);
 				const pausing = pausingIds.includes(saved.id);
 				const task = !nativeOwns && ownNativeTask?.scope.rootId === saved.id ? ownNativeTask : null;
 				const progress: ConnectionProgress | null = nativeOwns ? null : task?.progress ?? transfers[saved.id] ?? readStampedCache<ConnectionProgress>(progressKey(saved.id));
@@ -1106,6 +1110,7 @@ function Connections({
                         automation={nativeOwns ? paused ? 'Automatic backup is paused.' : nativePhotoRunSchedule(nativeRun) || 'Automatic retries follow your saved transfer settings.' : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
                             photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' :
                             queuedRecovery ? 'Automatic setup will be checked after this device’s current transfer. Its earlier indexing failure is still available below.' :
+							routineRetryQueued ? 'Automatic setup will be checked after this device’s current transfer. The previous issue remains in Recovery details.' :
                             pendingLane ? 'Saved automatic setup is pending behind this device’s current transfer. Its previous failure still needs attention.' :
                             currentJob?.state === 'attention' ? 'Automatic sync needs attention.' :
                             admitted && !paused && !running && !waiting ? automaticEnabled ? queued ? undefined : 'Automatic sync is on.' : 'Automatic sync is disabled in Activity manager.' : undefined}
@@ -1121,7 +1126,7 @@ function Connections({
                             continuationHeld ? undefined : !nativeRun?.stale && nativeProgress?.activity?.reason === 'interrupted' ?
                                 nativePhotoBackgroundLabel(nativeProgress.activity.backgroundRequest, nativeProgress.activity.reason) :
                                 continuation?.status || (!nativeRun?.stale ? nativePhotoBackgroundLabel(nativeProgress?.activity?.backgroundRequest) : undefined)}
-						quickAction={!pausing && (automaticallyWaiting || queuedRecovery) ? undefined : { label: actionLabel,
+						quickAction={!pausing && (automaticallyWaiting || routineRetryQueued) ? undefined : { label: actionLabel,
                             disabled: pausing || (running ? !!task?.stopping : !allowed || busy || retainedDrafts.current.has(saved.id) || !ready || (nativeOwns && (!nativeRun || nativeRun.stale))),
                             run: () => {
                                 if (running && automatic) return pausePhotoAutomation(saved.id);
@@ -1280,12 +1285,13 @@ function Connections({
 						scopeKey={`${key}:save:${draft.id}`} accountTransport={reviewTransport} scope={{ editor: {
 						status: selectedQueuedRecovery && draft.id === retainedDrafts.current.get(draft.id)?.id ?
 							'Settings are saved. Automatic setup will be checked after this device’s current transfer finishes.' :
+							selectedRoutineRetryQueued ? 'Settings are saved. Automatic setup will be checked after this device’s current transfer; the previous issue remains in Recovery details.' :
 							selectedPendingLane ? 'Settings are saved. Another transfer is active; the previous automatic setup failure still needs attention.' :
 							draft.enrollment?.savedRevision ? 'Settings are saved. Retry automatic setup to finish this exact config.' :
 								draft.pending ? 'This save is not confirmed. Retry checks the same sync config.' :
 								mobileFolderBusy && !canQueueDraft(draft) ? 'Folder access is busy. Your draft is saved; apply it when this transfer finishes.' :
 								appOwned && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' ? 'Saving and syncing enables automatic checks on this device. Downloads may require folder approval.' : 'Draft saved on this device.',
-						canSync: !selectedQueuedRecovery && appOwned && scope.dataPlane === 'home' && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' && !!draft.configuration.localRootId,
+						canSync: !selectedRoutineRetryQueued && appOwned && scope.dataPlane === 'home' && !draft.configuration.paused && draft.configuration.sourceKind !== 'photos' && !!draft.configuration.localRootId,
 							canSave: !draft.enrollment && (draft.baseUpdatedAt !== null || !appOwned || draft.configuration.sourceKind === 'photos' || draft.configuration.paused || scope.dataPlane !== 'home' || !draft.configuration.localRootId),
 							syncLabel: draft.enrollment?.savedRevision ? 'Retry automatic setup' : draft.pending ? 'Retry save & sync' : 'Save & sync',
 							saveLabel: draft.pending ? 'Retry save' : 'Save sync config',

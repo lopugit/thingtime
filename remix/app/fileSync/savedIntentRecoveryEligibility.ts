@@ -68,8 +68,16 @@ export function savedLocalRecoveryPendingOnLane(input: {
  } catch { return false; }
 }
 
-/** Only this typed failure has a known automatic retry path. Other failures
- * may still be pending behind the lane, but retain attention and Retry. */
+/** Only this typed failure replaces attention with waiting status. Other
+ * failures retain attention even when their routine Retry is queued. */
 export function savedLocalRecoveryWaitsForLane(input: Parameters<typeof savedLocalRecoveryPendingOnLane>[0]): boolean {
  return input.job?.failureReason === 'indexing-incomplete' && savedLocalRecoveryPendingOnLane(input);
+}
+
+/** A proven pending automatic check makes a manual Retry redundant while the
+ * lane is occupied. Unknown failures still retain attention and details. */
+export function savedLocalRecoveryRetryQueuedOnLane(input: Parameters<typeof savedLocalRecoveryPendingOnLane>[0]): boolean {
+ const reason = input.job?.failureReason;
+ return (reason === 'indexing-incomplete' || reason === 'unknown' || reason === undefined) &&
+  savedLocalRecoveryPendingOnLane(input);
 }

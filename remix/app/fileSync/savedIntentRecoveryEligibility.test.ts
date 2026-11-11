@@ -4,7 +4,7 @@ import { newFileSyncConfiguration } from './configuration';
 import type { ConfigurationDraft } from './configurationEditor';
 import type { SyncJob } from './syncJobJournal';
 import type { SyncTaskSnapshot } from './syncTaskRuntime';
-import { savedLocalRecoveryPendingOnLane, savedLocalRecoveryProofCurrent, savedLocalRecoveryWaitsForLane, savedLocalStrictRecoveryEligible, settleSavedLocalRecoveryProof, verifySavedLocalRecoveryCandidate } from './savedIntentRecoveryEligibility';
+import { savedLocalRecoveryPendingOnLane, savedLocalRecoveryProofCurrent, savedLocalRecoveryRetryQueuedOnLane, savedLocalRecoveryWaitsForLane, savedLocalStrictRecoveryEligible, settleSavedLocalRecoveryProof, verifySavedLocalRecoveryCandidate } from './savedIntentRecoveryEligibility';
 
 test('saved local strict recovery is shown as queued only with exact saved policy, journal and foreign active lane', () => {
  const scope = { origin: 'https://thingtime.com', ownerId: 'owner', deviceId: 'device', dataPlane: 'home', rootId: 'config' };
@@ -33,6 +33,20 @@ test('saved local strict recovery is shown as queued only with exact saved polic
   'a current refused read clears an earlier proof');
  assert.equal(savedLocalRecoveryPendingOnLane({ ...input, job: { ...job, failureReason: 'unknown' } }), true,
   'the retained intent may be pending on the lane while its unknown failure remains attention');
+ for (const failureReason of ['indexing-incomplete', 'unknown', undefined] as const) {
+  assert.equal(savedLocalRecoveryRetryQueuedOnLane({ ...input, job: { ...job, failureReason } }), true,
+   'an exact pending automatic recheck makes routine Retry redundant without resolving the prior failure');
+ }
+ for (const failureReason of ['folder-access', 'cloud-authorization', 'write-approval', 'configuration-changed'] as const) {
+  assert.equal(savedLocalRecoveryRetryQueuedOnLane({ ...input, job: { ...job, failureReason } }), false,
+   'actionable failures must retain their recovery control');
+ }
+ assert.equal(savedLocalRecoveryRetryQueuedOnLane({ ...input, task: null, job: { ...job, failureReason: 'unknown' } }), false,
+  'ordinary Retry returns when the active lane becomes idle');
+ assert.equal(savedLocalRecoveryRetryQueuedOnLane({ ...input, locallyPaused: true, job: { ...job, failureReason: 'unknown' } }), false,
+  'Pause retains explicit recovery controls');
+ assert.equal(savedLocalRecoveryRetryQueuedOnLane({ ...input, saved: undefined, job: { ...job, failureReason: 'unknown' } }), false,
+  'missing exact saved proof never hides Retry');
  for (const changed of [
   { saved: undefined }, { job: undefined }, { task: null }, { task: { ...task, active: false } },
   { task: { ...task, scope: { ...task.scope, ownerId: 'foreign' } } },

@@ -15952,6 +15952,7 @@ the isolated real-API/browser command and the metadata-only session boundary.
   CAS refusal, uncertain save, identity changes or retained selected drafts must
   prevent admission; unrelated Home/other connections and draft bytes stay unchanged. Photo Library uses its virtual label,
   while native folders preserve their absolute source path.
+- [ ] With exact retained local automatic setup, matching saved revision/policy and strict-capture attention job, an active same-account/device transfer shows the previous unknown failure and a pending automatic check without routine Retry in both the collapsed card and selected editor. Keep Recovery details and the option to keep saved settings. An actionable folder-access, cloud-authorization or write-approval failure retains its control; missing/stale proof, Pause, foreign lane or idle transition restores ordinary attention/Retry. Check at desktop and 375px widths.
 - [ ] Root Things shows one Device card and hides only its exact managed folder
   duplicate; search and folder-only pickers still find it. The compact native
   Device setup link opens pairing/grants without an invented device ID or a
