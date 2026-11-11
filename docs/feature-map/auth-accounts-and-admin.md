@@ -494,3 +494,15 @@ no-op updates and caller-supplied actor IDs are not authority. The selected
 ordinary-restore primitive currently refuses Character delegation and scoped
 credentials; this is an explicit initial capability scope, not impersonation.
 The real replica check covers wrong-account and revoked accepted-receipt retries.
+
+## Anthropic Console connections
+
+Secure Vault exposes the explicit `anthropic-api-key` kind alongside unchanged
+`anthropic` Claude Code OAuth records. `ai/anthropicApiKey.ts` creates the native
+Messages SDK with only the selected owner credential; `lopu/vaultProviderClient.ts`
+applies the existing host/DNS/redirect fences and `lopu/chat.ts` reuses native tool
+streaming. Console keys use separate provider billing. Save rejects setup tokens
+and mode changes without a new key. No platform/admin credential is migrated.
+Run `anthropicApiKey.test.ts`, `userVaultCore.test.ts`, `vaultProviders.test.ts`,
+`voice.test.ts`, `chat.streaming.test.mts`, `completion.test.ts` and capability
+coverage. Live Console inference and installed-native acceptance remain separate.
