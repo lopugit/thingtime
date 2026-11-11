@@ -26,6 +26,7 @@ final class NativeDeferredUploadClient {
     private let minimum: [Int]
     private let session: URLSession
     private var verified = false
+    private var backgroundFileSupported = false
 
     init(record: NativeDeferredUploadRecord) {
         self.record = record
@@ -55,6 +56,7 @@ final class NativeDeferredUploadClient {
         guard LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: Self.feature, minimum: minimum) else {
             throw Failure.incompatible
         }
+        backgroundFileSupported = LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: Self.feature, minimum: [1, 5, 0])
         verified = true
     }
 
@@ -63,6 +65,7 @@ final class NativeDeferredUploadClient {
         try await requireCapability()
         var payload: [String: Any] = ["action": action, "admissionId": record.admissionId]
         if let parts { payload["parts"] = parts }
+        if action == "parts", backgroundFileSupported, record.photoRunId != nil { payload["transport"] = "background-file-v1" }
         let result = try await read(Self.path, body: payload)
         if action == "complete" {
             guard let attachment = result["attachment"] as? [String: Any],
@@ -97,7 +100,7 @@ final class NativeDeferredUploadClient {
     }
 
     func send(part: FileUploadPartStore.Part, partNumber: Int, conditions: NativePhotoDownloadConditions, check: () throws -> Void,
-              account: (NativePhotoTransferBytes) throws -> Void) async throws {
+              account: @escaping (NativePhotoTransferBytes, UUID?) throws -> Void) async throws {
         guard let record else { throw Failure.invalid }
         let signed = try await request(action: "parts", parts: [["partNumber": partNumber, "checksumSha256": part.checksumSha256]])
         let allowsCellular = record.configuration.network == "any"
@@ -109,7 +112,10 @@ final class NativeDeferredUploadClient {
         do {
             if record.configuration.managedPhotos != nil {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
-                    scope: record.scope, authorization: record.request.authorization, conditions: conditions, account: account)
+                    scope: record.scope, authorization: record.request.authorization, conditions: conditions,
+                    background: backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
+                    record: record, partNumber: partNumber, checksum: part.checksumSha256,
+                    accountOnce: { try account($0, $1) }, account: { try account($0, nil) })
             } else {
                 try await NativeFileUpload().send(request, file: part.url, configuration: configuration)
             }

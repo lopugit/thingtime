@@ -57,6 +57,7 @@ struct OrderedPhotoCheckpoint: Codable {
     var undated = 0
     var indexed = PhotoLibraryReader.IndexedLibrary()
     var unavailable = 0
+    var unavailableReadFailures: Int?
     var passID: UUID? = UUID()
 }
 
@@ -265,9 +266,9 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     }
 
     private func scanEntries(_ resources: ArraySlice<PhotoResource>, scope: Scope,
-                             authorize: () throws -> Void = {}, allowCloudGaps: Bool = false,
+                             authorize: () throws -> Void = {}, allowCloudGaps: Bool = false, allowReadGaps: Bool = false,
                              download: PhotoOriginalDownloadControl? = nil, beginDownload: () -> Bool = { true },
-                             cloudGap: (PhotoResource) -> Void = { _ in },
+                             cloudGap: (PhotoResource) -> Void = { _ in }, gapReason: (PhotoResource, String) -> Void = { _, _ in },
                              progress: () -> Void = {}) throws -> [MobileFolderReader.Entry] {
         let client = try requireClient()
         for resource in resources { try authorize(); try require(); try provider.validate(resource) }
@@ -285,7 +286,10 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                 do { result = try materialize(resource, scope: scope, download: download, beginDownload: beginDownload).0 }
                 catch Failure.cloudOriginal where allowCloudGaps {
                     try authorize(); try require(); try provider.validate(resource)
-                    cloudGap(resource); return nil
+                    gapReason(resource, "cloud-download"); cloudGap(resource); return nil
+                } catch Failure.readFailed where allowReadGaps {
+                    try authorize(); try require(); try provider.validate(resource)
+                    gapReason(resource, "photo-read"); cloudGap(resource); return nil
                 }
             }
             try authorize(); progress()
@@ -504,6 +508,19 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return entries
     }
 
+    /// Warm only local observation hashes for the next bounded date page while
+    /// current originals are on the wire. Cloud gaps stay in their canonical
+    /// deferred flow; this does not admit another active queue selection.
+    public func prepareQueueLookahead(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID,
+                                      authorize: () throws -> Void = {}) throws {
+        lock.lock(); defer { lock.unlock() }
+        try require(); try authorize()
+        guard let ordered = provider as? any OrderedPhotoResourceProvider else { return }
+        let resources = try queueStore(scope: scope, request: request).lookahead(provider: ordered, batchId: batchId)
+        _ = try scanEntries(resources[...], scope: scope, authorize: authorize, allowCloudGaps: true, allowReadGaps: true)
+        try require(); try authorize()
+    }
+
     public func finishQueueBatch(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
         lock.lock(); defer { lock.unlock() }
         try require()
@@ -614,6 +631,9 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             }
             report(legacy: false)
             let retainedGaps = Set(batch?.1.selection.attempts?.flatMap(\.unavailable) ?? [])
+            var batchReasons = Dictionary(uniqueKeysWithValues: (batch?.1.selection.attempts ?? []).flatMap { attempt in
+                attempt.unavailable.map { ($0, attempt.reasonByPath?[$0] ?? "cloud-download") }
+            })
             var batchGaps = Set<String>(), batchEntries: [MobileFolderReader.Entry] = []
             if prepared.coverage == "scanning" {
                 // An interrupted async job is discarded before a new capture starts.
@@ -624,13 +644,13 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                     var gaps = Set(resources.map(\.path).filter(retainedGaps.contains))
                     skipped += gaps.count
                     let eligible = resources.filter { !retainedGaps.contains($0.path) }
-                    let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
+                    let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, allowReadGaps: batch != nil && allowCloudGaps, download: download, beginDownload: {
                             if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
                             gaps.insert(resource.path); skipped += 1; report()
-                        }) { indexed += 1; report() }
+                        }, gapReason: { resource, reason in batchReasons[resource.path] = reason }) { indexed += 1; report() }
                     if !entries.isEmpty {
                         if batch != nil { batchEntries += entries }
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
@@ -642,7 +662,7 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                             generation: generation, fields: ["paths": gaps.sorted()])
                     }
                 }
-                if let batchStore, let batch { batchStatus = try batchStore.prepare(batch.1, unavailable: batchGaps, entries: batchEntries) }
+                if let batchStore, let batch { batchStatus = try batchStore.prepare(batch.1, unavailable: batchGaps, entries: batchEntries, reasons: batchReasons) }
             }
             try authorize(); try require()
             guard indexed + skipped == start.resources.count, allowCloudGaps || skipped == 0 else { throw Failure.changed }

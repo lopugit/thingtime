@@ -788,6 +788,16 @@ test('Photos automation settings and exact publication are additive origin-scope
  }
 });
 
+test('native background file transport is an explicit compatible transfer admission capability', () => {
+ const minimum = '1.5.0';
+ const docs = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest('https://photos.test');
+ assert.equal(docs.features['api.file-sync-transfer-admissions'], minimum);
+ assert.equal(runtime.features['api.file-sync-transfer-admissions']?.version, minimum);
+ assert(capabilitySatisfies('1.5.1', minimum));
+ for (const version of [undefined, '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
+ assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/files/sync-transfer-admissions')?.methods, ['POST']);
+});
+
 test('session replacement reports compatible protection for scoped file-sync reservations', () => {
   const versions = {
     'api.auth-accounts-assume': ['1.1.0', '1.1.1'],

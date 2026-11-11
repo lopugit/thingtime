@@ -33,14 +33,14 @@ final class NativeFileUpload: NSObject, URLSessionDataDelegate, @unchecked Senda
         lock.lock(); cancelled = true; let current = task; lock.unlock(); current?.cancel()
     }
     func send(_ request: URLRequest, file: URL, configuration: URLSessionConfiguration = .ephemeral,
-              rate: Int64? = nil, length: Int64 = 0, check: @escaping @Sendable () throws -> Void = {}) async throws {
+              rate: Int64? = nil, length: Int64 = 0, pace: (@Sendable (Int64, Int64) async throws -> Void)? = nil, check: @escaping @Sendable () throws -> Void = {}) async throws {
         configuration.httpCookieStorage = nil; configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false; configuration.urlCache = nil
         configuration.timeoutIntervalForResource = rate.map { Self.timeout(length: length, rate: $0) } ?? 900
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         if let rate {
-            let body = try PacedUploadBody(rate: rate, length: length, file: file, check: check)
+            let body = try PacedUploadBody(rate: rate, length: length, file: file, pace: pace, check: check)
             lock.withLock { input = body.input }
             let producer = Task.detached { [self] in
                 do { try await body.produce() }
@@ -135,12 +135,13 @@ private final class PacedUploadBody: @unchecked Sendable {
     private let rate: Int64, length: Int64
     private let file: URL
     private let check: @Sendable () throws -> Void
+    private let pace: (@Sendable (Int64, Int64) async throws -> Void)?
 
-    init(rate: Int64, length: Int64, file: URL, check: @escaping @Sendable () throws -> Void) throws {
+    init(rate: Int64, length: Int64, file: URL, pace: (@Sendable (Int64, Int64) async throws -> Void)?, check: @escaping @Sendable () throws -> Void) throws {
         var source: InputStream?, sink: OutputStream?
         Stream.getBoundStreams(withBufferSize: 16_384, inputStream: &source, outputStream: &sink)
         guard rate > 0, length > 0, let source, let sink else { throw MobileFolderStore.Failure.invalid }
-        input = source; output = sink; self.rate = rate; self.length = length; self.file = file; self.check = check
+        input = source; output = sink; self.rate = rate; self.length = length; self.file = file; self.pace = pace; self.check = check
     }
 
     func produce() async throws {
@@ -154,7 +155,8 @@ private final class PacedUploadBody: @unchecked Sendable {
             let count = min(quantum, remaining)
             guard let bytes = try handle.read(upToCount: Int(count)), bytes.count == count else { throw MobileFolderStore.Failure.changed }
             let wait = max(1, Int64((Double(count) / Double(rate) * 1_000_000_000).rounded(.up)))
-            try await Task.sleep(for: .nanoseconds(wait))
+            if let pace { try await pace(count, rate) }
+            else { try await Task.sleep(for: .nanoseconds(wait)) }
             var offset = 0
             while offset < bytes.count {
                 try Task.checkCancellation(); try check()

@@ -578,7 +578,8 @@ export async function transferAdmission(input: {
 	if (
 		!['parts', 'complete', 'publish', 'revoke'].includes(String(raw.action)) ||
 		!jti ||
-		Object.keys(raw).some((key) => key !== 'action' && key !== 'admissionId' && !(raw.action === 'parts' && key === 'parts'))
+		Object.keys(raw).some((key) => key !== 'action' && key !== 'admissionId' && !(raw.action === 'parts' && (key === 'parts' || key === 'transport'))) ||
+		(raw.transport !== undefined && raw.transport !== 'background-file-v1')
 	)
 		return fail(400, 'Invalid admitted transfer request');
 	if (!device && !(raw.action === 'revoke' && owner)) return fail(401, 'The paired device credential is required');
@@ -596,6 +597,7 @@ export async function transferAdmission(input: {
 			: row.userId === owner?.userId && a.ownerSessionId === owner.sessionId)
 	)
 		return missing();
+	if (raw.transport === 'background-file-v1' && !a.photoRun) return fail(400, 'Background file transport requires a Photos run');
 	if (raw.action === 'revoke') {
 		const revoked = await sessions.updateOne(
 			{ ...byId(row.jti), 'meta.handle': meta.handle, revokedAt: null },
@@ -697,7 +699,8 @@ export async function transferAdmission(input: {
 			throw error;
 		}
 	}
-	const authority = { expiresAt: meta.authorizationExpiresAt, expectedFingerprint: a.fingerprint, check };
+	const authority = { expiresAt: meta.authorizationExpiresAt, expectedFingerprint: a.fingerprint, check,
+		...(a.photoRun && raw.transport === 'background-file-v1' ? { backgroundFileTransport: true } : {}) };
 	return raw.action === 'parts'
 		? signAttachmentUploadParts(row.userId, { uploadId: a.uploadId, parts: raw.parts }, authority)
 		: completeAttachmentUpload(row.userId, { uploadId: a.uploadId }, authority);

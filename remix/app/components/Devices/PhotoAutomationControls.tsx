@@ -3,7 +3,7 @@ import { DEFAULT_PHOTO_AUTOMATION, type FileSyncConfiguration } from '~/fileSync
 import type { ConfigurationDraft } from '~/fileSync/configurationEditor';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import type { WebpageBlock } from '../Builder/webpageBlocks';
+import { findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 import { syncResourceAction, syncResourceControlStyle, syncResourceField, syncResourceOperation } from './syncResourceControlsBlocks';
 
@@ -91,6 +91,25 @@ const blocks: WebpageBlock[] = [{
 	]
 }];
 
+const legacyLabels = structuredClone(blocks);
+// Match exact stock nodes so saved custom wording and layouts remain untouched.
+const speedLabel = (nodes: WebpageBlock[]): void => {
+ for (const node of nodes) {
+  if (node.text === 'Maximum upload speed') node.text = 'Average upload speed';
+  if (node.props?.['aria-label'] === 'Maximum upload speed') node.props['aria-label'] = 'Average upload speed';
+  if (node.id === 'photo-backup-speed-help') node.text += ' Background transfers are scheduled to this average; individual transfers can be faster.';
+  if (node.children) speedLabel(node.children);
+ }
+};
+speedLabel(blocks);
+export function migratePhotoAutomationLabels(nodes: WebpageBlock[]): WebpageBlock[] {
+ return nodes.map(node => {
+  const legacy = findBlock(legacyLabels, node.id), current = findBlock(blocks, node.id);
+  if (legacy && current && JSON.stringify(legacy) === JSON.stringify(node)) return current;
+  return node.children ? { ...node, children: migratePhotoAutomationLabels(node.children) } : node;
+ });
+}
+
 export function PhotoAutomationControls({ policy, draft, disabled, availability, scopeKey, accountTransport, onChange, onValidityChange }: {
 	policy?: Policy;
 	draft?: Draft;
@@ -130,7 +149,7 @@ export function PhotoAutomationControls({ policy, draft, disabled, availability,
 			parsed.uploadBytesPerHour = policy.uploadBytesPerHour;
 		onChange(next, parsed);
 	};
-	return <SettingsDocumentHost documentKey="photo-backup-automation-controls" defaultDocument={blocks} scopeKey={scopeKey} title="Photos backup settings" accountTransport={accountTransport}>
+	return <SettingsDocumentHost documentKey="photo-backup-automation-controls" defaultDocument={blocks} migrateBlocks={migratePhotoAutomationLabels} scopeKey={scopeKey} title="Photos backup settings" accountTransport={accountTransport}>
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
 			scope={{ resources: { ...current, ids, disabled, availability, error, hasError: !!error } }}
 			actions={Object.fromEntries(keys.map(key => [syncResourceOperation(key), ({ value }: { value?: unknown }) => change(key, value)]))}>
