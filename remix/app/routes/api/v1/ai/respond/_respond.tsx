@@ -17,7 +17,7 @@ export const action = async ({ request }: { request: Request }) => {
   // This route does not accept ambient cookies, full sessions, or app grants.
   if (!request.headers.get('Authorization')?.startsWith('Bearer ')) return respond({ ok: false, error: 'A scoped AI token is required.' }, 401);
   const inspected = await inspectThingsActor(request, 'ai.complete');
-  if (!inspected.ok) return respond({ ok: false, error: inspected.error }, inspected.status);
+  if (inspected.ok === false) return respond({ ok: false, error: inspected.error }, inspected.status);
   if (!inspected.actor.user || !inspected.actor.pat) return respond({ ok: false, error: 'A scoped AI token is required.' }, 401);
   let input: { prompt: string };
   try { input = parseAiRespondInput(await readJsonBody(request, 16 * 1024)); }
@@ -27,11 +27,11 @@ export const action = async ({ request }: { request: Request }) => {
   const limit = await enforceRateLimit(request, 'ai.complete', `user:${user.id}:token:${inspected.actor.pat.jti}`, { failClosed: true });
   if (!limit.allowed) return json({ ok: false, error: 'AI text completion is temporarily rate limited.' }, rateLimitedResponseInit(limit));
   const access = await assertLopuAccess(user, { billing: 'thingtime', reserve: true });
-  if (!access.ok) return lopuAccessResponse(access);
+  if (access.ok === false) return lopuAccessResponse(access);
   try {
     // Consume exactly one use after the body, provider, rate, and credit gates.
     const admitted = await resolveThingsActor(request, 'ai.complete');
-    if (!admitted.ok) return respond({ ok: false, error: admitted.error }, admitted.status);
+    if (admitted.ok === false) return respond({ ok: false, error: admitted.error }, admitted.status);
     if (!admitted.actor.user || !admitted.actor.pat || admitted.actor.user.id !== user.id) return respond({ ok: false, error: 'AI token is unavailable.' }, 401);
     const startedAt = Date.now();
     try {
