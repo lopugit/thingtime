@@ -18964,6 +18964,18 @@ projection, which requires 2.3. Retain both actual preview manifests separately.
   the compiled Connections manifest smoke after the canonical build.
 ### Personal Claude saved-model effort
 
+- Console diagnostics: synthesize known billing, spend-cap, model-access and
+  unsupported-parameter SDK envelopes and verify fixed messages in streamed
+  events and saved outcomes. Unknown messages, request echoes and recognized
+  prefixes with arbitrary suffixes remain generic; no credentials, provider
+  bodies, headers or request IDs enter errors or logs. Preserve HTTP status,
+  existing fallback policy and the selected connection. Negotiate reply 1.23.2;
+  synthetic classifications do not establish the cause of a real rejection.
+- Facebook diagnostics: exact Graph origin, HTTP 400, numeric code 200 and
+  subcode 2069030 show fixed New Pages Experience endpoint/account copy; other
+  statuses/codes and ordinary denials keep existing mappings. Confirmed
+  `user_posts` stays independent, `posts` remains `permission-denied`, optional
+  probes skip, and arbitrary upstream text/credentials never appear.
 - The Console SDK streaming fixture must run a saved `claude-haiku-4-5` connection
   with inherited High effort and assert the actual HTTP request omits effort and
   thinking fields, keeps the exact model and credential, completes one response

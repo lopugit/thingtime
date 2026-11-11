@@ -41,7 +41,7 @@ if (process.argv[2] !== '--worker') {
 		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']],
 		['lopu-vault', 'lopu/vault', '1.5.0', ['GET', 'POST']],
 		['ai-models', 'ai/models', '1.9.0', ['GET']],
-		['lopu-chats-reply', 'lopu/chats/reply', '1.23.1', ['POST']],
+		['lopu-chats-reply', 'lopu/chats/reply', '1.23.2', ['POST']],
 		['lopu-voice-reply', 'lopu/voice/reply', '1.5.0', ['POST']],
 		['ai-complete', 'ai/complete', '1.3.0', ['POST']],
 		['releases-native-web', 'releases/native-web', '1.0.0', ['GET']],

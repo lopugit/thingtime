@@ -2,10 +2,18 @@
 // and provider payloads never enter the public attempt trace.
 export type AiAttempt = { connectionId: string; outcome: 'succeeded' | 'unavailable'; status?: number };
 
+export type AiTransportFailureReason = 'billing' | 'spend_limit' | 'model_access' | 'unsupported_parameter';
+const FAILURE_DETAILS: Record<AiTransportFailureReason, string> = {
+  billing: 'The selected AI provider reports a billing or credit problem; check its billing settings',
+  spend_limit: 'The selected AI provider reports an organization or workspace spending limit; check its usage limits',
+  model_access: 'The selected AI provider reports that the model is unavailable for this key; check model access and selection',
+  unsupported_parameter: 'The selected AI provider reports an unsupported request parameter; check the provider request settings'
+};
+
 export class AiTransportFailure extends Error {
   code?: 'model_not_available';
-	constructor(public readonly status?: number) {
-		super(status ? `The selected AI provider rejected the request (${status}).` : 'The selected AI provider could not be reached.');
+	constructor(public readonly status?: number, public readonly reason?: AiTransportFailureReason) {
+		super(reason ? `${FAILURE_DETAILS[reason]}${status ? ` (HTTP ${status})` : ''}.` : status ? `The selected AI provider rejected the request (${status}).` : 'The selected AI provider could not be reached.');
 		this.name = 'AiTransportFailure';
 	}
 }

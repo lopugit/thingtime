@@ -1,0 +1,58 @@
+{
+  "recordedAt": "2026-11-11T09:20:50.891Z",
+  "head": "b7f27c39b20ffb76e13df261270d972337f3d7d3",
+  "integratedMain": "5809d02e9e5a6e2530696ac1103946b2b03f68b9",
+  "runnerSha256": "1d86529a152cee95b5e467f52325292be023cab016a9f54de3ea06c069e829a4",
+  "canonicalJsonSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "planSourceSha256": "d82169ce0b3fcd919542abf151b4fd4927ac6fdf10628d0a1cd5c0213dfa1fd8",
+  "browserPassed": true,
+  "planPassed": true,
+  "counts": {
+    "total": 94,
+    "done": 65,
+    "local": 25,
+    "todo": 4,
+    "displayed": [
+      65,
+      25,
+      4
+    ]
+  },
+  "allResourcesClosed": true,
+  "priorCheckpointPreserved": true,
+  "artifactComparison": [
+    {
+      "name": "thingtime-draft.json",
+      "sameAsPrior": true
+    },
+    {
+      "name": "editor-1440x1000.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "card.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "editor-390x844.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "viewport-390x844.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "editor-320x844.png",
+      "sameAsPrior": true
+    },
+    {
+      "name": "viewport-320x844.png",
+      "sameAsPrior": true
+    }
+  ],
+  "scope": "Fresh local no-login actual UI and standalone plan acceptance; no app-source edits, builds, deployment, production activation or native installation performed."
+}

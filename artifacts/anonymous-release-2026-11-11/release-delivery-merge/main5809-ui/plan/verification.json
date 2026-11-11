@@ -1,0 +1,182 @@
+{
+  "observedAt": "2026-11-11T09:19:40.940Z",
+  "source": "docs/progress/anonymous-local-first.html",
+  "sourceSha256": "d82169ce0b3fcd919542abf151b4fd4927ac6fdf10628d0a1cd5c0213dfa1fd8",
+  "scope": "Read-only progress-plan HTML layout, derived counts, filters, search and in-page navigation",
+  "chromiumSandbox": true,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 32831,
+      "bottomReached": true,
+      "positionsChecked": 42,
+      "maxWidth": 1440,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 390,
+      "height": 68285,
+      "bottomReached": true,
+      "positionsChecked": 102,
+      "maxWidth": 390,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 320,
+      "height": 85430,
+      "bottomReached": true,
+      "positionsChecked": 127,
+      "maxWidth": 320,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    }
+  ],
+  "requests": [
+    "http://127.0.0.1:50090/plan.html"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "artifacts": [
+    {
+      "name": "plan-1440-top.png",
+      "bytes": 260154,
+      "sha256": "4e9392c09b734b9b45713d0e8fc17729bc6bdfd053280551f109c556f29207f2"
+    },
+    {
+      "name": "plan-1440-bottom.png",
+      "bytes": 225154,
+      "sha256": "7ec05865b81440812d17607a412eb7c41103cfabc9d5f47e3c3e348c4e833374"
+    },
+    {
+      "name": "plan-1440-counts.png",
+      "bytes": 260119,
+      "sha256": "08cdf947e5db0329f634712bc0dd9d8f704eeea57f5e85806c9100799031b8ee"
+    },
+    {
+      "name": "plan-390-top.png",
+      "bytes": 93693,
+      "sha256": "b2b264316470b8d87865d729ece265bcbd76d8d664338f8eef6cbb5608f63c71"
+    },
+    {
+      "name": "plan-390-bottom.png",
+      "bytes": 63215,
+      "sha256": "4b18cd03527e8e949cfc537114d413895a7981d6fe4bc3ff0f55a7206ce42539"
+    },
+    {
+      "name": "plan-390-counts.png",
+      "bytes": 75281,
+      "sha256": "6453ca50d1785fd7ce24eff6996cbd1262bfa7a14a2a16e0c391f473acb501b7"
+    },
+    {
+      "name": "plan-320-top.png",
+      "bytes": 92112,
+      "sha256": "a565190a7bd44df5150d8f9339a94eb39df16a1fa3b037817ffe7defd2b08d8a"
+    },
+    {
+      "name": "plan-320-bottom.png",
+      "bytes": 58883,
+      "sha256": "7539e73c7cb0dd1ca5d06d72b308aad1f5f80c218c79d25c3236c33c7631a1fa"
+    },
+    {
+      "name": "plan-320-counts.png",
+      "bytes": 69272,
+      "sha256": "1783f89e18308afbdda1ce7863091da4a9cba773f14f9cb24c12e51da8b32f63"
+    }
+  ],
+  "ok": true,
+  "browserClosed": true,
+  "serverClosed": true,
+  "chromiumVersion": "149.0.7827.55",
+  "counts": {
+    "total": 94,
+    "done": 65,
+    "local": 25,
+    "todo": 4,
+    "displayed": [
+      65,
+      25,
+      4
+    ]
+  },
+  "visualInspection": {
+    "observedAt": "2026-11-11T09:20:50.891Z",
+    "files": [
+      "plan-1440-top.png",
+      "plan-390-top.png",
+      "plan-320-counts.png",
+      "plan-320-bottom.png"
+    ],
+    "result": "Main5809 header, task counters, narrow cards and footer reviewed; no overflow/clipping/overlap observed."
+  }
+}

@@ -2,6 +2,17 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Final main refresh — 11 November 2026
+
+Main advanced during acceptance to `5809d02e9e5a6e2530696ac1103946b2b03f68b9`
+(PR #1473, safe Claude/Facebook diagnostics). This follow-up preserves the combined
+Things 1.63 and vault 1.5 contracts, and imports reply 1.23.2, Connections feed
+2.0.2 and diagnostics 1.0.1. Provider errors remain fixed, redacted messages.
+The detailed `b3374a16d` checkpoint below and its screenshots retain their original
+source association. [Final refresh evidence](../artifacts/anonymous-release-2026-11-11/release-delivery-merge/main5809.md)
+records resulting-source checks separately. No primary merge, production trust
+activation or stable-app replacement is included.
+
 ## Release delivery and current main integration — 11 November 2026
 
 Current integration target is freshly fetched main

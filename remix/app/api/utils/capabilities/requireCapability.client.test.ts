@@ -129,7 +129,7 @@ test('owned-plan clients negotiate each new operation and reject pre-admission o
   for (const [feature, minimum, old] of [
     ['api.ai-models', '1.8.0', '1.7.0'], ['api.lopu-chats', '1.7.0', '1.6.0'],
     ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0'],
-    ['api.lopu-chats-reply', '1.23.1', '1.23.0']
+    ['api.lopu-chats-reply', '1.23.1', '1.23.0'], ['api.lopu-chats-reply', '1.23.2', '1.23.1']
   ]) {
     for (const version of [undefined, old, '2.0.0', minimum, '1.99.0']) {
       const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { [feature]: { version } } : {} }));

@@ -1,0 +1,161 @@
+{
+  "observedAt": "2026-11-11T09:19:31.998Z",
+  "scope": "Final merged-source no-login draft UI against real built assets; no MCP/provider/deployment/native-install claim",
+  "sourceAssociation": {
+    "head": "b7f27c39b20ffb76e13df261270d972337f3d7d3",
+    "fetchedMain": "5809d02e9e5a6e2530696ac1103946b2b03f68b9",
+    "files": {
+      "remix/app/components/Kinds/HtmlThingRenderer.tsx": "fde2722e52d22460e1a53a3aa208463d7aecb8fe649758a868ce197126577bda",
+      "remix/app/components/Builder/WebpageBlocksRenderer.tsx": "e6b4e0ee3663ba42ad4d5948ca9e673a85ac0fe7d64f1dca7927501d22f83162",
+      "remix/app/draftPreview/entry.tsx": "90acdbae2e01f637b6e13b09c139222919dde45a1228c8e76d28d7e5a3da6385",
+      "remix/app/draftPreview/prepare.ts": "5a7d7c905a4ecaa2b36fd409a465464c84f83fc8ee37bf58a2795ecb1913f6e3",
+      "remix/vite.draft.config.ts": "add86e141fb94b50da86e62f9f4346aa576039c9c41ab93e0d0eed56ca207092"
+    }
+  },
+  "runnerSha256": "1d86529a152cee95b5e467f52325292be023cab016a9f54de3ea06c069e829a4",
+  "htmlSha256": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+  "policySha256": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+  "fixtureSha256": "b442fb14997f943b1b31a2f01f37b07d20d73d2ef82b429931f038f4fc7fa215",
+  "policy": "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads",
+  "chromiumSandbox": true,
+  "cleanContext": true,
+  "requests": [
+    "http://127.0.0.1:50057/draft-preview/index.html",
+    "http://127.0.0.1:50057/draft-preview/runner.js",
+    "http://127.0.0.1:50057/draft-preview/index.html",
+    "http://127.0.0.1:50057/draft-preview/runner.js"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "documentWidth": 1440,
+      "card": {
+        "x": 520,
+        "y": 220,
+        "width": 400,
+        "height": 560,
+        "right": 920,
+        "bottom": 780
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap",
+      "overflow": false,
+      "exact": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me."
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "documentWidth": 390,
+      "card": {
+        "x": 24,
+        "y": 182.59375,
+        "width": 342,
+        "height": 478.796875,
+        "right": 366,
+        "bottom": 661.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap",
+      "overflow": false,
+      "exact": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me."
+    },
+    {
+      "width": 320,
+      "height": 844,
+      "documentWidth": 320,
+      "card": {
+        "x": 24,
+        "y": 231.59375,
+        "width": 272,
+        "height": 380.796875,
+        "right": 296,
+        "bottom": 612.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap",
+      "overflow": false,
+      "exact": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me."
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "thingtime-draft.json",
+      "bytes": 2081,
+      "sha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4"
+    },
+    {
+      "name": "editor-1440x1000.png",
+      "bytes": 216408,
+      "sha256": "f5852cb06f029fa385bc83e23dffffaac0439147121e0a02181ae97c1206a731",
+      "width": 1440,
+      "height": 2024
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "bytes": 122808,
+      "sha256": "3d4b01b805da7fe4ca5bd053f016c705de9da62cd30e99278f28564ee1bfe4b6",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "card.png",
+      "bytes": 101897,
+      "sha256": "a6e9686439ed0f4f35c852c261f0ad669bc9930a57202b2edd1287cb38e0663c",
+      "width": 400,
+      "height": 560
+    },
+    {
+      "name": "editor-390x844.png",
+      "bytes": 168082,
+      "sha256": "e8b9695fef4c86e72880b47e075c32517e3f7fae14d3c204db220ee39c4699ab",
+      "width": 390,
+      "height": 2108
+    },
+    {
+      "name": "viewport-390x844.png",
+      "bytes": 84324,
+      "sha256": "88d3c8f949d7077a7057bed07cb0bdb68220910d21f4db5a34f6c3fd6495b745",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "name": "editor-320x844.png",
+      "bytes": 149678,
+      "sha256": "a9ae297d7e0c77f95885e5306a8f751c59bf49273dc1be75e54943e638755311",
+      "width": 320,
+      "height": 2228
+    },
+    {
+      "name": "viewport-320x844.png",
+      "bytes": 61521,
+      "sha256": "ad97da06f748a0faed18c14b80928ef7c43a14d1b28e905912af427ca0e24f19",
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "ok": true,
+  "browserClosed": true,
+  "serverClosed": true,
+  "chromiumVersion": "149.0.7827.55",
+  "exactText": true,
+  "opaqueStorageDenied": true,
+  "componentComplete": true,
+  "jsonSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "lastGoodPreviewRetained": true,
+  "invalidJsonRejected": true,
+  "emptyAfterReload": true,
+  "privateApiRequests": 0,
+  "visualInspection": {
+    "observedAt": "2026-11-11T09:20:50.890Z",
+    "files": [
+      "viewport-1440x1000.png",
+      "viewport-390x844.png",
+      "viewport-320x844.png",
+      "card.png"
+    ],
+    "result": "Complete text and authored line breaks; centered card at desktop and narrow sizes, 24px narrow margins and no overflow/clipping/overlap observed."
+  }
+}

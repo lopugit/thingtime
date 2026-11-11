@@ -4,6 +4,9 @@ This checkpoint combines fetched main `b3374a16d23994dd3c1c355d75d3fe730321a284`
 with the feature branch and its preserved native update work. It does not merge
 PR #1000 into main, activate production or replace the stable Thingtime app.
 
+Latest main subsequently advanced to `5809d02e9`; the [final refresh addendum](main5809.md)
+records its separate checks. The evidence below retains its tested source association.
+
 ## Current capabilities
 
 - No-login editable transfer input, actual Thingtime rendering and portable

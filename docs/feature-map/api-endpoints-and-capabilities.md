@@ -50,7 +50,7 @@ acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
 Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.
 
 The combined contract distinguishes main’s existing features from the local-first
-receipt additions: `api.things` 1.62.0, `api.things-search` 1.7.0,
+receipt additions: `api.things` 1.63.0, `api.things-search` 1.7.0,
 `api.attachment-content` 1.20.0,
 `api.attachment-link` 1.3.0, `api.attachment-upload-abort` 1.4.0,
 `api.attachment-delete` 1.9.0 and
@@ -61,6 +61,19 @@ must not run a restored held definition through a local adapter. Keep both
 manifest generators and the direct account transport’s requirement map aligned.
 Run `test:api-capabilities`, the affected local-workspace transport/cache tests,
 and built-origin negotiation before acceptance.
+
+`api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
+for recognized structured billing, spend-limit, model-access and unsupported
+parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;
+unknown errors retain status only. No raw upstream body is returned or logged.
+Personal-provider chat clients negotiate this patch. Run `test:anthropic-api-key`,
+`test:lopu-chat-streaming`, and `test:api-capabilities`.
+
+Connections feed 2.0.2 identifies exact Facebook Graph HTTP 400 code 200/subcode
+2069030 as a New Pages Experience endpoint/account restriction using fixed copy.
+Diagnostics 1.0.1 retains `permission-denied` for that restriction independently
+of confirmed grants. Existing client shapes and minimum ranges remain compatible.
+Run `test:connections` and the compiled Connections smoke after building.
 
 Device sync control 1.5.0 adds config-scoped activity and paged receipt history
 to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
