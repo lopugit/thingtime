@@ -23,6 +23,7 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     var minimumPartBytes: Int64?
     var pendingOriginals: Int?
     var unavailableOriginals: Int?
+    var unavailableReasons: [String: Int]?
     // Older builds used this for the OS callback. New writes keep policy
     // pause separate and recover old holds only after fresh authorization.
     var continuedHold: Bool?
@@ -129,7 +130,7 @@ final class NativePhotoExecutionLease {
         }
     }
     func attach(_ task: NativeDeferredUploadSystemTask) -> Bool {
-        guard !finished, system == nil else { return false }
+        guard !finished, system == nil, task.available else { return false }
         system = task
         task.expiration = { [weak self] in
             guard let self else { return }
@@ -150,8 +151,8 @@ final class NativePhotoExecutionLease {
     func continuedProgress(completed: Int64, total: Int64?, subtitle: String) {
         continued?.work(completed: completed, total: total, subtitle: subtitle)
     }
-    func finishContinued(_ success: Bool) {
-        let previous = continued; continued = nil; previous?.finish(success: success)
+    func finishContinued(_ success: Bool, settledSubtitle: String? = nil) {
+        let previous = continued; continued = nil; previous?.finish(success: success, settledSubtitle: settledSubtitle)
     }
     private var canExecute: Bool {
         !finished && (system != nil || continuedActive || assertion != .invalid || foregroundAllowed && applicationState() != .background)

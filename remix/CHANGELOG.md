@@ -147,7 +147,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-11: Bind saved Component instance arguments explicitly to parent rows,
   preserve bindings through editable expansion, and keep nested Component
-  Actions and field submissions on their own live surface. **Codex (AI)**
+  Actions and field submissions on their own live surface. See [PR 1465 evidence](../PRs/1465-codex-component-row-argument-bindings-reusable-component-arguments.md). **Codex (AI)**
+- 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
+  settings. Add the explicit canonical background-file transfer contract,
+  preserve automatic recovery after system interruption and saved-settings
+  authority holds, retain Pause and authorization boundaries, and distinguish
+  deferred work from a failed continued task. Simulator logic and physical
+  background execution remain separate acceptance gates. See [PR 1466 evidence](../PRs/1466-codex-ios-photos-background-hardening-keep-photos-transfers-running.md). **Codex (AI)**
 
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**

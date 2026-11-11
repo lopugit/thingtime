@@ -6,6 +6,7 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        NativeBackgroundPhotoUpload.shared.activate()
         NativeUploadBackgroundCoordinator.shared.activate()
         NativeDeferredUpload.shared.activate(foreground: application.applicationState != .background)
         MobileDeviceBackgroundPresence.shared.activate()
@@ -16,6 +17,11 @@ final class ThingtimeAppDelegate: NSObject, UIApplicationDelegate, UNUserNotific
         UNUserNotificationCenter.current().delegate = self
         ThingtimeNativeNotifications.shared.activate()
         return true
+    }
+
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        if !NativeBackgroundPhotoUpload.shared.handleEvents(identifier: identifier, completion: completionHandler) { completionHandler() }
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
