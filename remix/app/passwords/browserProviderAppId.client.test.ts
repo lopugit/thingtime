@@ -7,13 +7,13 @@ test('AppID client negotiates both current origin and active API before any vaul
   const origin='https://appid-capability.test';
   const previousWindow=globalThis.window,previousFetch=globalThis.fetch;
   Object.defineProperty(globalThis,'window',{value:{location:{origin}},configurable:true,writable:true});
-  let activeVersion='1.8.0',vaultCalls=0;const urls:string[]=[];
-  globalThis.fetch=async input=>{const url=String(input);urls.push(url);return Response.json(url.endsWith('/api/v1/capabilities')?{ok:true,schemaVersion:1,features:{'api.passwords':activeVersion}}:{schemaVersion:1,origin,features:{'api.passwords':{version:'1.9.0'}}});};
-  const request:ProviderRequest={version:1,id:crypto.randomUUID(),type:'get',origin:'https://site.example.com',publicKey:{challenge:'AQID',rpId:'example.com',extensions:{appid:'https://site.example.com/legacy'}}};
+  let activeVersion='1.9.0',vaultCalls=0;const urls:string[]=[];
+  globalThis.fetch=async input=>{const url=String(input);urls.push(url);return Response.json(url.endsWith('/api/v1/capabilities')?{ok:true,schemaVersion:1,features:{'api.passwords':activeVersion}}:{schemaVersion:1,origin,features:{'api.passwords':{version:'1.9.1'}}});};
+  const request:ProviderRequest={version:1,id:crypto.randomUUID(),type:'get',origin:'https://site.example.com',publicKey:{challenge:'AQID',rpId:'example.com',extensions:{appid:'https://example.com/legacy'}}};
   try {
     await assert.rejects(runProviderCeremony(request,'',null,async()=>{vaultCalls++;throw Error('vault boundary');},new AbortController().signal),/incompatible/);
     assert.equal(vaultCalls,0);
-    activeVersion='1.9.0';await ensureBrowserProvider(new AbortController().signal,request);
+    activeVersion='1.9.1';await ensureBrowserProvider(new AbortController().signal,request);
     assert.deepEqual(urls,['/.well-known/thingtime-capabilities.json',origin+'/api/v1/capabilities',origin+'/api/v1/capabilities']);
     const registration=await prepareBrowserPasskeyRegistration({type:'create',origin:request.origin,publicKey:{challenge:'AQID',rp:{id:'example.com',name:'Fixture'},user:{id:'BAUG',name:'fixture',displayName:'Fixture'},pubKeyCredParams:[{type:'public-key',alg:-7}]}},true,[]);
     const selection={id:'selected',relyingParty:'example.com',credentialId:registration.response.id};

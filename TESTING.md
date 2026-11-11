@@ -15979,10 +15979,18 @@ projection, which requires 2.3. Retain both actual preview manifests separately.
 
 Run the passkey/provider/client and extension suites, then
 `THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-module> node browser-extension/test/appid-browser.mjs <evidence-dir>`.
+Also run `browser-extension/test/appid-extension-browser.mjs` with the same
+Playwright settings. It loads the entire packaged MV3 extension with a loopback
+synthetic provider, checks real content/runtime messaging and popup cleanup, and
+independently verifies the resulting ES256 signature. Browser binaries may be
+selected with `THINGTIME_TEST_CHROMIUM_EXECUTABLE`.
 The isolated synthetic Chromium fixture must preserve AppID through serialization,
 return appid:false, verify the real ES256 assertion independently against the
-ordinary RP ID, and delegate an unsupported cross-origin request unchanged.
-Reject credential-bearing/HTTP/cross-origin/fragment/malformed AppIDs, unknown or
+ordinary RP ID, and delegate an unsupported cross-site request unchanged. Include
+an AWS-shaped signin.aws.amazon.com request with an aws.amazon.com AppID path,
+unchanged RP/allowlist/discouraged UV, parent/sibling hosts and same-host ports.
+Reject credential-bearing/HTTP/cross-site/public-suffix/fragment/malformed AppIDs,
+ICANN/private suffix tenant escapes (co.uk, github.io and s3.amazonaws.com), unknown or
 mixed extensions, registration AppID, wrong RP and excluded credentials. Preserve
 fresh verification and reject changed request/session state. A newer frontend
 with an older active API must refuse before any vault operation and permit a
