@@ -10,6 +10,7 @@ import {
 	LOPU_USER_VAULT_SYSTEM_TYPE,
 	normalizeLopuProviderEndpoint,
 	normalizeLopuProviderKind,
+	validateAnthropicApiKey,
 	safeVaultId,
 	safeVaultModelId,
 	type LopuProviderKind
@@ -245,6 +246,12 @@ export const saveUserVaultProvider = async (
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');
 	if (!existing && !token) throw new Error('A provider token is required when creating a connection.');
+ if (provider === 'anthropic-api-key') {
+  if (endpoint !== 'https://api.anthropic.com') throw new Error('Anthropic Console connections require https://api.anthropic.com.');
+  // Mode changes require a fresh credential; never silently reuse an OAuth token.
+  if (!token && existing?.crystal.provider !== provider) throw new Error('Supply a Console API key when changing the connection type.');
+  if (token) validateAnthropicApiKey(token);
+ }
 	const shareId = existing?.shareId || randomUUID();
 	const now = new Date().toISOString();
 	const encryptedValue = token ? encryptValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;

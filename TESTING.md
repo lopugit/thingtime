@@ -8560,6 +8560,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
+- [ ] On a failed YouTube sync, distinguish disabled YouTube Data API v3,
+      missing read permission, invalid/expired authorization and exhausted quota
+      using fixed redacted diagnostics. Unknown, malformed and oversized upstream
+      errors must remain generic; never show upstream messages, tokens, URLs or
+      trace IDs. Facebook errors distinguish request/field, permission and
+      authorization categories without claiming which field failed.
+- [ ] Verify all YouTube uploads-playlist requests failing records a sync error;
+      a successful empty playlist remains an empty success, and a partial failure
+      preserves successfully fetched uploads. Synthetic regression coverage:
+      `providerErrors.test.ts`; real-provider acceptance is separate.
+
+
 Automated first: `pnpm --dir remix run verify:connections` (94 real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
