@@ -33,6 +33,8 @@ import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
 import { automaticThingCloudSyncAllowed } from '../things/thingStoragePolicy';
 import { cloudInventoryAccess, readCloudInventoryRoot, readCloudPath } from './inventory';
 
+import { SourceIndexDiscarded, parseSourceIndexPage, writeSourceIndex, ownerSourceIndex, listSourceIndexes } from './sourceIndex';
+
 const PHOTO_RUN_PURPOSE = 'file-sync-photo-run' as const;
 export const TRANSFER_SESSION_PURPOSE = 'file-sync-transfer' as const;
 const id = (value: unknown, max = 200): value is string =>
@@ -303,6 +305,16 @@ export async function transferAdmission(input: {
 		if (!found || found.row.userId !== ownerId || found.meta.binding.deviceSessionId !== deviceSessionId || !live(found.row, Date.now())) return null;
 		return found;
 	};
+	if (raw.action === 'read-source-index' || raw.action === 'discard-source-index' || raw.action === 'list-source-indexes') {
+        if (!owner) return fail(401, 'An owning browser session is required');
+        try {
+            const index = await withHomeMongoTransaction<unknown>(session => (raw.action === 'list-source-indexes' ? listSourceIndexes : ownerSourceIndex)(things, session, owner.userId, origin, raw));
+            return { ok: true, index };
+        } catch (error) {
+            if (error instanceof StorageMutationError) return fail(error.status, error.message);
+            throw error;
+        }
+    }
 	if (raw.action === 'open-photo-run') {
 		if (!owner) return fail(401, 'An owning browser session is required');
 		if (!owner.uploadsEnabled) return fail(403, 'Private uploads are not approved for this account');
@@ -353,10 +365,13 @@ export async function transferAdmission(input: {
 			throw error;
 		}
 	}
-	if (raw.action === 'reserve-photo-original' || raw.action === 'revoke-photo-run' || raw.action === 'check-photo-run') {
+	if (raw.action === 'reserve-photo-original' || raw.action === 'revoke-photo-run' || raw.action === 'check-photo-run' || raw.action === 'observe-photo-index') {
 		const revoking = raw.action === 'revoke-photo-run';
 		const checking = raw.action === 'check-photo-run';
-		const allowed = revoking || checking ? ['action', 'runId'] : ['action', 'runId', 'path', 'sourceVersion', 'sizeBytes', 'fingerprint', 'guardedReplacement'];
+		const indexing = raw.action === 'observe-photo-index';
+        const indexPage = indexing ? parseSourceIndexPage(raw) : null;
+        if (indexing && !indexPage) return fail(400, 'Invalid source index page');
+        const allowed = indexing ? ['action','runId','epoch','passId','sequence','requestId','entries','progress'] : revoking || checking ? ['action', 'runId'] : ['action', 'runId', 'path', 'sourceVersion', 'sizeBytes', 'fingerprint', 'guardedReplacement'];
 		if (Object.keys(raw).some(key => !allowed.includes(key)) || !photoRunKey(raw.runId)) return fail(400, 'Invalid Photos run request');
 		const handle = raw.runId as string, found = await readRun(handle);
 		if (!found) return missing();
@@ -374,6 +389,46 @@ export async function transferAdmission(input: {
 		]);
 		if (!ownerSession || !pairing || !attached) return expired();
 		if (!config || digest(config) !== binding.configDigest || !isPhotoBackup(config) || config.resourceLimits || config.ignoreRules) return configurationChanged();
+        const fencePhotoRun = async (session: any) => {
+                    const token = randomUUID(), date = new Date();
+                    const refuse = (): never => { throw new StorageMutationError(409, 'storage_conflict', 'Source index authority changed'); };
+                    for (const filter of [
+                        { ...runFilter(row.jti), userId: row.userId, 'meta.handle': handle, revokedAt: null, expiresAt: { $gt: date } },
+                        { jti: binding.deviceSessionId, userId: row.userId, purpose: 'device', 'meta.deviceId': binding.deviceId, revokedAt: null, expiresAt: { $gt: date } },
+                        { jti: binding.ownerSessionId, userId: row.userId, purpose: { $in: ['browser', null] }, revokedAt: null,
+                            $or: [{ expiresAt: null }, { expiresAt: { $gt: date } }] }
+                    ]) {
+                        const locked = await sessions.updateOne(filter as any, { $set: { 'meta.fileSyncPublicationFence': token } }, { session, signal });
+                        if (locked.matchedCount !== 1) refuse();
+                    }
+                    if (!(await fencePrivateUploadPermission(row.userId, token, session, signal))) refuse();
+                    const device = await things.updateOne({ shareId: binding.deviceId, ownerId: row.userId, thingtime: 'device', 'crystal.platform': 'ios' },
+                        { $set: { fileSyncPublicationFence: token } }, { session, signal });
+                    if (device.matchedCount !== 1) refuse();
+                    const fresh = await readConfiguration(row.userId, binding, signal, { session, token });
+                    if (!fresh || digest(fresh) !== binding.configDigest || !isPhotoBackup(fresh)) refuse();
+                    const root = await readCloudInventoryRoot(things, session, row.userId, binding.folderId, () => 5000, signal);
+                    const locked = await things.updateOne({ shareId: root.shareId, ownerId: row.userId }, { $set: { fileSyncPublicationFence: token } }, { session, signal });
+                    if (locked.matchedCount !== 1) refuse();
+        };
+		if (indexing && indexPage) {
+            try {
+                return await withHomeMongoTransaction(async session => {
+                    await fencePhotoRun(session);
+                    const scope = { origin, ownerId: row.userId, configurationId: binding.configurationId,
+                        configurationRevision: binding.configurationRevision, deviceId: binding.deviceId,
+                        localRootId: binding.localRootId, grantRevision: binding.grantRevision, folderId: binding.folderId };
+                    const receipt = await writeSourceIndex(things, session, scope, indexPage);
+                    signal.throwIfAborted();
+                    if (row.expiresAt!.getTime() <= Date.now()) throw new StorageMutationError(410, 'storage_conflict', 'Source index authority expired');
+                    return { ok: true, receipt };
+                });
+            } catch (error) {
+                if (error instanceof SourceIndexDiscarded) return { ...fail(409, error.message), code: 'source_index_discarded' };
+                if (error instanceof StorageMutationError) return fail(error.status, error.message);
+                throw error;
+            }
+        }
 		if (checking) {
 			try {
 				await withHomeMongoSnapshot(session => readCloudInventoryRoot(things, session, row.userId, binding.folderId, () => 5000, signal));
@@ -394,7 +449,25 @@ export async function transferAdmission(input: {
 		if (existing?.kind === 'file' && !existing.symbolicLink && existing.size === sizeBytes && existing.fingerprint &&
 			equalContentFingerprints(existing.fingerprint, fingerprint)) {
 			if (!(await liveRun(handle, row.userId, binding.deviceSessionId))) return expired();
-			return { ok: true as const, state: 'already-backed' as const };
+            // Old native publications lacked a source-version stamp. Establish
+            // it only from this exact currently verified file/fingerprint and
+            // immutable native provenance, with the same transactional fences.
+            await withHomeMongoTransaction(async session => {
+                await fencePhotoRun(session);
+                const file = await things.findOne({ shareId: existing.id, ownerId: row.userId, thingtime: 'file',
+                    folderId: binding.folderId, timelineHeadId: existing.version, 'crystal.name': path, 'crystal.trashed': false }, { session, signal });
+                if (!file || !equalContentFingerprints(file.crystal.content.fingerprint, fingerprint)) throw new StorageMutationError(409, 'storage_conflict', 'Verified Photos file changed');
+                const attachment = await things.findOne({ shareId: file.crystal.content.attachmentId, ownerId: row.userId,
+                    thingtime: 'attachment', targetId: file.shareId, attachmentState: 'ready' }, { session, signal });
+                const provenance = { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId,
+                    cloudRootId: binding.folderId, fileId: file.shareId, folderId: binding.folderId, path };
+                if (attachment && sameFileSyncUploadOrigin(attachment.attachmentFileSyncOrigin, provenance) &&
+                    file.crystal.content.version === attachmentContentVersion(attachment.shareId, attachment.objectKey, attachment.objectVersionId)) {
+                    await things.updateOne({ _id: attachment._id, ownerId: row.userId }, { $set: { fileSyncSourceGrant: {
+                        localRootId: binding.localRootId, grantRevision: binding.grantRevision, sourceVersion } } }, { session, signal });
+                }
+            });
+            return { ok: true as const, state: 'already-backed' as const };
 		}
 		if (existing) {
 			const conflict = () => ({ ...fail(409, 'The Photos destination path requires review'), code: 'photo_path_conflict' });
@@ -690,7 +763,7 @@ export async function transferAdmission(input: {
 					name: provenance.path, folderId: provenance.folderId, attachmentId: a.uploadId,
 					contentVersion: attachmentContentVersion(a.uploadId, doc.objectKey, doc.objectVersionId),
 					trashed: false, syncDestination: { rootId: config.remoteFolderId, path: provenance.path }
-				}, { session, expectedFingerprint: a.fingerprint, syncSourceGrant: { localRootId: a.localRootId, grantRevision: a.grantRevision } });
+				}, { session, expectedFingerprint: a.fingerprint, syncSourceGrant: { localRootId: a.localRootId, grantRevision: a.grantRevision, sourceVersion: a.sourceVersion } });
 				if (!result.ok) return refuse(fail(result.status, result.error));
 				if (meta.authorizationExpiresAt.getTime() <= Date.now()) return refuse(expired());
 				signal.throwIfAborted();

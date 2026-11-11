@@ -177,7 +177,7 @@ final class NativePhotoRunActivity: @unchecked Sendable {
         case .stateChanged: return .transferState
         case .configurationChanged: return .savedSettings
         case .destinationChanged: return .destinationReview
-        case .invalid, .incompatible, .partsRetryable, .unavailable: return .cloudRequest
+        case .sourceIndexDiscarded, .invalid, .incompatible, .partsRetryable, .unavailable: return .cloudRequest
         case nil: return .retry
         }
     }

@@ -46,6 +46,22 @@ final class NativeFileUploadJobTests: XCTestCase {
         return (NativeUploadFileRequest(source: source, uploadId: "upload", requestId: "operation", authorization: try authorization()), digest)
     }
 
+    func testSourceIndexRotationReconcilesStaleJournalWithoutChangingByteEpoch() throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        var run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),
+            grantRevision: String(repeating: "a", count: 64), runId: "run", expiresAt: Date().addingTimeInterval(3600))
+        let byteEpoch = run.epoch
+        try run.recordSourceIndexReceipt(indexId: "old-index", metadataEpoch: "old-metadata", sequence: 40)
+        // Durable outbox rotation happened, but its journal checkpoint did not.
+        let data = try JSONEncoder().encode(run)
+        var restarted = try JSONDecoder().decode(NativePhotoRunRecord.self, from: data)
+        try restarted.recordSourceIndexReceipt(indexId: "new-index", metadataEpoch: "new-metadata", sequence: 1)
+        XCTAssertEqual(restarted.epoch, byteEpoch)
+        XCTAssertEqual(restarted.sourceIndexId, "new-index")
+        XCTAssertEqual(restarted.sourceIndexAcknowledgedSequence, 1)
+        XCTAssertThrowsError(try restarted.recordSourceIndexReceipt(indexId: "wrong-index", metadataEpoch: "new-metadata", sequence: 2))
+    }
+
     func testPhotoRunStoreReloadsThroughDirectoryAliasAndRejectsWrongKey() throws {
         let files = FileManager.default
         let directory = files.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -16223,3 +16223,25 @@ never print the file-download JSON, encryption metadata or signed URL.
   `NativePhotoTransferPolicyTests`/`NativeFolderUploadPolicyTests`, and
   `node remix/scripts/test-folder-upload-limits-ui.mjs`. Real native byte and
   installed-device acceptance are separate from mocks and test-bundle builds.
+
+### Incremental Photos source index (12 November 2026)
+
+- Negotiate transfer-admissions1.8.0 on the exact origin; older origins retain
+  the outbox and report unavailable indexing. Discover the newest asset and
+  inspect the private server index before any original publication.
+- Restart with an uncertain metadata reply; require the exact same page/request
+  identity, one charged observation per resource, and no duplicate file/Timeline
+  revision. Exercise unavailable cloud/read originals and subsequent recovery.
+- Page a growing scan using its discovery watermark; appends and status updates
+  preserve cursor progress. A pass change explicitly invalidates the cursor.
+  Partial metadata and missing records never seal a complete scan or claim zero
+  unknown resources. Separate local discovery from cloud acknowledgements.
+- Verify wrong device/owner/origin, Pause, revocation, config revision, destination
+  privacy and quota failures refuse metadata writes. Owner reads remain private
+  and available after Pause/expiry. Old unstamped saved copies are unknown until
+  a verified same-scope already-backed check establishes proof without uploading.
+- Discard a multi-page index, retry cleanup, and reject late writes to its
+  tombstone. Delete a disposable configuration through the canonical API and
+  verify index children and their accounted bytes cascade without orphaning.
+- Run native outbox/discovery tests, parser/manifests and built HTTP transfer
+  fixture. Simulator/build evidence does not establish physical background work.

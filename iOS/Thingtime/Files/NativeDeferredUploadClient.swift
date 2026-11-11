@@ -8,10 +8,11 @@ final class NativeDeferredUploadClient {
     static let path = "/api/v1/files/sync-transfer-admissions"
     static let feature = "api.file-sync-transfer-admissions"
     enum Failure: Error, LocalizedError {
-        case incompatible, invalid, denied, expired, missing, stateChanged, configurationChanged, destinationChanged, partsRetryable, unavailable, photoPathConflict
+        case sourceIndexDiscarded, incompatible, invalid, denied, expired, missing, stateChanged, configurationChanged, destinationChanged, partsRetryable, unavailable, photoPathConflict
         var terminal: Bool { [.incompatible, .invalid, .denied, .expired, .missing, .stateChanged, .configurationChanged, .destinationChanged].contains(self) }
         var errorDescription: String? {
             switch self {
+            case .sourceIndexDiscarded: return "The pending Photos index was discarded. Its metadata will be rebuilt; saved copies are kept."
             case .denied: return "The paired device could not authorize this background transfer."
             case .expired: return "Background transfer authorization expired or was revoked."
             case .missing: return "The exact background transfer authorization is no longer available."
@@ -26,6 +27,7 @@ final class NativeDeferredUploadClient {
         }
     }
     enum Operation: String, Codable, Sendable {
+        case observePhotoIndex = "observe-photo-index"
         case manifest, checkPhotoRun = "check-photo-run", reservePhotoOriginal = "reserve-photo-original"
         case parts, complete, publish, revoke, revokePhotoRun = "revoke-photo-run", localGrant = "local-grant", queue
     }
@@ -60,7 +62,7 @@ final class NativeDeferredUploadClient {
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
     init(photoRun: NativePhotoRunRecord) {
-        record = nil; scope = photoRun.scope; deviceId = photoRun.authorization.scope.deviceId; minimum = photoRun.nativeOwnsRun ? [1, 3, 0] : [1, 2, 0]
+        record = nil; scope = photoRun.scope; deviceId = photoRun.authorization.scope.deviceId; minimum = photoRun.nativeOwnsRun ? [1, 8, 0] : [1, 2, 0]
         let configuration = Self.configuration(allowsCellular: photoRun.authorization.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
@@ -104,6 +106,15 @@ final class NativeDeferredUploadClient {
         guard record == nil else { throw Failure.invalid }
         try await requireCapability()
         return try await read(Self.path, body: body)
+    }
+
+    func publishSourceIndex(_ page: PhotoSourceIndexPage, runId: String) async throws -> String {
+        var body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(page)) as! [String: Any]
+        body["action"] = "observe-photo-index"; body["runId"] = runId
+        let result = try await photoRunRequest(body)
+        guard let receipt = result["receipt"] as? [String: Any], receipt["sequence"] as? Int == page.sequence,
+              receipt["requestId"] as? String == page.requestId, let indexId = receipt["indexId"] as? String, indexId.range(of: "^sync-source-index-[a-f0-9]{64}$", options: .regularExpression) != nil else { throw Failure.invalid }
+        return indexId
     }
 
     private func validatePublication(_ result: [String: Any]) throws {
@@ -179,7 +190,7 @@ final class NativeDeferredUploadClient {
         if [401, 403].contains(http.statusCode) { throw Failure.denied }
         if http.statusCode == 404 { throw Failure.missing }
         if http.statusCode == 410 { throw Failure.expired }
-        if http.statusCode == 429 || http.statusCode >= 500 { throw Failure.unavailable }
+        if http.statusCode == 413 || http.statusCode == 429 || http.statusCode >= 500 { throw Failure.unavailable }
         var data = Data()
         for try await byte in bytes {
             try Task.checkCancellation()
@@ -200,6 +211,7 @@ final class NativeDeferredUploadClient {
     static func conflictFailure(_ result: [String: Any]?) -> Failure {
         let error = result?["error"] as? [String: Any]
         let code = result?["code"] as? String ?? error?["code"] as? String
+        if code == "source_index_discarded" { return .sourceIndexDiscarded }
         if code == "sync_configuration_changed" { return .configurationChanged }
         if code == "sync_destination_changed" { return .destinationChanged }
         if result?["code"] as? String == "photo_path_conflict" || error?["code"] as? String == "photo_path_conflict" {

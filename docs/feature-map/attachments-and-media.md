@@ -1,5 +1,12 @@
 # Attachments and media
 
+Photos pending source discovery uses transfer-admissions 1.8.0. The live exact
+run writes sequenced metadata pages; full-owner `read-source-index` reads private
+atomic source Things without a run handle after Pause/expiry. See
+[the source-index contract](../sync-source-index.md), `sourceIndex.ts`, native
+`PhotoSourceIndexOutbox`, and the source-index cases in the built transfer
+admission fixture. Metadata never substitutes for verified Files publication.
+
 Ordinary iOS folder Backup uploads use independent `fileUploadPolicyVersion`
 1.1.0 and saved v5 `uploadPolicy`; they share Photos device/folder budgets without
 advertising CPU, scan or download enforcement. See

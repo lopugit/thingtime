@@ -409,6 +409,10 @@ final class NativeDeferredUpload {
             next.pendingOriginals = current.pendingOriginals; next.unavailableOriginals = current.unavailableOriginals; next.unavailableReasons = current.unavailableReasons
             next.foregroundOwner = current.nativeOwnsRun || proposed.nativeOwnsRun
             next.activity = current.activity
+            next.sourceIndexId = current.sourceIndexId
+            next.sourceIndexMetadataEpoch = current.sourceIndexMetadataEpoch
+            next.sourceIndexAcknowledgedSequence = current.sourceIndexAcknowledgedSequence
+            next.sourceIndexAcknowledgedAt = current.sourceIndexAcknowledgedAt
         }
         if let current, !current.armed, current.sameScope(proposed), current.authorization == proposed.authorization,
            current.stage == "needs-review", current.activity?.reason.map({
@@ -1211,6 +1215,29 @@ final class NativeDeferredUpload {
             _ = try await client.photoRunRequest(["action": "check-photo-run", "runId": proposed.runId])
             _ = try check()
         }
+        func flushSourceIndex() async throws {
+            guard startWithSingleAsset else { return }
+            while let page = try photos.pendingQueueSourceIndex(scope: photoScope, request: queue) {
+                _ = try check()
+                let indexId: String
+                do { indexId = try await client.publishSourceIndex(page, runId: proposed.runId) }
+                catch {
+                    if NativeDeferredUploadClient.failure(error) == .sourceIndexDiscarded {
+                        try photos.rotateQueueSourceIndex(scope: photoScope, request: queue)
+                        run.sourceIndexId = nil; run.sourceIndexMetadataEpoch = nil; run.sourceIndexAcknowledgedSequence = nil; run.sourceIndexAcknowledgedAt = nil
+                        try checkpoint()
+                        throw NativeDeferredUploadClient.Failure.unavailable
+                    }
+                    throw error
+                }
+                _ = try check()
+                try run.recordSourceIndexReceipt(indexId: indexId, metadataEpoch: page.epoch, sequence: page.sequence)
+                // Persist acknowledgement progress before retiring its outbox
+                // page. A crash between them replays the same safe request.
+                try checkpoint()
+                try photos.acknowledgeQueueSourceIndex(scope: photoScope, request: queue, page: page)
+            }
+        }
         let grant = try check()
         let control = conditions.control(for: authorization)
         let download = control?.reporting { fraction in
@@ -1277,6 +1304,14 @@ final class NativeDeferredUpload {
             run.retryCloudGaps = false; try checkpoint()
         }
 
+        if startWithSingleAsset, run.batch != nil {
+            try await flushSourceIndex()
+            let discovery = Task.detached { try photos.discoverQueueIndex(scope: photoScope, request: queue, activity: { progress in
+                if activity.capture(progress) { announce(false) }
+            }) }
+            try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+            try await flushSourceIndex()
+        }
         while true {
             try await authorize()
             if run.batch == nil { try await startCloudWork() }
@@ -1289,6 +1324,17 @@ final class NativeDeferredUpload {
                     try checkpoint()
                 }
                 let id = run.captureId!, selectedDeferred = preparedCloud
+                if startWithSingleAsset {
+                    try await flushSourceIndex()
+                    let discovery = Task.detached { try photos.discoverQueueIndex(scope: photoScope, request: queue, preparedDeferred: selectedDeferred, activity: { progress in
+                        if activity.capture(progress) {
+                            if case .enumerating(let discovery) = progress { announce(discovery.inspected == 1 && discovery.latest != nil) }
+                            else { announce(false) }
+                        }
+                    }) }
+                    try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+                    try await flushSourceIndex()
+                }
                 let preparation = Task.detached {
                     if let sealed = try photos.status(scope: photoScope, id: id, allowCloudGaps: true, queueRequest: queue) {
                         return sealed
@@ -1335,6 +1381,7 @@ final class NativeDeferredUpload {
                 run.unavailableReasons = batch.unavailableReasons
                 try checkpoint()
             }
+            try await flushSourceIndex()
             guard let batch = run.batch, let id = run.captureId else { throw MobileFolderStore.Failure.invalid }
             let staging = NativeUploadPartStaging(scope: run.scope, grant: grant, photos: photos, store: parts,
                 download: cloudWork == nil ? download : nil)
@@ -1347,9 +1394,19 @@ final class NativeDeferredUpload {
             defer { lookahead?.cancel() }
             func startLookahead() {
                 guard lookahead == nil else { return }
-                lookahead = Task.detached(priority: .utility) {
-                    try photos.prepareQueueLookahead(scope: photoScope, request: queue, batchId: batch.id,
-                        authorize: { try conditions.verify(authorization) })
+                lookahead = Task { @MainActor in
+                    let discovery = Task.detached(priority: .utility) {
+                        try photos.discoverQueueIndexLookahead(scope: photoScope, request: queue, batchId: batch.id)
+                    }
+                    try await withTaskCancellationHandler(operation: { try await discovery.value }, onCancel: { discovery.cancel() })
+                    // Only metadata waits here. Already accepted background
+                    // transfers retain their own canonical transport lifecycle.
+                    try await flushSourceIndex()
+                    let warm = Task.detached(priority: .utility) {
+                        try photos.prepareQueueLookahead(scope: photoScope, request: queue, batchId: batch.id,
+                            authorize: { try conditions.verify(authorization) })
+                    }
+                    try await withTaskCancellationHandler(operation: { try await warm.value }, onCancel: { warm.cancel() })
                 }
             }
             let process: @MainActor (MobileFolderReader.Entry) async throws -> Void = { [self] source in
@@ -1402,6 +1459,7 @@ final class NativeDeferredUpload {
                 lookahead.cancel()
                 _ = await withTaskCancellationHandler(operation: { await lookahead.result }, onCancel: { lookahead.cancel() })
             }
+            try await flushSourceIndex()
             try await authorize()
             let finish = Task.detached { try photos.finishQueueBatch(scope: photoScope, request: queue, batchId: batch.id) }
             try await withTaskCancellationHandler(operation: { try await finish.value }, onCancel: { finish.cancel() })

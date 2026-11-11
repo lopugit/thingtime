@@ -160,6 +160,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Persist pending Photos discovery incrementally through the approved
+  sync-run authority, with durable native metadata retries, private owner reads,
+  explicit partial counts and verified publication reconciliation. See
+  [source-index contract](../docs/sync-source-index.md). — **Codex (AI)**
+
 - 2026-11-12: Label current sync attempt bytes separately from the most recent
   measured saved attempt in loaded activity history. Keep unknown bytes unknown,
   preserve zero and per-attempt receipts, and clear old history synchronously

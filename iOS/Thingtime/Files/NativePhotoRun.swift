@@ -29,12 +29,26 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     var continuedHold: Bool?
     var userPaused: Bool?
     var activity: NativePhotoRunActivity.Snapshot?
+    var sourceIndexId: String?
+    var sourceIndexMetadataEpoch: String?
+    var sourceIndexAcknowledgedSequence: Int?
+    var sourceIndexAcknowledgedAt: Date?
 
     var rootId: String { authorization.configuration.localRootId }
     var queue: PhotoBackupQueueRequest { .init(epoch: epoch, configurationId: authorization.id, configurationRevision: authorization.updatedAt) }
     var photoScope: PhotoLibraryReader.Scope { .init(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId) }
     var nativeOwnsRun: Bool { foregroundOwner == true }
     var legacySystemInterruption: Bool { continuedHold == true && userPaused != true }
+    mutating func recordSourceIndexReceipt(indexId: String, metadataEpoch: String, sequence: Int, now: Date = Date()) throws {
+        guard sequence > 0, sourceIndexMetadataEpoch != metadataEpoch || sourceIndexId == nil || sourceIndexId == indexId else {
+            throw NativeDeferredUploadClient.Failure.invalid
+        }
+        // The durable outbox epoch wins over stale journal progress after a
+        // crash between metadata rotation and the run's checkpoint. It grants
+        // no authority; this exact receipt was already origin/run negotiated.
+        sourceIndexId = indexId; sourceIndexMetadataEpoch = metadataEpoch
+        sourceIndexAcknowledgedSequence = sequence; sourceIndexAcknowledgedAt = now
+    }
     func validate() throws {
         try authorization.validate(owner: scope, rootId: rootId, photos: true)
         guard scope == (try FileSyncOwnerScope(ownerId: scope.ownerId, url: scope.origin)),

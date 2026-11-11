@@ -45,6 +45,7 @@ final class PhotoBackupQueue {
         let stamp: Stamp
         let unavailable: [String]
         var reasonByPath: [String: String]?
+        var sourceVersions: [String: String]?
     }
     private struct Deferred: Codable {
         let stamp: Stamp
@@ -83,6 +84,7 @@ final class PhotoBackupQueue {
         var orderedCursor: OrderedPhotoCheckpoint?
         var remainingKnown: Bool?
         var priorReadFailures: Int?
+        var sourceTotal: Int?
     }
     struct Work {
         let assets: [Asset]
@@ -121,6 +123,54 @@ final class PhotoBackupQueue {
 
     init(directory: URL, request: PhotoBackupQueueRequest) {
         self.directory = directory; self.request = request
+    }
+    private var indexEnabled = false
+    private var cachedIndexOutbox: PhotoSourceIndexOutbox?
+    private var metadataEpochFile: URL { directory.appendingPathComponent("source-index-v1/epoch.json") }
+    private func sourceIndexOutbox() throws -> PhotoSourceIndexOutbox {
+        if let cachedIndexOutbox { return cachedIndexOutbox }
+        let epoch = try read(UUID.self, at: metadataEpochFile) ?? request.epoch
+        let outbox = PhotoSourceIndexOutbox(directory: directory.appendingPathComponent("source-index-v1/epochs/" + epoch.uuidString.lowercased(), isDirectory: true), epoch: epoch)
+        cachedIndexOutbox = outbox
+        return outbox
+    }
+    func rotateSourceIndex(afterBackfillIntent: () throws -> Void = {}) throws {
+        // Recovery intent must precede namespace activation. A failure here
+        // may repeat metadata discovery in the old epoch, but cannot activate
+        // a fresh epoch while skipping its acknowledged source prefix.
+        try write(true, at: directory.appendingPathComponent("source-index-v1/backfill-after-selection.json"))
+        try afterBackfillIntent()
+        let epoch = UUID()
+        try write(epoch, at: metadataEpochFile)
+        cachedIndexOutbox = nil
+        if !FileManager.default.fileExists(atPath: selectedFile.path) {
+            if FileManager.default.fileExists(atPath: cursorFile.path) { try FileManager.default.removeItem(at: cursorFile) }
+            orderedSelection = nil
+        }
+    }
+    func sourceIndexPendingCount() throws -> Int { try sourceIndexOutbox().pendingCount() }
+    func enableSourceIndex() throws {
+        indexEnabled = true
+        let marker = directory.appendingPathComponent("source-index-v1/enabled.json")
+        if !FileManager.default.fileExists(atPath: marker.path) {
+            // One metadata backfill on upgrade; acknowledged originals keep
+            // their byte receipts and will not be uploaded again.
+            if FileManager.default.fileExists(atPath: selectedFile.path) {
+                try write(true, at: directory.appendingPathComponent("source-index-v1/backfill-after-selection.json"))
+            } else if FileManager.default.fileExists(atPath: cursorFile.path) { try FileManager.default.removeItem(at: cursorFile) }
+            orderedSelection = nil
+            try write(true, at: marker)
+        }
+    }
+    func pendingSourceIndex() throws -> PhotoSourceIndexPage? { try sourceIndexOutbox().first() }
+    func acknowledgeSourceIndex(_ page: PhotoSourceIndexPage) throws { try sourceIndexOutbox().acknowledge(page) }
+    private func observe(_ resources: [PhotoResource], cursor: OrderedPhotoCheckpoint, total: Int,
+                         unavailable: Set<String> = [], reasons: [String: String] = [:], sourceVersions: [String: String] = [:], legacyUnverified: Set<String> = []) throws {
+        guard indexEnabled else { return }
+        let inspected = cursor.dated + cursor.undated
+        try sourceIndexOutbox().append(resources, passId: (cursor.passID ?? request.epoch).uuidString.lowercased(),
+            progress: .init(inspectedAssets: inspected, totalAssets: total, indexedResources: cursor.indexed.files, complete: inspected == total),
+            unavailable: unavailable, reasons: reasons, sourceVersions: sourceVersions, legacyUnverified: legacyUnverified)
     }
     private var selectedFile: URL { directory.appendingPathComponent("current.json") }
     private var deferredDirectory: URL { directory.appendingPathComponent("deferred-originals", isDirectory: true) }
@@ -312,13 +362,25 @@ final class PhotoBackupQueue {
 
     func selectOrdered(provider: any OrderedPhotoResourceProvider, replaceStale: Bool, preparedDeferred: PhotoResource? = nil,
                        progress: (PhotoLibraryReader.InventoryProgress) -> Void) throws -> Work {
-        if let retained = try read(Selection.self, at: selectedFile) {
+        if var retained = try read(Selection.self, at: selectedFile) {
             guard let identifiers = retained.sourceAssets, let cursor = retained.orderedCursor,
                   identifiers.count == retained.stamps.count else { throw PhotoLibraryReader.Failure.changed }
             do {
                 let groups = try provider.orderedResources(identifiers: identifiers)
                 let assets = groups.filter { !$0.isEmpty }.map(Asset.init)
                 guard assets.map(Stamp.init) == retained.stamps else { throw PhotoLibraryReader.Failure.changed }
+                if retained.sourceTotal == nil {
+                    let current = try provider.orderedInventory(resuming: cursor)
+                    guard try current.isCurrent() else { throw PhotoLibraryReader.Failure.changed }
+                    retained.sourceTotal = current.progress.total
+                    try write(retained, at: selectedFile)
+                }
+                if let total = retained.sourceTotal {
+                    try observe(assets.flatMap(\.resources), cursor: cursor, total: total,
+                        unavailable: Set(retained.attempts?.flatMap(\.unavailable) ?? []),
+                        reasons: Dictionary(uniqueKeysWithValues: (retained.attempts ?? []).flatMap { ($0.reasonByPath ?? [:]).map { ($0.key, $0.value) } }),
+                        sourceVersions: Dictionary(uniqueKeysWithValues: (retained.entries ?? []).map { ($0.path, $0.version) }))
+                }
                 // A terminal selection must still represent the current library.
                 // Nonempty selections retain their exact version across edits
                 // elsewhere, then the next group starts at the new newest asset.
@@ -326,8 +388,9 @@ final class PhotoBackupQueue {
                     let fresh: any OrderedPhotoInventory
                     if let state = orderedSelection, try state.inventory.isCurrent() { fresh = state.inventory }
                     else { fresh = try provider.orderedInventory(resuming: cursor) }
-                    guard fresh.progress.inspected == fresh.progress.total,
+                    guard fresh.checkpoint.libraryToken == cursor.libraryToken,
                           fresh.progress.inspected == cursor.dated + cursor.undated,
+                          retained.remainingKnown == false || fresh.progress.inspected == fresh.progress.total,
                           try fresh.isCurrent() else {
                         throw PhotoLibraryReader.Failure.changed
                     }
@@ -360,21 +423,34 @@ final class PhotoBackupQueue {
             let cursor = state.checkpoint, observed = deferred.observed
             let included = observed.passID != nil && cursor.passID == observed.passID && cursor.dated >= observed.dated && cursor.undated >= observed.undated
             let previouslyCounted = included ? deferred.unavailable.count : 0
-            let selection = Selection(id: UUID(), stamps: [Stamp(asset)], pending: 0,
+            var selection = Selection(id: UUID(), stamps: [Stamp(asset)], pending: 0,
                 priorUnavailable: max(0, state.unavailable - previouslyCounted),
                 sourceAssets: [preparedDeferred.asset], orderedCursor: cursor, remainingKnown: initial.inspected == initial.total,
                 priorReadFailures: max(0, state.readFailures - (included ? deferred.unavailable.filter { deferred.reasonByPath?[$0] == "photo-read" }.count : 0)))
+            selection.sourceTotal = initial.total
             try write(selection, at: selectedFile)
             return Work(assets: [asset], selection: selection, descriptor: descriptor(selection))
         }
         progress(.init(inspected: initial.inspected, total: initial.total, indexed: initial.indexed, latest: nil))
-        while state.candidates.count < state.limit, let resources = try state.inventory.next() {
+        var discovery: [PhotoResource] = [], discoveryUnavailable = Set<String>(), discoveryReasons: [String: String] = [:], discoveryVersions: [String: String] = [:], discoveryLegacy = Set<String>()
+        func flushDiscovery() throws {
+            try observe(discovery, cursor: state.checkpoint, total: state.inventory.progress.total,
+                unavailable: discoveryUnavailable, reasons: discoveryReasons, sourceVersions: discoveryVersions, legacyUnverified: discoveryLegacy)
+            discovery.removeAll(keepingCapacity: true); discoveryUnavailable.removeAll(keepingCapacity: true); discoveryReasons.removeAll(keepingCapacity: true); discoveryVersions.removeAll(keepingCapacity: true); discoveryLegacy.removeAll(keepingCapacity: true)
+        }
+        while state.candidates.count < state.limit, try (!indexEnabled || sourceIndexPendingCount() < 4),
+              let resources = try state.inventory.next() {
             let current = state.inventory.progress
+            discovery.append(contentsOf: resources)
             progress(current)
             if !resources.isEmpty {
                 let asset = Asset(resources)
                 do {
                     if let outcome = try exactOutcome(asset) {
+                        discoveryUnavailable.formUnion(outcome.unavailable)
+                        discoveryVersions.merge(outcome.sourceVersions ?? [:], uniquingKeysWith: { _, new in new })
+                        discoveryLegacy.formUnion(asset.resources.map(\.path).filter { !outcome.unavailable.contains($0) && outcome.sourceVersions?[$0] == nil })
+                        discoveryReasons.merge(outcome.reasonByPath ?? [:], uniquingKeysWith: { _, new in new })
                         state.unavailable += outcome.unavailable.count
                         state.readFailures += Self.readFailures(outcome)
                         if !outcome.unavailable.isEmpty { try rememberDeferred(asset, outcome: outcome, at: state.checkpoint) }
@@ -384,6 +460,7 @@ final class PhotoBackupQueue {
                     throw error
                 }
             }
+            if discovery.count >= 32 { try flushDiscovery() }
             // Save a restart point while walking a previously acknowledged
             // prefix. An unacknowledged group never advances this checkpoint.
             if state.candidates.isEmpty, current.inspected % 64 == 0,
@@ -396,9 +473,11 @@ final class PhotoBackupQueue {
             throw PhotoLibraryReader.Failure.changed
         }
         let assets = state.candidates
+        try flushDiscovery()
         let exhausted = state.inventory.progress.inspected == state.inventory.progress.total
-        let selection = Selection(id: UUID(), stamps: assets.map(Stamp.init), pending: 0, priorUnavailable: state.unavailable,
+        var selection = Selection(id: UUID(), stamps: assets.map(Stamp.init), pending: 0, priorUnavailable: state.unavailable,
             sourceAssets: assets.map { $0.resources[0].asset }, orderedCursor: state.checkpoint, remainingKnown: exhausted, priorReadFailures: state.readFailures)
+        selection.sourceTotal = state.inventory.progress.total
         try write(selection, at: selectedFile)
         return Work(assets: assets, selection: selection, descriptor: descriptor(selection))
     }
@@ -418,6 +497,7 @@ final class PhotoBackupQueue {
             resources.append(contentsOf: group); count += 1
         }
         guard try inventory.isCurrent() else { throw PhotoLibraryReader.Failure.changed }
+        try observe(resources, cursor: inventory.checkpoint, total: inventory.progress.total)
         return resources
     }
 
@@ -425,6 +505,13 @@ final class PhotoBackupQueue {
         guard var cursor = selection.orderedCursor else { return }
         cursor.unavailable = selection.priorUnavailable + (selection.attempts?.reduce(0) { $0 + $1.unavailable.count } ?? 0)
         cursor.unavailableReadFailures = (selection.priorReadFailures ?? 0) + (selection.attempts?.reduce(0) { $0 + Self.readFailures($1) } ?? 0)
+        let backfill = directory.appendingPathComponent("source-index-v1/backfill-after-selection.json")
+        if indexEnabled, FileManager.default.fileExists(atPath: backfill.path) {
+            if FileManager.default.fileExists(atPath: cursorFile.path) { try FileManager.default.removeItem(at: cursorFile) }
+            try FileManager.default.removeItem(at: backfill)
+            orderedSelection = nil
+            return
+        }
         if cursor.libraryToken != nil { try write(cursor, at: cursorFile) }
         if let state = orderedSelection {
             state.candidates.removeAll(keepingCapacity: true)
@@ -479,9 +566,15 @@ final class PhotoBackupQueue {
     func prepare(_ work: Work, unavailable: Set<String>, entries: [MobileFolderReader.Entry], reasons: [String: String] = [:]) throws -> PhotoBackupQueueBatch {
         guard var selected = try read(Selection.self, at: selectedFile), selected.id == work.selection.id,
               selected.stamps == work.assets.map(Stamp.init) else { throw PhotoLibraryReader.Failure.changed }
+        if let cursor = selected.orderedCursor, let total = selected.sourceTotal {
+            try observe(work.assets.flatMap(\.resources), cursor: cursor,
+                total: total,
+                unavailable: unavailable, reasons: reasons, sourceVersions: Dictionary(uniqueKeysWithValues: entries.map { ($0.path, $0.version) }))
+        }
         let attempts = work.assets.map { asset in
             Attempt(stamp: Stamp(asset), unavailable: asset.resources.map(\.path).filter(unavailable.contains),
-                reasonByPath: Dictionary(uniqueKeysWithValues: asset.resources.map(\.path).filter(unavailable.contains).map { ($0, reasons[$0] ?? "cloud-download") }))
+                reasonByPath: Dictionary(uniqueKeysWithValues: asset.resources.map(\.path).filter(unavailable.contains).map { ($0, reasons[$0] ?? "cloud-download") }),
+                sourceVersions: Dictionary(uniqueKeysWithValues: entries.filter { entry in asset.resources.contains { $0.path == entry.path } }.map { ($0.path, $0.version) }))
         }
         let available = work.assets.flatMap(\.resources).map(\.path).filter { !unavailable.contains($0) }
         guard entries.map(\.path) == available, entries.allSatisfy({ $0.kind == "file" && ($0.fingerprint != nil || $0.sha256 != nil) }) else {
