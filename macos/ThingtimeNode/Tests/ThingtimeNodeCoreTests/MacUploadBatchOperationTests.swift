@@ -164,6 +164,9 @@ private actor BatchOperationPeer {
         XCTAssertEqual(try BatchJSON.array(rejectedBody["results"]!)[0].decode([String: JSONValue].self)["code"], .string("source-changed"))
         XCTAssertEqual(stale.messages.count, 1)
         XCTAssertTrue(stale.messages[0].contains("native-initial-read=1"))
+        XCTAssertTrue(stale.messages[0].contains("first-inspect-identity=1"))
+        XCTAssertTrue(stale.messages[0].contains("native-code-changed=1"))
+        XCTAssertTrue(stale.messages[0].contains("unknown=0"))
         XCTAssertTrue(stale.messages[0].contains("server-checksum-prepare=0"), "a second source-required reply keeps the first failure stage")
         let staleRounds = await stalePeer.rounds, stalePuts = await stalePeer.puts
         XCTAssertEqual(staleRounds, 2)
@@ -180,6 +183,7 @@ private actor BatchOperationPeer {
             XCTAssertEqual(try BatchJSON.array(body["results"]!)[0].decode([String: JSONValue].self)["code"], .string("source-changed"))
             XCTAssertEqual(sink.messages.count, 1)
             XCTAssertTrue(sink.messages[0].contains(checksum ? "server-checksum-prepare=1" : "server-lookup=1"))
+            XCTAssertTrue(sink.messages[0].contains("native-code-changed=0"))
             XCTAssertFalse(sink.messages[0].contains("file-0"))
         }
     }
