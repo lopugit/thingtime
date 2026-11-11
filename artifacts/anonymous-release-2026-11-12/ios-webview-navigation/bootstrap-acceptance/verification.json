@@ -1,0 +1,454 @@
+{
+  "passed": false,
+  "simulatorDeleted": true,
+  "sourceToBinaryReproducibility": "unproven",
+  "localAccountApiSupported": false,
+  "networkUnavailableScope": "development WebView external HTTP(S) only; OS networking not disabled",
+  "preparation": {
+    "entrySha256": "85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d",
+    "canonicalOutputInventory": {
+      "sha256": "01b8875ec0b5257c4ed57c9312439c459a71257a537a90e8c68378ec186b92a1",
+      "files": 1822,
+      "bytes": 270045313
+    },
+    "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+    "sourceToBinaryReproducibility": "unproven",
+    "origin": "http://127.0.0.1:29741",
+    "bundleId": "com.thingtime.localdevelopment",
+    "localAccountApiSupported": false,
+    "nativeAddonSha256": {
+      ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+      ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    },
+    "toolCheckoutHead": "b3eba7dbf293fe3cf4552d37416408f02283cbe1"
+  },
+  "sharedPasswordCoreSha256": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c",
+  "executedToolSha256": {
+    "iOS/scripts/local-development/run.py": "1622bf997b6426ae7d34cb0c174c087736f9ce9d4421131eb1bb1241d1fdef7d",
+    "iOS/scripts/local-development/prepare.py": "4e22f1bbcd028596b8ab5a0d90e22f9666790ae908c183894546605e98bf8014",
+    "iOS/scripts/local-development/entry.mjs": "d51e730432a0ae0549f5aaf93a8d7c80990cb218653123de595faf30aa709d8a",
+    "iOS/scripts/local-development/acceptance.js": "afde8bfdc8dea0a032f1483fcb13d771e58a8ba6cb3f9a3a660f8e72e23ecf11",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "a8f6e17f972054a20d4cae2584406b90498ed58fc93a5708af65c97dcea8280e",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift": "7e14368d719663bb7a0a41317a29b068a09a260431529b18277cfa2a7153a388",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h": "c4aa76edd69d16cc5dfe46d1f0952e029dd0709823cab906dd79916bf8a29628",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4f965422aabfcbe3144cee2f4641e26a4ea78156104821b8db500cc4f5c706e5",
+    "iOS/Thingtime/App/ThingtimeApp.swift": "c074f71d9e55944059937adb63288f8219883988ed094b145e7e29b5817d1285",
+    "iOS/Thingtime/Web/WebView.swift": "f17576f6ebc154e7e9d5f5d7a50b8bcad5f71fe8f222f2eb382b75ebcd65a54c",
+    "iOS/Thingtime/Web/ThingtimeWebDestination.swift": "9d614cb1df16b9088adad18b1da4a7d0f238e182b6986378998d2cec6e0e52cd"
+  },
+  "signedPayload": {
+    "canonicalFilesMatched": 1822,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "0dc35d5410e9de0ef662327e868402e2d57a56e2b17d7e8891a53979e64a9819",
+      "files": 1824,
+      "bytes": 278458689
+    }
+  },
+  "signedLocalRuntimeInventory": {
+    "sha256": "676368827f8e707c337de9c80a84beb5b981e9f9487484fad7552bdff0033f36",
+    "files": 1826,
+    "bytes": 278470004
+  },
+  "signedAppInventory": {
+    "sha256": "9e3124d759382a18667e034bf85f5791f7045805423fb8c816662f23122c231b",
+    "files": 1840,
+    "bytes": 408678820
+  },
+  "binarySha256": "173855518bd13e18198d4d55125c06a37946623ee2ac52784b99a0d4274876c6",
+  "frameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "installedAppInventory": {
+    "sha256": "9e3124d759382a18667e034bf85f5791f7045805423fb8c816662f23122c231b",
+    "files": 1840,
+    "bytes": 408678820
+  },
+  "runtime.json": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "origin": "http://127.0.0.1:29741",
+    "apiStarted": true,
+    "localAccountApiSupported": false,
+    "cloudFallback": false,
+    "preservedOSKeys": [
+      "CFFIXED_USER_HOME",
+      "DYLD_ROOT_PATH",
+      "HOME",
+      "PATH",
+      "SIMULATOR_ARCHS",
+      "SIMULATOR_AUDIO_DEVICES_PLIST_PATH",
+      "SIMULATOR_AUDIO_SETTINGS_PATH",
+      "SIMULATOR_BOOT_TIME",
+      "SIMULATOR_CAPABILITIES",
+      "SIMULATOR_DEVICE_NAME",
+      "SIMULATOR_EXTENDED_DISPLAY_PROPERTIES",
+      "SIMULATOR_FRAMEBUFFER_FRAMEWORK",
+      "SIMULATOR_HID_SYSTEM_MANAGER",
+      "SIMULATOR_HOST_HOME",
+      "SIMULATOR_LEGACY_ASSET_SUFFIX",
+      "SIMULATOR_LOG_ROOT",
+      "SIMULATOR_MAINSCREEN_HEIGHT",
+      "SIMULATOR_MAINSCREEN_PITCH",
+      "SIMULATOR_MAINSCREEN_SCALE",
+      "SIMULATOR_MAINSCREEN_WIDTH",
+      "SIMULATOR_MEMORY_WARNINGS",
+      "SIMULATOR_MODEL_IDENTIFIER",
+      "SIMULATOR_PRODUCT_CLASS",
+      "SIMULATOR_ROOT",
+      "SIMULATOR_RUNTIME_BUILD_VERSION",
+      "SIMULATOR_RUNTIME_VERSION",
+      "SIMULATOR_SHARED_RESOURCES_DIRECTORY",
+      "SIMULATOR_UDID",
+      "SIMULATOR_VERSION_INFO",
+      "TMPDIR",
+      "XPC_FLAGS",
+      "XPC_SERVICE_NAME",
+      "__CF_USER_TEXT_ENCODING"
+    ],
+    "applicationConfigurationCleared": true,
+    "externalUndiciRequests": 0,
+    "externalUndiciRequestsScope": "Node startup acceptance only; not an OS or all-lifecycle network proof",
+    "manifest": {
+      "schemaVersion": 1,
+      "origin": "http://127.0.0.1:29741",
+      "features": 367,
+      "operations": 729
+    },
+    "document": {
+      "status": 200,
+      "hasViteRoot": true
+    },
+    "entryAssetPassed": true,
+    "accountApi": {
+      "status": 503,
+      "code": "LOCAL_API_NOT_CONFIGURED"
+    },
+    "ready": true
+  },
+  "http-lifecycle.json": {
+    "startedAt": "2026-11-11T17:06:51.885Z",
+    "events": [
+      {
+        "at": 1794416811995,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794416812000,
+        "kind": "request",
+        "id": 1,
+        "route": "/.well-known/thingtime-capabilities.json",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812000,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794416812009,
+        "kind": "middleware-settled",
+        "id": 1
+      },
+      {
+        "at": 1794416812010,
+        "kind": "response-finish",
+        "id": 1,
+        "status": 200
+      },
+      {
+        "at": 1794416812010,
+        "kind": "response-close",
+        "id": 1,
+        "finished": true
+      },
+      {
+        "at": 1794416812087,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794416812087,
+        "kind": "request",
+        "id": 2,
+        "route": "/",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812087,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794416812103,
+        "kind": "response-finish",
+        "id": 2,
+        "status": 200
+      },
+      {
+        "at": 1794416812103,
+        "kind": "response-close",
+        "id": 2,
+        "finished": true
+      },
+      {
+        "at": 1794416812103,
+        "kind": "middleware-settled",
+        "id": 2
+      },
+      {
+        "at": 1794416812105,
+        "kind": "request",
+        "id": 3,
+        "route": "asset",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812118,
+        "kind": "response-finish",
+        "id": 3,
+        "status": 200
+      },
+      {
+        "at": 1794416812118,
+        "kind": "response-close",
+        "id": 3,
+        "finished": true
+      },
+      {
+        "at": 1794416812118,
+        "kind": "middleware-settled",
+        "id": 3
+      },
+      {
+        "at": 1794416812118,
+        "kind": "request",
+        "id": 4,
+        "route": "/api/v1/auth/me",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812120,
+        "kind": "middleware-settled",
+        "id": 4
+      },
+      {
+        "at": 1794416812120,
+        "kind": "response-finish",
+        "id": 4,
+        "status": 503
+      },
+      {
+        "at": 1794416812120,
+        "kind": "response-close",
+        "id": 4,
+        "finished": true
+      },
+      {
+        "at": 1794416812176,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794416812179,
+        "kind": "request",
+        "id": 5,
+        "route": "/.well-known/thingtime-capabilities.json",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812179,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794416812183,
+        "kind": "middleware-settled",
+        "id": 5
+      },
+      {
+        "at": 1794416812184,
+        "kind": "response-finish",
+        "id": 5,
+        "status": 200
+      },
+      {
+        "at": 1794416812184,
+        "kind": "response-close",
+        "id": 5,
+        "finished": true
+      },
+      {
+        "at": 1794416812200,
+        "kind": "request",
+        "id": 6,
+        "route": "/things",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812233,
+        "kind": "middleware-settled",
+        "id": 6
+      },
+      {
+        "at": 1794416812233,
+        "kind": "response-finish",
+        "id": 6,
+        "status": 200
+      },
+      {
+        "at": 1794416812233,
+        "kind": "response-close",
+        "id": 6,
+        "finished": true
+      },
+      {
+        "at": 1794416812248,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794416812474,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794416812493,
+        "kind": "request",
+        "id": 7,
+        "route": "/api/v1/vercel/deployments",
+        "method": "GET"
+      },
+      {
+        "at": 1794416812494,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794416812496,
+        "kind": "middleware-settled",
+        "id": 7
+      },
+      {
+        "at": 1794416812496,
+        "kind": "response-finish",
+        "id": 7,
+        "status": 503
+      },
+      {
+        "at": 1794416812496,
+        "kind": "response-close",
+        "id": 7,
+        "finished": true
+      },
+      {
+        "at": 1794416813147,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794416815126,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794416815157,
+        "kind": "request",
+        "id": 8,
+        "route": "/things",
+        "method": "GET"
+      },
+      {
+        "at": 1794416815157,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794416815161,
+        "kind": "middleware-settled",
+        "id": 8
+      },
+      {
+        "at": 1794416815161,
+        "kind": "response-finish",
+        "id": 8,
+        "status": 200
+      },
+      {
+        "at": 1794416815161,
+        "kind": "response-close",
+        "id": 8,
+        "finished": true
+      },
+      {
+        "at": 1794416815161,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794416818500,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794416821164,
+        "kind": "socket-close",
+        "hadError": false
+      }
+    ],
+    "eventCount": 47,
+    "pending": {},
+    "heartbeat": 165,
+    "stopped": false
+  },
+  "navigation.json": [
+    {
+      "at": 1794416812.241379,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "native-urlsession-things-200"
+    },
+    {
+      "at": 1794416815.118074,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-provisional-start"
+    },
+    {
+      "at": 1794416959.6338658,
+      "errorCode": -1001,
+      "errorDomain": "NSURLErrorDomain",
+      "stage": "wk-provisional-failure"
+    }
+  ],
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "observedAt": "2026-11-11T17:09:53.047955+00:00"
+}

@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "cleanupVerified": true,
+  "receiptSha256": "8271292ab6a6042c1cab0a6c638ce5465a0268c6b31c29c5e814e8b209be22eb",
+  "reviewedNativeSourceUnchanged": true,
+  "baselinePid": 47990,
+  "replacementPid": 68336,
+  "activeReleaseId": "13b0d731b78aa73787112d205c739712e22c13a950dd3fb86ea16ba74ad31048",
+  "pendingCleared": true,
+  "durableDataReadback": true,
+  "manualRestartCalled": false,
+  "privateHelperGroupEmptyAfterRun": true,
+  "independentHttpsAuthorityRetirement": "../helper-integration/authority-retirement-proof.json",
+  "localAccountOrVaultRecoveryClaim": false,
+  "productionPublicationOrTrustKeysClaim": false,
+  "screenshotsViewed": [
+    "automatically-confirmed.png",
+    "drawer-editor-1440.png",
+    "drawer-editor-390.png",
+    "drawer-cancelled-390.png"
+  ]
+}

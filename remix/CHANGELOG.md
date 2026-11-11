@@ -145,6 +145,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add explicit first-launch device-home recovery with version, origin,
+  cookie/profile and live-document fences. Verify helper-inclusive automatic
+  native bundle replacement without discarding unsaved edits; isolate signed
+  development helper authority from the stable app. iOS navigation and full
+  SQLite account APIs remain open. [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+
+- 2026-11-12: Connect canonical user identities to explicit native home repositories
+  alongside sessions; preserve Mongo/legacy behavior, refuse unsupported fallback,
+  share protected Things uniqueness with accounting and batch identity reads in one
+  scan/transaction. Full SQLite registration remains unfinished. See
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-11-12: Remove anonymous-vault requests for account confirmation settings;
   retain normal account controls and independent device passphrase/locking.
   Extract canonical session persistence behind an explicit home repository,

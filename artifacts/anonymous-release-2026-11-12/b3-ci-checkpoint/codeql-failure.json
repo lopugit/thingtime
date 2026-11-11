@@ -1,0 +1,9 @@
+{
+  "head": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "job": 130654186260,
+  "url": "https://github.com/lopugit/thingtime/actions/runs/43058441414/job/130654186260",
+  "observedErrorAt": "2026-11-11T16:39:01Z",
+  "failure": "API rate limit exceeded for installation",
+  "classification": "GitHub installation API quota failure; no code finding or successful security analysis inferred",
+  "fullLog": "Retained privately outside repository"
+}

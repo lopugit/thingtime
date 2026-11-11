@@ -1,3 +1,4 @@
+import { passwordHelperOptions } from './password-helper-identity.mjs';
 // Opt-in native acceptance. Uses the actual app/renderer and signed delivery;
 // remote bootstrap and GitHub publication are isolated synthetic fixtures.
 import assert from 'node:assert/strict';
@@ -16,7 +17,9 @@ const name = process.argv.find(arg => arg.startsWith('--workspace='))?.slice(12)
 const output = path.resolve(process.argv.find(arg => arg.startsWith('--output='))?.slice(9) || '');
 if (!name?.startsWith('native-bundle-qa-auto-') || !process.argv.some(arg => arg.startsWith('--output='))) throw Error('Require a dedicated native-bundle-qa-auto-* workspace and --output');
 const workspace = retainedWorkspace(name), require = createRequire(import.meta.url);
+const passwordHelper = passwordHelperOptions(process.argv);
 const reusePrepared = process.argv.includes('--reuse-prepared');
+if (passwordHelper && reusePrepared) throw Error('A signed helper requires a fresh canonical snapshot.');
 const previousReceiptPath = process.argv.find(arg => arg.startsWith('--previous-receipt='))?.slice(19);
 const puppeteer = require('puppeteer-core'), hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'thingtime-native-auto-'));
@@ -245,7 +248,7 @@ try {
   await assert.rejects(access(workspace.root), { code: 'ENOENT' }); await assert.rejects(access(workspace.app), { code: 'ENOENT' });
   enter('prepare-isolated-snapshot');
   const releaseClaim = await claimWorkspace(workspace); createdWorkspace = true;
-  try { await prepareWorkspace(workspace, electronDir, require('electron')); } finally { await releaseClaim(); }
+  try { await prepareWorkspace(workspace, electronDir, require('electron'), { passwordHelper }); } finally { await releaseClaim(); }
  }
  const web = path.join(workspace.source, 'dist/web'), metadata = JSON.parse(await readFile(path.join(web, 'metadata.json'), 'utf8'));
  const built = metadata.nativeBundle;

@@ -74,3 +74,40 @@ hashes. Canonical files must match the frozen source output except the two
 explicit genuine iOS addon substitutions; installed app inventory must equal the
 exact built/signed app before UI acceptance. Preparation recovery is permitted
 only before any build/simulator exists and retains the original elapsed budget.
+
+## Explicit fresh-profile local-home bootstrap
+
+The native development lane negotiates `local-workspace-status` before an
+ordinary **Work on this device** action can send `local-workspace-initialize`.
+The independent feature version is1.0.0; initialize binds the exact negotiated
+origin, version and native main-document token. Native admission and post-await
+commit both require the selected/current/frame origins to match the local
+runtime. Provisional navigation changes the document token, including a reload
+to the same URL, and exact live URL checks reject changed same-origin paths.
+Only a profile first observed with no website records/cookies is owned by this
+lane; cookies are rechecked before initialization. Native state mutates only
+synchronously after all final document/capability checks.
+
+The browser's canonical device-home initializer refuses any pre-existing or
+pending workspace pointer and stale identity generation. Its distinct explicit
+local selection does not authenticate a server account or make unavailable
+account APIs succeed. Acceptance must click the real recovery button, create
+and rename a real local folder through ordinary controls, then retain the same
+Thing ID/name after WebView reload. Direct module calls and storage seeds are
+not substitutes.
+
+The actual native origin/document predicate is independently executable:
+
+```sh
+xcrun swiftc -D THINGTIME_LOCAL_DEVELOPMENT \
+  iOS/Thingtime/Lopu/LopuVoiceContract.swift \
+  iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift \
+  iOS/scripts/local-development/test-document-fence.swift \
+  -o /tmp/thingtime-local-document-fence-tests
+/tmp/thingtime-local-document-fence-tests
+```
+
+The latest corrective run's native HTTP readiness passed but WK provisional
+navigation timed out before rendering, so real explicit bootstrap/edit/reload
+acceptance remains incomplete. Consult the dated evidence instead of treating
+source assertions or helper tests as a working native UI.

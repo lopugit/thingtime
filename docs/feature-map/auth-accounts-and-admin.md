@@ -801,3 +801,14 @@ Anonymous device password vaults do not have account-password approval settings:
 anonymous vault while retaining its independent passphrase and lock lifecycle.
 The same controls remain active for account scopes. Run the actual-component
 `test-authenticator-setup-ui.mjs` account and anonymous variants.
+
+### Explicit native home identities
+
+`auth/userIdentityRepository.ts` binds canonical identity and session operations
+to one native home scope. `documentStore/nativeUserIdentities.ts` uses the shared
+`nativeThingsCollection.ts` protected uniqueness definition; `auth/users.ts` keeps
+canonical envelope construction/projection and the normal Mongo/legacy path.
+Unsupported native user mutations refuse. Batch reads use one scan/transaction.
+`nativeUserIdentities.test.ts` covers scope, persistence, uniqueness, Mongo
+compatibility and same-provider accounting. This does not activate SQLite signup;
+the wider registration/readiness chain remains required.

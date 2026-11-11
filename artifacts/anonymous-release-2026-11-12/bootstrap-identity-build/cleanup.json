@@ -1,0 +1,14 @@
+{
+  "newFixtureDirectoriesRemaining": [],
+  "ports": {
+    "19881": {
+      "listenerPresent": false,
+      "exitCode": 1
+    },
+    "19882": {
+      "listenerPresent": false,
+      "exitCode": 1
+    }
+  },
+  "passed": true
+}

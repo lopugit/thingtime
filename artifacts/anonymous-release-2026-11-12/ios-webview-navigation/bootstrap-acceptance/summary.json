@@ -1,0 +1,44 @@
+{
+  "passed": false,
+  "canonicalWebBuild": "../../bootstrap-identity-build/verification.json",
+  "canonicalEntrySha256": "85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d",
+  "nativeBaseRevision": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "sharedPasswordCoreSha256": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c",
+  "wkServerObservedResponse": {
+    "status": 200,
+    "milliseconds": 4,
+    "note": "Node response-finish is not proof that WK received/committed the document"
+  },
+  "wkProvisionalFailure": {
+    "domain": "NSURLErrorDomain",
+    "code": -1001,
+    "elapsedSeconds": 144.516
+  },
+  "pendingAtSnapshot": {},
+  "observedUiOperations": [],
+  "uiReceiptsPresent": {
+    "ui-edit.json": false,
+    "webview.json": false
+  },
+  "controlledFixtureOutcomeEstablishedInNative": false,
+  "fullSignedAppEqualsInstalled": true,
+  "currentExecutedHashesMatch": true,
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "simulatorDeleted": true
+}

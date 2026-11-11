@@ -1,0 +1,138 @@
+{
+  "originalPrivateCrashReportSha256": "67348a70243f635fd20449f494c8e98e15c2f7938ea76b810fe056684e979d91",
+  "pid": 99998,
+  "process": "ThingtimeLocalDevelopment",
+  "captureTime": "2026-11-12 04:36:01.7416 +1100",
+  "exception": {
+    "codes": "0x0000000000000000, 0x0000000000000000",
+    "rawCodes": [
+      0,
+      0
+    ],
+    "type": "EXC_CRASH",
+    "signal": "SIGABRT"
+  },
+  "termination": {
+    "flags": 0,
+    "code": 6,
+    "namespace": "SIGNAL",
+    "indicator": "Abort trap: 6",
+    "byProc": "ThingtimeLocalDevelopment",
+    "byPid": 99998
+  },
+  "faultingThread": 14,
+  "queue": "com.apple.root.user-initiated-qos",
+  "triggeredFrames": [
+    {
+      "symbol": "__pthread_kill",
+      "imageName": "libsystem_kernel.dylib",
+      "imageUuid": "7f2b41c7-ce21-35cc-804e-7d9b7f4c101f",
+      "imageOffset": 34976
+    },
+    {
+      "symbol": "pthread_kill",
+      "imageName": "libsystem_pthread.dylib",
+      "imageUuid": "8cb2d3be-68f7-3dca-9920-f8d8247f0aa6",
+      "imageOffset": 25456
+    },
+    {
+      "symbol": "abort",
+      "imageName": "libsystem_c.dylib",
+      "imageUuid": "08fd9b4d-3600-3a86-a09e-c688df669d99",
+      "imageOffset": 480744
+    },
+    {
+      "symbol": "__assert_rtn",
+      "imageName": "libsystem_c.dylib",
+      "imageUuid": "08fd9b4d-3600-3a86-a09e-c688df669d99",
+      "imageOffset": 477628
+    },
+    {
+      "symbol": null,
+      "imageName": "LinguisticData",
+      "imageUuid": "87e8002e-3282-3615-8d6f-f6d57096da11",
+      "imageOffset": 11068
+    },
+    {
+      "symbol": null,
+      "imageName": "LinguisticData",
+      "imageUuid": "87e8002e-3282-3615-8d6f-f6d57096da11",
+      "imageOffset": 7456
+    },
+    {
+      "symbol": null,
+      "imageName": "LinguisticData",
+      "imageUuid": "87e8002e-3282-3615-8d6f-f6d57096da11",
+      "imageOffset": 6808
+    },
+    {
+      "symbol": "LDEnumerateAssetDataItems",
+      "imageName": "LinguisticData",
+      "imageUuid": "87e8002e-3282-3615-8d6f-f6d57096da11",
+      "imageOffset": 15116
+    },
+    {
+      "symbol": "-[AppleSpell(Lexicon) enumerateAssetDataItemsForLocale:withBlock:]",
+      "imageName": "ProofReader",
+      "imageUuid": "464f8e5a-6ad1-361d-aa4a-5d267148ab76",
+      "imageOffset": 341664
+    },
+    {
+      "symbol": "-[AppleSpell(LanguageModeling) assetDataBundleURLsForLanguageObject:]",
+      "imageName": "ProofReader",
+      "imageUuid": "464f8e5a-6ad1-361d-aa4a-5d267148ab76",
+      "imageOffset": 45248
+    },
+    {
+      "symbol": "__43-[AppleSpell dataBundlesForLanguageObject:]_block_invoke_2",
+      "imageName": "ProofReader",
+      "imageUuid": "464f8e5a-6ad1-361d-aa4a-5d267148ab76",
+      "imageOffset": 7768
+    },
+    {
+      "symbol": "_dispatch_call_block_and_release",
+      "imageName": "libdispatch.dylib",
+      "imageUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2",
+      "imageOffset": 5792
+    },
+    {
+      "symbol": "_dispatch_client_callout",
+      "imageName": "libdispatch.dylib",
+      "imageUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2",
+      "imageOffset": 114880
+    },
+    {
+      "symbol": "<deduplicated_symbol>",
+      "imageName": "libdispatch.dylib",
+      "imageUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2",
+      "imageOffset": 231832
+    },
+    {
+      "symbol": "_dispatch_root_queue_drain",
+      "imageName": "libdispatch.dylib",
+      "imageUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2",
+      "imageOffset": 84252
+    },
+    {
+      "symbol": "_dispatch_worker_thread2",
+      "imageName": "libdispatch.dylib",
+      "imageUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2",
+      "imageOffset": 86220
+    },
+    {
+      "symbol": "_pthread_wqthread",
+      "imageName": "libsystem_pthread.dylib",
+      "imageUuid": "8cb2d3be-68f7-3dca-9920-f8d8247f0aa6",
+      "imageOffset": 11320
+    },
+    {
+      "symbol": "start_wqthread",
+      "imageName": "libsystem_pthread.dylib",
+      "imageUuid": "8cb2d3be-68f7-3dca-9920-f8d8247f0aa6",
+      "imageOffset": 6772
+    }
+  ],
+  "conclusion": "The actual app PID99998 aborted in Apple LinguisticData/ProofReader AppleSpell asset enumeration ~182ms after reload provisional start. This proves process crash, not its underlying assertion cause. No assertion message was present in retained crash metadata. Reload persistence remains unverified.",
+  "reloadAction": "Actual WKWebView.reload() in create-edit callAsyncJavaScript completion after passing ui-edit.json; WebKit log WebPageProxy::reload04:36:01.546; navigation receipt provisional start1794418561.559565; crash capture04:36:01.7416.",
+  "cleanup": "terminate return3; shutdown/delete return0. Overall run failed and no further attempt executed."
+}

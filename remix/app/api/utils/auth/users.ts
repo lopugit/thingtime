@@ -4,6 +4,7 @@ import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
+import { currentUserIdentityRepository, UserIdentityRepositoryError } from './userIdentityRepository';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
 import { parseInstructionRecord, type InstructionRecord } from '../../../lopu/instructionTransfer';
@@ -30,7 +31,8 @@ import {
 // Identity is control-plane: user things ALWAYS live on the home deployment
 // DB, regardless of any active data-plane endpoint override (see endpoint.ts) —
 // aliased so every things access in this file is home-pinned.
-import { getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection as getMongoThingsCollection, getUsersCollection as getMongoUsersCollection, withHomeMongoTransaction as withMongoHomeTransaction } from '../mongodb/collections';
+
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type ProfileAttachmentRefs } from '../attachments/attachmentStore';
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
@@ -40,6 +42,15 @@ import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
 import { toBin, fromBin } from './binary';
 export { toBin, fromBin } from './binary';
+
+// Unadapted user mutations/directories must refuse in an explicit native scope,
+// never borrow the hosted legacy store. Default Mongo behavior is unchanged.
+const assertMongoUserPersistence = () => {
+	if (currentUserIdentityRepository()) throw new UserIdentityRepositoryError('USER_IDENTITY_SCOPE', 'This user operation has no native repository implementation');
+};
+const getThingsCollection: typeof getMongoThingsCollection = () => { assertMongoUserPersistence(); return getMongoThingsCollection(); };
+const getUsersCollection: typeof getMongoUsersCollection = () => { assertMongoUserPersistence(); return getMongoUsersCollection(); };
+const withHomeMongoTransaction: typeof withMongoHomeTransaction = (work) => { assertMongoUserPersistence(); return withMongoHomeTransaction(work); };
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -407,6 +418,8 @@ const findUserThing = async (filter: Record<string, unknown>) => (await getThing
 // two back-to-back round trips on the hottest path. Mirrors searchUsersForAdmin.
 export const findUserByUsername = async (username: string) => {
 	const normalized = username.trim().toLowerCase();
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingByUsername(normalized); return thing ? userThingToDoc(thing) : null; }
 	const [thing, legacy] = await Promise.all([
 		findUserThing({ 'crystal.username': normalized }),
 		getUsersCollection().then((c) => c.findOne({ username: normalized }))
@@ -424,6 +437,12 @@ export const findUserByUsername = async (username: string) => {
 export const findUsersByUsernames = async (usernames: readonly string[]): Promise<any[]> => {
 	const unique = [...new Set(usernames.map((username) => username.trim().toLowerCase()).filter(Boolean))];
 	if (!unique.length) return [];
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const rows = await native.findUserThingsByUsernames(unique);
+		const byName = new Map(rows.map(row => { const user = userThingToDoc(row); return [user.username, user] as const; }));
+		return unique.map(name => byName.get(name)).filter(Boolean);
+	}
 	const [thingRows, legacyRows] = await Promise.all([
 		getThingsCollection().then((collection) => collection.find({ thingtime: 'user', 'crystal.username': { $in: unique } } as any).toArray()),
 		getUsersCollection().then((collection) => collection.find({ username: { $in: unique } } as any).toArray())
@@ -434,6 +453,8 @@ export const findUsersByUsernames = async (usernames: readonly string[]): Promis
 };
 
 export const findUserByEmail = async (email: string) => {
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingByEmailKey(userEmailKey(email)); return thing ? userThingToDoc(thing) : null; }
 	// the hashed uniqueKey is the exact-match path — no email string in any index
 	const [thing, legacy] = await Promise.all([
 		getThingsCollection().then((c) => c.findOne({ uniqueKeys: userEmailKey(email) } as any)),
@@ -444,6 +465,8 @@ export const findUserByEmail = async (email: string) => {
 };
 
 export const findUserById = async (id: string) => {
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingById(String(id)); return thing ? userThingToDoc(thing) : null; }
 	const [thing, legacy] = await Promise.all([
 		findUserThing({ shareId: String(id) }),
 		ObjectId.isValid(id) ? getUsersCollection().then((c) => c.findOne({ _id: new ObjectId(id) })) : Promise.resolve(null)
@@ -510,6 +533,12 @@ export async function fencePrivateUploadPermission(id: string, token: string, se
 export const findUsersByIds = async (ids: readonly string[]) => {
 	const uniqueIds = [...new Set(ids.map((id) => String(id)).filter(Boolean))];
 	if (!uniqueIds.length) return [];
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const rows = await native.findUserThingsByIds(uniqueIds);
+		const byId = new Map(rows.map(row => { const user = userThingToDoc(row); return [String(user._id), user] as const; }));
+		return uniqueIds.map(id => byId.get(id)).filter(Boolean);
+	}
 
 	const legacyIds = uniqueIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
 	const [thingRows, legacyRows] = await Promise.all([
@@ -655,6 +684,7 @@ export const insertUser = async (
 		session?: any;
 	} = {}
 ) => {
+	const native = currentUserIdentityRepository();
 	const shareId = new ObjectId().toHexString();
 	const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
 	const { secure, admin, recentReactions } = buildUserSecure(doc);
@@ -692,7 +722,8 @@ export const insertUser = async (
 		createdAt: now,
 		updatedAt: now
 	};
-	await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
+	if (native) await native.insertUserThing(thing, options.session);
+	else await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
 	return userThingToDoc(thing);
 };
 

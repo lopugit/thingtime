@@ -1,0 +1,700 @@
+
+> @1.0.0 lint /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint --ext .js,.ts,.jsx,.tsx .
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/agents/overviewCore.test.ts
+  52:99  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/agents/overviewCore.ts
+  22:36  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/ai/claudeOAuth.test.ts
+  72:8  warning  This generator function does not have 'yield'  require-yield
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/ai/savedWaterfallCore.ts
+  8:95  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/apps/browseStorageProjection.test.ts
+  22:45  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  23:81  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/apps/namespaceStorageRecovery.test.ts
+   12:24  warning  `import()` type annotations are forbidden                                                                          @typescript-eslint/consistent-type-imports
+   13:21  warning  `import()` type annotations are forbidden                                                                          @typescript-eslint/consistent-type-imports
+   14:30  warning  `import()` type annotations are forbidden                                                                          @typescript-eslint/consistent-type-imports
+  147:4   warning  Function declared in a loop contains unsafe references to variable(s) 'appStorageReconciliationPlan'               no-loop-func
+  358:4   warning  Function declared in a loop contains unsafe references to variable(s) 'historicalAppStorageCounterConversionPlan'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/attachments/attachmentCore.test.ts
+  441:44  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/attachments/copyStoredAttachment.test.ts
+  112:54  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/auth/usersStorageLegacy.test.ts
+  21:58  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/backups/ordinaryRestoreTransaction.ts
+  241:42  warning  Function declared in a loop contains unsafe references to variable(s) 'effects'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/backups/timelineRecords.test.ts
+  26:84  warning  This generator function does not have 'yield'  require-yield
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/connections/outboundTarget.test.ts
+   98:28  warning  Function declared in a loop contains unsafe references to variable(s) 'calls'  no-loop-func
+  238:45  warning  Function declared in a loop contains unsafe references to variable(s) 'calls'  no-loop-func
+  311:24  warning  Script URL is a form of eval                                                   no-script-url
+  312:24  warning  Script URL is a form of eval                                                   no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/devices/deviceContracts.ts
+  72:13  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/files/batches.test.ts
+  49:18  warning  Unexpected use of comma operator  no-sequences
+  86:19  warning  Unexpected use of comma operator  no-sequences
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/files/folders.ts
+  286:46  warning  Function declared in a loop contains unsafe references to variable(s) 'effects'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/lopu/thingInspection.test.ts
+  7:95  warning  Unnecessary escape character: \"  no-useless-escape
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/mail/provider.ts
+  26:44   warning  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x0c, \x0e, \x1f  no-control-regex
+  92:102  warning  Unexpected control character(s) in regular expression: \x00, \x1f                          no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/messenger/detachedShutdown.test.ts
+  31:22  warning  The Function constructor is eval  no-new-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/meta/socialCard.test.ts
+  186:27  warning  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x0c, \x0e, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/meta/socialCard.ts
+  46:22  warning  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x0c, \x0e, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/meta/socialPreview.test.ts
+  36:147  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/moderation/claudeProvider.ts
+  6:1  warning  All imports in the declaration are only used as types. Use `import type`  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts
+  54:21  warning  The Function constructor is eval  no-new-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/moderation/moderationSettings.test.ts
+  612:66  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/mongodb/endpoint.ts
+  51:7  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/subspaces/subspaceCore.test.ts
+   80:160  warning  Script URL is a form of eval  no-script-url
+  130:44   warning  Script URL is a form of eval  no-script-url
+  315:72   warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/subspaces/subspaceMediaCore.test.ts
+   6:178  warning  Script URL is a form of eval  no-script-url
+  47:80   warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/discussionCursor.ts
+  43:77  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/recordingTransfer.test.ts
+  91:24  warning  Function declared in a loop contains unsafe references to variable(s) 'committed'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/things/things.ts
+  4182:78  warning  Unexpected control character(s) in regular expression: \x00, \x1f                             no-control-regex
+  6049:30  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  6049:73  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/API/Submit.tsx
+  32:6  warning  React Hook React.useCallback has missing dependencies: 'asyncFetcher', 'pathname', and 'props?.data'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Account/ssoNavigation.test.ts
+  31:24  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Actions/useTtActionClicks.tsx
+  384:3  warning  React Hook React.useCallback has missing dependencies: 'user?.localOnly' and 'user?.offline'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Admin/mongoConnectionInventoryBlocks.test.ts
+  20:23  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/ComponentMap.tsx
+  24:80  warning  Unexpected control character(s) in regular expression: \x00                   no-control-regex
+  86:35  warning  Function declared in a loop contains unsafe references to variable(s) 'live'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/Maps/mapboxData.test.ts
+  97:92  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/Maps/mapboxOverlay.test.ts
+   28:2   warning  Useless constructor  no-useless-constructor
+  133:20  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/ServiceWorkspace/ServiceMaps.tsx
+  129:40  warning  Function declared in a loop contains unsafe references to variable(s) 'live', 'count'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/ServiceWorkspace/ServiceMedia.tsx
+  85:17  warning  The ref value 'generation.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'generation.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/builderAppEntryPoint.test.ts
+  33:100  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Builder/useWebpage.ts
+  342:5   warning  React Hook React.useCallback has a missing dependency: 'user?.id'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  509:3   warning  React Hook React.useCallback has a missing dependency: 'user?.id'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  543:5   warning  React Hook React.useCallback has a missing dependency: 'user?.id'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  572:5   warning  React Hook React.useCallback has a missing dependency: 'user?.id'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  583:53  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                         no-mixed-operators
+  583:82  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                         no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Commander/CommanderV1Deprecated.tsx
+   12:1  warning  All imports in the declaration are only used as types. Use `import type`                                                                                @typescript-eslint/consistent-type-imports
+   40:5  warning  React Hook React.useMemo has an unnecessary dependency: 'thingtime?.settings?.commander.commanderId'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+   76:5  warning  React Hook React.useMemo has a missing dependency: 'thingtime?.settings?.commander'. Either include it or remove the dependency array                   react-hooks/exhaustive-deps
+  154:5  warning  React Hook React.useMemo has a missing dependency: 'props?.pathPrefix'. Either include it or remove the dependency array                                react-hooks/exhaustive-deps
+  156:3  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked            react-hooks/exhaustive-deps
+  171:5  warning  React Hook React.useMemo has a missing dependency: 'commandPath'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
+  171:6  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked            react-hooks/exhaustive-deps
+  191:5  warning  React Hook React.useMemo has an unnecessary dependency: 'commanderSettings'. Either exclude it or remove the dependency array                           react-hooks/exhaustive-deps
+  212:5  warning  React Hook React.useMemo has a missing dependency: 'commandPath'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
+  212:6  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked            react-hooks/exhaustive-deps
+  229:3  warning  React Hook React.useCallback has an unnecessary dependency: 'commanderSettings'. Either exclude it or remove the dependency array                       react-hooks/exhaustive-deps
+  238:5  warning  React Hook React.useCallback has an unnecessary dependency: 'commanderSettings'. Either exclude it or remove the dependency array                       react-hooks/exhaustive-deps
+  275:5  warning  React Hook React.useCallback has a missing dependency: 'commandPath'. Either include it or remove the dependency array                                  react-hooks/exhaustive-deps
+  280:3  warning  React Hook React.useCallback has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked        react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Commander/CommanderV2.tsx
+   86:5  warning  React Hook React.useMemo has an unnecessary dependency: 'commanderId'. Either exclude it or remove the dependency array                                          react-hooks/exhaustive-deps
+  434:5  warning  React Hook React.useCallback has unnecessary dependencies: 'commanderId' and 'thingtime.settings.commander'. Either exclude them or remove the dependency array  react-hooks/exhaustive-deps
+  603:3  warning  React Hook React.useCallback has an unnecessary dependency: 'suggestions'. Either exclude it or remove the dependency array                                      react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Devices/MobileSyncConnections.tsx
+  388:38  warning  The ref value 'pauseRequests.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'pauseRequests.current' to a variable inside the effect, and use that variable in the cleanup function                react-hooks/exhaustive-deps
+  390:47  warning  The ref value 'continuationRequests.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'continuationRequests.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Devices/SyncUploadPriorities.tsx
+  44:84  warning  React Hook React.useMemo has a missing dependency: 'options'. Either include it or remove the dependency array                                react-hooks/exhaustive-deps
+  44:85  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked  react-hooks/exhaustive-deps
+  80:5   warning  React Hook React.useEffect has a missing dependency: 'work'. Either include it or remove the dependency array                                 react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Devices/syncProgressBlocks.ts
+  115:31  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  115:45  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Feed/PostThingPicker.tsx
+  52:6  warning  React Hook React.useEffect has missing dependencies: 'folder', 'query', and 'user'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Feed/useViewTracking.ts
+  134:24  warning  The ref value 'qualifyTimersRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'qualifyTimersRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Kinds/HtmlTemplateField.tsx
+  51:5  warning  React Hook React.useLayoutEffect has a missing dependency: 'fieldProps'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Kinds/safeUrl.ts
+  48:24  warning  Script URL is a form of eval                                       no-script-url
+  77:12  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/LopuVoiceControls.tsx
+  1419:58  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/RecordingAutomationPage.tsx
+  124:15  warning  The ref value 'generation.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'generation.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/ScheduledTaskPanel.tsx
+  25:95  warning  The ref value 'epoch.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'epoch.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/desktopSpeechRecognition.ts
+  23:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/dictationSilence.ts
+  19:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/lopuChatStore.ts
+  1167:22  warning  Function declared in a loop contains unsafe references to variable(s) 'recoveryFailures'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/lopuLinks.test.ts
+  27:3   warning  Script URL is a form of eval  no-script-url
+  36:47  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/lopuPageContext.test.ts
+  10:52  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/lopuToolHistoryRendering.test.ts
+  34:30  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Lopu/useLopu.tsx
+  259:9  warning  Component definition is missing display name  react/display-name
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Media/imagePresentation.ts
+  38:4  warning  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Nav/Drawer/CustomDrawerItems.tsx
+  71:50  warning  The ref value 'seq.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'seq.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Nav/Drawer/EditorDrawerSection.tsx
+  122:8  warning  The 'configs' logical expression could make the dependencies of useCallback Hook (at line 162) change on every render. To fix this, wrap the initialization of 'configs' in its own useMemo() Hook                                                                                                                            react-hooks/exhaustive-deps
+  122:8  warning  The 'configs' logical expression could make the dependencies of useCallback Hook (at line 211) change on every render. To fix this, wrap the initialization of 'configs' in its own useMemo() Hook                                                                                                                            react-hooks/exhaustive-deps
+  122:8  warning  The 'configs' logical expression could make the dependencies of useCallback Hook (at line 233) change on every render. To fix this, wrap the initialization of 'configs' in its own useMemo() Hook                                                                                                                            react-hooks/exhaustive-deps
+  135:5  warning  React Hook React.useCallback has a missing dependency: 'props'. Either include it or remove the dependency array. However, 'props' will change when *any* prop changes, so the preferred fix is to destructure the 'props' object outside of the useCallback call and refer to those specific props inside React.useCallback  react-hooks/exhaustive-deps
+  152:3  warning  React Hook React.useCallback has a missing dependency: 'props'. Either include it or remove the dependency array. However, 'props' will change when *any* prop changes, so the preferred fix is to destructure the 'props' object outside of the useCallback call and refer to those specific props inside React.useCallback  react-hooks/exhaustive-deps
+  317:3  warning  React Hook React.useCallback has a missing dependency: 'configMenu'. Either include it or remove the dependency array                                                                                                                                                                                                         react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Nav/Drawer/drawerCustomItems.ts
+  7:35  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Nav/Drawer/useDrawer.tsx
+  180:8  warning  The 'ordering' logical expression could make the dependencies of useCallback Hook (at line 280) change on every render. To fix this, wrap the initialization of 'ordering' in its own useMemo() Hook                react-hooks/exhaustive-deps
+  182:8  warning  The 'collapsedGroups' logical expression could make the dependencies of useCallback Hook (at line 311) change on every render. To fix this, wrap the initialization of 'collapsedGroups' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  186:8  warning  The 'closeOnClick' logical expression could make the dependencies of useCallback Hook (at line 291) change on every render. To fix this, wrap the initialization of 'closeOnClick' in its own useMemo() Hook        react-hooks/exhaustive-deps
+  186:8  warning  The 'closeOnClick' logical expression could make the dependencies of useCallback Hook (at line 301) change on every render. To fix this, wrap the initialization of 'closeOnClick' in its own useMemo() Hook        react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Nav/customDrawerItems.test.ts
+   8:42   warning  Script URL is a form of eval  no-script-url
+  12:118  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Passwords/BrowserPasswordFillProvider.tsx
+  136:77   warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  136:109  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  136:153  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  136:179  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Passwords/PasswordEntryEditor.tsx
+  30:30  warning  The ref value 'copyEpoch.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'copyEpoch.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Passwords/PasswordManager.tsx
+  95:55   warning  The ref value 'generation.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'generation.current' to a variable inside the effect, and use that variable in the cleanup function    react-hooks/exhaustive-deps
+  95:123  warning  The ref value 'controllers.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'controllers.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Passwords/passwordBrandingBlocks.ts
+  15:97   warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  15:117  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Rainbow/Rainbow.tsx
+  77:37  warning  Array.prototype.map() expects a return value from arrow function  array-callback-return
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Settings/NotificationTools.tsx
+  52:26  warning  The ref value 'epoch.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'epoch.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Sharing/sharedMediaCore.test.ts
+  93:71  warning  Unexpected template string expression  no-template-curly-in-string
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/ErrorLogsPage.tsx
+  43:52  warning  The ref value 'generation.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'generation.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+  44:6   warning  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array                                                                                                                                                              react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/FilesystemThingsBrowser.tsx
+  97:6  warning  React Hook useEffect has a missing dependency: 'uploads'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/ThingFileLocation.tsx
+  43:6  warning  React Hook React.useEffect has missing dependencies: 'plane', 'thing', and 'user?.id'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/ThingsPage.tsx
+  569:6  warning  React Hook useEffect has a missing dependency: 'user'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/ThingsViews.tsx
+  151:41  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/filesystemTransfer.ts
+  40:22  warning  Unnecessary escape character: \/  no-useless-escape
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/thingsCore.ts
+  23:11  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Things/thingsLocation.test.ts
+  71:23  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/ContextMenu/ThingActionMenuButton.tsx
+  33:6   warning  React Hook React.useEffect has a missing dependency: 'menu'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  35:43  warning  React Hook React.useEffect has a missing dependency: 'menu'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/ContextMenu/ThingContextMenu.tsx
+  231:5  warning  React Hook React.useEffect has a missing dependency: 'position'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  252:5  warning  React Hook React.useEffect has a missing dependency: 'position'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/ContextMenu/ThingContextMenuTrigger.tsx
+  140:5  warning  React Hook React.useEffect has a missing dependency: 'menu'. Either include it or remove the dependency array    react-hooks/exhaustive-deps
+  196:5  warning  React Hook React.useEffect has a missing dependency: 'menu'. Either include it or remove the dependency array    react-hooks/exhaustive-deps
+  496:5  warning  React Hook React.useCallback has a missing dependency: 'menu'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/EditorSplit.tsx
+  1118:8  warning  The 'configs' logical expression could make the dependencies of useEffect Hook (at line 1123) change on every render. To fix this, wrap the initialization of 'configs' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/Thingtime.tsx
+   165:8   warning  The 'props' object makes the dependencies of useEffect Hook (at line 313) change on every render. To fix this, wrap the initialization of 'props' in its own useMemo() Hook                                                                                                                                             react-hooks/exhaustive-deps
+   289:5   warning  React Hook React.useMemo has a missing dependency: 'props.edit'. Either include it or remove the dependency array                                                                                                                                                                                                       react-hooks/exhaustive-deps
+   309:5   warning  React Hook React.useEffect has a missing dependency: 'props'. Either include it or remove the dependency array. However, 'props' will change when *any* prop changes, so the preferred fix is to destructure the 'props' object outside of the useEffect call and refer to those specific props inside React.useEffect  react-hooks/exhaustive-deps
+   351:5   warning  React Hook React.useEffect has a missing dependency: 'createDependancies'. Either include it or remove the dependency array                                                                                                                                                                                             react-hooks/exhaustive-deps
+   355:5   warning  React Hook React.useMemo has a missing dependency: 'props?.path'. Either include it or remove the dependency array                                                                                                                                                                                                      react-hooks/exhaustive-deps
+   355:6   warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   376:5   warning  React Hook React.useMemo has missing dependencies: 'props?.fullPath' and 'props?.path'. Either include them or remove the dependency array                                                                                                                                                                              react-hooks/exhaustive-deps
+   376:6   warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   376:33  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   376:56  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   403:5   warning  React Hook React.useMemo has missing dependencies: 'fullPath' and 'props'. Either include them or remove the dependency array. Mutable values like 'childrenRef.current' aren't valid dependencies because mutating them doesn't re-render the component                                                                react-hooks/exhaustive-deps
+   403:34  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   433:5   warning  React Hook React.useMemo has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                         react-hooks/exhaustive-deps
+   433:6   warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   442:5   warning  React Hook React.useEffect has missing dependencies: 'createDependancies' and 'props?.fullPath'. Either include them or remove the dependency array                                                                                                                                                                     react-hooks/exhaustive-deps
+   442:17  warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+   485:5   warning  React Hook React.useMemo has an unnecessary dependency: 'thingDep'. Either exclude it or remove the dependency array                                                                                                                                                                                                    react-hooks/exhaustive-deps
+   522:5   warning  React Hook React.useMemo has a missing dependency: 'props?.path'. Either include it or remove the dependency array                                                                                                                                                                                                      react-hooks/exhaustive-deps
+   522:22  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   587:5   warning  React Hook React.useMemo has missing dependencies: 'props?.children', 'props?.path', 'props?.thing', and 'props?.value'. Either include them or remove the dependency array                                                                                                                                             react-hooks/exhaustive-deps
+   637:5   warning  React Hook React.useEffect has missing dependencies: 'fullPath' and 'thing'. Either include them or remove the dependency array                                                                                                                                                                                         react-hooks/exhaustive-deps
+   637:27  warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+   694:5   warning  React Hook React.useEffect has a missing dependency: 'thingtime?.settings?.keyGateLength'. Either include it or remove the dependency array                                                                                                                                                                             react-hooks/exhaustive-deps
+   796:5   warning  React Hook React.useMemo has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                         react-hooks/exhaustive-deps
+   809:3   warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+   921:5   warning  React Hook React.useEffect has missing dependencies: 'fullPath' and 'props?.path'. Either include them or remove the dependency array                                                                                                                                                                                   react-hooks/exhaustive-deps
+   926:3   warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+   929:3   warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+   947:3   warning  React Hook React.useCallback has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                     react-hooks/exhaustive-deps
+   947:4   warning  React Hook React.useCallback has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                        react-hooks/exhaustive-deps
+  1033:45  warning  React Hook React.useCallback has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                        react-hooks/exhaustive-deps
+  1040:3   warning  React Hook React.useCallback has an unnecessary dependency: 'updateValue'. Either exclude it or remove the dependency array                                                                                                                                                                                             react-hooks/exhaustive-deps
+  1178:5   warning  React Hook React.useMemo has missing dependencies: 'fullPath' and 'props?.debugId'. Either include them or remove the dependency array                                                                                                                                                                                  react-hooks/exhaustive-deps
+  1178:46  warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+  1194:5   warning  React Hook React.useMemo has a missing dependency: 'props?.path'. Either include it or remove the dependency array                                                                                                                                                                                                      react-hooks/exhaustive-deps
+  1194:6   warning  React Hook React.useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                            react-hooks/exhaustive-deps
+  1290:3   warning  React Hook React.useCallback has a missing dependency: 'thingtimeMachineNamespace'. Either include it or remove the dependency array                                                                                                                                                                                    react-hooks/exhaustive-deps
+  1374:3   warning  React Hook React.useCallback has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                     react-hooks/exhaustive-deps
+  1374:27  warning  React Hook React.useCallback has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                        react-hooks/exhaustive-deps
+  1402:5   warning  React Hook React.useEffect has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  1402:29  warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+  1457:3   warning  React Hook React.useCallback has missing dependencies: 'fullPath' and 'thingtimeMachineNamespace'. Either include them or remove the dependency array                                                                                                                                                                   react-hooks/exhaustive-deps
+  1457:4   warning  React Hook React.useCallback has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                        react-hooks/exhaustive-deps
+  1486:5   warning  React Hook React.useEffect has a missing dependency: 'fullPath'. Either include it or remove the dependency array                                                                                                                                                                                                       react-hooks/exhaustive-deps
+  1486:75  warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                          react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/concepts/OrbitCanvasViewer.tsx
+  50:6  warning  React Hook React.useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/Thingtime/thingMods.ts
+  2:30  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/components/textAnimation1.tsx
+  59:6  warning  React Hook React.useEffect has a missing dependency: 'texts'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/docs/apiDocs.ts
+    402:1266  warning  Unexpected string concatenation of literals  no-useless-concat
+    897:119   warning  Unexpected string concatenation of literals  no-useless-concat
+    959:249   warning  Unexpected string concatenation of literals  no-useless-concat
+   3962:119   warning  Unexpected string concatenation of literals  no-useless-concat
+   4792:119   warning  Unexpected string concatenation of literals  no-useless-concat
+  11901:99    warning  Unexpected string concatenation of literals  no-useless-concat
+  11995:322   warning  Unnecessary escape character: \"             no-useless-escape
+  11995:337   warning  Unnecessary escape character: \"             no-useless-escape
+  12069:99    warning  Unexpected string concatenation of literals  no-useless-concat
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/automaticStoragePlacement.ts
+  85:49  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  85:86  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudFolder.test.ts
+  73:72  warning  Function declared in a loop contains unsafe references to variable(s) 'parentId'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudIndexChanges.client.test.ts
+   98:13   warning  This generator function does not have 'yield'  require-yield
+  181:13   warning  This generator function does not have 'yield'  require-yield
+  212:13   warning  This generator function does not have 'yield'  require-yield
+  224:144  warning  Empty block statement                          no-empty
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudIndexChanges.client.ts
+  303:39  warning  Function declared in a loop contains unsafe references to variable(s) 'sequence'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudSyncPort.client.ts
+  35:113  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudTransport.ts
+   40:30  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   41:14  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  231:38  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  338:65  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/cloudWrite.ts
+  8:43  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/contentFingerprint.ts
+  42:81  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/desktopFolders.client.ts
+   30:16   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   31:16   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   72:38   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   72:117  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   72:214  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  213:31   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  213:91   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  227:31   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/desktopUploadRecovery.test.ts
+  127:25  warning  Function declared in a loop contains unsafe references to variable(s) 'attempts', 'failure', 'failure'                                                                                                                                                         no-loop-func
+  148:13  warning  Function declared in a loop contains unsafe references to variable(s) 'receipt', 'cloudStatus', 'cloudStatus', 'attempts', 'cloudStatus', 'failure', 'receipt', 'publications', 'receipt', 'failure', 'cloudCode', 'cloudRetryable', 'cloudStatus', 'receipt'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/foregroundSync.ts
+  36:15   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  38:14   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  73:16   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  74:16   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  78:197  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  80:270  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  85:20   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  85:78   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/inventoryJournal.ts
+  328:28  warning  Function declared in a loop contains unsafe references to variable(s) 'remaining'  no-loop-func
+  390:29  warning  Function declared in a loop contains unsafe references to variable(s) 'pending'    no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/mobileFolders.client.test.ts
+  48:17  warning  Function declared in a loop contains unsafe references to variable(s) 'now'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/mobileFolders.client.ts
+   60:54   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   60:130  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   61:67   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   62:53   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+   93:141  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  112:25   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  114:18   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  115:25   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  118:13   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  233:89   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/nativeFeedRecovery.test.ts
+  79:29  warning  This generator function does not have 'yield'  require-yield
+  93:18  warning  This generator function does not have 'yield'  require-yield
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/nativeInventory.test.ts
+  187:97   warning  Empty block statement                                                          no-empty
+  191:24   warning  Function declared in a loop contains unsafe references to variable(s) 'calls'  no-loop-func
+  194:10   warning  Empty block statement                                                          no-empty
+  224:95   warning  Empty block statement                                                          no-empty
+  232:122  warning  Empty block statement                                                          no-empty
+  428:87   warning  Empty block statement                                                          no-empty
+  574:128  warning  Empty block statement                                                          no-empty
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/nativeSyncHost.client.ts
+  27:38   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  27:117  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  27:214  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/pagedExecute.ts
+  17:140  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  17:217  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  17:283  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/pagedForegroundSync.test.ts
+  462:45  warning  Function declared in a loop contains unsafe references to variable(s) 'selected'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/pagedForegroundSync.ts
+  479:157  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  499:42   warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/pagedRunJournal.ts
+   281:47   warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+   281:97   warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+   281:97   warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+   281:134  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+   310:45   warning  `import()` type annotations are forbidden                                                                                                                                    @typescript-eslint/consistent-type-imports
+   314:24   warning  Function declared in a loop contains unsafe references to variable(s) 'remaining', 'pending', 'remaining'                                                                    no-loop-func
+   640:99   warning  Function declared in a loop contains unsafe references to variable(s) 'instance', 'instance', 'revision', 'instance', 'revision', 'after', 'after', 'size', 'size', 'after'  no-loop-func
+   803:69   warning  Function declared in a loop contains unsafe references to variable(s) 'after', 'after'                                                                                       no-loop-func
+   915:28   warning  Function declared in a loop contains unsafe references to variable(s) 'pending'                                                                                              no-loop-func
+  1746:22   warning  Function declared in a loop contains unsafe references to variable(s) 'pending'                                                                                              no-loop-func
+  1986:84   warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+  1986:112  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations                                                                                 no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/photoBackupPasses.ts
+  27:75  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  28:23  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/remoteSyncWorker.client.ts
+  413:94  warning  Function declared in a loop contains unsafe references to variable(s) 'enrollment', 'enrollment'  no-loop-func
+  421:58  warning  Function declared in a loop contains unsafe references to variable(s) 'historyRead'               no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/resourceGovernor.ts
+  38:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/signedDownloadTarget.ts
+  18:66  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/streamingForegroundSync.test.ts
+  401:32  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  402:30  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  472:33  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  564:32  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+  565:30  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/streamingForegroundSync.ts
+   60:20   warning  `import()` type annotations are forbidden                                         @typescript-eslint/consistent-type-imports
+  520:35   warning  Function declared in a loop contains unsafe references to variable(s) 'sequence'  no-loop-func
+  549:17   warning  Function declared in a loop contains unsafe references to variable(s) 'state'     no-loop-func
+  553:17   warning  Function declared in a loop contains unsafe references to variable(s) 'state'     no-loop-func
+  561:69   warning  `import()` type annotations are forbidden                                         @typescript-eslint/consistent-type-imports
+  561:142  warning  `import()` type annotations are forbidden                                         @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/streamingIndex.ts
+  48:13  warning  Unexpected mix of '!==' and '<'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  48:32  warning  Unexpected mix of '!==' and '<'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/syncIgnore.ts
+  71:33  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  71:53  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  71:53  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  71:77  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  72:35  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  72:47  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/syncTaskRuntime.test.ts
+  164:28  warning  Function declared in a loop contains unsafe references to variable(s) 'runs'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/syncTaskRuntime.ts
+  97:140  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  98:23   warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/fileSync/twoWayStreaming.test.ts
+  241:31  warning  This generator function does not have 'yield'  require-yield
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/hooks/useApi.tsx
+   198:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   625:10  warning  React Hook useCallback has a missing dependency: 'getJson'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  1292:43  warning  `import()` type annotations are forbidden                                                                     @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/hooks/useProps.tsx
+  9:6  warning  React Hook React.useMemo was passed a dependency list that is not an array literal. This means we can't statically verify whether you've passed the correct dependencies  react-hooks/exhaustive-deps
+  9:6  warning  React Hook React.useMemo has a missing dependency: 'allProps'. Either include it or remove the dependency array                                                           react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/hooks/useThingtimeMachine.tsx
+  136:5  warning  React Hook React.useEffect has missing dependencies: 'redo' and 'undo'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/hooks/useTtTheme.tsx
+   4:1  warning  Imports "TtCustomEntry" and "TtCustomMap" are only used as types                                                                                                                           @typescript-eslint/consistent-type-imports
+   5:1  warning  Imports "TtTheme" and "TtThemePatch" are only used as types                                                                                                                                @typescript-eslint/consistent-type-imports
+  33:8  warning  The 'custom' conditional could make the dependencies of useCallback Hook (at line 61) change on every render. To fix this, wrap the initialization of 'custom' in its own useMemo() Hook   react-hooks/exhaustive-deps
+  33:8  warning  The 'custom' conditional could make the dependencies of useCallback Hook (at line 116) change on every render. To fix this, wrap the initialization of 'custom' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  33:8  warning  The 'custom' conditional could make the dependencies of useCallback Hook (at line 143) change on every render. To fix this, wrap the initialization of 'custom' in its own useMemo() Hook  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/accountFileExport.browser.test.ts
+  17:165  warning  Function declared in a loop contains unsafe references to variable(s) 'offline'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/drafts.ts
+  24:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/interactions.ts
+  40:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/linkedAttachments.test.ts
+  105:31  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/media.test.ts
+  28:21  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/storage.ts
+  70:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/things.ts
+   82:2   warning  Useless constructor                                                               no-useless-constructor
+  499:44  warning  Function declared in a loop contains unsafe references to variable(s) 'folderId'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/timeline.ts
+  202:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/local-workspace/timelineVersions.ts
+  114:2  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/mail/model.ts
+  51:86  warning  Unexpected control character(s) in regular expression: \x00, \x08, \x0b, \x0c, \x0e, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/passwords/transfer.ts
+  25:3  warning  Useless constructor  no-useless-constructor
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/passwords/websites.test.ts
+  40:51  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/routes/algorithms.tsx
+  66:10  warning  The ref value 'seq.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'seq.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/routes/api/v1/template/_template.tsx
+  21:9  warning  Unexpected empty object pattern  no-empty-pattern
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/routes/api/v1/timeline/_timeline.tsx
+  126:36  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  126:55  warning  Unexpected mix of '||' and '&&'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/schemas/actionExpressions.test.ts
+  352:3  warning  Array prototype is read only, properties should not be added   no-extend-native
+  359:3  warning  Array prototype is read only, properties should not be added   no-extend-native
+  405:3  warning  String prototype is read only, properties should not be added  no-extend-native
+  415:3  warning  String prototype is read only, properties should not be added  no-extend-native
+  419:3  warning  String prototype is read only, properties should not be added  no-extend-native
+  433:3  warning  String prototype is read only, properties should not be added  no-extend-native
+  434:3  warning  String prototype is read only, properties should not be added  no-extend-native
+  435:3  warning  String prototype is read only, properties should not be added  no-extend-native
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/schemas/behaviourSuites.ts
+   971:12  warning  Unexpected template string expression  no-template-curly-in-string
+  1153:59  warning  Unexpected template string expression  no-template-curly-in-string
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/schemas/cssDeclarationNames.ts
+  41:83  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/schemas/postThingReferences.test.ts
+  46:80  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/schemas/webpageBlockGate.test.ts
+   83:64  warning  Script URL is a form of eval  no-script-url
+  109:53  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/storage/thingReplicaStore.ts
+   38:3   warning  Useless constructor                                                                no-useless-constructor
+  137:29  warning  Function declared in a loop contains unsafe references to variable(s) 'remaining'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/storage/thingReplicas.client.ts
+  320:69  warning  Unexpected control character(s) in regular expression: \x00  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/theme/tokens.ts
+  324:24  warning  Unnecessary escape character: \/  no-useless-escape
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/timeline/actionRecovery.test.ts
+  79:76  warning  Function declared in a loop contains unsafe references to variable(s) 'writes'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/timeline/branches.ts
+  23:141  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/timeline/contract.test.ts
+  31:98  warning  Unexpected comma in middle of array  no-sparse-arrays
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/timeline/indexedDb.ts
+  30:2   warning  Useless constructor                                                                         no-useless-constructor
+  95:23  warning  Function declared in a loop contains unsafe references to variable(s) 'failure', 'failure'  no-loop-func
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/timeline/sync.ts
+   44:2    warning  Useless constructor                                                                           no-useless-constructor
+  253:22   warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  253:147  warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  264:36   warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+  264:63   warning  Unexpected mix of '&&' and '||'. Use parentheses to clarify the intended order of operations  no-mixed-operators
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/utils/linkNavigation.ts
+  7:16  warning  Unexpected control character(s) in regular expression: \x00  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/utils/lopuLinks.ts
+  8:37  warning  Unexpected control character(s) in regular expression: \x00, \x1f  no-control-regex
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/utils/thingStoragePolicy.ts
+  55:51  warning  `import()` type annotations are forbidden  @typescript-eslint/consistent-type-imports
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/utils/thingTransfer/format.test.ts
+  22:22  warning  Script URL is a form of eval  no-script-url
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/webPlatform/languageSemantics.test.ts
+  201:54  warning  Unexpected template string expression  no-template-curly-in-string
+  202:3   warning  Unexpected template string expression  no-template-curly-in-string
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/webPlatform/synchronousCallback.ts
+  14:2  warning  Useless constructor  no-useless-constructor
+
+✖ 372 problems (0 errors, 372 warnings)
+  0 errors and 4 warnings potentially fixable with the `--fix` option.

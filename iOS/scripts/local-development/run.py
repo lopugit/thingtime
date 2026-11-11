@@ -2,7 +2,7 @@
 """Build/run the real opt-in app once on a new simulator, retaining diagnostics."""
 import argparse, datetime, hashlib, json, os, pwd
 from pathlib import Path
-import plistlib, signal, socket, subprocess, time
+import plistlib, signal, socket, subprocess, time, shutil
 from prepare import verify_payload, inventory
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[2]
@@ -14,7 +14,8 @@ def run(args):
  env={key:os.environ[key] for key in ['PATH','HOME','TMPDIR','DEVELOPER_DIR'] if key in os.environ}
  env['USER']=pwd.getpwuid(os.getuid()).pw_name
  env['CARGO_TARGET_DIR']=str(args.cache/'rust-target')
- remaining_budget=1800-(max(0,time.time()-args.cache.stat().st_birthtime) if args.resume_preparation else 0)
+ budget_anchor=args.reuse_verified_cache if args.reuse_verified_cache else args.cache if args.resume_preparation else None
+ remaining_budget=1800-(max(0,time.time()-budget_anchor.stat().st_birthtime) if budget_anchor else 0)
  deadline=time.monotonic()+remaining_budget;device=None;commands=[]
  report={'passed':False,'simulatorDeleted':False,'sourceToBinaryReproducibility':'unproven','localAccountApiSupported':False,'networkUnavailableScope':'development WebView external HTTP(S) only; OS networking not disabled'}
  def remaining():
@@ -40,9 +41,34 @@ def run(args):
   finally:check.close()
   command(['python3',HERE/'prepare.py','--cache',args.cache,'--web-output',args.web_output,'--entry-sha256',args.entry_sha256,'--runtime-cache',args.runtime_cache,'--native-app',args.native_app,'--port',args.port,'--allow-public-prerelease']+(['--resume-preparation'] if args.resume_preparation else []))
   report['preparation']=json.loads((args.cache/'preparation.json').read_text())
-  report['executedToolSha256']={str(p.relative_to(ROOT)):sha(p) for p in [HERE/'run.py',HERE/'prepare.py',HERE/'entry.mjs',HERE/'acceptance.js',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm',ROOT/'iOS/Thingtime/App/ThingtimeApp.swift',ROOT/'iOS/Thingtime/Web/WebView.swift',ROOT/'iOS/Thingtime/Web/ThingtimeWebDestination.swift']}
-  command(['xcodebuild','-project',args.cache/'ThingtimeLocalDevelopment.xcodeproj','-scheme','ThingtimeLocalDevelopment','-configuration','Debug','-sdk','iphonesimulator','-destination','generic/platform=iOS Simulator','-derivedDataPath',args.cache/'DerivedData','ARCHS=arm64','ONLY_ACTIVE_ARCH=YES','CODE_SIGNING_ALLOWED=NO','build'],limit=1200,log=args.cache/'build.local.log')
+  shared_core=ROOT/'apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift'
+  report['sharedPasswordCoreSha256']=sha(shared_core)
+  report['executedToolSha256']={str(p.relative_to(ROOT)):sha(p) for p in [HERE/'run.py',HERE/'prepare.py',HERE/'entry.mjs',HERE/'acceptance.js',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm',ROOT/'iOS/Thingtime/App/ThingtimeApp.swift',ROOT/'iOS/Thingtime/Web/WebView.swift',ROOT/'iOS/Thingtime/Web/ThingtimeWebDestination.swift']}
   app=args.cache/'DerivedData/Build/Products/Debug-iphonesimulator/ThingtimeLocalDevelopment.app'
+  if args.reuse_verified_cache:
+   previous=json.loads((args.reuse_verified_cache/'verification.json').read_text())
+   source=args.reuse_verified_cache/'DerivedData/Build/Products/Debug-iphonesimulator/ThingtimeLocalDevelopment.app'
+   if previous['preparation']['entrySha256']!=args.entry_sha256 or previous['sharedPasswordCoreSha256']!=sha(shared_core):raise RuntimeError('Verified native artifact inputs changed')
+   if previous['signedAppInventory']!=previous['installedAppInventory'] or inventory(source)!=previous['signedAppInventory']:raise RuntimeError('Verified native artifact bytes changed')
+   exceptions={'iOS/scripts/local-development/run.py','iOS/scripts/local-development/acceptance.js'}
+   for path,digest in previous['executedToolSha256'].items():
+    if path not in exceptions and sha(ROOT/path)!=digest:raise RuntimeError('Product source changed since verified native build: '+path)
+   # Attribute every changed tracked/untracked native compile input to the earlier
+   # verified build, allowing only this explicitly approved test-resource change.
+   roots=['iOS/Thingtime','apple/Shared','apple/Passwords/Sources','apple/Passwords/Host','apple/FileSync/Sources','filesystem-indexer']
+   changed=command(['git','diff','--name-only',previous['preparation']['toolCheckoutHead'],'--',*roots]).splitlines()
+   changed+=command(['git','ls-files','--others','--exclude-standard','--',*roots]).splitlines()
+   known={**previous['executedToolSha256'],'apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift':previous['sharedPasswordCoreSha256']}
+   for path in set(changed):
+    if Path(path).suffix in ['.swift','.m','.mm','.h','.hpp','.c','.cpp','.rs'] and (path not in known or sha(ROOT/path)!=known[path]):raise RuntimeError('Unattributed native source prevents reuse: '+path)
+   app.parent.mkdir(parents=True);shutil.copytree(source,app,symlinks=False)
+   if inventory(app)!=previous['signedAppInventory']:raise RuntimeError('Native artifact changed during copy')
+   shutil.copyfile(HERE/'acceptance.js',app/'LocalRuntime/acceptance.js')
+   report['nativeBuildReuse']={'verifiedSourceCacheReceiptSha256':sha(args.reuse_verified_cache/'verification.json'),'originalBinarySha256':previous['binarySha256'],'originalSignedAppInventory':previous['signedAppInventory'],'productSourceHashesMatched':True,'onlyResourceReplacement':'LocalRuntime/acceptance.js','budgetInheritedFromOriginalCache':True}
+  else:
+   command(['xcodebuild','-project',args.cache/'ThingtimeLocalDevelopment.xcodeproj','-scheme','ThingtimeLocalDevelopment','-configuration','Debug','-sdk','iphonesimulator','-destination','generic/platform=iOS Simulator','-derivedDataPath',args.cache/'DerivedData','ARCHS=arm64','ONLY_ACTIVE_ARCH=YES','CODE_SIGNING_ALLOWED=NO','build'],limit=1200,log=args.cache/'build.local.log')
+   if sha(shared_core)!=report['sharedPasswordCoreSha256']:raise RuntimeError('Shared native password core changed during build')
+  if sha(shared_core)!=report['sharedPasswordCoreSha256']:raise RuntimeError('Shared native password core changed during build/copy')
   info=plistlib.loads((app/'Info.plist').read_bytes())
   if info['CFBundleIdentifier']!=BUNDLE or info['ThingtimeWebURL']!=f'http://127.0.0.1:{args.port}':raise RuntimeError('Development app identity/origin mismatch')
   if sha(app/'LocalRuntime/.output/server/index.mjs')!=args.entry_sha256:raise RuntimeError('Built app changed canonical Nitro entry')
@@ -61,16 +87,29 @@ def run(args):
   if report['installedAppInventory']!=report['signedAppInventory']:raise RuntimeError('Installed executable/resources differ from exact signed built app')
   data=Path(command(['xcrun','simctl','get_app_container',device,BUNDLE,'data']));work=data/'Library/Application Support/ThingtimeLocalDevelopment'
   command(['xcrun','simctl','io',device,'screenshot',args.cache/'startup.png'])
-  until=min(deadline,time.monotonic()+150)
-  while time.monotonic()<until:
-   if (work/'runtime.json').exists() and not json.loads((work/'runtime.json').read_text()).get('ready'):break
-   if (work/'webview.json').exists():break
+  activation_deadline=min(deadline,time.monotonic()+180);ui_deadline=None
+  report['observer']={'activationLimitSeconds':180,'uiPhaseLimitSeconds':120,'budgetInherited':bool(budget_anchor)}
+  while time.monotonic()<deadline:
+   def read(name):
+    try:return json.loads((work/name).read_text())
+    except (FileNotFoundError,json.JSONDecodeError):return None
+   native=read('runtime.json');navigation=read('navigation.json') or []
+   if native and not native.get('ready'):report['observer']['outcome']='runtime-error';break
+   if any(event.get('stage')=='wk-provisional-failure' for event in navigation):report['observer']['outcome']='wk-provisional-failure';break
+   if ui_deadline is None and any(event.get('stage')=='wk-admitted-active' for event in navigation):
+    ui_deadline=min(deadline,time.monotonic()+120);report['observer']['activeAdmissionObserved']=True
+   if read('webview.json') is not None:report['observer']['outcome']='ui-result';break
+   if ui_deadline is None and time.monotonic()>=activation_deadline:report['observer']['outcome']='inactive-scene-deadline';break
+   if ui_deadline is not None and time.monotonic()>=ui_deadline:report['observer']['outcome']='ui-phase-deadline';break
    time.sleep(.25)
-  for name in ['runtime.json','ui-edit.json','webview.json','startup-error.json']:
+  else:report['observer']['outcome']='total-deadline'
+  for name in ['runtime.json','ui-edit.json','webview.json','startup-error.json','http-lifecycle.json','navigation.json']:
    if (work/name).exists():report[name]=json.loads((work/name).read_text())
   command(['xcrun','simctl','io',device,'screenshot',args.cache/'rendered.png'])
   web=report.get('webview.json',{});native=report.get('runtime.json',{})
-  report['passed']=native.get('ready') is True and web.get('passed') is True and web.get('manifestStatus')==200 and web.get('rootChildren',0)>0 and web.get('externalRequestRejected') is True and web.get('origin')==report['preparation']['origin']
+  edit=report.get('ui-edit.json',{})
+  report['independentReloadReadback']=bool(edit.get('beforeReloadReadback') and web.get('afterReloadReadback') and edit['beforeReloadReadback']['thingId']==web['afterReloadReadback']['thingId'] and edit['beforeReloadReadback']['selectLabel']==web['afterReloadReadback']['selectLabel'] and edit.get('documentTimeOrigin')!=web.get('documentTimeOrigin'))
+  report['passed']=report['independentReloadReadback'] and 'explicit-work-on-this-device' in edit.get('operations',[]) and native.get('ready') is True and web.get('passed') is True and web.get('manifestStatus')==200 and web.get('rootChildren',0)>0 and web.get('externalRequestRejected') is True and web.get('origin')==report['preparation']['origin']
  except Exception as error:report['error']=str(error).replace(str(args.cache),'<CACHE>')
  finally:
   report['cleanup']=[]
@@ -94,6 +133,7 @@ def run(args):
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
  for name in ['cache','web-output','runtime-cache','native-app']:p.add_argument('--'+name,required=True,type=lambda x:Path(x).resolve())
+ p.add_argument('--reuse-verified-cache',type=lambda x:Path(x).resolve())
  p.add_argument('--resume-preparation',action='store_true')
  p.add_argument('--entry-sha256',required=True);p.add_argument('--runtime',required=True);p.add_argument('--port',default=29741,type=int)
  run(p.parse_args())

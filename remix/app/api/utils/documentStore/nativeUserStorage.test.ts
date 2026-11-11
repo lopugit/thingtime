@@ -12,7 +12,9 @@ import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VER
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS } from '../storage/storageCore';
 import { userSubscriptionLedgerEnvelopeIsTrusted, subscriptionShareId } from '../subscriptions/subscriptionIdentity';
-import { buildUserSecure } from '../auth/users';
+import { buildUserSecure, insertUser } from '../auth/users';
+import { defineNativeThingsCollection } from './nativeThingsCollection';
+import { createNativeHomeAuthRepositories } from './nativeUserIdentities';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { createCollectionProvider } from './collectionProvider';
 import { openSqliteDocumentStore } from './sqliteStore';
@@ -47,7 +49,7 @@ const fixture = async (t: TestContext, options: { used?: number; allowance?: num
  // These are module-level synthetic persistence fixtures, NOT API signup,
  // normal Timeline rows or production account-data seeds.
  await provider.transaction(s => {
-  s.defineCollection(namespace, { unique: [{ name: 'share-id', path: ['shareId'], sparse: false, multikey: false }] });
+  defineNativeThingsCollection(s);
   const things = s.collection(namespace);
   if (!options.noUser) things.insert(encode({ _id: 'user', shareId: owner, ownerId: owner, thingtime: ['user'], secure: buildUserSecure({ email: '', passwordHash: 'synthetic-unused-hash', emailVerified: false, accountKind: 'user', meta: options.meta ?? {} }).secure }));
   things.insert(encode(subscription));
@@ -194,4 +196,19 @@ test('canonical ordinary-account metadata with a null Character field remains su
  const { provider, read, subscription } = await fixture(t, { meta: { character: null } });
  await withNativeHomeStorageTransaction(provider, binding, session => applyUserStorageDelta(owner, 1, session));
  assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 1);
+});
+
+// Synthetic ledger fixture plus canonical identity/session consumers share the
+// SAME provider/Things definition. This is not subscription issuance or signup.
+test('shared native Things definition composes identity and canonical accounting on the same provider after reopen', async t => {
+ const { provider, open, read, subscription } = await fixture(t);
+ const auth = await createNativeHomeAuthRepositories(provider, binding.homePlaneId);
+ const saved = await auth.run(() => insertUser({username:'coexist',ttid:'coexist',email:'coexist@example.invalid',passwordHash:'synthetic-unused',displayName:null,emailVerified:false,createdAt:new Date(),updatedAt:new Date(),meta:{}}));
+ await withNativeHomeStorageTransaction(provider, binding, session => applyUserStorageDelta(owner, 17, session));
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes,17);
+ await provider.close();
+ const reopened=await open(), next=await createNativeHomeAuthRepositories(reopened,binding.homePlaneId);
+ await next.run(async()=>assert.equal((await next.identities.findUserThingById(saved._id))!.ownerId,saved._id));
+ await withNativeHomeStorageTransaction(reopened,binding,session=>applyUserStorageDelta(owner,-7,session));
+ await reopened.transaction(s=>assert.equal(BSON.deserialize(s.collection(namespace).find({filter:eq(['shareId'],subscription.shareId),limit:1}).documents[0]).crystal.storageUsedBytes,10));
 });

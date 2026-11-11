@@ -1,0 +1,15 @@
+{
+  "message": "locator.waitFor: Timeout 12000ms exceeded.\nCall log:\n  - waiting for getByRole('heading', { name: 'Synthetic initialization acknowledged' }) to be visible\n",
+  "errors": [],
+  "body": "Thingtime\n\nWe couldn’t load your session\n\nCheck your connection, then try again. Your changes haven’t been repeated.\n\nTry again\nReload page",
+  "fixture": {
+    "attempts": 2,
+    "selected": true,
+    "loaderCalls": 2,
+    "revalidation": "idle",
+    "errors": [],
+    "loaderData": {
+      "0": null
+    }
+  }
+}

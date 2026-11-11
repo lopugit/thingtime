@@ -112,8 +112,8 @@ durable partial bytes for resume and rechecks complete files before reuse.
 independent verified copy and removes the temporary download copy after staging.
 Cancellation preserves resumable bytes; a subsequent check can retry. A staged
 release activates on the next normal process start. It never reloads a live
-editor. Guarded automatic activation is implemented below; its complete installed
-acceptance remains open.
+editor. Guarded automatic activation now has actual isolated development-app
+acceptance for an anonymous device workspace; local-account recovery remains open.
 
 These source implementations and local fixtures do not establish a signed
 production publication, configured trust, reachable deployed release routes or
@@ -245,7 +245,62 @@ storage acceptance with an imported runtime, not source-to-binary reproducibilit
 canonical Nitro/account integration, full WebView lifecycle or physical-device
 acceptance. [Probe and exact evidence](../artifacts/anonymous-release-2026-11-12/ios-sqlite-runtime/README.md).
 
+## Current native acceptance — 12 November 2026
+
+The helper-inclusive development app completes the actual signed catalogue/content
+journey, holds an unsaved edit for 70 seconds, persists through normal Enter and
+hard reload, then automatically replaces its process. The replacement confirms
+the new release, retains the stable loopback origin and reads the same durable
+content. Desktop and 390px drawer draft/cancel checks pass. No manual restart or
+forced checkpoint is used. The signing authority and release API are isolated
+fixtures; this does not establish production trust or a local-account recovery
+journey. [Actual receipt and screenshots](../artifacts/anonymous-release-2026-11-12/native-auto-activation/helper-replacement/README.md).
+
+The development password helper has a distinct signed host/provider identity,
+private Keychain group, notification and URL scheme. A separate compile-guarded
+fixture uses atomic insert-only session creation and exact-state readback to
+preserve unrelated authority. Actual signed verification preserves a wrong-origin
+synthetic session, retires the matching session and verifies empty storage. The
+subsequent loopback app replacement exercises an empty group, not restoration of
+a real account or vault. Stable app and user credentials remain unchanged.
+[Helper isolation and authority evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/helper-integration/README.md).
+
+Canonical user insert/read and session operations now compose with SQLite storage
+accounting through explicit home repositories and one shared Things definition.
+The document-store suite passes 56 checks. Identity batches use one scan/transaction;
+the provider remains correctness-first and does not claim indexed-query scaling.
+Normal signup still needs tier/subscription, vault, roster, verification/outbox,
+transaction and Nitro readiness integration. No account selects SQLite implicitly.
+[Identity evidence](../artifacts/anonymous-release-2026-11-12/sqlite-identities/README.md).
+
+The next bounded integration is the existing `createUserAccount` path: introduce
+an explicit home-account transaction for identity plus initial subscription/ledger,
+reuse canonical tier descriptors/admission, and scope tier bootstrap per provider.
+Test actual `createUserAccount` with rollback, duplicate races and reopening before
+attempting HTTP activation. Normal `/auth/register` still requires every vault,
+outbox/verification, notification, roster, resolver and readiness effect; do not
+turn on a partially adapted registration route.
+
+A cold native profile can explicitly choose **Work on this device** after compatible
+exact-origin capability negotiation. Initialization requires a fresh owned profile,
+no existing workspace/account pointer or cookies, and the same live document and
+immutable bundled runtime origin after asynchronous checks. The resulting local home is anonymous;
+account APIs stay unavailable until actually configured. Real RootRecovery UI
+checks pass at 1440/390/320px with a controlled host; actual iOS initialization and
+edit/reload acceptance remain separate. [Browser evidence](../artifacts/anonymous-release-2026-11-12/device-home-recovery-ui/README.md).
+The actual development app subsequently passed Work on this device, New folder
+and Rename with the same local item ID. Active-scene admission removed the
+observed provisional timeout in that run. Reload then preceded a task-app SIGABRT
+in Apple LinguisticData/ProofReader by about182ms; the underlying assertion cause
+is not established. The full acceptance receipt remains false, and the isolated
+simulator was deleted. [Actual partial result and crash evidence](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/ui-followup/outcome.json).
+
+
 ## Remaining integration and acceptance
+
+The following failed runs are retained as historical diagnosis; the helper-inclusive
+run above supersedes their missing anonymous-workspace process replacement proof.
+
 
 The fresh 1.3 run passes download/staging, dirty refusal, canonical persistence
 and reload. It observes `renderer-ready`, then `cancel-pagehide` six milliseconds
@@ -294,8 +349,8 @@ do not retroactively call this run final-source native acceptance.
 2. **P0 — interruption and editor safety.** Verify resumable network interruption,
    cancellation, retry and independent staging against the actual selected API.
    Preserve origin/profile and unsaved work. Next-normal-start activation is
-   implemented. Automatic activation has a guarded source implementation, but
-   installed acceptance of both account modes and external frozen-process
+   implemented. Guarded automatic activation passes the actual isolated anonymous
+   workspace journey. Local-account/vault restoration and external frozen-process
    recovery remain open.
 3. **P1 — iOS runtime and storage.** Continue from the actual simulator result:
    Node 24, genuine bcrypt and Sharp/libvips import the canonical Nitro bundle;

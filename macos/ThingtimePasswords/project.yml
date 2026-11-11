@@ -16,6 +16,8 @@ settings:
     THINGTIME_PASSWORD_HOST_BUNDLE_ID: com.thingtime.passwords
     THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID: com.thingtime.passwords.provider
     THINGTIME_PASSWORD_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.thingtime.passwords
+    THINGTIME_PASSWORD_URL_SCHEME: otpauth
+    THINGTIME_PASSWORD_DEVELOPMENT_HOST: ""
     THINGTIME_WEB_URL: https://thingtime.com
 targets:
   ThingtimePasswords:
@@ -23,6 +25,7 @@ targets:
     platform: macOS
     sources:
       - PasswordApp.swift
+      - PasswordHostIdentity.swift
       - PasswordSetupEditor.swift
       - path: ../../apple/Passwords/Host/AuthenticatorSetupBridge.swift
       - path: ../../apple/Passwords/Host/PasswordApplicationMenu.swift
@@ -43,11 +46,13 @@ targets:
         CFBundleIconName: Thingtime
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimePasswordNotificationName: $(THINGTIME_PASSWORD_HOST_BUNDLE_ID).destination-changed
+        ThingtimePasswordDevelopmentHost: $(THINGTIME_PASSWORD_DEVELOPMENT_HOST)
         LSUIElement: true
         CFBundleURLTypes:
-          - CFBundleURLName: com.thingtime.passwords.authenticator
+          - CFBundleURLName: $(THINGTIME_PASSWORD_HOST_BUNDLE_ID).authenticator
             CFBundleTypeRole: Editor
-            CFBundleURLSchemes: [otpauth]
+            CFBundleURLSchemes: [$(THINGTIME_PASSWORD_URL_SCHEME)]
     settings:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: Thingtime
@@ -105,8 +110,40 @@ targets:
         com.apple.security.network.client: true
         com.apple.developer.authentication-services.autofill-credential-provider: true
         keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
+  ThingtimePasswordFixture:
+    type: application
+    platform: macOS
+    sources:
+      - PasswordFixture.swift
+    dependencies:
+      - package: ThingtimePasswordCore
+    info:
+      path: build/Fixture-Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime Password Fixture
+        ThingtimePasswordDevelopmentFixture: true
+        ThingtimePasswordDevelopmentHost: $(THINGTIME_PASSWORD_DEVELOPMENT_HOST)
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
+        ThingtimePasswordNotificationName: $(THINGTIME_PASSWORD_HOST_BUNDLE_ID).destination-changed
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_PASSWORD_HOST_BUNDLE_ID).fixture
+        PRODUCT_NAME: Thingtime Password Fixture
+        SKIP_INSTALL: true
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(THINGTIME_PASSWORD_FIXTURE_CONDITION)
+    entitlements:
+      path: build/Fixture.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
+
 schemes:
   ThingtimePasswords:
     build:
       targets:
         ThingtimePasswords: all
+
+  ThingtimePasswordFixture:
+    build:
+      targets:
+        ThingtimePasswordFixture: all

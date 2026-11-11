@@ -1,0 +1,42 @@
+{
+  "head": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "observedAt": "2026-11-11T16:45:52Z",
+  "checks": [
+    {
+      "id": 130654485008,
+      "name": "control-plane / Build + typecheck ratchet + unit tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/43058441084/job/130654485008"
+    },
+    {
+      "id": 130654484789,
+      "name": "control-plane / API suite (headless /tests runner)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/43058441084/job/130654484789"
+    },
+    {
+      "id": 130654186260,
+      "name": "control-plane / Analyze (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/43058441414/job/130654186260"
+    },
+    {
+      "id": 130654186111,
+      "name": "control-plane / Analyze (actions)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/lopugit/thingtime/actions/runs/43058441414/job/130654186111"
+    },
+    {
+      "id": 130654106305,
+      "name": "native-pr-compile",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/43058441130/job/130654106305"
+    }
+  ],
+  "complete": false
+}

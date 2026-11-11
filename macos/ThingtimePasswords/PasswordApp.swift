@@ -45,7 +45,7 @@ import ThingtimePasswordCore
                         LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
                         try? await PasswordIdentityIndex.synchronize(catalog)
                     }
-                    DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
+                    DistributedNotificationCenter.default().postNotificationName(PasswordHostIdentity.destinationChanged, object: nil, userInfo: nil, deliverImmediately: true)
                     exit(0)
                 } catch { exit(1) }
             }

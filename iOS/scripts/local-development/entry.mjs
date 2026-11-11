@@ -22,7 +22,23 @@ const report={node:process.version,platform:process.platform,arch:process.arch,o
 channel('undici:request:create').subscribe(({request})=>{if(new URL(request.origin).origin!==selected.origin)report.externalUndiciRequests++;});
 try{
  const {middleware}=await import('./.output/server/index.mjs');assert.equal(typeof middleware,'function');
- const server=http.createServer(middleware);
+ // Development-only bounded diagnostic ledger: no headers, query values or bodies.
+ const trace={startedAt:new Date().toISOString(),events:[],eventCount:0,pending:{},heartbeat:0,stopped:false};
+ let capturing=true,sequence=0;
+ const route=request=>{const pathname=new URL(request.url,selected).pathname;return ['/', '/things','/.well-known/thingtime-capabilities.json','/api/v1/auth/me','/api/v1/vercel/deployments'].includes(pathname)?pathname:pathname.startsWith('/assets/')?'asset':'other';};
+ const event=(kind,details={})=>{if(!capturing)return;trace.eventCount++;if(trace.events.length<256)trace.events.push({at:Date.now(),kind,...details});};
+ const snapshot=()=>{fs.writeFileSync(path.join(work,'http-lifecycle.json'),JSON.stringify(trace,null,2));};
+ const ticker=setInterval(()=>{if(capturing){trace.heartbeat++;snapshot();}},1000);ticker.unref();
+ setTimeout(()=>{trace.stopped=true;snapshot();capturing=false;clearInterval(ticker);},180000).unref();
+ const server=http.createServer((request,response)=>{
+  if(!capturing)return middleware(request,response);
+  const id=++sequence,label=route(request),socket=request.socket,startWireBytes=socket.bytesWritten;trace.pending[id]={route:label,middlewareSettled:false,responseFinished:false};event('request',{id,route:label,method:request.method,developmentNavigation:/^[0-9a-f-]{36}$/i.test(request.headers['x-thingtime-development-navigation']||'')});
+  response.once('finish',()=>{if(!capturing)return;trace.pending[id].responseFinished=true;event('response-finish',{id,status:response.statusCode,headers:Object.fromEntries(['content-type','content-length','content-encoding','transfer-encoding','connection'].map(name=>[name,response.getHeader(name)??null])),chunkedEncoding:response.chunkedEncoding,shouldKeepAlive:response.shouldKeepAlive,socketBytesWrittenSpan:socket.bytesWritten-startWireBytes,socketWritableLength:socket.writableLength});if(trace.pending[id].middlewareSettled)delete trace.pending[id];});
+  response.once('close',()=>event('response-close',{id,finished:response.writableFinished}));
+  request.once('aborted',()=>event('request-aborted',{id}));
+  Promise.resolve().then(()=>middleware(request,response)).catch(error=>{event('middleware-error',{id,name:error.name,code:error.code});if(!response.headersSent)response.writeHead(500);response.end();}).finally(()=>{if(!capturing||!trace.pending[id])return;trace.pending[id].middlewareSettled=true;event('middleware-settled',{id});if(trace.pending[id].responseFinished)delete trace.pending[id];});
+ });
+ server.on('connection',socket=>{event('connection',{loopback:['127.0.0.1','::1','::ffff:127.0.0.1'].includes(socket.remoteAddress)});socket.once('data',bytes=>event('first-socket-data',{tlsRecord:bytes[0]===22}));socket.once('close',hadError=>event('socket-close',{hadError}));});
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(Number(selected.port),'127.0.0.1',resolve);});
  assert.equal(server.address().address,'127.0.0.1');report.apiStarted=true;
  const response=await fetch(selected.origin+'/.well-known/thingtime-capabilities.json',{redirect:'error',signal:AbortSignal.timeout(10000)});

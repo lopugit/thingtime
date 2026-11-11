@@ -31,6 +31,8 @@ import { createLocalRootFallback, type ClientRootData } from './local-workspace/
 import { createRootDataLoader } from './utils/rootDataLoader';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
+import { createLocalHomeBootstrap } from './local-workspace/localHomeBootstrap';
+import { registerLocalHomeBootstrap, requestDeviceHomeHost } from './local-workspace/localHomeBootstrap.client';
 
 // Everything else is code-split. Statically importing every route put the
 // admin dashboard, the migrations console and the whole API-docs registry into
@@ -85,6 +87,7 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
 };
 
 const localRootFallback = createLocalRootFallback({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) }, window.location.origin);
+registerLocalHomeBootstrap(createLocalHomeBootstrap({ origin: window.location.origin, identity: rootIdentity, selection: localRootFallback, requestHost: requestDeviceHomeHost }));
 rootIdentity.subscribe(() => { if (rootIdentity.read().pending) localRootFallback.invalidate(); });
 
 const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) => {
@@ -93,7 +96,7 @@ const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) 
   let rootData: ClientRootData;
   try {
     if (navigator.onLine === false && localRootFallback.read(new RootDataUnavailableError(true), rootIdentity.read().pending)) throw new RootDataUnavailableError(true);
-    const { offlineWorkspace: _ignoredClientPointer, ...fresh } = await fetchRootData<ClientRootData>(`/api/root-data${url.search}`, request.signal);
+    const { offlineWorkspace: _ignoredClientPointer, deviceOnly: _ignoredClientSelection, ...fresh } = await fetchRootData<ClientRootData>(`/api/root-data${url.search}`, request.signal);
     rootData = fresh;
   } catch (error) {
     const offline = localRootFallback.read(error, rootIdentity.read().pending);
@@ -111,8 +114,8 @@ const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) 
   const generation = data.clientIdentityGeneration;
   const account = data.offlineWorkspace || (data.user && !data.user.temporary && data.dataPlane ? { kind: 'account' as const, origin: window.location.origin, ownerId: data.user.id, dataPlane: data.dataPlane } : undefined);
   const anonymous = !account && (!data.user || !!data.user.temporary);
-  bindLocalWorkspace(anonymous, generation, account, !data.offlineWorkspace);
-  if (!data.offlineWorkspace) localRootFallback.confirm(anonymous, account);
+  bindLocalWorkspace(anonymous, generation, account, !data.offlineWorkspace && !data.deviceOnly);
+  if (!data.offlineWorkspace && !data.deviceOnly) localRootFallback.confirm(anonymous, account);
 }, error => {
   if (error instanceof RootDataUnavailableError && !error.retryable) localRootFallback.invalidate();
 });

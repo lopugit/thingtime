@@ -117,6 +117,30 @@ these checks. Native registration, wider transactions, TTL cleanup and API
 selection remain incomplete; this module does not activate a database provider.
 [Session evidence](../../artifacts/anonymous-release-2026-11-12/sqlite-sessions/README.md).
 
+### First-launch local home and isolated helper acceptance
+
+`local-workspace/localHomeBootstrap{,.client}.ts` and the ordinary `RootRecovery`
+provide explicit device-home initialization only after compatible exact-origin
+native negotiation. `ThingtimeLocalWorkspaceFence.swift` and `WebView.swift`
+retire document identity on every navigation and recheck live document state against the immutable bundled runtime origin
+after async cookie proof. Existing/pending workspaces and account authority refuse
+initialization. Run `test:local-workspace` and the native fence fixture; actual iOS
+New/Rename/reload remains required beyond controlled browser evidence.
+
+`electron/scripts/password-helper-identity.mjs` and `build-native-passwords.mjs`
+validate isolated signed helper identities/resources before/after dev-snapshot
+copy. `verify-isolated-password-helper.mjs` uses the separate compile-guarded
+native fixture and canonical atomic `PasswordSessionStore.saveIfAbsent` to verify
+exact synthetic authority without overwriting unrelated state. Run the focused
+password-helper tests and shared Swift package, then the real helper proof.
+`verify-web-bundle-auto-activation.mjs` accepts the explicit
+`--password-helper-app=`, `--password-helper-host=`, `--password-helper-team=`
+and `--password-helper-signing-identity=` options together. Its opt-in QA workspace
+follows actual signed download, dirty refusal, normal persistence, automatic
+replacement and readback. No production credential or release trust is supplied
+by these fixtures. Retain the verified
+development build separately from disposable QA profiles/processes.
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,

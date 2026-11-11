@@ -1,0 +1,2482 @@
+{
+  "passed": false,
+  "simulatorDeleted": true,
+  "sourceToBinaryReproducibility": "unproven",
+  "localAccountApiSupported": false,
+  "networkUnavailableScope": "development WebView external HTTP(S) only; OS networking not disabled",
+  "preparation": {
+    "entrySha256": "85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d",
+    "canonicalOutputInventory": {
+      "sha256": "01b8875ec0b5257c4ed57c9312439c459a71257a537a90e8c68378ec186b92a1",
+      "files": 1822,
+      "bytes": 270045313
+    },
+    "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+    "sourceToBinaryReproducibility": "unproven",
+    "origin": "http://127.0.0.1:29741",
+    "bundleId": "com.thingtime.localdevelopment",
+    "localAccountApiSupported": false,
+    "nativeAddonSha256": {
+      ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+      ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    },
+    "toolCheckoutHead": "b3eba7dbf293fe3cf4552d37416408f02283cbe1"
+  },
+  "sharedPasswordCoreSha256": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c",
+  "executedToolSha256": {
+    "iOS/scripts/local-development/run.py": "7e0ba8ddd2023be06db476d92e1e109a6a49393a2a0c70c1be78870a02d81e11",
+    "iOS/scripts/local-development/prepare.py": "4e22f1bbcd028596b8ab5a0d90e22f9666790ae908c183894546605e98bf8014",
+    "iOS/scripts/local-development/entry.mjs": "59dc38d410cabc6ff1b064fdf836fc6123ea64ca4d857ace0640cd66827c4f96",
+    "iOS/scripts/local-development/acceptance.js": "7a3cdf73385f647ccc1a5f3769e772522a439c95e254e2a001aca7305743fcf1",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "2099471306a1518d9afbb155bf96fc1966bf24344840755a6706af80e78f7eeb",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift": "7e14368d719663bb7a0a41317a29b068a09a260431529b18277cfa2a7153a388",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h": "c4aa76edd69d16cc5dfe46d1f0952e029dd0709823cab906dd79916bf8a29628",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4f965422aabfcbe3144cee2f4641e26a4ea78156104821b8db500cc4f5c706e5",
+    "iOS/Thingtime/App/ThingtimeApp.swift": "c074f71d9e55944059937adb63288f8219883988ed094b145e7e29b5817d1285",
+    "iOS/Thingtime/Web/WebView.swift": "61ee05535747ea9910824a6558c80b864e59bead2a07687aed3a2302df60ea42",
+    "iOS/Thingtime/Web/ThingtimeWebDestination.swift": "9d614cb1df16b9088adad18b1da4a7d0f238e182b6986378998d2cec6e0e52cd"
+  },
+  "nativeBuildReuse": {
+    "verifiedSourceCacheReceiptSha256": "534d4d0ddf6f57c7c08c378d2c801ad98c1663f928616e6b3243e051e93a2d72",
+    "originalBinarySha256": "1135dfff6622e5cd399976df8c58518972e09b8d9be41aa38b2799aacfb0b8d4",
+    "originalSignedAppInventory": {
+      "sha256": "1ebbd466f372e917ee2d06933f6aa564312e40833b9085ed56cec1e2e149d620",
+      "files": 1840,
+      "bytes": 408703088
+    },
+    "productSourceHashesMatched": true,
+    "onlyResourceReplacement": "LocalRuntime/acceptance.js",
+    "budgetInheritedFromOriginalCache": true
+  },
+  "signedPayload": {
+    "canonicalFilesMatched": 1822,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "0dc35d5410e9de0ef662327e868402e2d57a56e2b17d7e8891a53979e64a9819",
+      "files": 1824,
+      "bytes": 278458689
+    }
+  },
+  "signedLocalRuntimeInventory": {
+    "sha256": "a8502c1b7960af6f5974061acb49453b4dee59e835c167821e1199d5e9e1a9ef",
+    "files": 1826,
+    "bytes": 278471284
+  },
+  "signedAppInventory": {
+    "sha256": "95d1a4e0c84efdb2dc76656e20ca3c0630f8c163f70ed9690590b67cb90ef3bd",
+    "files": 1840,
+    "bytes": 408703860
+  },
+  "binarySha256": "bdd9c64dc3ece8416c929485bf017aec699ba9ab32f0712d7852cbcc97e2dccf",
+  "frameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "installedAppInventory": {
+    "sha256": "95d1a4e0c84efdb2dc76656e20ca3c0630f8c163f70ed9690590b67cb90ef3bd",
+    "files": 1840,
+    "bytes": 408703860
+  },
+  "observer": {
+    "activationLimitSeconds": 180,
+    "uiPhaseLimitSeconds": 120,
+    "budgetInherited": true,
+    "activeAdmissionObserved": true,
+    "outcome": "ui-phase-deadline"
+  },
+  "runtime.json": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "origin": "http://127.0.0.1:29741",
+    "apiStarted": true,
+    "localAccountApiSupported": false,
+    "cloudFallback": false,
+    "preservedOSKeys": [
+      "CFFIXED_USER_HOME",
+      "DYLD_ROOT_PATH",
+      "HOME",
+      "PATH",
+      "SIMULATOR_ARCHS",
+      "SIMULATOR_AUDIO_DEVICES_PLIST_PATH",
+      "SIMULATOR_AUDIO_SETTINGS_PATH",
+      "SIMULATOR_BOOT_TIME",
+      "SIMULATOR_CAPABILITIES",
+      "SIMULATOR_DEVICE_NAME",
+      "SIMULATOR_EXTENDED_DISPLAY_PROPERTIES",
+      "SIMULATOR_FRAMEBUFFER_FRAMEWORK",
+      "SIMULATOR_HID_SYSTEM_MANAGER",
+      "SIMULATOR_HOST_HOME",
+      "SIMULATOR_LEGACY_ASSET_SUFFIX",
+      "SIMULATOR_LOG_ROOT",
+      "SIMULATOR_MAINSCREEN_HEIGHT",
+      "SIMULATOR_MAINSCREEN_PITCH",
+      "SIMULATOR_MAINSCREEN_SCALE",
+      "SIMULATOR_MAINSCREEN_WIDTH",
+      "SIMULATOR_MEMORY_WARNINGS",
+      "SIMULATOR_MODEL_IDENTIFIER",
+      "SIMULATOR_PRODUCT_CLASS",
+      "SIMULATOR_ROOT",
+      "SIMULATOR_RUNTIME_BUILD_VERSION",
+      "SIMULATOR_RUNTIME_VERSION",
+      "SIMULATOR_SHARED_RESOURCES_DIRECTORY",
+      "SIMULATOR_UDID",
+      "SIMULATOR_VERSION_INFO",
+      "TMPDIR",
+      "XPC_FLAGS",
+      "XPC_SERVICE_NAME",
+      "__CF_USER_TEXT_ENCODING"
+    ],
+    "applicationConfigurationCleared": true,
+    "externalUndiciRequests": 0,
+    "externalUndiciRequestsScope": "Node startup acceptance only; not an OS or all-lifecycle network proof",
+    "manifest": {
+      "schemaVersion": 1,
+      "origin": "http://127.0.0.1:29741",
+      "features": 367,
+      "operations": 729
+    },
+    "document": {
+      "status": 200,
+      "hasViteRoot": true
+    },
+    "entryAssetPassed": true,
+    "accountApi": {
+      "status": 503,
+      "code": "LOCAL_API_NOT_CONFIGURED"
+    },
+    "ready": true
+  },
+  "ui-edit.json": {
+    "beforeReloadReadback": {
+      "selectLabel": "Select iOS local runtime persistence edited",
+      "thingId": "local-e64f20aa-1a41-4175-82d7-8bc2f676534b",
+      "visibleText": "\ud83d\udcc1\n\niOS local runtime persistence edited\n\nFOLDER\n\njust now"
+    },
+    "documentTimeOrigin": 1794418550087.0002,
+    "documentWidth": 402,
+    "externalNetworking": "blocked-in-this-WebView-only",
+    "externalRequestRejected": true,
+    "localAccountApiSupported": false,
+    "manifestOrigin": "http://127.0.0.1:29741",
+    "manifestStatus": 200,
+    "operations": [
+      "explicit-work-on-this-device",
+      "create-via-visible-folder-dialog",
+      "edit-via-visible-rename-dialog"
+    ],
+    "origin": "http://127.0.0.1:29741",
+    "passed": true,
+    "phase": "create-edit",
+    "rootChildren": 4,
+    "syntheticThingKind": "folder",
+    "thingId": "local-e64f20aa-1a41-4175-82d7-8bc2f676534b",
+    "viewportWidth": 402
+  },
+  "http-lifecycle.json": {
+    "startedAt": "2026-11-11T17:34:36.204Z",
+    "events": [
+      {
+        "at": 1794418476320,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418476375,
+        "kind": "request",
+        "id": 1,
+        "route": "/.well-known/thingtime-capabilities.json",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476375,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418476384,
+        "kind": "middleware-settled",
+        "id": 1
+      },
+      {
+        "at": 1794418476397,
+        "kind": "response-finish",
+        "id": 1,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 83658,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476397,
+        "kind": "response-close",
+        "id": 1,
+        "finished": true
+      },
+      {
+        "at": 1794418476487,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418476491,
+        "kind": "request",
+        "id": 2,
+        "route": "/",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476491,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418476519,
+        "kind": "response-finish",
+        "id": 2,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 15826,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476519,
+        "kind": "response-close",
+        "id": 2,
+        "finished": true
+      },
+      {
+        "at": 1794418476519,
+        "kind": "middleware-settled",
+        "id": 2
+      },
+      {
+        "at": 1794418476521,
+        "kind": "request",
+        "id": 3,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476579,
+        "kind": "response-finish",
+        "id": 3,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1110083,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476579,
+        "kind": "response-close",
+        "id": 3,
+        "finished": true
+      },
+      {
+        "at": 1794418476579,
+        "kind": "middleware-settled",
+        "id": 3
+      },
+      {
+        "at": 1794418476579,
+        "kind": "request",
+        "id": 4,
+        "route": "/api/v1/auth/me",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476580,
+        "kind": "middleware-settled",
+        "id": 4
+      },
+      {
+        "at": 1794418476580,
+        "kind": "response-finish",
+        "id": 4,
+        "status": 503,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 402,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476580,
+        "kind": "response-close",
+        "id": 4,
+        "finished": true
+      },
+      {
+        "at": 1794418476780,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418476783,
+        "kind": "request",
+        "id": 5,
+        "route": "/.well-known/thingtime-capabilities.json",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476783,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418476791,
+        "kind": "middleware-settled",
+        "id": 5
+      },
+      {
+        "at": 1794418476791,
+        "kind": "response-finish",
+        "id": 5,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 83658,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476791,
+        "kind": "response-close",
+        "id": 5,
+        "finished": true
+      },
+      {
+        "at": 1794418476803,
+        "kind": "request",
+        "id": 6,
+        "route": "/things",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418476836,
+        "kind": "middleware-settled",
+        "id": 6
+      },
+      {
+        "at": 1794418476836,
+        "kind": "response-finish",
+        "id": 6,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 16802,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418476836,
+        "kind": "response-close",
+        "id": 6,
+        "finished": true
+      },
+      {
+        "at": 1794418476848,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794418479611,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794418479611,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794418547324,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418547339,
+        "kind": "request",
+        "id": 7,
+        "route": "/api/v1/vercel/deployments",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418547339,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418547342,
+        "kind": "middleware-settled",
+        "id": 7
+      },
+      {
+        "at": 1794418547372,
+        "kind": "response-finish",
+        "id": 7,
+        "status": 503,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 402,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418547372,
+        "kind": "response-close",
+        "id": 7,
+        "finished": true
+      },
+      {
+        "at": 1794418547886,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418550123,
+        "kind": "request",
+        "id": 8,
+        "route": "/things",
+        "method": "GET",
+        "developmentNavigation": true
+      },
+      {
+        "at": 1794418550123,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418550138,
+        "kind": "middleware-settled",
+        "id": 8
+      },
+      {
+        "at": 1794418550138,
+        "kind": "response-finish",
+        "id": 8,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": true,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 16802,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418550139,
+        "kind": "response-close",
+        "id": 8,
+        "finished": true
+      },
+      {
+        "at": 1794418553395,
+        "kind": "socket-close",
+        "hadError": false
+      },
+      {
+        "at": 1794418555099,
+        "kind": "request",
+        "id": 9,
+        "route": "other",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555106,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418555106,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418555107,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418555110,
+        "kind": "response-finish",
+        "id": 9,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 4754,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555110,
+        "kind": "response-close",
+        "id": 9,
+        "finished": true
+      },
+      {
+        "at": 1794418555111,
+        "kind": "middleware-settled",
+        "id": 9
+      },
+      {
+        "at": 1794418555149,
+        "kind": "request",
+        "id": 10,
+        "route": "other",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555149,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418555166,
+        "kind": "request",
+        "id": 11,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555166,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418555192,
+        "kind": "response-finish",
+        "id": 10,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 4103,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555192,
+        "kind": "response-close",
+        "id": 10,
+        "finished": true
+      },
+      {
+        "at": 1794418555192,
+        "kind": "middleware-settled",
+        "id": 10
+      },
+      {
+        "at": 1794418555192,
+        "kind": "request",
+        "id": 12,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555192,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418555242,
+        "kind": "response-finish",
+        "id": 11,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1110083,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555242,
+        "kind": "response-close",
+        "id": 11,
+        "finished": true
+      },
+      {
+        "at": 1794418555243,
+        "kind": "middleware-settled",
+        "id": 11
+      },
+      {
+        "at": 1794418555244,
+        "kind": "response-finish",
+        "id": 12,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 11142,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555244,
+        "kind": "response-close",
+        "id": 12,
+        "finished": true
+      },
+      {
+        "at": 1794418555244,
+        "kind": "middleware-settled",
+        "id": 12
+      },
+      {
+        "at": 1794418555244,
+        "kind": "request",
+        "id": 13,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555250,
+        "kind": "request",
+        "id": 14,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555260,
+        "kind": "response-finish",
+        "id": 13,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1550,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555260,
+        "kind": "response-close",
+        "id": 13,
+        "finished": true
+      },
+      {
+        "at": 1794418555260,
+        "kind": "middleware-settled",
+        "id": 13
+      },
+      {
+        "at": 1794418555270,
+        "kind": "response-finish",
+        "id": 14,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 627,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555270,
+        "kind": "response-close",
+        "id": 14,
+        "finished": true
+      },
+      {
+        "at": 1794418555270,
+        "kind": "middleware-settled",
+        "id": 14
+      },
+      {
+        "at": 1794418555543,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418555544,
+        "kind": "request",
+        "id": 15,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555550,
+        "kind": "connection",
+        "loopback": true
+      },
+      {
+        "at": 1794418555561,
+        "kind": "request",
+        "id": 16,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555562,
+        "kind": "request",
+        "id": 17,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555582,
+        "kind": "request",
+        "id": 18,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555585,
+        "kind": "request",
+        "id": 19,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555585,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418555587,
+        "kind": "response-finish",
+        "id": 16,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 6056,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555587,
+        "kind": "response-close",
+        "id": 16,
+        "finished": true
+      },
+      {
+        "at": 1794418555587,
+        "kind": "middleware-settled",
+        "id": 16
+      },
+      {
+        "at": 1794418555598,
+        "kind": "response-finish",
+        "id": 15,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 67202,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555598,
+        "kind": "response-close",
+        "id": 15,
+        "finished": true
+      },
+      {
+        "at": 1794418555598,
+        "kind": "middleware-settled",
+        "id": 15
+      },
+      {
+        "at": 1794418555598,
+        "kind": "response-finish",
+        "id": 17,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 841,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555598,
+        "kind": "response-close",
+        "id": 17,
+        "finished": true
+      },
+      {
+        "at": 1794418555598,
+        "kind": "middleware-settled",
+        "id": 17
+      },
+      {
+        "at": 1794418555598,
+        "kind": "request",
+        "id": 20,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555598,
+        "kind": "first-socket-data",
+        "tlsRecord": false
+      },
+      {
+        "at": 1794418555600,
+        "kind": "request",
+        "id": 21,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555601,
+        "kind": "response-finish",
+        "id": 18,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 109921,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555601,
+        "kind": "response-close",
+        "id": 18,
+        "finished": true
+      },
+      {
+        "at": 1794418555601,
+        "kind": "middleware-settled",
+        "id": 18
+      },
+      {
+        "at": 1794418555608,
+        "kind": "response-finish",
+        "id": 19,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 7156,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555608,
+        "kind": "response-close",
+        "id": 19,
+        "finished": true
+      },
+      {
+        "at": 1794418555608,
+        "kind": "middleware-settled",
+        "id": 19
+      },
+      {
+        "at": 1794418555612,
+        "kind": "request",
+        "id": 22,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555617,
+        "kind": "request",
+        "id": 23,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555627,
+        "kind": "request",
+        "id": 24,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555629,
+        "kind": "response-finish",
+        "id": 20,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 8230,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555630,
+        "kind": "response-close",
+        "id": 20,
+        "finished": true
+      },
+      {
+        "at": 1794418555630,
+        "kind": "middleware-settled",
+        "id": 20
+      },
+      {
+        "at": 1794418555651,
+        "kind": "response-finish",
+        "id": 21,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 8561,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555651,
+        "kind": "response-close",
+        "id": 21,
+        "finished": true
+      },
+      {
+        "at": 1794418555651,
+        "kind": "middleware-settled",
+        "id": 21
+      },
+      {
+        "at": 1794418555651,
+        "kind": "request",
+        "id": 25,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555653,
+        "kind": "response-finish",
+        "id": 22,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 71736,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555653,
+        "kind": "response-close",
+        "id": 22,
+        "finished": true
+      },
+      {
+        "at": 1794418555653,
+        "kind": "middleware-settled",
+        "id": 22
+      },
+      {
+        "at": 1794418555653,
+        "kind": "response-finish",
+        "id": 23,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1477,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555653,
+        "kind": "response-close",
+        "id": 23,
+        "finished": true
+      },
+      {
+        "at": 1794418555653,
+        "kind": "middleware-settled",
+        "id": 23
+      },
+      {
+        "at": 1794418555654,
+        "kind": "request",
+        "id": 26,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555679,
+        "kind": "response-finish",
+        "id": 24,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 23828,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555679,
+        "kind": "response-close",
+        "id": 24,
+        "finished": true
+      },
+      {
+        "at": 1794418555679,
+        "kind": "middleware-settled",
+        "id": 24
+      },
+      {
+        "at": 1794418555679,
+        "kind": "request",
+        "id": 27,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555679,
+        "kind": "request",
+        "id": 28,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555686,
+        "kind": "response-finish",
+        "id": 25,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1588,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555686,
+        "kind": "response-close",
+        "id": 25,
+        "finished": true
+      },
+      {
+        "at": 1794418555686,
+        "kind": "middleware-settled",
+        "id": 25
+      },
+      {
+        "at": 1794418555687,
+        "kind": "response-finish",
+        "id": 26,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 3369,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555687,
+        "kind": "response-close",
+        "id": 26,
+        "finished": true
+      },
+      {
+        "at": 1794418555687,
+        "kind": "middleware-settled",
+        "id": 26
+      },
+      {
+        "at": 1794418555696,
+        "kind": "response-finish",
+        "id": 27,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 488,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555696,
+        "kind": "response-close",
+        "id": 27,
+        "finished": true
+      },
+      {
+        "at": 1794418555696,
+        "kind": "middleware-settled",
+        "id": 27
+      },
+      {
+        "at": 1794418555696,
+        "kind": "request",
+        "id": 29,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555696,
+        "kind": "request",
+        "id": 30,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555707,
+        "kind": "response-finish",
+        "id": 28,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 35267,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555707,
+        "kind": "response-close",
+        "id": 28,
+        "finished": true
+      },
+      {
+        "at": 1794418555707,
+        "kind": "middleware-settled",
+        "id": 28
+      },
+      {
+        "at": 1794418555707,
+        "kind": "request",
+        "id": 31,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555707,
+        "kind": "request",
+        "id": 32,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555708,
+        "kind": "request",
+        "id": 33,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555723,
+        "kind": "response-finish",
+        "id": 30,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 2260,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555723,
+        "kind": "response-close",
+        "id": 30,
+        "finished": true
+      },
+      {
+        "at": 1794418555723,
+        "kind": "middleware-settled",
+        "id": 30
+      },
+      {
+        "at": 1794418555724,
+        "kind": "response-finish",
+        "id": 29,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 3354,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555724,
+        "kind": "response-close",
+        "id": 29,
+        "finished": true
+      },
+      {
+        "at": 1794418555724,
+        "kind": "middleware-settled",
+        "id": 29
+      },
+      {
+        "at": 1794418555724,
+        "kind": "request",
+        "id": 34,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555727,
+        "kind": "response-finish",
+        "id": 33,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1764,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555727,
+        "kind": "response-close",
+        "id": 33,
+        "finished": true
+      },
+      {
+        "at": 1794418555727,
+        "kind": "middleware-settled",
+        "id": 33
+      },
+      {
+        "at": 1794418555733,
+        "kind": "response-finish",
+        "id": 32,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 4164,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555733,
+        "kind": "response-close",
+        "id": 32,
+        "finished": true
+      },
+      {
+        "at": 1794418555733,
+        "kind": "middleware-settled",
+        "id": 32
+      },
+      {
+        "at": 1794418555734,
+        "kind": "response-finish",
+        "id": 31,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 530,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555734,
+        "kind": "response-close",
+        "id": 31,
+        "finished": true
+      },
+      {
+        "at": 1794418555734,
+        "kind": "middleware-settled",
+        "id": 31
+      },
+      {
+        "at": 1794418555734,
+        "kind": "request",
+        "id": 35,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555736,
+        "kind": "request",
+        "id": 36,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555742,
+        "kind": "request",
+        "id": 37,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555743,
+        "kind": "request",
+        "id": 38,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555744,
+        "kind": "request",
+        "id": 39,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555761,
+        "kind": "response-finish",
+        "id": 34,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 13957,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555761,
+        "kind": "response-close",
+        "id": 34,
+        "finished": true
+      },
+      {
+        "at": 1794418555761,
+        "kind": "middleware-settled",
+        "id": 34
+      },
+      {
+        "at": 1794418555764,
+        "kind": "response-finish",
+        "id": 35,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1339,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555764,
+        "kind": "response-close",
+        "id": 35,
+        "finished": true
+      },
+      {
+        "at": 1794418555764,
+        "kind": "middleware-settled",
+        "id": 35
+      },
+      {
+        "at": 1794418555765,
+        "kind": "response-finish",
+        "id": 36,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 404,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555765,
+        "kind": "response-close",
+        "id": 36,
+        "finished": true
+      },
+      {
+        "at": 1794418555765,
+        "kind": "middleware-settled",
+        "id": 36
+      },
+      {
+        "at": 1794418555765,
+        "kind": "request",
+        "id": 40,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555771,
+        "kind": "request",
+        "id": 41,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555782,
+        "kind": "response-finish",
+        "id": 37,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 337809,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555782,
+        "kind": "response-close",
+        "id": 37,
+        "finished": true
+      },
+      {
+        "at": 1794418555782,
+        "kind": "middleware-settled",
+        "id": 37
+      },
+      {
+        "at": 1794418555783,
+        "kind": "response-finish",
+        "id": 39,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 6930,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555783,
+        "kind": "response-close",
+        "id": 39,
+        "finished": true
+      },
+      {
+        "at": 1794418555783,
+        "kind": "middleware-settled",
+        "id": 39
+      },
+      {
+        "at": 1794418555783,
+        "kind": "response-finish",
+        "id": 38,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 10656,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555783,
+        "kind": "response-close",
+        "id": 38,
+        "finished": true
+      },
+      {
+        "at": 1794418555783,
+        "kind": "middleware-settled",
+        "id": 38
+      },
+      {
+        "at": 1794418555784,
+        "kind": "request",
+        "id": 42,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555788,
+        "kind": "request",
+        "id": 43,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555789,
+        "kind": "request",
+        "id": 44,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555789,
+        "kind": "request",
+        "id": 45,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555810,
+        "kind": "response-finish",
+        "id": 40,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 22080,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555810,
+        "kind": "response-close",
+        "id": 40,
+        "finished": true
+      },
+      {
+        "at": 1794418555810,
+        "kind": "middleware-settled",
+        "id": 40
+      },
+      {
+        "at": 1794418555824,
+        "kind": "response-finish",
+        "id": 41,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 375865,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555824,
+        "kind": "response-close",
+        "id": 41,
+        "finished": true
+      },
+      {
+        "at": 1794418555824,
+        "kind": "middleware-settled",
+        "id": 41
+      },
+      {
+        "at": 1794418555824,
+        "kind": "response-finish",
+        "id": 42,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 5460,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555824,
+        "kind": "response-close",
+        "id": 42,
+        "finished": true
+      },
+      {
+        "at": 1794418555824,
+        "kind": "middleware-settled",
+        "id": 42
+      },
+      {
+        "at": 1794418555825,
+        "kind": "request",
+        "id": 46,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555832,
+        "kind": "response-finish",
+        "id": 45,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 380,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555832,
+        "kind": "response-close",
+        "id": 45,
+        "finished": true
+      },
+      {
+        "at": 1794418555832,
+        "kind": "middleware-settled",
+        "id": 45
+      },
+      {
+        "at": 1794418555833,
+        "kind": "response-finish",
+        "id": 44,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 539,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555833,
+        "kind": "response-close",
+        "id": 44,
+        "finished": true
+      },
+      {
+        "at": 1794418555833,
+        "kind": "middleware-settled",
+        "id": 44
+      },
+      {
+        "at": 1794418555833,
+        "kind": "response-finish",
+        "id": 43,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 975,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555833,
+        "kind": "response-close",
+        "id": 43,
+        "finished": true
+      },
+      {
+        "at": 1794418555833,
+        "kind": "middleware-settled",
+        "id": 43
+      },
+      {
+        "at": 1794418555833,
+        "kind": "request",
+        "id": 47,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555851,
+        "kind": "request",
+        "id": 48,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555868,
+        "kind": "request",
+        "id": 49,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555956,
+        "kind": "request",
+        "id": 50,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555957,
+        "kind": "request",
+        "id": 51,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555971,
+        "kind": "response-finish",
+        "id": 46,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 711,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555971,
+        "kind": "response-close",
+        "id": 46,
+        "finished": true
+      },
+      {
+        "at": 1794418555971,
+        "kind": "middleware-settled",
+        "id": 46
+      },
+      {
+        "at": 1794418555976,
+        "kind": "response-finish",
+        "id": 47,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 20539,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555976,
+        "kind": "response-close",
+        "id": 47,
+        "finished": true
+      },
+      {
+        "at": 1794418555976,
+        "kind": "middleware-settled",
+        "id": 47
+      },
+      {
+        "at": 1794418555979,
+        "kind": "request",
+        "id": 52,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555979,
+        "kind": "request",
+        "id": 53,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555981,
+        "kind": "response-finish",
+        "id": 48,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 23453,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555981,
+        "kind": "response-close",
+        "id": 48,
+        "finished": true
+      },
+      {
+        "at": 1794418555981,
+        "kind": "middleware-settled",
+        "id": 48
+      },
+      {
+        "at": 1794418555981,
+        "kind": "response-finish",
+        "id": 49,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 949,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555981,
+        "kind": "response-close",
+        "id": 49,
+        "finished": true
+      },
+      {
+        "at": 1794418555981,
+        "kind": "middleware-settled",
+        "id": 49
+      },
+      {
+        "at": 1794418555984,
+        "kind": "response-finish",
+        "id": 50,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 19051,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555984,
+        "kind": "response-close",
+        "id": 50,
+        "finished": true
+      },
+      {
+        "at": 1794418555984,
+        "kind": "middleware-settled",
+        "id": 50
+      },
+      {
+        "at": 1794418555984,
+        "kind": "response-finish",
+        "id": 51,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 1490,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555984,
+        "kind": "response-close",
+        "id": 51,
+        "finished": true
+      },
+      {
+        "at": 1794418555984,
+        "kind": "middleware-settled",
+        "id": 51
+      },
+      {
+        "at": 1794418555991,
+        "kind": "request",
+        "id": 54,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555991,
+        "kind": "request",
+        "id": 55,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555992,
+        "kind": "request",
+        "id": 56,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555999,
+        "kind": "request",
+        "id": 57,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418555999,
+        "kind": "response-finish",
+        "id": 52,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 838,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418555999,
+        "kind": "response-close",
+        "id": 52,
+        "finished": true
+      },
+      {
+        "at": 1794418555999,
+        "kind": "middleware-settled",
+        "id": 52
+      },
+      {
+        "at": 1794418556000,
+        "kind": "response-finish",
+        "id": 53,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 5108,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418556000,
+        "kind": "response-close",
+        "id": 53,
+        "finished": true
+      },
+      {
+        "at": 1794418556000,
+        "kind": "middleware-settled",
+        "id": 53
+      },
+      {
+        "at": 1794418556007,
+        "kind": "request",
+        "id": 58,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418556010,
+        "kind": "request",
+        "id": 59,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-finish",
+        "id": 54,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 5621,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-close",
+        "id": 54,
+        "finished": true
+      },
+      {
+        "at": 1794418556014,
+        "kind": "middleware-settled",
+        "id": 54
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-finish",
+        "id": 56,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 2139,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-close",
+        "id": 56,
+        "finished": true
+      },
+      {
+        "at": 1794418556014,
+        "kind": "middleware-settled",
+        "id": 56
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-finish",
+        "id": 55,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 3055,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418556014,
+        "kind": "response-close",
+        "id": 55,
+        "finished": true
+      },
+      {
+        "at": 1794418556014,
+        "kind": "middleware-settled",
+        "id": 55
+      },
+      {
+        "at": 1794418556018,
+        "kind": "response-finish",
+        "id": 57,
+        "status": 200,
+        "headers": {
+          "content-type": null,
+          "content-length": null,
+          "content-encoding": null,
+          "transfer-encoding": null,
+          "connection": null
+        },
+        "chunkedEncoding": false,
+        "shouldKeepAlive": true,
+        "socketBytesWrittenSpan": 38965,
+        "socketWritableLength": 0
+      },
+      {
+        "at": 1794418556018,
+        "kind": "response-close",
+        "id": 57,
+        "finished": true
+      },
+      {
+        "at": 1794418556018,
+        "kind": "middleware-settled",
+        "id": 57
+      },
+      {
+        "at": 1794418556019,
+        "kind": "request",
+        "id": 60,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      },
+      {
+        "at": 1794418556021,
+        "kind": "request",
+        "id": 61,
+        "route": "asset",
+        "method": "GET",
+        "developmentNavigation": false
+      }
+    ],
+    "eventCount": 732,
+    "pending": {},
+    "heartbeat": 85,
+    "stopped": false
+  },
+  "navigation.json": [
+    {
+      "applicationState": "inactive",
+      "at": 1794418470.141669,
+      "originMatched": true,
+      "path": "other",
+      "stage": "scene-initial-inactive"
+    },
+    {
+      "applicationState": "inactive",
+      "at": 1794418476.845155,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "native-urlsession-things-200"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418547.014142,
+      "originMatched": true,
+      "path": "other",
+      "stage": "application-became-active"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418547.0184531,
+      "originMatched": true,
+      "path": "other",
+      "stage": "scene-active"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418547.0202909,
+      "originMatched": true,
+      "path": "other",
+      "stage": "wk-admitted-active"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418550.090208,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-provisional-start"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418555.093027,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-commit"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418556.9927611,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-finish"
+    },
+    {
+      "applicationState": "active",
+      "at": 1794418561.559565,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-provisional-start"
+    }
+  ],
+  "independentReloadReadback": false,
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": false,
+      "returncode": 3
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "observedAt": "2026-11-11T17:37:53.491924+00:00"
+}

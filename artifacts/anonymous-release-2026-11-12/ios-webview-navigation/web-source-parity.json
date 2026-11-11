@@ -1,0 +1,21 @@
+{
+  "canonicalEntrySha256": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657",
+  "requiredFrozenRemixSourceHashes": {
+    "remix/app/api/utils/auth/sessionCore.ts": "506a059e3968ed4165a4cbde2562ecd0717dfc543dce0a308fd60091518d5e08",
+    "remix/app/api/utils/auth/sessionRepository.ts": "24bb9600e673238c568d87039187d991ff592b8a2dcce2b6aba44edf2bc565b5",
+    "remix/app/api/utils/auth/sessions.ts": "c43cb68d04c616723d0c5108537948fdbff391bd2f69abd9eb1eb0c90a82b658",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "96a3bdd00919fb81d6b95fe98e08d280ef530bb330cd921559d1c0666d8300ee",
+    "remix/app/api/utils/documentStore/nativeSessions.test.ts": "5a88366c2e36feb73c02ace7f0752e7b2620c384c238ae8e827d3c3af5f26498",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "7f66565a762e65e07bfef94f4da7f3573b3b26289019b15d44a7230a7c4bee4b",
+    "remix/app/components/Passwords/PasswordManager.tsx": "04e9f56329807859c69bd0e128a3e83628ffe63d4f41c5f623c1a82714fd5a4a",
+    "remix/scripts/authenticator-setup.browser.tsx": "5aab0e712169ecdd097400c3fd15a392c4961fb6a130f85bc25a27d2556825bd",
+    "remix/scripts/test-authenticator-setup-ui.mjs": "f21d8dad6f3dd0789644f12b4f67281e54f69c323e42588077b0cc0690e9b4c4"
+  },
+  "allRequiredSourceHashesMatched": true,
+  "nativeBaseRevision": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "scope": "Selected original frozen Remix paths at diagnostic start only; not the whole current combined dirty source",
+  "incomingCanonicalWebChangesExcluded": [
+    "remix/app/api/utils/auth/users.ts",
+    "new identity repositories"
+  ]
+}

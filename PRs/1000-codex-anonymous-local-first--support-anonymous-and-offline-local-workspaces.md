@@ -2,6 +2,77 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native checkpoint — 12 November 2026
+
+The helper-inclusive isolated desktop app now passes actual automatic bundle
+replacement: signed catalogue/content download and staging, 70-second dirty-editor
+refusal, normal Enter, canonical persistence/hard reload, fresh process, confirmed
+release, unchanged origin and saved data. Desktop/390px drawer edit/cancel and
+owned-resource cleanup pass. Synthetic release authority remains distinct from
+production trust; the app test starts with an empty native password group.
+[Actual replacement evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/helper-replacement/README.md).
+
+The signed development helper has distinct host/provider IDs, private Keychain
+group, notification and URL scheme. Its separate compile-guarded fixture uses
+atomic insert-only authority setup and exact-state recovery; unrelated authority
+is preserved. Real signed tests independently verify wrong-origin preservation,
+matching HTTPS retirement and empty readback. 96 focused Electron checks pass;
+Swift executes 68 tests with 2 skips and 0 failures. This is not local-account/vault
+restoration or production distribution acceptance.
+[Helper evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/helper-integration/README.md).
+A subsequent verifier-only CLI fix handles spaces and macOS symlink paths;
+its six focused checks pass and the proof body is unchanged. Historical native
+source receipts remain intact. The reconstructed stopped development app is
+retained separately; it has verified bytes/resources but no new launch claim.
+
+
+A fresh combined canonical web build passes typecheck/zero-baseline ratchet,
+full lint (0 errors, 372 warnings), bundle inventory and the genuine MongoDB HTTP
+fixture. All 5,185 scoped source hashes match before/after the build; the payload
+includes the recorded dirty bootstrap and identity inputs. Its Nitro entry hash
+is 85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d.
+[Combined source/build/API receipt](../artifacts/anonymous-release-2026-11-12/bootstrap-identity-build/README.md).
+
+The real iOS app reached RootRecovery in diagnostic run03, exposing the lack of
+an explicit first-launch local choice. The new Work on this device initializer
+negotiates compatible origin/version, checks fresh profile/cookies and existing
+workspace, then rechecks exact live document against the immutable bundled origin after async work.
+Its projection remains anonymous/device-only; account APIs still return 503.
+39 focused bootstrap/root/identity checks and actual-component browser states at
+1440/390/320px pass. In run04 WebKit received HTTP 200 but navigation timed out
+before React; no New/Rename/reload assertion ran. The active-scene admission control then reached the actual library. The next
+run passed ordinary device-home selection, New and Rename with the same local ID,
+but reload did not finish. The task app’s crash report proves SIGABRT in Apple’s
+LinguisticData/ProofReader path about182ms after reload began; the underlying
+assertion cause remains unknown. Simulator deletion/absence is verified; the
+overall receipt remains false. [Actual partial result](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/ui-followup/outcome.json).
+[Controlled UI evidence](../artifacts/anonymous-release-2026-11-12/device-home-recovery-ui/README.md).
+
+This checkpoint does not complete the goal. Full SQLite account/API selection,
+actual iOS first-launch edit/reload, local-account/vault restart recovery, hosted
+renderer release/activation and production native bundle trust remain open.
+
+## Canonical native identities — 12 November 2026
+
+Canonical insert/read user operations now use the same explicit native home scope
+as sessions. Normal Mongo and legacy behavior remain unchanged; unsupported native
+operations refuse instead of falling back. Shared Things uniqueness definitions
+compose with canonical storage accounting on one provider. Batch lookups use one
+scan/transaction with order/dedup preserved; OR evaluation is still not indexed.
+
+The document-store suite passes 56 checks, including nine identity regressions.
+TypeScript and scoped lint pass. This is real-file/canonical helper evidence;
+normal SQLite signup still requires the wider transaction, tier/subscription,
+vault, verification/outbox, roster and Nitro readiness chain.
+[Evidence](../artifacts/anonymous-release-2026-11-12/sqlite-identities/README.md).
+
+The pushed b3eba7dbf checkpoint passes Web build/type/unit, API and native compile
+CI. JavaScript CodeQL failed on GitHub's installation API rate limit, with no
+successful security analysis implied. The subsequent checkpoint has its own local receipts; its pushed head needs
+independent CI results. Hosted activation also requires released adapter
+source and a worker matching the final renderer; the prior snapshot differs from
+the current built renderer and is not being re-provisioned prematurely.
+
 ## Latest main integration — 12 November 2026
 
 Main1125ca1a9 (PR1480 native Passwords editing/status) is integrated with the
@@ -30,7 +101,7 @@ feature parity or release approval.
 
 The separate opt-in lane now builds the normal SwiftUI app and embeds the final
 canonical Node/Nitro payload. Actual simulator startup returns the local manifest,
-Vite HTML and entry JavaScript successfully. Account APIs correctly return503
+Vite HTML and entry JavaScript successfully. Account APIs correctly return 503
 `LOCAL_API_NOT_CONFIGURED`; no cloud fallback or completed SQLite account flow is
 claimed. Full canonical payload and signed/installed app inventories match.
 

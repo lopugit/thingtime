@@ -1,0 +1,48 @@
+{
+  "scope": "Explicit first-launch device-only bootstrap source/focused checks; corrective native app attempted but UI never committed",
+  "sourceSha256": {
+    "remix/app/routes.tsx": "e82522f4f49510b6eaee3afd6afd0083a8e5f1a71a30c4255bc124d11c1dc73d",
+    "remix/app/components/Layout/RootRecovery.tsx": "a5e67cafac9a47ec86c0cde0f21dbb5f17b4a3c5c4288524de263ceefadb27ec",
+    "remix/app/local-workspace/rootFallback.ts": "5f0819a9fae424e8ccb5c9cf902eb45a3c3ed9d973f4f296686e833abaf27f9d",
+    "remix/app/local-workspace/localHomeBootstrap.ts": "d13329c5d88dd43a9707f14171b6cdedbd3e00e3afffceb7ad23666a3f4ba2dc",
+    "remix/app/local-workspace/localHomeBootstrap.client.ts": "2e5cbcd29a72431e1c624604bec75dac9adac99794a568b4f683996b9a0e7077",
+    "remix/app/local-workspace/localHomeBootstrap.test.ts": "3da406e1014ad64f1133166bd153c731f03b34b256183ec1af10a091a029648d",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "a8f6e17f972054a20d4cae2584406b90498ed58fc93a5708af65c97dcea8280e",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift": "7e14368d719663bb7a0a41317a29b068a09a260431529b18277cfa2a7153a388",
+    "iOS/Thingtime/Web/WebView.swift": "f17576f6ebc154e7e9d5f5d7a50b8bcad5f71fe8f222f2eb382b75ebcd65a54c",
+    "iOS/scripts/local-development/acceptance.js": "afde8bfdc8dea0a032f1483fcb13d771e58a8ba6cb3f9a3a660f8e72e23ecf11",
+    "iOS/scripts/local-development/run.py": "1622bf997b6426ae7d34cb0c174c087736f9ce9d4421131eb1bb1241d1fdef7d",
+    "iOS/scripts/local-development/test-document-fence.swift": "bbc6f7471a0f35d445632f03618c974d660b1fa4fee4db0a750a0ab9738d39e3",
+    "apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c",
+    "iOS/scripts/local-development/prepare.py": "4e22f1bbcd028596b8ab5a0d90e22f9666790ae908c183894546605e98bf8014",
+    "iOS/scripts/local-development/entry.mjs": "d51e730432a0ae0549f5aaf93a8d7c80990cb218653123de595faf30aa709d8a",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h": "c4aa76edd69d16cc5dfe46d1f0952e029dd0709823cab906dd79916bf8a29628",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4f965422aabfcbe3144cee2f4641e26a4ea78156104821b8db500cc4f5c706e5",
+    "iOS/Thingtime/App/ThingtimeApp.swift": "c074f71d9e55944059937adb63288f8219883988ed094b145e7e29b5817d1285",
+    "iOS/Thingtime/Web/ThingtimeWebDestination.swift": "9d614cb1df16b9088adad18b1da4a7d0f238e182b6986378998d2cec6e0e52cd"
+  },
+  "focusedRootIdentityRecoveryTests": {
+    "pass": 39,
+    "fail": 0,
+    "skipped": 0
+  },
+  "typecheck": "passed",
+  "typecheckRatchet": {
+    "errors": 0
+  },
+  "focusedLint": "passed",
+  "nativeCompiledFenceChecks": [
+    "wrong selected/current origin rejected",
+    "wrong frame origin rejected",
+    "unsupported feature major rejected before mutation",
+    "stale same-origin navigation token rejected before mutation",
+    "changed current URL rejected",
+    "old document token rejected",
+    "current document accepted"
+  ],
+  "nativeFenceSourceIncludesCanonicalOriginHelper": true,
+  "serverApiResponsesReplaced": false,
+  "directThingSeeds": false,
+  "frozen": true,
+  "nativeUiAcceptance": "attempted against new canonical build; failed before renderer commit, no UI operations"
+}

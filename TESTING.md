@@ -19271,3 +19271,41 @@ never print the file-download JSON, encryption metadata or signed URL.
 - Account readiness must remain503 until canonical repositories are integrated;
   never substitute cloud credentials or direct database seeds. Verify exact owned
   simulator cleanup after success and failure.
+
+### Native identity and accounting coexistence
+
+- Exercise canonical user creation/read and session resolution in an explicit
+  native home scope, reopen the real file, and verify ordinary envelopes/projection.
+- Race username/email uniqueness and refuse wrong-plane, expired, detached or
+  session-only scopes without any Mongo/legacy fallback.
+- Batch lookups must preserve order/dedup with one native transaction/scan; do not
+  regress to one full scan/transaction per requested identity.
+- Initialize identities and apply canonical storage accounting on the same provider
+  and shared immutable Things definition, then reopen. Conflicting definitions
+  require explicit migration; never replace index policy to make a test pass.
+- Preserve normal Mongo selectors, legacy fallback and caller-session forwarding.
+  Helper persistence does not prove SQLite HTTP signup or complete account readiness.
+
+### Native cold-home admission and helper-inclusive activation (12 November 2026)
+
+- In a fresh isolated native profile, negotiate local-home initialization before
+  mutation. Refuse missing/breaking versions, wrong selected or runtime origin,
+  existing/pending account workspace and nonempty cookies. After asynchronous
+  checks, reject a changed document, including a same-URL reload. Verify the local
+  projection stays anonymous/device-only and never marks remote confirmation.
+- Exercise actual RootRecovery at 1440/390/320px: keyboard activation, one inline
+  busy indicator, failure/retry, long diagnostics, existing/unsupported/forbidden
+  hidden states and top-to-bottom scrolling. Controlled host UI is not native
+  initialization acceptance; require actual New/Rename/reload separately.
+- Build isolated signed password helpers with their own host/provider IDs,
+  Keychain group, notification and URL scheme. Ensure release binaries exclude
+  fixture commands. Atomic fixture seed must refuse existing authority; uncertain
+  writes require exact session readback and preserve mismatches. Verify wrong-origin
+  preservation, matching retirement and empty readback through the actual helper.
+- With the helper included in the actual development app, receive a verified
+  release through the real client/HTTP handlers, retain unsaved edits through the
+  dirty hold, persist via normal controls and reload, then observe automatic PID
+  replacement, confirmed release, unchanged local origin and durable content.
+  Exercise desktop/mobile drawer draft and cancel, then verify owned-resource
+  cleanup. An empty helper group does not prove account/vault recovery; synthetic
+  signing does not prove production release trust.

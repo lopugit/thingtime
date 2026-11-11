@@ -1,0 +1,28 @@
+{
+  "outputRoot": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron/dist/web",
+  "baseCommit": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "gitBranch": "codex/anonymous-release",
+  "nitroPreset": "node_middleware",
+  "serverEntrySha256": "85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d",
+  "metadataSha256": "ef8a5a75e2b06563dca3170f0177c16a19bb7911ec8511e396c432cc3251bdba",
+  "rawIntegritySha256": "b38c1b7bd1fe6cf1426c8414d12fbc90425606b137cca273a76c9e25cedf988b",
+  "canonicalInventorySha256": "b8e4159851365ed38dfc4e090018892c72eb6ce99ddad016e2b856ca87be3776",
+  "fileCount": 1823,
+  "nativeBundle": {
+    "target": {
+      "platform": "darwin",
+      "arch": "arm64"
+    },
+    "runtime": {
+      "id": "electron-node-middleware-v1",
+      "nativeAbi": "electron-43.1.0-node-24.18.0-modules-148",
+      "shellVersion": "0.1.2"
+    },
+    "entrypoints": {
+      "renderer": ".output/public/index.html",
+      "server": ".output/server/index.mjs"
+    }
+  },
+  "canonicalStagedEntryMatches": true,
+  "independentInventoryMatches": true
+}

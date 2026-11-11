@@ -1,0 +1,84 @@
+{
+  "passed": false,
+  "nativeBaseRevision": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "webAttribution": "Frozen45f07344 checkpoint from original6d96 plus recorded source changes; NOT current combined dirty web source",
+  "wkDocumentNitroResponseMs": 3,
+  "wkDocumentNitroStatus": 200,
+  "nativeNavigationEvents": [
+    {
+      "at": 1794414996.401201,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "native-urlsession-things-200"
+    },
+    {
+      "at": 1794414999.291584,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-provisional-start"
+    },
+    {
+      "at": 1794415032.255478,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-commit"
+    },
+    {
+      "at": 1794415034.794002,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "wk-finish"
+    }
+  ],
+  "httpEventCount": 692,
+  "storedHttpEvents": 256,
+  "httpEventsTruncated": true,
+  "heartbeat": 68,
+  "pendingMiddlewareAtSnapshot": {},
+  "visibleUi": {
+    "error": "Visible UI unavailable: Things library heading",
+    "operations": [],
+    "origin": "http://127.0.0.1:29741",
+    "passed": false,
+    "phase": "create-edit",
+    "syntheticThingKind": "folder",
+    "visibleButtons": [
+      {
+        "label": null,
+        "text": "Try again"
+      },
+      {
+        "label": null,
+        "text": "Reload page"
+      }
+    ],
+    "visibleHeadings": [
+      "We couldn\u2019t load your session"
+    ]
+  },
+  "rootColdStartBoundary": {
+    "rootDataEndpointStatus": 503,
+    "fallbackRequiresPriorConfirmedPointer": true,
+    "noSyntheticPointerInserted": true
+  },
+  "signedAppEqualsInstalled": true,
+  "currentExecutedCodeHashesMatch": true,
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "simulatorDeleted": true
+}

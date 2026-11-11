@@ -1,0 +1,20 @@
+{
+  "historicalActualRunReceiptSha256": "8271292ab6a6042c1cab0a6c638ce5465a0268c6b31c29c5e814e8b209be22eb",
+  "historicalSourceFreezePreserved": true,
+  "verifierOnlyDelta": "CLI entry guard decodes file URL and resolves argv symlinks; proof body/native helper binaries unchanged.",
+  "previousVerifierSha256": "c39348e977e6026bf1d0353d69bb5923e5c35883464aba8a5dfd2bece5eebcdc",
+  "correctedVerifierSha256": "128808c39637984c280abc9448b5d24533ee049b83814f866d243d1845979e80",
+  "testFile": "electron/test/password-helper-identity.test.cjs",
+  "correctedTestSha256": "e419139a259800994788af52316ca450500786f75fce4e5aab51a18c403372d0",
+  "proofBodyUnchanged": true,
+  "spacesRegressionFailedBeforeFix": true,
+  "focusedTests": {
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "logSha256": "a609a2cd23fa564f2f8b563f91070bc4a46eff374c05a889fca9f9219210840f"
+  },
+  "retainedStoppedCopyVerifierUpdated": true,
+  "noAppOrAuthorityRerun": true,
+  "macOsVarAliasHandled": true
+}

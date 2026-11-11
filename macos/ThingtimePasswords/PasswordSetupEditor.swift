@@ -22,7 +22,7 @@ import ThingtimePasswordCore
             if self.destinationMatches() { return true }
             self.retryDestination(); return false
         }
-        DistributedNotificationCenter.default().addObserver(self, selector: #selector(destinationChanged), name: .init("com.thingtime.passwords.destination-changed"), object: nil)
+        DistributedNotificationCenter.default().addObserver(self, selector: #selector(destinationChanged), name: PasswordHostIdentity.destinationChanged, object: nil)
         retryDestination()
     }
     @objc private func openThingtime() {

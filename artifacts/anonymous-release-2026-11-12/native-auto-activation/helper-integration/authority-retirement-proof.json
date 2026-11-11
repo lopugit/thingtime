@@ -1,0 +1,14 @@
+{
+  "canonicalStoreSeeded": true,
+  "freshProcessReadback": true,
+  "wrongOriginPreserved": true,
+  "actualHelperRetirement": true,
+  "privateGroupEmpty": true,
+  "emptyGroupLoopbackRetirement": true,
+  "realAccountOrServerUsed": false,
+  "proofSerialized": true,
+  "cleanupExactSessionWitness": true,
+  "atomicCompareAndDelete": false,
+  "scope": "Exclusive task-owned private group; arbitrary concurrent external authority replacement is not claimed.",
+  "logSha256": "cddd79954c918b12368bb8daafc7b50cd0d0e15f409349f2fb65ef75f4d5743c"
+}

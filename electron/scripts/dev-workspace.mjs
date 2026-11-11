@@ -1,3 +1,4 @@
+import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { cp, lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -102,7 +103,7 @@ export async function workspaceEnvironment(workspace) {
 	} catch (error) { if (error.code === 'ENOENT') return { ADMIN_USERNAMES: '' }; throw error; }
 }
 
-export async function prepareWorkspace(workspace, electronDir, electronExecutable) {
+export async function prepareWorkspace(workspace, electronDir, electronExecutable, { passwordHelper } = {}) {
 	if (process.platform !== 'darwin') throw new Error('Retained development app bundles currently require macOS.');
 	await mkdir(workspace.root, { recursive: true, mode: 0o700 });
 	const stage = path.join(workspace.root, `.prepare-${randomUUID()}`);
@@ -128,6 +129,14 @@ export async function prepareWorkspace(workspace, electronDir, electronExecutabl
 		for (const item of ['web', 'ai', 'mail', 'database']) {
 			await cp(path.join(electronDir, 'dist', item), path.join(stagedSource, 'dist', item), { recursive: true, dereference: true });
 		}
+        if (passwordHelper) {
+            const options = { isolatedIdentity: passwordHelper.identity, teamIdentifier: passwordHelper.identity.teamIdentifier, signingIdentity: passwordHelper.signingIdentity };
+            await verifyPasswordProvider(passwordHelper.app, options);
+            const destination = path.join(stagedSource, 'dist/native/Thingtime Passwords.app');
+            await mkdir(path.dirname(destination), { recursive: true });
+            run('/usr/bin/ditto', [passwordHelper.app, destination]);
+            await verifyPasswordProvider(destination, options);
+        }
 		await cp(path.join(electronDir, 'dist/web-integrity.json'), path.join(stagedSource, 'dist/web-integrity.json'));
 		run(process.execPath, [path.join(stagedSource, 'scripts/verify-web-build.mjs')], developmentEnvironment());
 		const originalBundle = path.resolve(electronExecutable, '../../..');
@@ -173,7 +182,7 @@ export async function prepareWorkspace(workspace, electronDir, electronExecutabl
 		if (await exists(workspace.app)) await rename(workspace.app, path.join(stage, 'previous-app'));
 		await rename(stagedApp, workspace.app); appActivated = true;
 		const metadata = JSON.parse(await readFile(path.join(workspace.source, 'dist/web/metadata.json'), 'utf8'));
-		await writeFile(path.join(workspace.root, 'development.json'), JSON.stringify({ source: electronDir, sourceSha: metadata.gitCommit, bundleIdentifier: workspace.identity, app: workspace.app, profile: workspace.profile, resources: path.join(workspace.source, 'dist'), nativeNodeBridge: 'disabled', apiPort: workspace.apiPort, databasePort: workspace.databasePort, inspectorPort: workspace.inspectorPort }, null, 2));
+		await writeFile(path.join(workspace.root, 'development.json'), JSON.stringify({ source: electronDir, sourceSha: metadata.gitCommit, bundleIdentifier: workspace.identity, app: workspace.app, profile: workspace.profile, resources: path.join(workspace.source, 'dist'), nativeNodeBridge: 'disabled', passwordHelper: passwordHelper?.identity || null, apiPort: workspace.apiPort, databasePort: workspace.databasePort, inspectorPort: workspace.inspectorPort }, null, 2));
 	} catch (error) {
 		if (sourceActivated) await rm(path.dirname(workspace.source), { recursive: true, force: true });
 		if (await exists(oldSource)) await rename(oldSource, path.dirname(workspace.source));

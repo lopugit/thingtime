@@ -54,6 +54,19 @@ public enum PasswordSessionStore {
         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
         return (session.origin, session.ownerId)
     }
+    /// Create initial authority without replacing an item inserted concurrently.
+    /// A duplicate is a conflict; never fall back to update or a read/delete.
+    public static func saveIfAbsent(_ session: ProviderSession) throws {
+        try saveIfAbsent(session, accessGroup: group, add: { SecItemAdd($0 as CFDictionary, nil) })
+    }
+    static func saveIfAbsent(_ session: ProviderSession, accessGroup: String?, add: ([String: Any]) -> OSStatus) throws {
+        let query = try query(accessGroup: accessGroup)
+        let data = try JSONEncoder().encode(session)
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        let status = add(query.merging(attributes) { _, new in new })
+        if status == errSecDuplicateItem { throw PasswordProviderError.conflict }
+        guard status == errSecSuccess else { throw PasswordProviderError.unavailable }
+    }
     public static func save(_ session: ProviderSession) throws {
         let query = try query(accessGroup: group)
         let data = try JSONEncoder().encode(session)

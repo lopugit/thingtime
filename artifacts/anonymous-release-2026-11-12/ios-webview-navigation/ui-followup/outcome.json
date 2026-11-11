@@ -1,0 +1,25 @@
+{
+  "outcome": "partial, acceptance failed",
+  "actualUiAssertions": [
+    "ordinary Work on this device click",
+    "recovery exited to ordinary Things heading",
+    "visible New > New folder dialog > Create",
+    "visible shared Rename > edited title > Rename",
+    "same-ID rendered DOM card and checkbox label before reload"
+  ],
+  "unverified": [
+    "post-reload same-ID persistence",
+    "physical iPhone",
+    "production distribution trust",
+    "runtime source-to-binary reproduction",
+    "SQLite full account API"
+  ],
+  "createdThingId": "local-e64f20aa-1a41-4175-82d7-8bc2f676534b",
+  "cleanupIndependentSimulatorAbsence": true,
+  "cleanupPolicy": "terminate returned3 because app already crashed; shutdown and delete succeeded; acceptance remains false",
+  "currentSourceStillMatchesExecutedReceipt": true,
+  "nextBoundary": "Diagnose Apple LinguisticData/ProofReader abort before another bounded reload run. No product correction justified from missing assertion text.",
+  "runtimeOriginFence": "Bound to immutable bundled origin computed from signed Info.plist; no mutable runtime origin or post-await live-origin getter claim",
+  "sourceFrozen": true,
+  "canonicalWebBuildEvidence": "../bootstrap-identity-build/source-before.json and source-after.json; baseb3eba7dbf plus frozen combined dirty inputs; Nitro85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d"
+}

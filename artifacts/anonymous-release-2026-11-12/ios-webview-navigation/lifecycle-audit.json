@@ -1,0 +1,48 @@
+{
+  "kind": "bounded read-only audit of existing receipts/source; no simulator run",
+  "runs": [
+    {
+      "run": "02",
+      "wkMainResponse200": "2026-11-12 03:12:56.924",
+      "applicationDidBecomeActive": "2026-11-12 03:14:01.314",
+      "callback": "failure",
+      "callbackAt": "2026-11-12 03:14:01.449",
+      "responseToActivationSeconds": 64.39,
+      "activationToCallbackSeconds": 0.135,
+      "rawLogSha256": "768e3f812b39fc6b0d05dbc18aaa2ada51eb4a92042f82e87b8641c1164630cf"
+    },
+    {
+      "run": "03-trace",
+      "wkMainResponse200": "2026-11-12 03:36:39.308",
+      "applicationDidBecomeActive": "2026-11-12 03:37:12.073",
+      "callback": "commit",
+      "callbackAt": "2026-11-12 03:37:12.251",
+      "responseToActivationSeconds": 32.765,
+      "activationToCallbackSeconds": 0.178,
+      "rawLogSha256": "e65204a9168e23618ca7d32db12ae51edc8f645d3da6456b62277a3c1fecfe1f"
+    },
+    {
+      "run": "04-bootstrap",
+      "wkMainResponse200": "2026-11-12 04:06:55.200",
+      "applicationDidBecomeActive": "2026-11-12 04:09:19.497",
+      "callback": "failure",
+      "callbackAt": "2026-11-12 04:09:19.630",
+      "responseToActivationSeconds": 144.297,
+      "activationToCallbackSeconds": 0.133,
+      "rawLogSha256": "ff2c1a8f11b947e79827386a26a56bf9ec08aa00982c9a86209d5dca0778a41b"
+    }
+  ],
+  "actualWkReceiptEvidence": "WebContent main-frame resource11 logs didReceiveResponse HTTP200, same page/frame used by navigation policy and timeout",
+  "requestAttribution": "Native URLSession preflight completed before WK start; WK own response log independently corroborates second Things request; old ledger lacks explicit request tag",
+  "navigationActionPolicy": "Use decision recorded before response",
+  "navigationResponsePolicy": "WebKit reports client does not implement response decision handler; no application callback can be left unresolved there",
+  "ownSynchronousWaitsFoundInNavigationStarted": false,
+  "mainThreadProgressDuringDelay": [
+    "client-navigation timer timeout log",
+    "accessibility PDFKit loading log"
+  ],
+  "oldResponseHeaderWhitelistCaptured": false,
+  "oldWkBodyBytesCaptured": false,
+  "correlationIsRootCauseProof": false,
+  "approvedDiscriminatingControl": "One-shot active scene + UIApplication active admission before constructing same real WebView; same Node/Nitro/protections; tagged request and safe header/wire-byte observations"
+}

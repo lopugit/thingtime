@@ -1,0 +1,142 @@
+{
+  "scope": "synthetic host/controlled response only; actual RootRecovery and shared React/router/controller; not native persistence acceptance",
+  "command": "node artifacts/anonymous-release-2026-11-12/device-home-recovery-ui/run.mjs",
+  "sourceHashes": {
+    "remix/app/components/Layout/RootRecovery.tsx": "a5e67cafac9a47ec86c0cde0f21dbb5f17b4a3c5c4288524de263ceefadb27ec",
+    "remix/app/components/Settings/DesktopConnectionRecovery.tsx": "cc3897f73947e5b63f7cb0fefaa13789aa5ff18c080b85b2b660f3131faa396b",
+    "remix/app/local-workspace/localHomeBootstrap.ts": "d13329c5d88dd43a9707f14171b6cdedbd3e00e3afffceb7ad23666a3f4ba2dc",
+    "remix/app/local-workspace/localHomeBootstrap.client.ts": "2e5cbcd29a72431e1c624604bec75dac9adac99794a568b4f683996b9a0e7077",
+    "remix/app/utils/rootIdentity.ts": "3ec05ce8e18ec19630505e5180949338fcb5e8ad19309e8927af6ea1dcff2130",
+    "remix/app/utils/rootDataRecovery.ts": "f0a1a3831b48d75748a1a5ec756d668e960163e6f384aee09be047bc82349a60"
+  },
+  "results": [
+    {
+      "width": 1440,
+      "readyButtonBounds": [
+        {
+          "text": "Try again",
+          "x": 500,
+          "y": 406.359375,
+          "width": 108.21875,
+          "height": 44
+        },
+        {
+          "text": "Reload page",
+          "x": 624.21875,
+          "y": 406.359375,
+          "width": 110.0625,
+          "height": 44
+        },
+        {
+          "text": "Work on this device",
+          "x": 500,
+          "y": 567.140625,
+          "width": 184.375,
+          "height": 44
+        }
+      ],
+      "checks": [
+        "real RootRecovery/router/controller",
+        "keyboard Tab+Enter+Space",
+        "single inline busy and disabled action",
+        "failure alert and retry clears prior error",
+        "controlled synthetic success revalidation",
+        "existing/unsupported/nonretryable hidden",
+        "identity invalidation hides action",
+        "top-bottom scroll and bounds in every state"
+      ]
+    },
+    {
+      "width": 390,
+      "readyButtonBounds": [
+        {
+          "text": "Try again",
+          "x": 24,
+          "y": 422.609375,
+          "width": 108.21875,
+          "height": 44
+        },
+        {
+          "text": "Reload page",
+          "x": 148.21875,
+          "y": 422.609375,
+          "width": 110.0625,
+          "height": 44
+        },
+        {
+          "text": "Work on this device",
+          "x": 24,
+          "y": 583.390625,
+          "width": 184.375,
+          "height": 44
+        }
+      ],
+      "checks": [
+        "real RootRecovery/router/controller",
+        "keyboard Tab+Enter+Space",
+        "single inline busy and disabled action",
+        "failure alert and retry clears prior error",
+        "controlled synthetic success revalidation",
+        "existing/unsupported/nonretryable hidden",
+        "identity invalidation hides action",
+        "top-bottom scroll and bounds in every state"
+      ]
+    },
+    {
+      "width": 320,
+      "readyButtonBounds": [
+        {
+          "text": "Try again",
+          "x": 24,
+          "y": 422.609375,
+          "width": 108.21875,
+          "height": 44
+        },
+        {
+          "text": "Reload page",
+          "x": 148.21875,
+          "y": 422.609375,
+          "width": 110.0625,
+          "height": 44
+        },
+        {
+          "text": "Work on this device",
+          "x": 24,
+          "y": 608.984375,
+          "width": 184.375,
+          "height": 44
+        }
+      ],
+      "checks": [
+        "real RootRecovery/router/controller",
+        "keyboard Tab+Enter+Space",
+        "single inline busy and disabled action",
+        "failure alert and retry clears prior error",
+        "controlled synthetic success revalidation",
+        "existing/unsupported/nonretryable hidden",
+        "identity invalidation hides action",
+        "top-bottom scroll and bounds in every state"
+      ]
+    }
+  ],
+  "errors": [],
+  "fixtureHashes": {
+    "fixture.tsx": "ca4260a04d9f25252739273a5db4d87869c9c6f8fcf5c5f15cd8e4afca50492c",
+    "run.mjs": "9d592a1f57b19b5d22bcdca2575faa4af571241b24a9a13b7b3801b5e7d8c293"
+  },
+  "screenshotInspection": [
+    "1440-busy.png",
+    "390-error.png",
+    "320-ready.png",
+    "320-error.png",
+    "390-keyboard.png"
+  ],
+  "findings": [],
+  "setupLimitation": "Initial synchronous fixture root loader cleared router errors but did not repaint its error boundary; fixture repaired to make a real delayed loopback root-check request, as actual root data loading is asynchronous. Historical setup failure is separated in fixture-setup-debug; no production defect asserted.",
+  "cleanup": {
+    "browserClosed": true,
+    "serverClosed": true,
+    "temporaryBundleRemoved": true,
+    "scope": "only task-owned browser contexts, listener and scratch directory"
+  }
+}
