@@ -401,21 +401,16 @@ export function installLocalApp(options = {}) {
       verifyCompanion(sourceCompanion);
       if (companionExists) {
         assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
-        // Preservation is the exception, so classification must stay advisory.
-        // An installed companion that cannot prove it is a newer build of the
-        // same signed identity — expired provisioning profile, different
-        // signing authority, unreadable metadata — keeps the existing
-        // quit-and-replace path instead of failing the whole desktop install.
-        // Aborting would also leave that unproven companion installed.
+        // A failed classification cannot prove that replacement is safe either:
+        // the installed companion may be newer even when its signed facts are
+        // unreadable. Keep the existing installation intact on uncertainty.
         try {
           verifyCompanion(targetCompanion);
           const sourceFacts = companionFactsReader(sourceCompanion);
           preservedCompanionFacts = companionFactsReader(targetCompanion);
           preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
-        } catch (error) {
-          preserveCompanion = false;
-          preservedCompanionFacts = null;
-          console.warn(`[install:local] Replacing the installed Password AutoFill companion; it is not a verified newer build (${error instanceof Error ? error.message : String(error)}).`);
+        } catch {
+          throw new Error('Installed Password AutoFill companion identity or version is unverified; no app was replaced.');
         }
       }
     }

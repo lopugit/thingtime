@@ -10948,7 +10948,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   negotiation and a normal provider status/action separately. Equal or older
   standalone companions must still require a clean quit before replacement.
   Malformed or reversed versions, different signing/team/group/entitlement or
-  changed destination during staging must refuse safely; a failed main install
+  changed destination during staging must refuse safely. Also test an idle
+  newer companion with mismatched signing and an unreadable version/profile:
+  neither may be staged or replaced, and the diagnostic must not print the
+  verifier's raw error. A failed main install
   must restore the old main app without touching a preserved companion. Run
   `node --test electron/test/install-local-app.test.cjs` for the synthetic guards.
 

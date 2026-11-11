@@ -412,13 +412,15 @@ test('installs the verified nested provider as the standalone companion with the
  } finally {rmSync(value.root,{recursive:true,force:true});}
 });
 
-test('restores both main and standalone apps when installed companion verification fails',async()=>{
+test('restores both main and standalone apps when replacement companion verification fails',async()=>{
  const {installLocalApp}=await installerPromise; const value=fixture();
  try {
   makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
   const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
   const target=makeApp(value.targetDir,'com.thingtime.desktop','original');
-  assert.throws(()=>installLocalApp(installOptions(value.sourceApp,value.targetDir,{verifyCompanion:app=>{if(app===companion) throw new Error('companion verification failed');},companionFactsReader,companionRunningPids:()=>[]})),/companion verification failed/);
+  assert.throws(()=>installLocalApp(installOptions(value.sourceApp,value.targetDir,{verifyCompanion:app=>{
+   if(app===companion && readFileSync(path.join(app,'marker.txt'),'utf8')==='new-helper') throw new Error('companion verification failed');
+  },companionFactsReader,companionRunningPids:()=>[]})),/companion verification failed/);
   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'old-helper');
   assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
  } finally {rmSync(value.root,{recursive:true,force:true});}
@@ -455,33 +457,34 @@ test('keeps a signed newer running companion out of staging, replacement, and ro
  } finally {rmSync(value.root,{recursive:true,force:true});}
 });
 
-test('an installed companion that cannot prove preservation is replaced, not left installed', async () => {
+test('an idle newer or unverified companion is never replaced on ambiguous identity', async () => {
  const {installLocalApp}=await installerPromise;
- // Unproven installed companions must stay on the quit-and-replace path. Failing
- // the desktop install instead would both block upgrades and leave the unproven
- // companion registered as the standalone AutoFill provider.
+ // A failed identity read does not establish that the installed version is old.
  const unproven=[
   companion=>app=>app===companion?companionFacts('1.0.10','11',{group:'DIFFERENTGROUP'}):companionFacts('1.0.8','9'),
   companion=>app=>app===companion?companionFacts('1.0.10','11',{hostAuthorities:['Authority=Apple Development']}):companionFacts('1.0.8','9'),
-  companion=>app=>{if(app===companion) throw new Error('Password AutoFill provisioning profile failed.');return companionFacts('1.0.8','9');}
+  companion=>app=>{if(app===companion) throw new Error('private verifier detail must not be logged');return companionFacts('1.0.8','9');},
+  companion=>app=>app===companion?companionFacts('unknown','11'):companionFacts('1.0.8','9')
  ];
  for(const reader of unproven) {
   const value=fixture();
   try {
    makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
    const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
-   makeApp(value.targetDir,'com.thingtime.desktop','original');
-   const installed=installLocalApp(installOptions(value.sourceApp,value.targetDir,{
-    verifyCompanion:()=>{},companionRunningPids:()=>[],companionFactsReader:reader(companion)
-   }));
-   assert.equal(installed.companionPreserved,false);
-   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'new-helper');
-   assert.equal(readFileSync(path.join(installed.targetApp,'marker.txt'),'utf8'),'new');
+   const target=makeApp(value.targetDir,'com.thingtime.desktop','original');
+   const copied=[];
+   assert.throws(()=>installLocalApp(installOptions(value.sourceApp,value.targetDir,{
+    verifyCompanion:()=>{},companionRunningPids:()=>[],companionFactsReader:reader(companion),
+    copyApp:(source,destination)=>{copied.push(source);cpSync(source,destination,{recursive:true});}
+   })),error=>error.message==='Installed Password AutoFill companion identity or version is unverified; no app was replaced.');
+   assert.deepEqual(copied,[]);
+   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'old-helper');
+   assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
   } finally {rmSync(value.root,{recursive:true,force:true});}
  }
 });
 
-test('an unverifiable installed companion keeps the quit guard instead of being preserved', async () => {
+test('an unverifiable running companion is refused before the quit-and-replace path', async () => {
  const {installLocalApp}=await installerPromise;const value=fixture();
  try {
   makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
@@ -491,7 +494,7 @@ test('an unverifiable installed companion keeps the quit guard instead of being 
    verifyCompanion:app=>{if(app===companion) throw new Error('installed companion signature is broken');},
    companionFactsReader:app=>app===companion?companionFacts('1.0.10','11'):companionFacts('1.0.8','9'),
    companionRunningPids:()=>[123]
-  })),/Quit the Thingtime AutoFill companion/u);
+  })),/identity or version is unverified/u);
   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'old-helper');
   assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
  } finally {rmSync(value.root,{recursive:true,force:true});}
