@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
-import { isAbortError, LopuStreamError, readNdjson } from './lopuChatStream.ts';
+import { isAbortError, LopuStreamError, readNdjson, postLopuReply } from './lopuChatStream.ts';
 // @ts-ignore same
 import type { LopuChatEvent } from './lopuTurnCore.ts';
 
@@ -75,4 +75,24 @@ test('readNdjson stops on an aborted signal and reports an AbortError', async ()
 	const already = new AbortController();
 	already.abort();
 	await assert.rejects(readNdjson(chunkedResponse(['{"type":"delta","text":"x"}\n']), () => {}, already.signal), (error: unknown) => isAbortError(error));
+});
+
+test('unknown or explicit personal chat providers reject pre-fix origins before posting a turn', async (t) => {
+ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://effort-client.test' } } });
+ let posts = 0;
+ const mocked = t.mock.method(globalThis, 'fetch', async (_url, init) => {
+  if (init?.method === 'POST') posts++;
+  return Response.json({ schemaVersion: 1, origin: 'https://effort-client.test', features: { 'api.lopu-chats-reply': { version: '1.23.0' } } });
+ });
+ try {
+  for (const selection of [{}, { providerId: 'saved-console-provider' }]) {
+   await assert.rejects(postLopuReply({ text: 'Synthetic contract probe', ...selection }), (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
+  }
+  assert.equal(posts, 0);
+ } finally {
+  mocked.mock.restore();
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  else delete (globalThis as any).window;
+ }
 });
