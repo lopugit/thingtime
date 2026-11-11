@@ -7,9 +7,10 @@ const requestId = 'a0000000-0000-4000-8000-000000000001', nonce = 'b0000000-0000
 function fixture(dataPlane: string | null = 'home') {
   const events = new EventTarget(), sent: Record<string, string>[] = [], notices: unknown[] = [];
   let current = true, errors = 0;
-  const session = new AuthenticatorSetupSession({ ownerId: 'synthetic-owner', dataPlane, events, nonce, bridge: { version: '1.0.0', postMessage: message => sent.push(message) }, current: () => current, onNotice: value => notices.push(value), onError: () => errors++ });
+  const statuses: string[] = [];
+  const session = new AuthenticatorSetupSession({ ownerId: 'synthetic-owner', dataPlane, events, nonce, bridge: { version: '1.0.0', postMessage: message => sent.push(message) }, current: () => current, onNotice: value => notices.push(value), onError: () => errors++, onStatus: message => statuses.push(message) });
   const emit = (detail: Record<string, unknown>) => events.dispatchEvent(new CustomEvent(authenticatorSetupEvent, { detail: { nonce, ownerId: 'synthetic-owner', requestId, ...detail } }));
-  return { session, sent, notices, emit, retire: () => { current = false; }, errors: () => errors };
+  return { session, sent, notices, statuses, emit, retire: () => { current = false; }, errors: () => errors };
 }
 test('independent setup capability accepts compatible version only', () => {
   for (const version of ['1.0.0', '1.2.0']) assert.equal(supportsAuthenticatorSetup({ version, postMessage() {} }), true);
@@ -61,4 +62,20 @@ test('expiry retires only its scoped request, preserves a newer notice, and reje
   const pending = f.session.consume(nextId);
   f.emit({ kind: 'unavailable', requestId: nextId }); await assert.rejects(pending);
   assert.equal(f.notices.at(-1), null); f.session.dispose();
+});
+
+test('verified empty status clears old feedback without clearing pending available guidance', () => {
+  const f = fixture();
+  f.emit({ kind: 'status', message: 'Sign in to the configured account.' });
+  f.emit({ kind: 'status', message: '' });
+  assert.equal(f.statuses.at(-1), '');
+  assert.equal(f.notices.length, 0);
+  f.emit({ kind: 'available' });
+  f.emit({ kind: 'status', message: '' });
+  assert.deepEqual(f.notices.at(-1), { requestId });
+  f.session.cancel();
+  f.emit({ kind: 'status', message: '' });
+  assert.equal(f.statuses.at(-1), '');
+  assert.equal(f.notices.at(-1), null);
+  f.session.dispose();
 });
