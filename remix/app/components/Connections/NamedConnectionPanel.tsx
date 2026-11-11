@@ -3,7 +3,7 @@ import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { namedAccess, namedFacebookProvider, namedGoogleProvider, namedOperationsFor, namedProviderPermissions, type NamedConnectionInput, type NamedOperation } from '~/connections/namedAccess';
-import { namedConnectionBlocks } from './namedConnectionBlocks';
+import { migrateNamedConnectionForm, namedConnectionBlocks } from './namedConnectionBlocks';
 import type { Connection } from './shared';
 
 type Provider = { id: string; name: string; auth: string; configured: boolean };
@@ -19,6 +19,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const candidates = providers.filter(provider => provider.auth !== 'none' && provider.configured);
   const named = connections.filter(connection => connection.named);
   const [draft, setDraft] = React.useState<Draft | null>(null);
+  const [validation, setValidation] = React.useState({ error: '', nameInvalid: false });
   const [active, setActive] = React.useState('');
   const [result, setResult] = React.useState<{ signature: string; text: string } | null>(null);
   const [using, setUsing] = React.useState(false);
@@ -35,6 +36,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
   const permissions = draft ? namedProviderPermissions(draft.provider) : [];
   const initialScopes = (provider: string) => namedFacebookProvider(provider) ? ['public_profile'] : [];
   const begin = (provider: string, connection?: Connection) => {
+    setValidation({ error: '', nameInvalid: false });
     if (connection) { useGeneration.current++; setResult(null); }
     setDraft({ provider, requestId: crypto.randomUUID(), name: connection?.named?.name || '',
       allowedOperations: connection?.named?.allowedOperations || ['account.identity'],
@@ -47,7 +49,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
     granted: connection.named!.grantedScopes === null ? 'Provider did not report OAuth scopes' : connection.named!.grantedScopes.join(', ') || 'None',
     allowed: connection.named!.allowedOperations.map(operation => namedAccess[operation].label).join(', ')
   }));
-  return <SettingsDocumentHost documentKey="named-auth-connections" title="Named auth connections layout" defaultDocument={namedConnectionBlocks} scopeKey={scopeKey}>
+  return <SettingsDocumentHost documentKey="named-auth-connections" title="Named auth connections layout" defaultDocument={namedConnectionBlocks} migrateBlocks={migrateNamedConnectionForm} scopeKey={scopeKey}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={`${scopeKey}:${draft?.requestId || 'view'}`} enabled={!editing}
       onError={() => onError(new Error('Could not run that connection action.'))}
       scope={{ named: {
@@ -58,6 +60,7 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
         hasPermissions: !!permissions.length,
         permissionNotice: permissions.length ? 'Choose the scopes to request from this provider. Saved scopes do not enable a Thingtime action on their own.'
           : 'Custom provider scopes are unavailable for this provider. Its standard consent applies.',
+        error: validation.error, valid: !validation.error, nameInvalid: validation.nameInvalid,
         editing: !!draft || editing, formTitle: draft?.reconnectId ? 'Reconnect the same account' : 'New sign-in',
         reconnecting: !!draft?.reconnectId, provider: draft?.provider || candidates[0]?.id || '',
         providerLabel: candidates.find(candidate => candidate.id === draft?.provider)?.name || '', name: draft?.name || '',
@@ -95,16 +98,16 @@ export function NamedConnectionPanel({ scopeKey, providers, connections, busy, s
           setDraft({ ...draft, allowedOperations: value === true ? [...new Set([...draft.allowedOperations, id])] : draft.allowedOperations.filter(item => item !== id),
             requestedScopes: value === true && required ? [...new Set([...draft.requestedScopes, required])] : draft.requestedScopes });
         },
-        cancel: () => setDraft(null),
+        cancel: () => { setDraft(null); setValidation({ error: '', nameInvalid: false }); },
         start: ({ readField }) => {
           if (!draft || busy || !candidates.some(provider => provider.id === draft.provider)) return;
           const name = readField('connection-name');
           if (typeof name !== 'string' || !name.trim() || !draft.allowedOperations.length) {
-            onError(new Error('Enter a connection name and choose at least one allowed operation.'));
+            setValidation({ error: typeof name !== 'string' || !name.trim() ? 'Enter a connection name to continue.' : 'Choose at least one allowed operation to continue.', nameInvalid: typeof name !== 'string' || !name.trim() });
             return;
           }
           if (namedGoogleProvider(draft.provider) && draft.provider !== 'google' && !draft.requestedScopes.length) {
-            onError(new Error('Choose at least one permission to request for this Google service.'));
+            setValidation({ error: 'Choose at least one permission to request for this Google service.', nameInvalid: false });
             return;
           }
           const { provider, ...intent } = draft;

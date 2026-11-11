@@ -10,6 +10,8 @@ const collection = (id: string, itemsPath: string, children: WebpageBlock[], tra
 const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock =>
   ({ id, type: 'condition', condition: { arg, equals: true }, children });
 
+const namedFormError = element('named-form-error', 'p', '{named.error}', { id: 'named-form-error', role: 'alert', hidden: '{named.valid}' }, { color: 'var(--tt-danger, #b42318)', 'overflow-wrap': 'anywhere' });
+
 export const namedConnectionBlocks: WebpageBlock[] = [
   element('named-heading', 'h2', 'Named auth connections', {}, { 'font-weight': '700' }),
   element('named-about', 'p', 'Save a separate sign-in for each use. Removing a connection here does not revoke access at the provider.'),
@@ -46,7 +48,7 @@ export const namedConnectionBlocks: WebpageBlock[] = [
         children: [collection('named-provider-options', 'named.providers', [element('named-provider-option', 'option', '{item.label}', { value: '{item.id}' })], true)] },
       element('named-provider-selected', 'p', '{named.providerLabel}', {}, { 'overflow-wrap': 'anywhere', 'font-size': '14px' }),
       element('named-name-label', 'label', 'Connection name', { htmlFor: 'named-connection-name' }),
-      element('named-name-field', 'input', '', { id: 'named-connection-name', name: 'connection-name', 'aria-label': 'Connection name', defaultValue: '{named.name}' },
+      element('named-name-field', 'input', '', { id: 'named-connection-name', name: 'connection-name', 'aria-label': 'Connection name', value: '{named.name}', 'aria-invalid': '{named.nameInvalid}', 'aria-describedby': 'named-form-error' },
         { 'min-height': '44px', width: '100%', 'min-width': '0', padding: '6px 8px', border: '1px solid var(--tt-border, #ddd)' }),
       element('named-provider-scope-label', 'p', 'Provider permissions to request', {}, { 'font-weight': '600' }),
       element('named-provider-scope-notice', 'p', '{named.permissionNotice}'),
@@ -70,6 +72,7 @@ export const namedConnectionBlocks: WebpageBlock[] = [
           element('named-access-copy', 'span', '{item.label}')
         ]
       }], true),
+      namedFormError,
       button('named-form-submit', 'Continue to sign in', 'start'),
       button('named-form-cancel', 'Cancel', 'cancel')
     ]
@@ -86,3 +89,22 @@ export const namedConnectionBlocks: WebpageBlock[] = [
     element('named-result', 'p', '{named.result}', { role: 'status' }, { 'overflow-wrap': 'anywhere' })
   ])
 ];
+
+/** Upgrade the old unsupported input prop while preserving the saved layout. */
+export function migrateNamedConnectionForm(blocks: WebpageBlock[]): WebpageBlock[] {
+  return blocks.map(block => {
+    const children = block.children ? migrateNamedConnectionForm(block.children) : undefined;
+    const next = { ...block, ...(children ? { children } : {}) };
+    if (block.id === 'named-name-field') {
+      const { defaultValue, ...props } = block.props || {};
+      next.props = { ...props, ...(!('value' in props) ? { value: defaultValue ?? '{named.name}' } : {}),
+        'aria-invalid': '{named.nameInvalid}', 'aria-describedby': 'named-form-error' };
+    }
+    if (block.id === 'named-form-group' && children && !children.some(child => child.id === 'named-form-error')) {
+      const index = children.findIndex(child => child.id === 'named-form-submit');
+      next.children = [...children.slice(0, index < 0 ? children.length : index), namedFormError,
+        ...children.slice(index < 0 ? children.length : index)];
+    }
+    return next;
+  });
+}

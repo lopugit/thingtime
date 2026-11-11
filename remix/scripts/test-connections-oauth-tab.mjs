@@ -51,6 +51,7 @@ try {
     let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, pendingNamed;
     const savedLayouts = new Map();
     const namedRows = [];
+    const namedBegins = [];
     const account = (name, id) => ({ id: id + '-link', provider: 'facebook-account', providerName: 'Facebook', contentVisibility: 'personal', account: { id, displayName: name, handle: id } });
     const pageErrors = [];
     context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -134,6 +135,7 @@ try {
           assert.equal(body.provider, 'google');
           assert.ok(body.named.allowedOperations.includes('google.profile'));
           assert.deepEqual(body.named.requestedScopes, ['profile']);
+          namedBegins.push(body.named);
           pendingNamed = body.named;
         } else assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
         begins++;
@@ -142,9 +144,12 @@ try {
       if (url.pathname === callbackPath) {
         callbacks++;
         if (pendingNamed && !url.searchParams.has('error')) {
-          namedRows.push({ ...account('Named provider identity', 'same-google-subject'), id: 'named-' + namedRows.length,
+          const reconnectIndex = pendingNamed.reconnectId ? namedRows.findIndex(row => row.id === pendingNamed.reconnectId) : -1;
+          assert.ok(!pendingNamed.reconnectId || reconnectIndex >= 0);
+          const saved = { ...account('Named provider identity', 'same-google-subject'), id: reconnectIndex >= 0 ? pendingNamed.reconnectId : 'named-' + namedRows.length,
             provider: 'google', providerName: 'Google account', named: { name: pendingNamed.name, requestedScopes: ['openid', 'profile'],
-              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } });
+              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } };
+          if (reconnectIndex >= 0) namedRows[reconnectIndex] = saved; else namedRows.push(saved);
           pendingNamed = undefined;
           return route.fulfill({ status: 302, headers: { location: origin + '/connections?connected=google' } });
         }
@@ -192,6 +197,7 @@ try {
       await page.screenshot({ path: join(evidence, `provider-icons-${label}.png`), fullPage: true });
       await page.evaluate(() => window.scrollTo(0, 0));
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         await catalogHost.getByRole('button', { name: 'Edit provider cards', exact: true }).click();
         await catalogHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');
@@ -217,6 +223,7 @@ try {
       const pendingCopy = label === 'desktop' ? 'Complete Facebook sign-in in your new tab.' : 'Finish signing in to Facebook in the new tab.';
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         const host = page.locator('[data-settings-document="connections-oauth-pending"]');
         await host.getByRole('button', { name: 'Edit sign-in status', exact: true }).click();
         await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
@@ -236,7 +243,7 @@ try {
       }
       await page.evaluate(() => { window.__oauthFixtureOpen = window.open; window.open = () => null; });
       await signIn.click();
-      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').waitFor();
+      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').first().waitFor();
       assert.equal(begins, 0);
       assert.equal(page.url(), initial);
       await page.evaluate(() => { window.open = window.__oauthFixtureOpen; });
@@ -256,7 +263,7 @@ try {
       await page.screenshot({ path: join(evidence, label + '-pending.png'), fullPage: true });
       const declineClosed = declined.waitForEvent('close', { timeout: 5000 });
       await declined.getByRole('link', { name: 'Decline' }).click();
-      await page.getByText('That sign-in was declined', { exact: false }).waitFor();
+      await page.getByText('That sign-in was declined', { exact: false }).first().waitFor();
       await declineClosed;
       assert.equal(await signIn.isEnabled(), true);
       assert.equal(linked, false);
@@ -399,6 +406,43 @@ try {
       await namedHost.getByText('name: Named profile result').waitFor();
       await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
       assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      const reconnectName = 'Second profile with a long descriptive name for research notes';
+      assert.equal(await namedHost.getByRole('textbox', { name: 'Connection name' }).inputValue(), reconnectName,
+        'Reconnect must prefill its saved name without requiring the user to type it again');
+      assert.equal(await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).isDisabled(), true);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).isChecked(), true);
+      const reconnectPage = context.waitForEvent('page');
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      const reconnectAuthorization = await reconnectPage;
+      const reconnectClosed = reconnectAuthorization.waitForEvent('close', { timeout: 5000 });
+      await reconnectAuthorization.getByRole('link', { name: 'Continue' }).click();
+      await reconnectClosed;
+      await second.getByRole('button', { name: 'Reconnect', exact: true }).waitFor();
+      assert.equal(namedRows.length, 2, 'Reconnect replaces only the intended grant');
+      assert.deepEqual(namedBegins.at(-1), { ...namedBegins[1], requestId: namedBegins.at(-1).requestId, reconnectId: 'named-1' });
+      assert.equal(namedRows[1].named.name, reconnectName);
+      assert.deepEqual(namedRows[1].named.requestedScopes, ['openid', 'profile']);
+      await namedHost.getByRole('button', { name: 'Add named connection' }).click();
+      await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
+      const nameField = namedHost.getByRole('textbox', { name: 'Connection name' });
+      assert.equal(await nameField.inputValue(), '', 'A new grant must not inherit the reconnect name');
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).isChecked(), false);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Email address', exact: true }).isChecked(), false);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Saved account identity', exact: true }).isChecked(), true);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Google profile name and photo', exact: true }).isChecked(), false);
+      const beginsBeforeInvalid = begins;
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      await namedHost.getByRole('alert').filter({ hasText: 'Enter a connection name to continue.' }).waitFor();
+      assert.equal(await nameField.getAttribute('aria-invalid'), 'true');
+      assert.equal(await nameField.getAttribute('aria-describedby'), 'named-form-error');
+      await page.screenshot({ path: join(evidence, label + '-named-validation.png'), fullPage: true });
+      await nameField.fill('New identity fixture');
+      await namedHost.getByRole('checkbox', { name: 'Saved account identity', exact: true }).uncheck();
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      await namedHost.getByRole('alert').filter({ hasText: 'Choose at least one allowed operation to continue.' }).waitFor();
+      assert.equal(await nameField.inputValue(), 'New identity fixture', 'Validation preserves entered text');
+      assert.equal(begins, beginsBeforeInvalid, 'Invalid forms never start provider authorization');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
       if (label === 'desktop') {
         holdList = undefined;

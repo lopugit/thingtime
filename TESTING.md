@@ -14694,6 +14694,12 @@ removing provenance or widening ACLs is not a workaround.
   Verify the name and access blocks can be selected separately in Builder.
   Keep provider consent and installed native acceptance separate.
 
+- Reconnect a named grant without retyping its prefilled name. Verify the same
+  grant ID, provider, account, scopes and allowed operations are retained. A new
+  grant starts unnamed with identity-only defaults. Submit a blank name or no
+  allowed operations and verify actionable inline feedback with no OAuth request,
+  preserving typed input and customized Builder labels at desktop/phone widths.
+
 - Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
   viewports. The fixture renders the real Connections page with synthetic
   transport. Verify the original URL and page remain in place, the provider has
