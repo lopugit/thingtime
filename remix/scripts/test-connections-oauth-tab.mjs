@@ -183,7 +183,11 @@ try {
       const initial = origin + '/connections?keep=1';
       await page.goto(initial);
       const signIn = page.getByRole('button', { name: /Default sign-in with Facebook/ });
-      await signIn.waitFor();
+      await signIn.waitFor().catch(async error => {
+        await writeFile(join(evidence, label + '-initial-failure.json'), JSON.stringify({ pageErrors, text: await page.locator('body').innerText() }));
+        await page.screenshot({ path: join(evidence, label + '-initial-failure.png'), fullPage: true });
+        throw error;
+      });
       const catalogHost = page.locator('[data-settings-document="connections-provider-catalog"]');
       const logo = '[data-block-id="connections-provider-logo"]';
       const facebookCard = signIn.locator('..');
@@ -203,6 +207,7 @@ try {
       await page.screenshot({ path: join(evidence, `provider-icons-${label}.png`), fullPage: true });
       await page.evaluate(() => window.scrollTo(0, 0));
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         await catalogHost.getByRole('button', { name: 'Edit provider cards', exact: true }).click();
         await catalogHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');
@@ -229,6 +234,7 @@ try {
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
       if (label === 'desktop') {
         const host = page.locator('[data-settings-document="connections-oauth-pending"]');
+        await enableCurrentPageBuilder(page);
         await host.getByRole('button', { name: 'Edit sign-in status', exact: true }).click();
         await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');

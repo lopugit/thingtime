@@ -110,8 +110,10 @@ export function migrateNamedServiceBlocks(blocks: WebpageBlock[]): WebpageBlock[
       const [resource, , next] = serviceOperationBlocks();
       return { ...block, children: [resource, ...children, next] };
     }
-    if (block.id === 'named-result') return { ...block, tag: 'pre', props: { ...block.props, role: undefined },
-      css: { 'white-space': 'pre-wrap', 'min-width': '0', 'max-height': '480px', overflow: 'auto', ...block.css } };
+    if (block.id === 'named-result') {
+      const props = { ...block.props }; delete props.role;
+      return { ...block, tag: 'pre', props, css: { 'white-space': 'pre-wrap', 'min-width': '0', 'max-height': '480px', overflow: 'auto', ...block.css } };
+    }
     return block.children ? { ...block, children: migrateNamedServiceBlocks(block.children) } : block;
   });
 }
