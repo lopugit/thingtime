@@ -55,6 +55,37 @@ final class NativeBackgroundUploadCalendar {
         try JSONEncoder().encode(begin.addingTimeInterval(duration)).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         return begin
     }
+    /// One durable transaction across all applicable speed scopes. Both the
+    /// daemon and foreground lane debit this admission calendar; neither can
+    /// acquire its own copy of the device/folder allowance.
+    func admit(key: String, bytes: Int64, constraints: [NativePhotoRateConstraint], expiry: Date, now: Date = Date(), requiresCompletionBeforeExpiry: Bool = true, deferFutureAdmission: Bool = false) throws -> Date {
+        guard bytes > 0, !constraints.isEmpty, constraints.allSatisfy({ $0.rate > 0 }),
+              Set(constraints.map(\.key)).count == constraints.count else { throw MobileFolderStore.Failure.invalid }
+        let leaf = PhotoLibraryReader.hash(Data(key.utf8))
+        let file = directory.appendingPathComponent(leaf + ".scopes.json")
+        var schedule: [String: Date]
+        do { schedule = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: file)) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { schedule = [:] }
+        // Keep outstanding v1 device-wide admission after upgrading.
+        let legacyFile = directory.appendingPathComponent(leaf + ".json")
+        let legacy: Date
+        do { legacy = try JSONDecoder().decode(Date.self, from: Data(contentsOf: legacyFile)) }
+        catch let error as CocoaError where error.code == .fileReadNoSuchFile { legacy = now }
+        let begin = constraints.reduce(max(now, legacy)) { max($0, schedule[$1.key] ?? now) }
+        let longest = constraints.map { Double(bytes) / Double($0.rate) }.max() ?? 0
+        guard begin.addingTimeInterval((requiresCompletionBeforeExpiry ? longest : 0) + 15) < expiry else {
+            throw NativePhotoUploadBudget.Wait(retryAt: max(now.addingTimeInterval(5), begin))
+        }
+        // A future slot requires a freshly signed request on that future run.
+        // A policy wait consumes no speed allowance and holds no upload lane.
+        if deferFutureAdmission, begin > now { throw NativePhotoUploadBudget.Wait(retryAt: begin) }
+        schedule = schedule.filter { $0.value > now }
+        for constraint in constraints { schedule[constraint.key] = begin.addingTimeInterval(Double(bytes) / Double(constraint.rate)) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode(schedule).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        return begin
+    }
+
 }
 
 enum NativeBackgroundTaskBinding {
@@ -240,7 +271,12 @@ final class NativeBackgroundPhotoUpload: NSObject, URLSessionDataDelegate {
                     if tasks[ticket.key] == nil {
                         guard activeCount + foregroundCount() < 5 else { throw NativePhotoUploadBudget.Wait(retryAt: Date(timeIntervalSinceNow: 5)) }
                         let policyKey = [job.record.scope.origin.absoluteString, job.record.scope.ownerId, job.record.configuration.deviceId].joined(separator: "\n")
-                        let begin = try calendar.admit(key: policyKey, bytes: job.length, rate: rate, expiry: job.expiry)
+                        let limits = try NativePhotoTransferPolicyStore().limits(scope: job.record.scope, authorization: job.record.request.authorization)
+                        // The daemon can retain authorized future starts while
+                        // the app is suspended. Reserve the shared schedule now;
+                        // iOS still decides actual wire timing and may start late.
+                        let begin = try calendar.admit(key: policyKey, bytes: job.length, constraints: limits.rates, expiry: job.expiry,
+                            requiresCompletionBeforeExpiry: false, deferFutureAdmission: false)
                         let task = session(job.cellularAllowed).uploadTask(with: request, fromFile: try url(job.key, suffix: ".part"))
                         task.taskDescription = job.key; task.earliestBeginDate = begin
                         job.taskId = task.taskIdentifier

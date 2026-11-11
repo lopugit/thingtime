@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.5.0"
+    static let photoAutomationVersion = "1.6.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
         return nil
@@ -642,10 +642,50 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "arm-photo-run", "photo-run-status", "pause-photo-runs", "run-photo-in-background", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["read-photo-transfer-policy", "set-photo-transfer-policy", "list", "choose", "remove", "scan", "scan-capture", "scan-status", "scan-cancel", "scan-page", "scan-skips", "scan-discard", "inspect", "read", "upload-part", "upload-file", "defer-upload", "cancel-deferred-upload", "arm-photo-run", "photo-run-status", "pause-photo-runs", "run-photo-in-background", "photo-queue-finish", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "write-check", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend(.requestCancelled) }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
+        if action == "read-photo-transfer-policy" || action == "set-photo-transfer-policy" {
+            // Settings never wait behind a long-running renderer folder slot.
+            // They still independently prove the live origin, owner, paired
+            // device, and (for folder scope) exact local Photos grant.
+            Task { [weak self, weak webView] in
+                guard let self, let webView else { return }
+                let check = { [weak webView] in
+                    try Task.checkCancellation()
+                    guard let webView, currentRoot() == root, let current = webView.url,
+                          LopuVoiceContract.sameOrigin(current, root) else { throw CancellationError() }
+                }
+                do {
+                    try check()
+                    guard let device = payload["deviceId"] as? String,
+                          device.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil,
+                          let verifyDevice else { throw MobileFolderStore.Failure.invalid }
+                    let rootId: String?
+                    if let raw = payload["rootId"] {
+                        guard let id = raw as? String, UUID(uuidString: id) != nil else { throw MobileFolderStore.Failure.invalid }
+                        rootId = id
+                    } else { rootId = nil }
+                    let proposed = action == "set-photo-transfer-policy" ? try NativePhotoTransferPolicy.parse(payload["photoTransferPolicy"]) : nil
+                    try await verifyOwner(scope, check); try check()
+                    try await verifyDevice(scope, device, check); try check()
+                    if let rootId {
+                        let grant = try self.store.grant(scope, id: rootId)
+                        guard grant.sourceKind == "photos" else { throw MobileFolderStore.Failure.invalid }
+                    }
+                    let policies = NativePhotoTransferPolicyStore()
+                    if let proposed { try policies.save(proposed, scope: scope, deviceId: device, rootId: rootId) }
+                    let saved = try policies.read(scope: scope, deviceId: device, rootId: rootId)
+                    guard proposed == nil || saved == proposed else { throw MobileFolderStore.Failure.changed }
+                    var result: [String: Any] = ["deviceId": device, "roots": [[String: Any]](), "photoTransferPolicy": saved.json]
+                    if let rootId { result["rootId"] = rootId }
+                    try check()
+                    reply("mobile-files-result", base.merging(result) { _, new in new })
+                } catch { reply("mobile-files-result", base.merging(["error": Self.folderErrorMessage(error)]) { _, new in new }) }
+            }
+            return
+        }
         if action == "pause-photo-runs" {
             // Only removes authority from the exact owner/origin. Works
             // offline and returns no owner content, handles or other scopes.
@@ -708,7 +748,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         if let message = (error as? PhotoLibraryReader.Failure)?.errorDescription { return message }
         if let message = (error as? MobileFolderStore.Failure)?.errorDescription { return message }
         if let message = (error as? MobileDevicePairing.Failure)?.errorDescription { return message }
-        if let message = (error as? NativeDeferredUploadClient.Failure)?.errorDescription { return message }
+        if let message = NativeDeferredUploadClient.failure(error)?.errorDescription { return message }
         return "Folder access failed. Your selections were preserved; try again."
     }
 

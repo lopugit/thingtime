@@ -202,20 +202,47 @@ export async function assertCloudSyncDestination(things: any, session: any, owne
 	}
 }
 
+/** FIFO backpressure for snapshot work. Waiting uses the caller's existing
+ * deadline; cancellation removes an unsent request without spending a slot. */
+function createObservationSlots(concurrency: number) {
+	let active = 0;
+	const waiting = new Set<() => void>();
+	const pump = () => { while (active < concurrency && waiting.size) waiting.values().next().value!(); };
+	return (signal: AbortSignal | undefined, timeoutMs: number): Promise<() => void> => new Promise((resolve, reject) => {
+		let settled = false;
+		let timer: ReturnType<typeof setTimeout>;
+		const cleanup = () => { clearTimeout(timer); waiting.delete(start); signal?.removeEventListener('abort', abort); };
+		const cancel = (reason: unknown) => {
+			if (settled) return;
+			settled = true; cleanup(); reject(reason); pump();
+		};
+		const abort = () => cancel(signal?.reason);
+		const start = () => {
+			if (settled) return;
+			settled = true; cleanup(); active++;
+			let released = false;
+			resolve(() => { if (!released) { released = true; active--; pump(); } });
+		};
+		timer = setTimeout(() => cancel(new StorageMutationError(503, 'storage_conflict', 'Cloud path observation timed out while waiting for capacity.')), Math.max(0, timeoutMs));
+		signal?.addEventListener('abort', abort, { once: true });
+		if (signal?.aborted) { abort(); return; }
+		waiting.add(start); pump();
+	});
+}
+
 /** A fresh snapshot of one path. Missing roots/root ancestors, authorization failures
  * and bounded-read failures are errors, never evidence of absence. */
 export function createCloudPathService(overrides: Parameters<typeof createCloudInventoryService>[0] & { workspace?: typeof openInventoryUniqueness } = {}) {
 	const deps = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction,
 		customPlane: isCustomMongoEndpointActive, now: Date.now, workspace: openInventoryUniqueness, ...overrides };
-	let active = 0;
+	const acquire = createObservationSlots(2);
 	return async (ownerId: string, rootId: unknown, requestedPath: unknown, signal?: AbortSignal) => {
 		if (deps.customPlane()) return { ok: false as const, status: 409, error: 'Files currently require the home data plane' };
 		if (!ownerId || !identity(rootId)) return { ok: false as const, status: 400, error: 'Choose a cloud folder root' };
 		if (typeof requestedPath !== 'string' || !validSyncPath(requestedPath) || requestedPath.split('/').length > MAX_FOLDER_DEPTH)
 			return { ok: false as const, status: 400, error: 'Choose a supported relative cloud path' };
-		if (active >= 2) return { ok: false as const, status: 503, error: 'Cloud path capacity is busy; retry later.' };
-		active++;
 		const started = deps.now();
+		let release: (() => void) | undefined;
 		const budget = () => {
 			signal?.throwIfAborted();
 			if (deps.customPlane()) fail(409, 'Cloud inventory data plane changed');
@@ -224,6 +251,7 @@ export function createCloudPathService(overrides: Parameters<typeof createCloudI
 			return Math.min(remaining, 5000);
 		};
 		try {
+			release = await acquire(signal, 20_000);
 			budget(); const things = await deps.collection();
 			const result = await deps.transaction(async session => {
 				const { root, entry } = await observeCloudPathInTransaction(things, session, ownerId, rootId, requestedPath, budget, signal, deps.workspace);
@@ -234,7 +262,7 @@ export function createCloudPathService(overrides: Parameters<typeof createCloudI
 		} catch (error) {
 			return error instanceof StorageMutationError ? { ok: false as const, status: error.status, error: error.message }
 				: { ok: false as const, status: 503, error: 'A complete cloud path observation is unavailable; keep the last complete scan.' };
-		} finally { active--; }
+		} finally { release?.(); }
 	};
 }
 export const readCloudPath = createCloudPathService();

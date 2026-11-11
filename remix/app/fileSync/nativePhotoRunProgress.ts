@@ -2,13 +2,15 @@ const stages = ['ready', 'preparing', 'uploading', 'waiting', 'complete', 'pause
 const waits = ['wifi', 'network', 'offline', 'charging', 'data-budget'] as const;
 const counters = ['photos', 'videos', 'other', 'wifiBytes', 'mobileBytes', 'unknownBytes'] as const;
 const activityPhases = ['verifying', 'indexing', 'checking-originals', 'downloading', 'checking-cloud', 'uploading', 'publishing', 'waiting', 'complete'] as const;
-const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'device-storage', 'photo-read', 'cloud-request', 'saved-settings', 'destination-review', 'retry'] as const;
+const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'device-storage', 'photo-read', 'cloud-request', 'saved-settings', 'destination-review', 'transfer-permission', 'transfer-expired', 'transfer-missing', 'transfer-state', 'grant-changed', 'queue-changed', 'retry'] as const;
 const backgroundStatuses = ['active', 'declined', 'waiting', 'complete'] as const;
 export type NativePhotoActivityPhase = (typeof activityPhases)[number];
 export type NativePhotoContinuation = { requested: boolean; status: (typeof backgroundStatuses)[number] };
 export type NativePhotoUnavailableReasons = { 'cloud-download': number; 'photo-read': number };
 type DiscoveredPhoto = { kind: 'photo' | 'video'; capturedAt?: string };
+const failureOperations = ['manifest', 'check-photo-run', 'reserve-photo-original', 'parts', 'complete', 'publish', 'revoke', 'revoke-photo-run', 'local-grant', 'queue'] as const;
 export type NativePhotoRunActivity = {
+	failureOperation?: (typeof failureOperations)[number];
 	phase: NativePhotoActivityPhase;
 	indexed?: { photos: number; videos: number; files: number };
 	indexing?: { unit: 'assets' | 'files'; completed: number; total: number };
@@ -67,6 +69,8 @@ function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 		activity.cloudPreparationFraction = cloudFraction;
 	const reason = activityReasons.find(candidate => candidate === value.reason);
 	if (reason) activity.reason = reason;
+	const operation = failureOperations.find(candidate => candidate === value.failureOperation);
+	if (operation) activity.failureOperation = operation;
 	const backgroundRequest = backgroundStatuses.find(candidate => candidate === value.backgroundRequest);
 	if (backgroundRequest) activity.backgroundRequest = backgroundRequest;
 	if (Array.isArray(events)) {
