@@ -253,7 +253,7 @@ try {
       }
       await page.evaluate(() => { window.__oauthFixtureOpen = window.open; window.open = () => null; });
       await signIn.click();
-      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').waitFor();
+      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').first().waitFor();
       assert.equal(begins, 0);
       assert.equal(page.url(), initial);
       await page.evaluate(() => { window.open = window.__oauthFixtureOpen; });
@@ -273,7 +273,7 @@ try {
       await page.screenshot({ path: join(evidence, label + '-pending.png'), fullPage: true });
       const declineClosed = declined.waitForEvent('close', { timeout: 5000 });
       await declined.getByRole('link', { name: 'Decline' }).click();
-      await page.getByText('That sign-in was declined', { exact: false }).waitFor();
+      await page.getByText('That sign-in was declined', { exact: false }).first().waitFor();
       await declineClosed;
       assert.equal(await signIn.isEnabled(), true);
       assert.equal(linked, false);
@@ -437,6 +437,8 @@ try {
       await namedHost.getByRole('button', { name: 'List Drive files', exact: true }).click();
       await namedHost.getByRole('button', { name: 'Read next page', exact: true }).waitFor();
       assert.equal(JSON.parse(await payload.textContent()).files[0].id, 'first');
+      const serviceOverflow = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > innerWidth + 1).slice(-15).map(el => ({ tag: el.tagName, id: el.getAttribute('data-block-id'), width: el.getBoundingClientRect().width, css: el.getAttribute('style') })));
+      await writeFile(join(evidence, label + '-service-overflow.json'), JSON.stringify(serviceOverflow));
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await page.screenshot({ path: join(evidence, label + '-google-service-actions.png'), fullPage: true });

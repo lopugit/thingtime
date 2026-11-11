@@ -14776,7 +14776,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session-or-bearer', description: 'Requires the connection owner and matching expectedOwnerId.' },
     steps: ['Select an exact named connection ID.', 'Choose one of its allowlisted operations.', 'Read only the returned operation result.'],
     requestExamples: [{ name: 'Read saved account identity', description: 'Use a single named profile.', method: 'POST',
-      body: { id: 'ext-auth-…', operation: 'account.identity', expectedOwnerId: 'owner-id' } }],
+      body: { id: 'ext-auth-…', operation: 'account.identity', expectedOwnerId: 'owner-id' } },
+      { name: 'Read a Drive page', description: 'Use an explicitly allowed Drive grant; omit pageToken for the first page.', method: 'POST',
+        body: { id: 'ext-auth-…', operation: 'drive.list-files', pageToken: 'opaque-provider-cursor', expectedOwnerId: 'owner-id' } },
+      { name: 'Read a selected document', description: 'Use the document ID, not its URL.', method: 'POST',
+        body: { id: 'ext-auth-…', operation: 'docs.get-document', resourceId: 'document_123', expectedOwnerId: 'owner-id' } }],
     responseExamples: [{ status: 200, description: 'Allowlisted operation result.', body: { ok: true, result: { provider: 'google', accountId: 'ext-account-…' } } }]
   }),
   endpoint({

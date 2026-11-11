@@ -29,7 +29,7 @@ export const namedConnectionBlocks: WebpageBlock[] = [
     { 'font-size': '14px', color: 'var(--tt-muted, #6b7280)' }),
   collection('named-list', 'named.rows', [{
     id: 'named-card', type: 'element', tag: 'article',
-    css: { padding: '12px', 'margin-bottom': '8px', display: 'grid', gap: '5px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', 'overflow-wrap': 'anywhere' },
+    css: { padding: '12px', 'margin-bottom': '8px', display: 'grid', 'grid-template-columns': 'minmax(0, 1fr)', 'min-width': '0', 'max-width': '100%', 'box-sizing': 'border-box', gap: '5px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', 'overflow-wrap': 'anywhere' },
     children: [
       element('named-card-name', 'h3', '{item.name}', {}, { 'font-weight': '650' }),
       element('named-card-account', 'p', '{item.account}'),
@@ -96,7 +96,7 @@ export const namedConnectionBlocks: WebpageBlock[] = [
     element('named-consumer-selected-name', 'p', '{named.activeName}', {}, { 'overflow-wrap': 'anywhere', 'font-size': '14px' }),
     collection('named-consumer-operations', 'named.operations', serviceOperationBlocks(), true),
     when('named-operation-busy', 'named.using', [element('named-operation-status', 'span', '◌', { role: 'status', 'aria-label': 'Reading selected connection' })]),
-    element('named-result', 'pre', '{named.result}', {}, { 'white-space': 'pre-wrap', 'overflow-wrap': 'anywhere', 'min-width': '0', 'max-height': '480px', overflow: 'auto', 'font-size': '13px' })
+    element('named-result', 'pre', '{named.result}', {}, { 'white-space': 'pre-wrap', 'overflow-wrap': 'anywhere', 'word-break': 'break-word', display: 'block', width: '100%', 'max-width': '100%', 'box-sizing': 'border-box', 'min-width': '0', 'max-height': '480px', overflow: 'auto', 'font-size': '13px' })
   ])
 ];
 
@@ -110,9 +110,19 @@ export function migrateNamedServiceBlocks(blocks: WebpageBlock[]): WebpageBlock[
       const [resource, , next] = serviceOperationBlocks();
       return { ...block, children: [resource, ...children, next] };
     }
+    if (block.id === 'named-consumer' && block.children) {
+      const children = migrateNamedServiceBlocks(block.children);
+      if (!children.some(child => child.id === 'named-operation-busy')) {
+        const index = children.findIndex(child => child.id === 'named-result');
+        if (index >= 0) children.splice(index, 0, when('named-operation-busy', 'named.using', [element('named-operation-status', 'span', '◌', { role: 'status', 'aria-label': 'Reading selected connection' })]));
+      }
+      return { ...block, children };
+    }
+    if (block.id === 'named-card' && !block.css?.['grid-template-columns']) return { ...block,
+      css: { ...block.css, 'grid-template-columns': 'minmax(0, 1fr)', 'min-width': '0', 'max-width': '100%', 'box-sizing': 'border-box' } };
     if (block.id === 'named-result') {
       const props = { ...block.props }; delete props.role;
-      return { ...block, tag: 'pre', props, css: { 'white-space': 'pre-wrap', 'min-width': '0', 'max-height': '480px', overflow: 'auto', ...block.css } };
+      return { ...block, tag: 'pre', props, css: { 'white-space': 'pre-wrap', 'word-break': 'break-word', display: 'block', width: '100%', 'max-width': '100%', 'box-sizing': 'border-box', 'min-width': '0', 'max-height': '480px', overflow: 'auto', ...block.css } };
     }
     return block.children ? { ...block, children: migrateNamedServiceBlocks(block.children) } : block;
   });

@@ -155,3 +155,15 @@ test('cancelled reads do not start a provider request', async () => {
   await assert.rejects(useNamedConnection(owner, { id: a.connection.id, operation: 'drive.list-files' }, origin, controller.signal), { name: 'AbortError' });
   assert.equal(requests.length, 0);
 });
+
+
+test('refresh losing confirmed permission cannot run the selected service action', async () => {
+  const a = await saved('Expiring', { expiresAt: new Date(Date.now() - 1000).toISOString() }); assert.ok(a.ok);
+  const original = provider.oauth!.refreshTokens;
+  let refreshed = 0;
+  provider.oauth!.refreshTokens = async () => { refreshed++; return { accessToken: 'refreshed-access-fixture', confirmedScopes: [], expiresAt: new Date(Date.now() + 3600000).toISOString() }; };
+  try {
+    const result = await useNamedConnection(owner, { id: a.connection.id, operation: 'drive.list-files' }, origin);
+    assert.equal(result.ok, false); assert.equal(refreshed, 1); assert.equal(requests.length, 0);
+  } finally { provider.oauth!.refreshTokens = original; }
+});

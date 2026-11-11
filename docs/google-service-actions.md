@@ -68,3 +68,19 @@ pagination, and reconnect races. They do not establish real Google consent,
 API enablement, data access or production acceptance. Parent task owns those
 checks and private lifecycle reporting; the legacy reporting-binding adoption
 gap remains, so this worker does not create duplicate workspace records.
+
+
+Focused Connections/component/capability batch: 261 passing, zero skips. After
+rendered fixes, the updated named-service and block-upgrade suites passed eight
+tests, including rejection after a refresh loses scope. The isolated real
+Connections UI fixture passed at 1440×900 and 390×844, exercising Docs resource
+inputs, exact Drive continuation requests, result clearing, saved Builder edits,
+page scrolling and long-scope/result overflow. Synthetic screenshots and fixture
+records are in `/tmp/thingtime-google-service-actions-ui`; no provider credentials
+or real-account data were used. Changed-source ESLint passed.
+
+The source tree has changed since the carried Graphify snapshot. Hook-triggered
+refresh did not produce an updated snapshot; its writer PID had exited. A heavy
+fresh extraction is deferred on the overloaded host. Structural/semantic freshness
+is not claimed; the parent coordinates the final shared refresh and real provider
+acceptance independently.
