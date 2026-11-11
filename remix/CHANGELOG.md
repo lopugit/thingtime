@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Integrate main sync recovery and native authenticator intake while
+  preserving anonymous/account vault controls and canonical storage adapters.
+  Keep individually editable setup blocks and origin/owner/nonce checks; retain
+  exact-source native acceptance boundaries. **Codex (AI)**
+
 - 2026-11-12: Verify real embedded iOS SQLite/BSON collections and recovery after
   an ownership-verified process crash with retained WAL evidence. Harden the
   isolated probe's exact source freezing, dependency resolution, deadlines and
@@ -192,6 +197,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Add a transactional BSON/SQLite storage primitive and real file-recovery tests;
   canonical API and iOS storage integration remain unfinished. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
+
+- 2026-11-12: Reconcile native TOTP setup-link intake with the current password
+  editor and account lifecycle. Keep one-use seeds transient, require editable
+  review plus explicit Save, preserve current drafts and passkey behavior, and
+  add native/browser security coverage. Signed-app and live-provider acceptance
+  remain separate checks. [Review and acceptance notes](../PRs/PR-1479-native-authenticator-intake.md). **Codex (AI)**
+
+- 2026-11-12: Retire only exact native source-changed file-batch members
+  proven never canonically dispatched, preserving all marked or ambiguous
+  original receipts. A lost journal reply is idempotent, and fresh sealed
+  backup reconciliation must publish any replacement identity. A saved terminal
+  local feed now drains its pending original receipts before completion even
+  when a batch admission misses. A sealed local feed recovers superseded parent
+  dependents through their original receipts, retiring only proven unpublished
+  children before a fresh full scan; ambiguous publication stays retained.
+  The native identity diagnostic remains value-free. See [PR 1478](../PRs/1478-codex-sync-source-identity-and-batch-recovery.md). **Codex (AI)**
+
+- 2026-11-12: Show the current indexed-entry count during a resumed folder scan
+  even when an older saved hierarchy remains visible; label its total as still
+  being discovered and retain the saved tree separately. **Codex (AI)**
+
 - 2026-11-11: Correct AppID compatibility to WebAuthn's documented same-site
   browser rule using one private-PSL-aware validator in the hook and provider;
   accept parent paths and same-host ports while preserving RP-bound signing,

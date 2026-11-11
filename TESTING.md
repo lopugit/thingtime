@@ -11780,6 +11780,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   frames, cancelled sources, removal followed by a delayed file retry, and parent deletion during upload. A vault lock must
   cancel a blocked input and prevent subsequent stream decryption. Check desktop,
   390px and 320px layouts. Account file retention/sync requires separate coverage.
+
+- [ ] Native authenticator links: cold and warm `otpauth://totp` intake reaches
+  the configured signed companion/iOS destination, using normal sign-in.
+  Refuse malformed/duplicate/HOTP/migration input, iframe/wrong-origin delivery,
+  changed document/owner/data plane, expired/cancelled/replayed requests and
+  locked destination metadata. Opening setup never saves or overwrites a draft.
+  Select and edit nested setup text/buttons independently, save layout, reload;
+  review into a new or current non-passkey draft, explicitly Save entry, reopen
+  the saved entry and compare its code with an independent authenticator.
+  Verify URI/seed absence from navigation, persisted layouts, logs and storage.
+  `authenticatorSetup*.test.ts`, Swift `AuthenticatorSetupTests` and
+  `scripts/test-authenticator-setup-ui.mjs` cover synthetic transport regressions;
+  installed menu selection, sign-in and real setup remain independent gates.
+- [ ] After merging password workspace changes, run the setup UI fixture with the
+  canonical platform document plugin and explicit root workspace binding. Cover
+  both the account setup subtree and the real anonymous encrypted device vault
+  at desktop/mobile widths; preserve device-only session text, editable nested
+  labels, the real Lock transition and refusal of account setup for the local
+  owner. Record any unrelated offline settings transport errors separately.
+
 - [ ] Browser autofill modal and reconnect: open a website's current-password
   verification modal, then open Thingtime's inline chooser. Ensure it remains
   visible, in the active dialog's accessibility scope, with Tab wrapping inside;
@@ -16714,6 +16734,12 @@ Local results do not establish current-head CI or deployed acceptance.
 
 - [x] Existing upload-batch disk rows count only actual closed failure codes after final host validation; counts sum to failed members, bounded to256, and malformed/getter/proxy input cannot leak raw metadata. Legacy missing histograms mean unknown, never zero. Whole-request authority/cancellation refusals do not publish accepted-member counts.
 - [x] Native `source-changed` batch summaries count a fixed stage, exact first-read guard and independent native failure code without path, ID, digest, byte or raw-error values. Verify an unchanged Rust capture passes, controlled stale identity/version/fingerprint and descriptor/digest refusals retain the same thrown error/result, and cancellation does not turn into a source-change retry. A closed stage/guard count diagnoses an installed failure; it does not authorize relaxing source validation.
+- [x] Split a first-inspect identity refusal into closed counts for same full version, malformed or inconsistent saved identity, changed device or inode, and numeric-equivalent representation. All categories still refuse with the original source-changed result; the counts contain no identity values or paths and cannot alone establish why a live file was replaced.
+- [x] With a saved hierarchy visible during a new backup scan, show the current native indexed-entry count and say that the total is still being discovered. Keep the saved folder tree separately available; a stopped scan must not show the live label, and completed idle history still shows its saved summary. Cover current count, cold no-index state and retained idle state in `syncProgressBlocks.test.ts`.
+- [ ] In the installed signed app, compare that displayed current scan count with a later native scan progress observation before claiming it advances. Canonical install stops and replaces the Node helper, so install at a natural idle checkpoint if possible; otherwise record the scanner interruption and verify saved-cursor resume without resetting the job.
+- [x] When a native file batch returns exact source-changed ordinals, retire only members whose saved operation and batch marker both prove canonical dispatch was false, with no receipt or confirmation. Reopen the journal and repeat a lost reply without double-counting; preserve confirmed, marked, missing-marker and unrelated members under their original IDs. A changed source after staging may leave an expiring unbound draft but cannot publish the old file identity. The complete-backup consumer must use a fresh sealed scan and publish a replacement only once; incomplete inventory must not checkpoint or authorize deletes.
+- [x] Reopen a terminal local feed with pending original operations and saved priorities. Priority setup must not reopen its producer; a missed batch admission must drain one original ordinary claim through the journal's receipt and ancestor guards before sealing. If both claims remain unavailable, retain ID/count and refuse completion. For a superseded parent in a sealed, caught-up local feed, look up each original child receipt first: confirm an accepted original, retain unknown/marked/pending publication under its original ID, retire only explicit never-dispatched row and batch-member evidence or an exact file terminal fence, and cascade folder descendants without an old cloud write. A fresh complete scan must precede a new publication or checkpoint. If the final operation retires after the runner's progress snapshot, use durable completion evidence rather than that stale snapshot.
+- [ ] On the installed Downloads job, compare confirmed files and bytes before and after automatic recovery, verify an original uncertain receipt by exact owner-authenticated ID, and independently hash a newly published file. Closed native guard counts and a changing planned-work count alone do not establish transfer progress.
 - [x] Existing editable priority-readiness status renders negotiated folder gate and exact journal reservation kind/remaining count from the same read-only header projection. Old/malformed observations say UNKNOWN; no recovery inference from a reserved boolean. IDs, receipts, source watermarks and recovery order survive observation/reopen unchanged.
 - [x] Focused Electron49/49 and progress/journal/formatter24/24 pass. Changed9 TypeScript files have zero semantic errors (not a full-repo zero-error claim); lint has zero errors. Old producer fails the new histogram regression. OS-isolated Chromium proof passes at1440/390px, scroll/overflow, existing status block editing, save/reload, paused and legacy-unknown states.
 - [ ] After reviewed deployment/install, record ONE natural same-Home window. Timestamp-filter existing rotated logs and compare visible gate/recovery count; classify only newly returned failures. Historical89 codes remain unknown; missing rows/rotated intervals are not zero failures. Preserve all job IDs/settings; no manual Retry/reset/regrant.

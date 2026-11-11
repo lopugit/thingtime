@@ -1,0 +1,5 @@
+{
+  "errors": [],
+  "body": "Unexpected Application Error!\nAccount workspace changed. Reopen this editor before continuing.\nWorkspaceError: Account workspace changed. Reopen this editor before continuing.\n    at Object.assertCurrent (http://127.0.0.1:64937/fixture.js:109941:13)\n    at new AccountDraftClient (http://127.0.0.1:64937/fixture.js:186675:24)\n    at createWorker (http://127.0.0.1:64937/fixture.js:188153:23)\n    at accountWorkspaceWorker (http://127.0.0.1:64937/fixture.js:189538:19)\n    at startAccountWorkspaceSync (http://127.0.0.1:64937/fixture.js:189544:7)\n    at http://127.0.0.1:64937/fixture.js:195248:7\n    at Object.react_stack_bottom_frame (http://127.0.0.1:64937/fixture.js:71407:21)\n    at runWithFiberInDEV (http://127.0.0.1:64937/fixture.js:53837:72)\n    at commitHookEffectListMount (http://127.0.0.1:64937/fixture.js:62251:164)\n    at commitHookPassiveMountEffects (http://127.0.0.1:64937/fixture.js:62305:60)",
+  "message": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Create new entry', exact: true }) to be visible\u001b[22m\n"
+}

@@ -123,6 +123,17 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+Native authenticator link intake: shared Swift `AuthenticatorSetup.swift` and
+`Host/AuthenticatorSetupBridge.swift`; macOS `PasswordSetupEditor.swift`; iOS
+`WebView.swift`. The narrow native bridge 1.0.0 requires compatible `api.passwords`
+1.2+ and verifies current home-plane owner, origin and document before transient
+one-use delivery. `PasswordAuthenticatorSetup.tsx` composes editable
+`PasswordWorkspaceControls` setup blocks into the existing controlled draft;
+Save remains the canonical encrypted-vault operation. No new API route or scope.
+See `password-manager.md` for packaging, separate sign-in and acceptance, Swift
+`AuthenticatorSetupTests`, web `authenticatorSetup*.test.ts` and the isolated
+`test-authenticator-setup-ui.mjs` browser regression.
+
 See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
 The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
 only for non-passkey manager entries. Copy uses an already-authorized draft and

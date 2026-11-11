@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T15:29:49.097894+00:00",
+  "scope": "Synthetic merged password/authenticator UI and unit regression; no real credentials, provider ceremony or deployed/native acceptance.",
+  "sourceHashes": {
+    "remix/app/components/Passwords/PasswordWorkspaceControls.tsx": "1ed1617de60cdf0ebfe180dd3b49ad3d75660e7a8bb9e75209d22b4c7be2bb13",
+    "remix/app/components/Passwords/PasswordManager.tsx": "056c8cbea8a75d73c0746d992a17b51f6b6c0be2ee941918e9e4d763dc61caa7",
+    "remix/app/components/Passwords/PasswordAuthenticatorSetup.tsx": "c2239391361487652be68712578b95603f34b037d18b1f11113783ec40665578",
+    "remix/app/components/Passwords/DevicePasswordManager.tsx": "e96bb1671b952911b309218e06022ee90fc41b6346057bff7bf601581df011ca",
+    "remix/app/passwords/authenticatorSetup.client.ts": "6fceef3c55b70da5d3160bb73cb73f879b985ef16412b905ed2a09605687212f",
+    "remix/app/local-workspace/passwordVault.ts": "149525106a0c2bdfc210abc3708a5c302304c2769a9db2d34f1c3d6ab2d2d0cd",
+    "remix/scripts/test-authenticator-setup-ui.mjs": "40828cf870df57e3186f930ca49ed0262b95855104aca91d31fa514bd104de9d",
+    "remix/scripts/authenticator-setup.browser.tsx": "be37cc6d0fe88866f7eb1741b8e2d6e70ebe49cacfda709615c01906842ab704",
+    "remix/scripts/platform-runtime-plugin.mjs": "32ad8757225dab84066e0fd2777a1203cf6109a382f6bd697aaafd708c405fa1"
+  },
+  "verification": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/passwords/authenticatorSetup.client.test.ts app/passwords/authenticatorSetup.native.test.ts",
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main637-password-authenticator.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/local-workspace/passwordVault.test.ts app/local-workspace/passwordFiles.test.ts app/local-workspace/passwordSync.test.ts",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main637-password-local.log"
+    },
+    {
+      "command": "node remix/scripts/test-authenticator-setup-ui.mjs artifacts/anonymous-release-2026-11-12/main-6378-integration/password-authenticator-ui",
+      "exitCode": 0,
+      "cases": 4,
+      "widths": [
+        1440,
+        390
+      ],
+      "log": "/tmp/pr1000-main637-authenticator-ui.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/components/Passwords/PasswordWorkspaceControls.tsx scripts/authenticator-setup.browser.tsx",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "/tmp/pr1000-main637-password-fixtures-lint.log"
+    },
+    {
+      "command": "node --check remix/scripts/test-authenticator-setup-ui.mjs",
+      "exitCode": 0
+    }
+  ],
+  "relatedCombinedChecks": "../combined-checks.json",
+  "limitations": [
+    "Account setup uses actual PasswordManagerScope with synthetic transport and explicit workspace binding, not a real account/API/native handoff.",
+    "Anonymous variant uses actual full PasswordManager and encrypted LocalPasswordVault in task-owned browser context; mock native bridge refuses owner local-workspace.",
+    "TOTP intake is fenced by owner/home-plane/nonce/current document and explicit review/configuration/user activation; nativeAvailable is not a TOTP gate.",
+    "Synthetic history/account data and passphrases are disposable; no real credential source or account mutation.",
+    "Existing global verification-preference component still attempts account preference calls in anonymous mode and displays the synthetic wrong-owner error. This pre-existing offline settings transport limitation was not expanded into this merge fix.",
+    "Retained desktop-failure diagnostics describe the repaired fixture bootstrap, not a current production failure.",
+    "Screenshot inspection found no relevant overflow/clipping at1440/390; no320 acceptance or real native authenticator ceremony claimed."
+  ]
+}

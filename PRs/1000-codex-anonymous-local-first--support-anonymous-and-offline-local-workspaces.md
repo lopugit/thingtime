@@ -2,6 +2,27 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main merge — 12 November 2026
+
+Main advanced during the checkpoint to `6378ed470203c34ef7b99d29b0c685a11fdf78e7` (PR1478 sync
+source/receipt recovery and PR1479 native authenticator setup intake). Those changes are
+merged into the feature branch. The resolution preserves the local/account session
+label and conditional device Lock action alongside incoming editable setup blocks,
+keeping account/home-plane/nonce and explicit Save checks. Both documentation sets
+and complete immutable Graphify inputs were retained for regeneration.
+Merged-source checks pass: typecheck, zero-baseline ratchet, full lint (0 errors,
+372 warnings), 72 imported sync tests, 10 authenticator tests, and 42 local
+vault/files/sync tests. Four rendered synthetic cases cover account setup and the
+actual encrypted device vault at 1440 and 390 pixels, including Lock and editable
+controls. The imported browser fixture now uses the canonical platform document
+plugin and explicit workspace binding. Its existing anonymous verification-settings
+transport gap remains recorded separately.
+
+[Combined evidence](../artifacts/anonymous-release-2026-11-12/main-6378-integration/combined-checks.json)
+and [UI evidence](../artifacts/anonymous-release-2026-11-12/main-6378-integration/password-authenticator-ui/README.md).
+Native/Mongo/iOS receipts below remain bound to their original source; this merge
+does not establish a new installed-app or physical-device result.
+
 ## Native checkpoint attribution and close ownership — 12 November 2026
 
 Activation1.3 adds optional closed-enum renderer/host reasons with exact current
