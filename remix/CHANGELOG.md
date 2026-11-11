@@ -164,6 +164,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   same-scope status checks behind startup connection work, revalidates authority
   for each caller, and preserves scoped cancellation. Removed the ineffective
   client delay retry; added native race and durable automatic-enrollment tests.
+  Recover only an unexecuted legacy setup whose saved version-1 policy changed
+  solely to deletion-disabled Backup, preserving job identity, Pause, cadence
+  and atomic previous-job evidence. [PR1488 details](../PRs/1488-codex-ios-enrollment-claim-diagnostics-recover-saved-ios-folder-backup-setup-safely.md).
 
 - 2026-11-12: Label current sync attempt bytes separately from the most recent
   measured saved attempt in loaded activity history. Keep unknown bytes unknown,

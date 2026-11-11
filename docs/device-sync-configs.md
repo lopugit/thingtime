@@ -58,6 +58,17 @@ Ordinary builds do not install the hook. A reload begins a new renderer history
 and cannot identify a historical claim holder. The native queue and a successful
 status check do not override saved-config, grant, receipt or migration guards.
 
+An unexecuted legacy Two-way setup may recover automatically only when its
+canonical saved version-1 config changed solely to deletion-disabled Backup.
+Owner, origin, device, granted source, destination and automatic cadence must
+match; both settings must be unpaused. A fresh private config read precedes
+admission. One IndexedDB transaction checks the expected job revision and
+absence of canonical, archived or orphaned execution, inventory, review,
+receipt and activity rows. It preserves the job ID and cadence and atomically
+adds a separate, non-executable receipt containing the entire previous job.
+Pause, concurrent edits, prior work, changed destinations and unavailable
+storage refuse this special recovery. Transfer usage is never reset.
+
 Offline and typed transient transport failures defer with backoff. An interrupted
 strict inventory gets one fresh verification attempt; repeated incomplete scans
 need attention and cannot publish deletions. Missing folder access, revoked
