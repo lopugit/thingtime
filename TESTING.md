@@ -15856,3 +15856,14 @@ private readback while an unrelated Home fixture remains paused.
   memory. Growth must remain bounded across the entire archive, with exact
   fingerprints and unchanged original bytes. Keep simulator/build evidence,
   a physical app exit, and an actual iOS crash/termination report distinct.
+
+### Personal Claude saved-model effort
+
+- The Console SDK streaming fixture must run a saved `claude-haiku-4-5` connection
+  with inherited High effort and assert the actual HTTP request omits effort and
+  thinking fields, keeps the exact model and credential, completes one response
+  and never reads the shared-provider waterfall. Verify a supported Opus effort
+  remains unchanged and custom-model tuning is preserved.
+- Negotiate reply 1.23.1, then repeat the authorized minimal live Haiku prompt on
+  the selected personal connection. Verify a real reply and BYO attribution;
+  synthetic SSE acceptance does not establish live provider acceptance.
