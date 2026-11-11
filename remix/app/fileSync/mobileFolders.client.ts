@@ -1,3 +1,4 @@
+import { parsePhotoTransferPolicy, supportsNativePhotoTransferPolicy, type PhotoTransferPolicy } from './photoTransferPolicy';
 import { parseNativePhotoRunStatus, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
 import type { FileSyncApproval } from './configuredPlan';
 import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
@@ -63,6 +64,8 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true; continueInBackground?: true }
+	| { action: 'read-photo-transfer-policy'; deviceId: string; rootId?: string }
+	| { action: 'set-photo-transfer-policy'; deviceId: string; rootId?: string; photoTransferPolicy: PhotoTransferPolicy }
 	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
 	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string; explicitPause?: true }
@@ -107,6 +110,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	  }
 );
 export type FolderResult = {
+	photoTransferPolicy?: PhotoTransferPolicy;
 	photoRunStatus?: NativePhotoRunStatus;
 	photoContinuation?: NativePhotoContinuation;
 	deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy;
@@ -459,6 +463,13 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') {
+        if (payload.deviceId !== request.deviceId || payload.rootId !== request.rootId || payload.roots.length)
+            throw Error('Photos transfer policy scope changed.');
+        result.photoTransferPolicy = parsePhotoTransferPolicy(payload.photoTransferPolicy);
+        if (request.action === 'set-photo-transfer-policy' && JSON.stringify(result.photoTransferPolicy) !== JSON.stringify(parsePhotoTransferPolicy(request.photoTransferPolicy)))
+            throw Error('The device did not confirm the saved Photos transfer policy.');
+    }
 	// iOS includes the validated grant snapshot on successful gated replies.
 	// The action-specific fields bind the reply to the requested Photos run.
 	if (request.action === 'arm-photo-run') {
@@ -944,7 +955,7 @@ export function requestMobileFolders(
 	const send = () => requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
 	// iOS has one folder request slot. Pause commands are local denials
 	// that the native bridge can process immediately even with an active slot.
-	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'cancel-deferred-upload') return send();
+	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
 	const origin = window.location.origin;
 	const generation = rootIdentity.read().generation;
 	const check = () => {
@@ -996,6 +1007,8 @@ function requestMobileFoldersNow(
 	if (request.action === 'inspect-stamp' && (!supportsNativePathStamp(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path stamp inspection requires a supported Mac app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
+	if ((request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') && !supportsNativePhotoTransferPolicy(bridge))
+		throw Error('Update Thingtime to manage device and folder Photos upload settings.');
 	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
 		throw Error('This iPhone does not support starting continued Photos work.');
 	if (request.action === 'arm-photo-run' && request.continueInBackground !== undefined &&

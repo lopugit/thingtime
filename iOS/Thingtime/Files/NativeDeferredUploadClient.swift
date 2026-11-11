@@ -8,16 +8,40 @@ final class NativeDeferredUploadClient {
     static let path = "/api/v1/files/sync-transfer-admissions"
     static let feature = "api.file-sync-transfer-admissions"
     enum Failure: Error, LocalizedError {
-        case incompatible, invalid, denied, partsRetryable, unavailable, photoPathConflict
-        var terminal: Bool { self == .incompatible || self == .invalid || self == .denied }
+        case incompatible, invalid, denied, expired, missing, stateChanged, configurationChanged, destinationChanged, partsRetryable, unavailable, photoPathConflict
+        var terminal: Bool { [.incompatible, .invalid, .denied, .expired, .missing, .stateChanged, .configurationChanged, .destinationChanged].contains(self) }
         var errorDescription: String? {
             switch self {
-            case .denied: return "Background transfer permission changed. Reopen this sync connection to resume."
+            case .denied: return "The paired device could not authorize this background transfer."
+            case .expired: return "Background transfer authorization expired or was revoked."
+            case .missing: return "The exact background transfer authorization is no longer available."
+            case .stateChanged: return "The cloud transfer state changed. Its saved checkpoint was retained."
+            case .configurationChanged: return "The saved backup settings changed."
+            case .destinationChanged: return "The cloud backup destination changed or is unavailable."
             case .incompatible: return "Background transfers are unavailable on this server. Keep Thingtime open to continue."
             case .invalid: return "The server did not confirm the exact deferred upload."
             case .photoPathConflict: return "A cloud file at the backup path needs review. Its bytes were kept."
             case .partsRetryable, .unavailable: return "Cloud transfer paused. Its original reservation can be retried."
             }
+        }
+    }
+    enum Operation: String, Codable, Sendable {
+        case manifest, checkPhotoRun = "check-photo-run", reservePhotoOriginal = "reserve-photo-original"
+        case parts, complete, publish, revoke, revokePhotoRun = "revoke-photo-run", localGrant = "local-grant", queue
+    }
+    struct RequestFailure: Error {
+        let failure: Failure
+        let operation: Operation
+    }
+    nonisolated static func failure(_ error: Error) -> Failure? {
+        (error as? RequestFailure)?.failure ?? error as? Failure
+    }
+    nonisolated static func operation(_ error: Error) -> Operation? {
+        if let refusal = error as? RequestFailure { return refusal.operation }
+        switch error as? NativePhotoRunActivity.SourceFailure {
+        case .grantChanged, .photoAccess: return .localGrant
+        case .queueChanged: return .queue
+        case nil: return (error as? MobileFolderStore.Failure) == .changed ? .localGrant : nil
         }
     }
     private let record: NativeDeferredUploadRecord?
@@ -54,7 +78,7 @@ final class NativeDeferredUploadClient {
         guard !verified else { return }
         let manifest = try await read(LopuVoiceContract.manifestPath, body: nil)
         guard LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: Self.feature, minimum: minimum) else {
-            throw Failure.incompatible
+            throw RequestFailure(failure: .incompatible, operation: .manifest)
         }
         backgroundFileSupported = LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: Self.feature, minimum: [1, 5, 0])
         verified = true
@@ -113,6 +137,7 @@ final class NativeDeferredUploadClient {
             if record.configuration.managedPhotos != nil {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
                     scope: record.scope, authorization: record.request.authorization, conditions: conditions,
+                    signedExpiry: try NativeFileSession.signedUploadExpiry(signed, partNumber: partNumber),
                     background: backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
                     record: record, partNumber: partNumber, checksum: part.checksumSha256,
                     accountOnce: { try account($0, $1) }, account: { try account($0, nil) })
@@ -127,6 +152,14 @@ final class NativeDeferredUploadClient {
     }
 
     private func read(_ path: String, body: [String: Any]?) async throws -> [String: Any] {
+        do { return try await performRead(path, body: body) }
+        catch let failure as Failure {
+            guard let operation = body == nil ? Operation.manifest : (body?["action"] as? String).flatMap(Operation.init(rawValue:)) else { throw failure }
+            throw RequestFailure(failure: failure, operation: operation)
+        }
+    }
+
+    private func performRead(_ path: String, body: [String: Any]?) async throws -> [String: Any] {
         try Task.checkCancellation()
         guard let url = URL(string: path, relativeTo: scope.origin)?.absoluteURL,
               LopuVoiceContract.sameOrigin(url, scope.origin) else { throw Failure.invalid }
@@ -143,7 +176,9 @@ final class NativeDeferredUploadClient {
         }
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse, http.url == url else { throw Failure.invalid }
-        if [401, 403, 404, 410].contains(http.statusCode) { throw Failure.denied }
+        if [401, 403].contains(http.statusCode) { throw Failure.denied }
+        if http.statusCode == 404 { throw Failure.missing }
+        if http.statusCode == 410 { throw Failure.expired }
         if http.statusCode == 429 || http.statusCode >= 500 { throw Failure.unavailable }
         var data = Data()
         for try await byte in bytes {
@@ -153,18 +188,27 @@ final class NativeDeferredUploadClient {
         }
         let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         if http.statusCode == 409 {
-            let error = result?["error"] as? [String: Any]
-            if result?["code"] as? String == "photo_path_conflict" || error?["code"] as? String == "photo_path_conflict" {
-                throw Failure.photoPathConflict
-            }
-            if result?["code"] as? String == "upload_parts_retryable" ||
-                result?["error"] as? String == "upload_parts_retryable" || error?["code"] as? String == "upload_parts_retryable" {
-                throw Failure.partsRetryable
-            }
-            throw Failure.denied
+            throw Self.conflictFailure(result)
         }
         guard (200..<300).contains(http.statusCode), let result,
               body == nil || result["ok"] as? Bool == true else { throw Failure.invalid }
         return result
+    }
+
+    /// Only registered codes affect recovery. Raw server text never enters a
+    /// journal, progress reply, log or user-visible diagnostic.
+    static func conflictFailure(_ result: [String: Any]?) -> Failure {
+        let error = result?["error"] as? [String: Any]
+        let code = result?["code"] as? String ?? error?["code"] as? String
+        if code == "sync_configuration_changed" { return .configurationChanged }
+        if code == "sync_destination_changed" { return .destinationChanged }
+        if result?["code"] as? String == "photo_path_conflict" || error?["code"] as? String == "photo_path_conflict" {
+            return .photoPathConflict
+        }
+        if result?["code"] as? String == "upload_parts_retryable" ||
+            result?["error"] as? String == "upload_parts_retryable" || error?["code"] as? String == "upload_parts_retryable" {
+            return .partsRetryable
+        }
+        return .stateChanged
     }
 }

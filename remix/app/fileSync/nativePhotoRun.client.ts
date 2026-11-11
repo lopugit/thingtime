@@ -63,7 +63,7 @@ export async function armNativePhotoRun(input: {
 						// A saved-settings hold describes lost authority, not a user
 						// decision. Recheck the current grant and saved Thing below;
 						// native/server authorization still decides whether it may run.
-						const savedSettingsHold = progress.stage === 'needs-review' && progress.activity?.reason === 'saved-settings';
+						const savedSettingsHold = progress.stage === 'needs-review' && ['saved-settings', 'transfer-permission', 'transfer-expired', 'transfer-missing', 'transfer-state'].includes(progress.activity?.reason ?? '');
 						if (progress.continuation === 'held' || (progress.stage !== 'paused' && !needsAuthorityCheck && !savedSettingsHold)) return;
 						if (savedSettingsHold) {
 							const now = Date.now();
