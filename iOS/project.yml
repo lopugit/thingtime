@@ -59,6 +59,7 @@ targets:
             CFBundleTypeRole: Editor
             CFBundleURLSchemes: [otpauth]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         ThingtimeAPNSEnvironment: $(APS_ENVIRONMENT)
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Thingtime can save this device's measured location when you enable location history.
@@ -108,6 +109,8 @@ targets:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
         com.apple.security.application-groups: [$(THINGTIME_WIDGET_GROUP)]
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
         aps-environment: $(APS_ENVIRONMENT)
         com.apple.developer.usernotifications.time-sensitive: true
         com.apple.developer.associated-domains:
@@ -115,6 +118,9 @@ targets:
     dependencies:
       - package: ThingtimePasswordCore
       - package: AppleFileSync
+      - target: ThingtimePasswordProvider
+        embed: true
+        codeSign: true
       - target: ThingtimeWatch
         embed: true
         codeSign: true
@@ -122,6 +128,45 @@ targets:
       - target: ThingtimeShare
         embed: true
         codeSign: true
+
+  ThingtimePasswordProvider:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ../apple/PasswordProvider/CredentialProviderViewController.swift
+      - path: ../macos/ThingtimePasswords/Resources/ThingtimeTree.png
+        buildPhase: resources
+    dependencies:
+      - package: ThingtimePasswordCore
+    info:
+      path: PasswordProvider/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDisplayName: Thingtime
+        NSFaceIDUsageDescription: Thingtime verifies you before filling saved passwords or using a passkey.
+        ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionShowsConfigurationUI: true
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesPasskeys: true
+              ProvidesOneTimeCodes: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_IOS_BUNDLE_IDENTIFIER).password-provider
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER)
+        APPLICATION_EXTENSION_API_ONLY: true
+        SKIP_INSTALL: true
+        TARGETED_DEVICE_FAMILY: "1,2"
+    entitlements:
+      path: PasswordProvider/PasswordProvider.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        keychain-access-groups: [$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)]
 
   ThingtimeWatch:
     type: application

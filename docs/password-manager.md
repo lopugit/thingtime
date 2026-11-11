@@ -323,8 +323,21 @@ for prerequisites, first-sign-in limits, supported consumers and packaging.
 
 Native provider code is present in `apple/Passwords` and
 `apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
-This checkout does not expose an iOS native-password bridge; web-only behavior
-remains available there.
+The iOS main app embeds the same provider controller as
+`$(THINGTIME_IOS_BUNDLE_IDENTIFIER).password-provider` and exposes the canonical
+`passwordsVersion` 1.1.0 bridge. Connect, status, sync and Disconnect use the
+existing editable Password manager and Settings controls. Native code reads
+only its own WebView's first-party HttpOnly session, negotiates the exact HTTPS
+origin, verifies the home-plane owner and fences the captured document and
+cookie again before saving. Credentials never enter JavaScript or a bridge reply.
+Background sync preserves another owner/origin and explicit Disconnect opt-out.
+A missing web identity retires only this host's same-origin connection after
+native observation that its authentication cookie is absent; initial account
+loading cannot erase an authenticated connection. A logout signal arriving while
+a saved session awaits its system identity-index callback is retained once and
+processed after that callback; other busy requests receive correlated retry
+feedback. The iOS shared Keychain group
+is separate from the macOS companion. See [iOS acceptance](../iOS/README.md#password-autofill-and-passkey-provider).
 The provider handles a website-initiated WebAuthn registration, checks the relying
 party and supported algorithm, creates an ES256 key, saves it through the encrypted
 vault, verifies readback and completes the operating-system request. Registration starts at the destination website rather than in a standalone
@@ -508,7 +521,7 @@ The tree is decorative beside visible accessible text; entry/site icons retain
 their meaning. Extension 0.2.1 packages valid 16/32/48/128px icons. Native
 1.0.7/build 8 packages the same tree and ICNS in both host and provider extension.
 System bundle icons are separate from website-controlled passkey/account artwork.
-The current iOS project has no shared PasswordProvider target/resource consumer.
+The iOS embedded PasswordProvider target consumes the same controller and official tree resource.
 
 Password confirmation timing, durable account/origin/device Never trust,
 per-entry overrides, explicit forgetting, native reuse boundaries and the 1.5 API

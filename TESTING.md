@@ -10941,6 +10941,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] iOS embedded provider: build the final host+extension, verify exact bundle IDs,
+  shared iOS-only Keychain group, both AutoFill entitlements, Face ID usage text
+  and matching versions. Run Swift host-scope/commit-fence tests, release/profile
+  Python tests and registry helper Ruby tests. In the signed physical app,
+  connect/decline enablement, verify the account, fill a password on an independent
+  HTTPS site, register/use a passkey, and test OTP on iOS 18+. Exercise logout,
+  owner/origin switches during document/cookie awaits, parallel status requests,
+  stale same-URL documents, wrong verification, Disconnect/reload and OS-disabled
+  state. Busy requests receive correlated retry feedback; no old completion or
+  cookie enters the new document. Simulator/build evidence is not device acceptance.
+
 - [ ] macOS companion editing shortcuts: in the signed installed companion,
   focus a synthetic password input and verify Command-V inserts masked text.
   Compare the field's normal context-menu Paste without reading the clipboard

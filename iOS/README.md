@@ -818,3 +818,63 @@ Thing; pending uploads retain their original identity and local bytes for retry.
 The web UI can invoke the same scanner through its independently versioned
 native bridge or hand off from Safari. See [capture format and lifecycle](../docs/native-lidar-scans.md)
 and the LiDAR checklist in [TESTING](../TESTING.md).
+
+## Password AutoFill and passkey provider
+
+The existing Thingtime app contains `ThingtimePasswordProvider.appex`; there is
+no second iOS Passwords app. The default identities are `com.thingtime.appletime`
+and `com.thingtime.appletime.password-provider`. Both have Apple's AutoFill
+Credential Provider entitlement and share only
+`$(AppIdentifierPrefix)$(THINGTIME_IOS_BUNDLE_IDENTIFIER).passwords` in the
+non-synchronizing, device-only Keychain. This is independent of the Mac companion.
+The extension reuses `apple/PasswordProvider` and `apple/Passwords`, including
+live authorization, device verification, encrypted saves, origin/RP checks and
+passkey registration readback. Face ID's usage explanation belongs to the
+extension. Passwords and passkeys require iOS 17; OTP AutoFill requires iOS 18.
+
+In the signed-in HTTPS app open Passwords or Settings → Passwords and use the
+existing **Connect Password AutoFill** control. iOS 18+ requests normal system
+provider enablement after explicit Connect; cancellation changes no saved link.
+iOS 17 shows instructions to enable Thingtime in system AutoFill settings before
+retrying. Status describes the saved account/origin connection, not proof that
+OS AutoFill is enabled or a relying-party ceremony works. HTTP loopback does not
+receive a provider connection. No new server route or scope is introduced.
+
+The release lane requires an existing host App ID, creates only its exact
+`.password-provider` extension if missing, enables `AUTOFILL_CREDENTIAL_PROVIDER`
+on those two App IDs, refreshes profiles when that capability changes, and
+preflights both profiles before archive. The optional
+`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER` selects an existing provider
+App Store profile; export maps all embedded targets. Signed archive verification
+requires the embedded executable, matching versions, extension capabilities,
+and matching resolved Keychain group in Info and signed entitlements. Forks
+must replace their host identity/team and regenerate both profiles; do not reuse
+another app's Keychain group or provisioned identity.
+
+Validation commands (build only; no install):
+
+```sh
+swift test --package-path apple/Passwords
+python3 iOS/scripts/test_verify_release.py
+ruby iOS/fastlane/lib/password_provider_signing_test.rb
+xcodegen generate --spec iOS/project.yml --project iOS
+xcodebuild -project iOS/Thingtime.xcodeproj -scheme Thingtime -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
+
+Physical acceptance remains required after an eligible signed release: verify
+installed app/build and nested provider identity, connect the intended account,
+confirm Thingtime in the normal OS AutoFill picker, fill a saved password into
+an independent HTTPS site and verify the resulting signed-in identity. Register
+and use a passkey on that site and compare saved-record/readback results; also
+exercise OTP on iOS 18+, cancellation, denied verification, session expiry,
+account/origin switching, Disconnect and app restart. Ensure stale documents,
+old cookies and concurrent refresh cannot reconnect or receive a prior result.
+A simulator compile, profile check, unit test or archived extension is separate
+from physical Face ID/passcode, system enablement and real-site acceptance.
+
+Historical provenance: PR #996 (`codex/password-manager`, head `83feba95`)
+already proposed the embedded target and identity. This implementation retains
+that architecture and Face ID explanation while using current-main shared code
+and a new fenced 1.1 host bridge; it does not import the historical branch's
+unrelated source tree or older bridge that cleared existing links on failures.

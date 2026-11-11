@@ -195,7 +195,7 @@ import ThingtimePasswordCore
     private final class NoRedirect: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
     }
-    private static func verifySession(web: WKWebView, root: URL, owner: String) async throws {
+    static func verifySession(web: WKWebView, root: URL, owner: String) async throws {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil; config.urlCache = nil; config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 15; config.timeoutIntervalForResource = 20

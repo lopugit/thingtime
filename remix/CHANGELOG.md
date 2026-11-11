@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Embed the shared Apple credential provider in the existing iOS app,
+  with a fenced native Password AutoFill connection bridge, isolated shared
+  Keychain, scoped Apple App ID/profile bootstrap and release-package validation.
+  Retain editable web controls and distinguish simulator evidence from signed
+  physical password/passkey/OTP acceptance. **Codex (AI)**
+
 - 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
   and saved sync cards, with native aggregate enforcement and active policy-only
   saves. Queue concurrent cloud path checks instead of rejecting a five-item
