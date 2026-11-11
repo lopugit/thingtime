@@ -14960,6 +14960,10 @@ removing provenance or widening ACLs is not a workaround.
 - [ ] Final installed acceptance: compare native link target bytes, per-folder directions/rates, device aggregate measurements and Timeline restore with independent local/cloud evidence. Keep Home paused and DJ DODA automatic sync off. Production must advertise the required link/device-control capabilities before dependent work starts.
 
 - Signed Mac build prerequisites: verify a missing or incomplete `electron-builder` is repaired once with the exact pinned pnpm and frozen lockfile before web/native resource builds begin. A healthy install must not reinstall; failed or ineffective repair must stop immediately. `electron/test/build-dependencies.test.cjs` covers the boundary.
+### Password entry icon mobile layout
+
+- At320px,375px and desktop widths, open an existing entry and the Entry icon URL controls. Keep every button and file picker inside the fieldset content box before and after selecting a long filename. Verify the URL field, enabled/disabled controls and keyboard focus without horizontal overflow. Existing saved default layouts migrate; authored CSS and deleted controls remain unchanged.
+
 ### Password preview Website icons
 
 - Save two Website/URL fields: first missing/broken icon, second usable public
