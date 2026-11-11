@@ -1,0 +1,52 @@
+{
+  "runs": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/passwords/browserPasskey.test.ts app/passwords/browserProviderAppId.client.test.ts",
+      "log": "/tmp/pr1000-main284-appid.log",
+      "exitCode": 0,
+      "tests": 11,
+      "pass": 11,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "log": "/tmp/pr1000-main284-capabilities.log",
+      "exitCode": 0,
+      "tests": 206,
+      "pass": 206,
+      "fail": 0,
+      "skipped": 0,
+      "cancelled": 0
+    }
+  ],
+  "sourceHashes": {
+    "remix/CHANGELOG.md": "5f46485de4929c4607c6c549090fd60ed8bc590d022ab102a5022db5f2dc66f3",
+    "remix/app/docs/apiDocs.ts": "384161751a9c8785c71eb40dc6ae5a0c21be5e05251961719aa7212bb1b243cc",
+    "remix/app/docs/apiCapabilities.test.ts": "0bd27f81c6a47772eec6883f875d3031fba8b5cd91df534395f188812a5a2d95",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "10493d5cc7e39d117058307794ba4aa7fdc8e2ac716a4c0b4daf971adde1f79e",
+    "remix/app/passwords/browserPasskey.ts": "97a6f52738d90c1c41f989d7b13ee37d2c5d730ac36e32cb7f43d4d79fb68d00",
+    "remix/app/passwords/browserPasskey.test.ts": "c17e74f1541090aeeb4620b0b889c016e2f53096e71fea757a8f2d253d2aa12a",
+    "remix/app/passwords/browserPasskeyAppId.ts": "71a7ebb2d0fe910a7d90faed8d1e16cc5a7dc39477598cdc2076a2a6e0542703",
+    "remix/app/passwords/browserProviderAppId.client.test.ts": "d4c92cc59cad42ea1aec5e3e22e9894f6eda62d0c10b3fcfbd18307c5e81c7ac",
+    "remix/app/passwords/browserProviderCeremony.ts": "840a71717b48fd9c0d91aa65a21f15891974a0d055f48e47d2ca2efea6e6650d"
+  },
+  "mergedStaticChecks": {
+    "ratchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "errors": 0
+    },
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "0429c5d5346c25ecc03ee8165cd581f04bd5a3ef4bb73afcdf5804fd9a557af1",
+      "errors": 0,
+      "warnings": 372
+    },
+    "plan": {
+      "exitCode": 0,
+      "logSha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73"
+    }
+  }
+}

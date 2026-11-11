@@ -4,6 +4,12 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Both local database providers — 12 November 2026
 
+Main advanced during this checkpoint to `284f73d44` (PR #1477 browser passkey
+AppID parent-domain compatibility). Merge the actual changes and retain the
+combined passwords 1.10.0 contract instead of the imported historical 1.9.1.
+Existing native/Mongo receipts keep their exact source/build attribution.
+
+
 Actual MagicInput rendering reproduced input loss when the mount passive effect
 ran after accepted input. Initialize escaped HTML/raw value from the real prop
 and preserve mount input/parent echoes while honoring genuine resets. Cover the

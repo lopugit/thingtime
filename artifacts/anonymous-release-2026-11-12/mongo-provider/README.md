@@ -46,3 +46,12 @@ do not include iOS. SQLite remains the in-process portable provider work; its
 BSON transaction primitive is tested, but canonical API integration remains open.
 Provider selection must remain explicit and profile scoped: no cloud-failure
 fallback, automatic migration, or dual writes to independent databases.
+
+## Later main integration
+
+Main `284f73d44` (PR #1477) landed during verification. The combined password
+contract stays 1.10.0 and includes the imported 1.9.1 same-site AppID correction.
+Focused passkey/AppID checks pass 11 tests and canonical capability checks pass
+206, with no skips. [Commands and hashes](main284-verification.json) retain their
+source attribution. Earlier Mongo/native compiled-runtime receipts are not
+retrospectively treated as fresh runs of this later merged source.
