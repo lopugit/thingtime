@@ -422,7 +422,7 @@ export async function transferAdmission(input: {
 			...(existing ? [existing.id, existing.version] : [])]);
 		const fileId = existing?.id ?? requestId;
 		const reservation = await startAttachmentUpload(row.userId, { filename: path, contentType: 'application/octet-stream', sizeBytes,
-			requestId, purpose: 'file', fileSyncOrigin: { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId,
+			requestId, purpose: 'file', contentFingerprint: fingerprint, fileSyncOrigin: { version: 1, deviceId: binding.deviceId, localRootId: binding.configurationId,
 				cloudRootId: binding.folderId, fileId, folderId: binding.folderId, path } });
 		if (!reservation.ok) return reservation;
 		const uploadId = reservation.upload.id, publication = { expectedRevision: existing?.version ?? null };

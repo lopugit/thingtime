@@ -1,3 +1,4 @@
+import { EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS, usesExpandedWebpageAuthoring } from '~/schemas/cssDeclarationNames';
 import { actionActivationWriteMinimum } from '~/schemas/webpageActivation';
 import { requireRemoteTransferImport, REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '~/utils/thingTransfer/remoteCapabilities';
 import { characterApi, withCharacterRequest } from '../local-workspace/characterRequest.client';
@@ -13,7 +14,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -49,6 +50,7 @@ import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
 import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
 import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
+import { requireSubspaceImagePresentation } from '~/utils/subspaceMediaCapabilities';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -204,7 +206,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
+        await requireThingtimeCapability('api.webpages-resolve', usesExpandedWebpageAuthoring(blocks)
+          ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -1096,7 +1099,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
-          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
+          if (body.mediaPresentation !== undefined) await requireSubspaceImagePresentation();
+          else if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
           return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
         },
         [asyncFetcher]
@@ -1249,6 +1253,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, workspace: _workspace, ...rest } = args || {};
           await requireSharedContentCapability('api.things-search', options);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things-search', '1.5.0', options?.expectedApiOrigin);
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
@@ -1316,6 +1321,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           await requireSharedContentCapability('api.things', options);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things', '1.59.0', options?.expectedApiOrigin);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1327,7 +1333,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId,
-              builderApp: args?.builderApp
+              builderApp: args?.builderApp,
+              libraryArchive: args?.libraryArchive
             })}`, { ...options, expectedDataPlane }
           );
         },
@@ -1350,6 +1357,10 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
                 planeRef.current !== expectedDataPlane || window.location.origin !== origin)
               throw new DOMException('Storage scope changed', 'AbortError');
           };
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks)) {
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+            await requireThingtimeCapability('api.things-update', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          }
           let confirmStorageCloudWrite: (() => Promise<string | null | undefined>) | undefined;
           if (origin && typeof args?.id === 'string' && !character && !options?.characterId && storageOwner &&
             expectedDataPlane === 'home' && options?.storageMode !== 'cloud' &&
@@ -1369,11 +1380,13 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
             }, options?.signal);
           }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things-update', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
             : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
           if (activationMinimum) await requireThingtimeCapability('api.things-update', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things-update', MAP_POINTS_SOURCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things-update', PAGE_COLLECTION_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
 
           if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
@@ -1436,10 +1449,12 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
-      // multi-select move/copy/delete/share — see /docs/api things-bulk
+      // Multi-select library operations — see /docs/api things-bulk.
       bulk: useCallback(
-        async (args) => {
-          await requireSharedContentCapability('api.things-bulk');
+        async (args, options?: ThingRequestOptions) => {
+          await requireSharedContentCapability('api.things-bulk', options);
+          if (args?.op === 'archive' || args?.op === 'restore')
+            await requireThingtimeCapability('api.things-bulk', '1.8.0', options?.expectedApiOrigin);
           return asyncFetcher.submit(
             {
               op: args?.op,
@@ -1449,7 +1464,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               ...(args && 'acl' in args ? { acl: args.acl } : {}),
               ...(args?.recursive ? { recursive: true } : {})
             },
-            { action: '/api/v1/things/bulk' }
+            { ...options, action: '/api/v1/things/bulk' }
           );
         },
         [asyncFetcher]
@@ -1457,10 +1472,14 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       upsert: useCallback(
         async (args) => {
           if (sharedContentWrite(args)) { await requireSharedContentCapability('api.things'); await requireSharedContentCapability('api.things-update'); }
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things']);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
@@ -1486,11 +1505,15 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
+          if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
+            await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum, options?.expectedApiOrigin);
           if (usesMapPointsSource(args?.crystal)) await requireThingtimeCapability('api.things', MAP_POINTS_SOURCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesPageCollections(args?.crystal)) await requireThingtimeCapability('api.things', PAGE_COLLECTION_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
 
           if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
@@ -1857,11 +1880,16 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
+						'avatarPresentation',
+						'bannerPresentation',
+						'avatarPresentationSource',
+						'bannerPresentationSource',
 						'birthday',
 						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
+					if ('avatarPresentation' in body || 'bannerPresentation' in body) await requireThingtimeCapability('api.users-profile', '1.2.0');
 					const ret = asyncFetcher.submit(body, { action: '/api/v1/users/profile' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

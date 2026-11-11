@@ -161,7 +161,7 @@ try {
   owner = start(process.execPath, ['.output/server/index.mjs']); await ready(owner);
   phase = 'capabilities';
   const { data: manifest } = await api('/.well-known/thingtime-capabilities.json'); assert.equal(manifest.origin, origin);
-  for (const [feature, version] of Object.entries({ 'api.things-export': '1.18.0', 'api.things-import': '1.15.0', 'api.attachment-content': '1.19.0',
+  for (const [feature, version] of Object.entries({ 'api.things-export': '1.18.0', 'api.things-import': '1.15.0', 'api.attachment-content': '1.20.0',
     'api.admin-subscriptions': '1.1.1', 'api.attachment-uploads': '1.3.0', 'api.attachment-upload-parts': '1.1.0', 'api.attachment-upload-complete': '1.3.0', 'api.attachment-delete': '1.1.0' }))
     assert.ok(capabilitySatisfies(manifest.features[feature]?.version, version), `Missing ${feature} ${version}`);
   phase = 'disposable account provisioning';

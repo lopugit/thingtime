@@ -6,15 +6,18 @@ import {
   connectorConfirmationsForMutation, effectiveConnectorConfirmations, parseConnectorConfirmations,
   requiredConnectorConfirmations, type ConnectorConfirmationAction, type ConnectorConfirmations
 } from './connectorProtections';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 import { json, redirect } from '~/api/http';
+import { authCookie } from '~/api/utils/auth/authCookie';
+import { characterIdentity } from '~/api/utils/auth/characterCore';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
-import { mintPatToken, PAT_SCOPE_CATALOG, revokePatToken } from '~/api/utils/auth/patTokens';
+import { isKnownPatScope, mintPatToken, PAT_SCOPE_CATALOG, resolvePatIntrospection, revokePatToken } from '~/api/utils/auth/patTokens';
 import { createSession, getLiveSession, revokedSessionPipeline, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
+import { findUserById } from '~/api/utils/auth/users';
 import { createMutationStore, mutationDigest, type MutationStorageScope, type MutationStore } from './mutationStore';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
@@ -22,6 +25,7 @@ import { validateThingtimeCrystal, validateValueAgainstFields } from '~/schemas/
 
 import {
   CHATGPT_AUTHORIZE_PATH,
+  CHATGPT_BASE_OAUTH_SCOPES,
   CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
   CHATGPT_OAUTH_RELAY_PATH,
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH,
@@ -29,6 +33,7 @@ import {
   CHATGPT_MCP_INSTRUCTIONS,
   CHATGPT_MCP_METHOD_FEATURES,
   CHATGPT_PLUGIN_FEATURES,
+  CHATGPT_OAUTH_PERMISSION_SCOPES,
   allowedThingtimeEndpoints,
   applyUpstreamQuery,
   escapeHtml,
@@ -39,13 +44,16 @@ import {
   parseChatGptAuthorizationRequest,
   parseCredentialBundle,
   pluginDiscovery,
-  renderConnectionPage
+  renderConnectionPage,
+  renderScopedConnectionPage,
+  requestedOAuthPermissions
 } from './pluginCore';
 import type {
   CHATGPT_MCP_TOOL_FEATURES,
   ChatGptConnection,
   ChatGptCredentialBundle,
   ChatGptDynamicOAuthClient,
+  ChatGptOAuthPermissionScope,
   ChatGptOAuthRequest
 } from './pluginCore';
 import {
@@ -226,7 +234,11 @@ const clientRequestFromClaims = (claims: Record<string, unknown>): ChatGptOAuthR
   const rawScope = Array.isArray(claims.scope) ? claims.scope.filter((value): value is string => typeof value === 'string') : [];
   const scope = normalizeChatGptOAuthScopes(rawScope);
   if (!clientId || !redirectUri || !state || !codeChallenge || !resource || !scope) return null;
-  return { clientId, redirectUri, state, codeChallenge, resource, scope };
+  return {
+    clientId, redirectUri, state, codeChallenge, resource, scope,
+    ...(isUuid(claims.requestId) ? { requestId: claims.requestId } : {}),
+    ...(isUuid(claims.browserSessionJti) ? { browserSessionJti: claims.browserSessionJti } : {})
+  };
 };
 
 const dynamicClientFromId = async (clientId: string, origin: string): Promise<ChatGptDynamicOAuthClient | null> => {
@@ -342,6 +354,16 @@ const validateCredential = async (endpoint: string, token: string): Promise<Resu
 const requestClaimsToken = async (request: ChatGptOAuthRequest) =>
   signPurposeToken(OAUTH_REQUEST_PURPOSE, request, '10m');
 
+const oauthAttemptId = ({ clientId, redirectUri, state, codeChallenge, resource }: ChatGptOAuthRequest) => {
+  // Reloading the consent page is still the same client/state/PKCE attempt.
+  // Scopes are signed separately: changing them cannot create a second attempt
+  // under the same host state and PKCE proof.
+  const hash = createHash('sha256').update('thingtime:chatgpt:scoped-consent:v1\0').update(JSON.stringify([clientId, redirectUri, state, codeChallenge, resource])).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+};
+
+const oauthAttemptUsed = async (jti: string) => Boolean(await (await getSessionsCollection()).findOne({ jti, purpose: OAUTH_CODE_PURPOSE }, { projection: { _id: 1 } }));
+
 type McpConnectionReference = { connectionId: string; sessionJti: string };
 type ResolvedMcpBundle = { bundle: ChatGptCredentialBundle; connection: SessionDoc | null };
 
@@ -356,8 +378,9 @@ const connectionReferenceFromMeta = (meta: unknown): McpConnectionReference | nu
     : null;
 };
 
-const scopeText = (hasOfflineAccess: boolean) => (hasOfflineAccess ? 'thingtime offline_access' : 'thingtime');
 const hasOfflineAccess = (scope: readonly string[]) => scope.includes('offline_access');
+const readOAuthGrantScopes = (value: unknown, legacy: readonly string[] = ['thingtime']) =>
+  value === undefined ? [...legacy] : Array.isArray(value) && value.every((item) => typeof item === 'string') ? normalizeChatGptOAuthScopes(value) : null;
 
 const createMcpConnection = async ({
   userId,
@@ -383,16 +406,18 @@ const createMcpConnection = async ({
 const createMcpAccessGrant = async ({
   userId,
   resource,
-  connection
+  connection,
+  scope
 }: {
   userId: string;
   resource: string;
   connection: McpConnectionReference;
+  scope: string[];
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_SESSION_PURPOSE,
     expiresAt: null,
-    meta: { resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+    meta: { resource, scope, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
   return {
     accessToken: await signJwt({ sub: userId, jti: session.jti, expiresIn: null })
@@ -403,17 +428,19 @@ const createMcpRefreshGrant = async ({
   userId,
   clientId,
   resource,
-  connection
+  connection,
+  scope
 }: {
   userId: string;
   clientId: string;
   resource: string;
   connection: McpConnectionReference;
+  scope: string[];
 }) => {
   const session = await createSession(userId, {
     purpose: MCP_REFRESH_SESSION_PURPOSE,
     expiresAt: null,
-    meta: { clientId, resource, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
+    meta: { clientId, resource, scope, connectionId: connection.connectionId, connectionSessionJti: connection.sessionJti }
   });
   return signJwt({ sub: userId, jti: session.jti, expiresIn: null });
 };
@@ -453,10 +480,16 @@ export const beginChatGptAuthorization = async ({ request }: { request: Request 
   if (!allowed.length) return oauthErrorPage(503, 'No Thingtime API endpoints have been configured for ChatGPT connections.');
   if (!configuredCipherKey()) return oauthErrorPage(503, 'This Thingtime endpoint has not configured encrypted ChatGPT credential storage.');
 
-  const requestToken = await requestClaimsToken(parsed.request);
+  const permissions = requestedOAuthPermissions(parsed.request.scope);
+  const requestId = permissions.length ? oauthAttemptId(parsed.request) : null;
+  if (requestId && await oauthAttemptUsed(requestId)) return oauthErrorPage(409, 'This authorization request has already been used. Return to your app and start again.');
+  const requestToken = await requestClaimsToken({ ...parsed.request, ...(requestId ? { requestId } : {}) });
   const normalizedOrigin = normalizeThingtimeEndpoint(requestOrigin(request));
   const defaultEndpoint = normalizedOrigin && allowed.includes(normalizedOrigin) ? normalizedOrigin : allowed[0];
-  return new Response(renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
+  if (permissions.length && normalizedOrigin !== defaultEndpoint) return oauthErrorPage(503, 'This origin is not available for scoped Thingtime connections.');
+  return new Response(permissions.length
+    ? renderScopedConnectionPage(requestToken, PAT_SCOPE_CATALOG, permissions)
+    : renderConnectionPage(requestToken, allowed, defaultEndpoint, PAT_SCOPE_CATALOG), {
     headers: {
       ...noStoreHeaders,
       'Content-Type': 'text/html; charset=utf-8',
@@ -476,6 +509,9 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
   if (!Array.isArray(rawRedirectUris) || rawRedirectUris.length < 1 || rawRedirectUris.length > 8) {
     return json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must contain between one and eight supported ChatGPT or loopback callbacks' }, { status: 400, headers: noStoreHeaders });
   }
+  const scope = candidate?.scope === undefined ? [...CHATGPT_BASE_OAUTH_SCOPES]
+    : typeof candidate.scope === 'string' ? normalizeChatGptOAuthScopes(candidate.scope.split(/\s+/)) : null;
+  if (!scope) return json({ error: 'invalid_client_metadata', error_description: 'scope must include thingtime and contain only supported scopes' }, { status: 400, headers: noStoreHeaders });
   const redirectUris = [...new Set(rawRedirectUris.map((value) => normalizeRegisteredClientRedirectUri(value, requestOrigin(request))).filter((value): value is string => Boolean(value)))];
   if (redirectUris.length !== rawRedirectUris.length) {
     return json({ error: 'invalid_redirect_uri', error_description: 'Every redirect URI must be an exact ChatGPT connector, loopback callback, or a first-party short-lived OAuth relay callback' }, { status: 400, headers: noStoreHeaders });
@@ -489,7 +525,7 @@ export const registerChatGptOAuthClient = async ({ request }: { request: Request
       response_types: ['code'],
       grant_types: ['authorization_code', 'refresh_token'],
       token_endpoint_auth_method: 'none',
-      scope: 'thingtime offline_access'
+      scope: scope.join(' ')
     },
     { status: 201, headers: noStoreHeaders }
   );
@@ -565,6 +601,92 @@ export const handleChatGptOAuthRelay = async ({ request }: { request: Request })
   return json({ status: 'complete', response }, { headers: noStoreHeaders });
 };
 
+const completeOAuthCallback = (oauthRequest: ChatGptOAuthRequest, origin: string, params: Record<string, string>, wantsJson: boolean) => {
+  const callback = new URL(oauthRequest.redirectUri);
+  callback.searchParams.set('state', oauthRequest.state);
+  callback.searchParams.set('iss', origin);
+  for (const [key, value] of Object.entries(params)) callback.searchParams.set(key, value);
+  return wantsJson ? json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders }) : redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
+};
+
+const oauthCodeMetadata = (oauthRequest: ChatGptOAuthRequest) => ({
+  clientId: oauthRequest.clientId,
+  redirectUri: oauthRequest.redirectUri,
+  state: oauthRequest.state,
+  codeChallenge: oauthRequest.codeChallenge,
+  codeChallengeMethod: 'S256',
+  resource: oauthRequest.resource,
+  scope: oauthRequest.scope,
+  connectionId: crypto.randomUUID()
+});
+
+const readConsentingBrowser = async (request: Request) => {
+  if (request.headers.has('authorization')) return null;
+  const cookie = await authCookie.parse(request.headers.get('cookie'));
+  const claims = typeof cookie === 'string' ? await verifyJwt(cookie) : null;
+  if (!claims) return null;
+  const [session, user] = await Promise.all([getLiveSession(claims.jti), getCurrentUser(request)]);
+  return session && (session.purpose === 'browser' || session.purpose == null) && session.userId === claims.sub &&
+    !session.meta?.activeCharacterId && user?.id === claims.sub && user.accountKind !== 'service' && !user.isCharacter && !user.temporary ? { user, session } : null;
+};
+
+const submitScopedChatGptConsent = async (
+  request: Request,
+  form: URLSearchParams,
+  oauthRequest: ChatGptOAuthRequest,
+  signedRequest: string,
+  permissions: readonly ChatGptOAuthPermissionScope[]
+) => {
+  const origin = requestOrigin(request);
+  const reject = (status: number, error: string) => json({ ok: false, error }, { status, headers: noStoreHeaders });
+  if (!oauthRequest.requestId || request.headers.get('origin') !== origin || !allowedThingtimeEndpoints().includes(origin)) {
+    return reject(400, 'This authorization request does not match this Thingtime origin.');
+  }
+  const intent = form.get('intent');
+  const browser = await readConsentingBrowser(request);
+  const unboundCancel = intent === 'cancel' && !oauthRequest.browserSessionJti;
+  if (!browser && !unboundCancel) return reject(401, 'Sign in with Thingtime to continue.');
+  if (oauthRequest.browserSessionJti && oauthRequest.browserSessionJti !== browser?.session.jti) {
+    return reject(409, 'The signed-in Thingtime account changed. Return to your app and start again.');
+  }
+  if (intent === 'prepare') {
+    if (await oauthAttemptUsed(oauthRequest.requestId)) return reject(409, 'This authorization request has already been used. Return to your app and start again.');
+    const bound = oauthRequest.browserSessionJti ? signedRequest : await requestClaimsToken({ ...oauthRequest, browserSessionJti: browser.session.jti });
+    return json({ ok: true, request: bound, username: browser.user.username }, { headers: noStoreHeaders });
+  }
+  if (!unboundCancel && (!oauthRequest.browserSessionJti || (intent !== 'complete' && intent !== 'cancel'))) {
+    return reject(400, 'Review the signed-in account before approving this connection.');
+  }
+
+  const optional = form.getAll('scope');
+  if (intent === 'complete' && (!optional.every(isKnownPatScope) || optional.length > PAT_SCOPE_CATALOG.length)) {
+    return reject(400, 'Review the selected access rules and try again.');
+  }
+  const scopes = [...new Set([...permissions, ...optional])];
+  let codeSession: SessionDoc;
+  try {
+    // Retain the one-use row beyond both the unbound and browser-bound signed
+    // requests. The authorization JWT itself still expires in five minutes.
+    // A signed-out cancellation has no owner or credential. Store only the
+    // short-lived attempt marker so another open tab cannot approve it later.
+    codeSession = await createSession(browser?.user.id ?? '', {
+      jti: oauthRequest.requestId,
+      purpose: OAUTH_CODE_PURPOSE,
+      expiresAt: new Date(Date.now() + 20 * 60 * 1000),
+      meta: intent === 'cancel' ? { cancelled: true } : {
+        ...oauthCodeMetadata(oauthRequest),
+        scopedConsent: { browserSessionJti: browser?.session.jti, scopes }
+      }
+    });
+  } catch (error) {
+    if ((error as { code?: number })?.code !== 11000) throw error;
+    return reject(409, 'This authorization request has already been used. Return to your app and start again.');
+  }
+  if (intent === 'cancel') return completeOAuthCallback(oauthRequest, origin, { error: 'access_denied' }, true);
+  const code = await signJwt({ sub: browser.user.id, jti: codeSession.jti, expiresIn: '5m' });
+  return completeOAuthCallback(oauthRequest, origin, { code }, true);
+};
+
 export const submitChatGptAuthorization = async ({ request }: { request: Request }) => {
   const form = await formBody(request);
   if (form.ok === false) return oauthErrorPage(form.status, form.error);
@@ -572,7 +694,12 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const signedRequest = form.value.get('request');
   const claims = typeof signedRequest === 'string' ? await verifyPurposeToken(signedRequest, OAUTH_REQUEST_PURPOSE) : null;
   const oauthRequest = claims ? clientRequestFromClaims(claims) : null;
-  if (!oauthRequest) return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  const origin = requestOrigin(request);
+  if (!oauthRequest || !isMcpResourceForOrigin(oauthRequest.resource, origin) || (request.headers.has('origin') && request.headers.get('origin') !== origin)) {
+    return oauthErrorPage(400, 'This connection request has expired or is invalid. Return to ChatGPT and try again.');
+  }
+  const permissions = requestedOAuthPermissions(oauthRequest.scope);
+  if (permissions.length) return submitScopedChatGptConsent(request, form.value, oauthRequest, signedRequest!, permissions);
   const wantsJsonCompletion = form.value.get('intent') === 'complete';
 
   if (form.value.get('intent') === 'prepare') {
@@ -659,32 +786,46 @@ export const submitChatGptAuthorization = async ({ request }: { request: Request
   const encrypted = encryptBundle({ version: 1, defaultConnectionId: connections[0].id, connections });
   if (encrypted.ok === false) return oauthErrorPage(encrypted.status, encrypted.error);
   const expiresAt = new Date(Date.now() + OAUTH_CODE_TTL_MS);
-  const connectionId = crypto.randomUUID();
   const codeSession = await createSession(connections[0].user.id, {
     purpose: OAUTH_CODE_PURPOSE,
     expiresAt,
     meta: {
-      clientId: oauthRequest.clientId,
-      redirectUri: oauthRequest.redirectUri,
-      state: oauthRequest.state,
-      codeChallenge: oauthRequest.codeChallenge,
-      codeChallengeMethod: 'S256',
-      resource: oauthRequest.resource,
-      scope: oauthRequest.scope,
-      connectionId,
+      ...oauthCodeMetadata(oauthRequest),
       ciphertext: encrypted.value
     }
   });
   const code = await signJwt({ sub: connections[0].user.id, jti: codeSession.jti, expiresIn: '5m' });
-  const callback = new URL(oauthRequest.redirectUri);
-  callback.searchParams.set('code', code);
-  callback.searchParams.set('state', oauthRequest.state);
-  callback.searchParams.set('iss', requestOrigin(request));
-  if (wantsJsonCompletion) return json({ ok: true, redirectUri: callback.toString() }, { headers: noStoreHeaders });
-  return redirect(callback.toString(), { status: 302, headers: noStoreHeaders });
+  return completeOAuthCallback(oauthRequest, origin, { code }, wantsJsonCompletion);
 };
 
 const invalidGrant = () => json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid, expired, already used, or does not match this request' }, { status: 400, headers: noStoreHeaders });
+
+const mintScopedOAuthBundle = async (session: SessionDoc, origin: string, permissions: readonly ChatGptOAuthPermissionScope[]): Promise<Result<{ bundle: ChatGptCredentialBundle; tokenId: string }>> => {
+  const consent = session.meta?.scopedConsent;
+  if (!isUuid(consent?.browserSessionJti) || !Array.isArray(consent?.scopes) || !consent.scopes.every(isKnownPatScope) ||
+      !permissions.every((permission) => consent.scopes.includes(permission)) || !allowedThingtimeEndpoints().includes(origin)) {
+    return { ok: false, status: 400, error: 'The approved Thingtime permissions do not match this request.' };
+  }
+  const [browser, user] = await Promise.all([getLiveSession(consent.browserSessionJti), findUserById(session.userId)]);
+  if (!browser || (browser.purpose !== 'browser' && browser.purpose != null) || browser.userId !== session.userId || browser.meta?.activeCharacterId ||
+      !user || user.accountKind === 'service' || user.meta?.temporary || characterIdentity(user)) {
+    return { ok: false, status: 400, error: 'The Thingtime browser approval is no longer valid.' };
+  }
+  const minted = await mintPatToken(session.userId, {
+    name: `Thingtime ChatGPT connection · @${user.username}`, scopes: consent.scopes, expiresInMs: null,
+    maxUses: null, visibility: 'all', createdVia: 'chatgpt-oauth'
+  });
+  if (minted.ok === false) return minted;
+  const accountId = crypto.randomUUID();
+  return { ok: true, value: {
+    tokenId: minted.tokenInfo.id,
+    bundle: { version: 1, defaultConnectionId: accountId, connections: [{
+      id: accountId, label: user.displayName?.trim() || user.username, endpoint: origin, token: minted.token,
+      user: { id: session.userId, username: user.username, displayName: user.displayName ?? null },
+      scopes: minted.tokenInfo.scopes, connectedAt: new Date().toISOString()
+    }] }
+  } };
+};
 
 const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: string) => {
   const code = params.get('code')?.trim() || '';
@@ -708,41 +849,40 @@ const exchangeAuthorizationCodeGrant = async (params: URLSearchParams, origin: s
       'meta.clientId': clientId,
       'meta.redirectUri': redirectUri,
       'meta.resource': resource,
-      'meta.codeChallengeMethod': 'S256'
+      'meta.codeChallengeMethod': 'S256',
+      'meta.codeChallenge': createHash('sha256').update(verifier).digest('base64url')
     },
     { $set: { revokedAt: now, 'meta.consumedAt': now } },
     { returnDocument: 'before' }
   );
   if (!consumed || !pkceVerifierMatches(verifier, consumed.meta?.codeChallenge)) return invalidGrant();
 
-  const bundle = decryptBundle(consumed.meta?.ciphertext);
+  const scope = readOAuthGrantScopes(consumed.meta?.scope);
+  if (!scope) return invalidGrant();
+  const permissions = requestedOAuthPermissions(scope);
+  const scoped = permissions.length ? await mintScopedOAuthBundle(consumed, origin, permissions) : null;
+  if (scoped?.ok === false) return json({ error: 'invalid_grant', error_description: scoped.error }, { status: scoped.status, headers: noStoreHeaders });
+  const bundle = scoped?.ok ? { ok: true as const, value: scoped.value.bundle } : decryptBundle(consumed.meta?.ciphertext);
   if (bundle.ok === false) return json({ error: 'server_error', error_description: bundle.error }, { status: bundle.status, headers: noStoreHeaders });
-  const encrypted = encryptBundle(bundle.value);
-  if (encrypted.ok === false) return json({ error: 'server_error', error_description: encrypted.error }, { status: encrypted.status, headers: noStoreHeaders });
-  const connection = await createMcpConnection({
-    userId: claims.sub,
-    clientId,
-    resource,
-    ciphertext: encrypted.value,
-    connectionId: isUuid(consumed.meta?.connectionId) ? consumed.meta.connectionId : crypto.randomUUID()
-  });
-  const access = await createMcpAccessGrant({ userId: claims.sub, resource, connection });
-  const scope = normalizeChatGptOAuthScopes(
-    Array.isArray(consumed.meta?.scope) ? consumed.meta.scope.filter((value): value is string => typeof value === 'string') : ['thingtime']
-  ) || ['thingtime'];
-  const offlineAccess = hasOfflineAccess(scope);
-  const refreshToken = offlineAccess
-    ? await createMcpRefreshGrant({ userId: claims.sub, clientId, resource, connection })
-    : null;
-  return json(
-    {
-      access_token: access.accessToken,
-      token_type: 'Bearer',
-      scope: scopeText(offlineAccess),
-      ...(refreshToken ? { refresh_token: refreshToken } : {})
-    },
-    { headers: noStoreHeaders }
-  );
+  let connection: McpConnectionReference | undefined;
+  try {
+    const encrypted = encryptBundle(bundle.value);
+    if (encrypted.ok === false) {
+      if (scoped?.ok) await revokePatToken(claims.sub, scoped.value.tokenId);
+      return json({ error: 'server_error', error_description: encrypted.error }, { status: encrypted.status, headers: noStoreHeaders });
+    }
+    connection = await createMcpConnection({
+      userId: claims.sub, clientId, resource, ciphertext: encrypted.value,
+      connectionId: isUuid(consumed.meta?.connectionId) ? consumed.meta.connectionId : crypto.randomUUID()
+    });
+    const access = await createMcpAccessGrant({ userId: claims.sub, resource, connection, scope });
+    const refreshToken = hasOfflineAccess(scope) ? await createMcpRefreshGrant({ userId: claims.sub, clientId, resource, connection, scope }) : null;
+    return json({ access_token: access.accessToken, token_type: 'Bearer', scope: scope.join(' '), ...(refreshToken ? { refresh_token: refreshToken } : {}) }, { headers: noStoreHeaders });
+  } catch (error) {
+    if (scoped?.ok) await revokePatToken(claims.sub, scoped.value.tokenId);
+    if (connection) await revokeSession(connection.sessionJti);
+    throw error;
+  }
 };
 
 const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string) => {
@@ -750,6 +890,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   const clientId = params.get('client_id')?.trim() || '';
   const requestedResource = params.get('resource');
   const resource = requestedResource?.trim() || '';
+  const requestedScope = params.get('scope');
   if (!refreshToken || !clientId || (requestedResource !== null && (!resource || !isMcpResourceForOrigin(resource, origin)))) return invalidGrant();
 
   const claims = await verifyJwt(refreshToken);
@@ -764,16 +905,30 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   };
   Object.assign(refreshFilter, infiniteExpiryFilter(now));
   if (resource) refreshFilter['meta.resource'] = resource;
-  const consumed = await (await getSessionsCollection()).findOneAndUpdate(
-    refreshFilter,
-    consumedSessionPipeline(now),
-    { returnDocument: 'before' }
-  );
-  if (!consumed) return invalidGrant();
-
-  const resolved = await resolveMcpBundle(consumed, origin);
-  const connection = connectionReferenceFromMeta(consumed.meta);
+  const sessions = await getSessionsCollection();
+  const pending = await sessions.findOne(refreshFilter);
+  const scope = pending && readOAuthGrantScopes(pending.meta?.scope, CHATGPT_BASE_OAUTH_SCOPES);
+  if (!scope || !isMcpResourceForOrigin(pending?.meta?.resource, origin)) return invalidGrant();
+  if (requestedScope !== null) {
+    const requested = normalizeChatGptOAuthScopes(requestedScope.split(/\s+/));
+    if (!requested || requested.length !== scope.length || !requested.every((value) => scope.includes(value))) {
+      return json({ error: 'invalid_scope', error_description: 'Refresh cannot change permissions; authorize the requested scopes again.' }, { status: 400, headers: noStoreHeaders });
+    }
+  }
+  const resolved = await resolveMcpBundle(pending!, origin);
+  const connection = connectionReferenceFromMeta(pending!.meta);
   if (resolved.ok === false || !resolved.value.connection || !connection) return invalidGrant();
+  const permissions = requestedOAuthPermissions(scope);
+  if (permissions.length) {
+    // New scoped grants have one approved account. A revoked backing PAT may
+    // never be advertised as still authorizing this OAuth permission.
+    const account = accountFor(resolved.value.bundle, undefined);
+    if (account?.endpoint !== origin) return invalidGrant();
+    const live = await resolvePatIntrospection(new Request(`${origin}/api/v1/tokens/self`, { headers: { Authorization: `Bearer ${account.token}` } }));
+    if (live.ok === false || live.token.status !== 'active' || live.user.id !== claims.sub || !permissions.every((permission) => live.token.scopes.includes(permission))) return invalidGrant();
+  }
+  const consumed = await sessions.findOneAndUpdate(refreshFilter, consumedSessionPipeline(now), { returnDocument: 'before' });
+  if (!consumed) return invalidGrant();
 
   const extended = await (await getSessionsCollection()).updateOne(
     {
@@ -789,14 +944,14 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (!extended.matchedCount) return invalidGrant();
 
   const storedResource = typeof consumed.meta?.resource === 'string' ? consumed.meta.resource : '';
-  const access = await createMcpAccessGrant({ userId: claims.sub, resource: storedResource, connection });
-  const nextRefreshToken = await createMcpRefreshGrant({ userId: claims.sub, clientId, resource: storedResource, connection });
+  const access = await createMcpAccessGrant({ userId: claims.sub, resource: storedResource, connection, scope });
+  const nextRefreshToken = await createMcpRefreshGrant({ userId: claims.sub, clientId, resource: storedResource, connection, scope });
   return json(
     {
       access_token: access.accessToken,
       token_type: 'Bearer',
       refresh_token: nextRefreshToken,
-      scope: scopeText(true)
+      scope: scope.join(' ')
     },
     { headers: noStoreHeaders }
   );
@@ -956,9 +1111,6 @@ const AGENT_REPORTING_REQUIREMENTS = {
 // Negotiate afresh on each call: deployment changes and a repaired manifest must
 // never remain hidden behind an earlier rejection or a different account origin.
 const requireAgentReporting = async (account: ChatGptConnection): Promise<Result<true>> => {
-  if (!accountScopeCovers(account, 'agents.report')) {
-    return { ok: false, status: 403, error: 'The selected Thingtime token needs the independent agents.report scope. Existing things access does not include it. Authorize agents.report once in Advanced connection settings and reconnect; no scope is upgraded automatically.' };
-  }
   const result = await endpointRequest(account.endpoint, account.token, THINGTIME_CAPABILITY_MANIFEST_PATH);
   if (result.ok === false) return result;
   const manifest = asRecord(result.value);
@@ -1368,6 +1520,10 @@ const loginTool = <T extends Record<string, unknown>>(tool: T) => ({ ...loginToo
 
 type ChatGptMcpToolName = keyof typeof CHATGPT_MCP_TOOL_FEATURES;
 const protectedThingtimeTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => protectedTool(tool);
+const toolWithPermissions = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T, permissions: readonly ChatGptOAuthPermissionScope[]) => {
+  const securitySchemes = [{ type: 'oauth2', scopes: ['thingtime', ...permissions] }] as const;
+  return { ...protectedThingtimeTool(tool), securitySchemes, _meta: { ...protectedToolContract._meta, securitySchemes } };
+};
 const confirmationArgument = {
   type: 'boolean',
   description: 'Set true only after the user explicitly confirms this action or the exact signed plan. Omit it when Thingtime does not require confirmation. Host approvals still apply.'
@@ -1380,8 +1536,9 @@ const agentTaskIdentityProperties = {
   externalTaskId: { type: 'string', minLength: 1, description: 'Stable chat/task identity, reused across restarts.' }
 };
 const agentReportActionNames = ['createProject', 'createTask', 'updateTask', 'updateWorkItem', 'createAgent', 'addTodo', 'completeTodo', 'addProgress', 'askQuestion', 'answerQuestion', 'recordMeasurements', 'recordTokenUsage', 'recordProgressPercent', 'recordStartTime', 'recordEndTime', 'readOverview'] as const;
+const reportingTool = <T extends Record<string, unknown> & { name: ChatGptMcpToolName }>(tool: T) => toolWithPermissions(tool, ['agents.report']);
 const reportingTools = [
-  protectedThingtimeTool({
+  reportingTool({
     name: 'prepare_thingtime_agent_task', title: 'Prepare private agent task reporting',
     description: 'Reuse or prepare a distinct task Character and binding to the existing private saved workspace. Requires independent agents.report authorization and compatible selected-origin capabilities. Standing authorization for private task lifecycle reporting permits this bounded operation without repeat confirmation. Never falls back to the public owner identity or creates replacement workspace schemas.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'displayName', 'workspace'], properties: {
@@ -1395,19 +1552,19 @@ const reportingTools = [
     } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'get_thingtime_agent_task', title: 'Read private agent task binding',
     description: 'Read the existing private task binding by stable task identity. Requires agents.report and origin-bound capability negotiation. Returns safe Character/workspace/record IDs without credentials or private ownership links.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId'], properties: { ...agentTaskIdentityProperties, recordIds: { type: 'array', uniqueItems: true, items: { type: 'string' }, description: 'Optional exact IDs of this task Character’s private workspace Data Things for independent ACL-checked readback.' } } },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'report_thingtime_agent_task', title: 'Report private agent task progress',
     description: 'Invoke one registered saved workspace reporting Action through the bound task Character. Reuse requestId and immutable inputs after uncertain completion. Standing authorization permits private lifecycle updates without repeat confirmation; generic mutation and security confirmations remain unchanged. No arbitrary Action ID, route, URL or public identity fallback is accepted.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'actionName', 'inputs'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, actionName: { type: 'string', enum: agentReportActionNames }, inputs: { type: 'object' } } },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   }),
-  protectedThingtimeTool({
+  reportingTool({
     name: 'coordinate_thingtime_agent_task', title: 'Maintain private agent coordination post',
     description: 'Create or update this task’s single private coordination post as its distinct Character in the bound existing Thingtime Agents subspace. Reuses the stable task post and immutable requestId; requires an explicit renderComponent definition or saved Component reference. Standing private coordination authorization permits this bounded operation without repeat confirmation. Cannot select arbitrary subspaces, public identity, Actions or routes.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['externalTaskId', 'requestId', 'title', 'text', 'renderComponent'], properties: { ...agentTaskIdentityProperties, requestId: { type: 'string', format: 'uuid' }, title: { type: 'string', minLength: 1 }, text: { type: 'string', minLength: 1 }, renderComponent: { type: 'object', description: 'Explicit embedded Component definition or saved Component reference supported by the canonical renderer.' } } },
@@ -1419,8 +1576,11 @@ export const thingtimeToolDefinitions = [
   loginThingtimeTool({
     name: 'login_thingtime',
     title: 'Log in to Thingtime',
-    description: 'Use for “@Thingtime login”. This public bootstrap returns a tool-level OAuth challenge when no connection exists, so the invoking ChatGPT or Codex host opens its native browser authorization flow and owns the registered callback. The connection page can add multiple named accounts.',
-    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+    description: 'Use for “@Thingtime login”. This public bootstrap lets the invoking host open its native OAuth browser and own the registered callback. Pass an exact connected accountId and requiredScopes to request missing permissions with explicit consent. After approval list accounts and verify the same owner/origin before using the new account ID.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {
+      accountId: { type: 'string', description: 'Exact existing account ID when requesting additional permissions.' },
+      requiredScopes: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', enum: CHATGPT_OAUTH_PERMISSION_SCOPES }, description: 'Additional independent OAuth permissions needed for this task.' }
+    } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
   }),
   protectedThingtimeTool({
@@ -1670,8 +1830,38 @@ const mcpToolResult = (value: unknown, isError = false) => ({
   ...(isError ? { isError: true } : {})
 });
 
+const readRequiredScopes = (value: unknown): ChatGptOAuthPermissionScope[] | null => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.length || value.length > CHATGPT_OAUTH_PERMISSION_SCOPES.length) return null;
+  const permissions = requestedOAuthPermissions(value);
+  return permissions.length === value.length ? permissions : null;
+};
+
+const missingOAuthPermissions = (account: ChatGptConnection, required: readonly ChatGptOAuthPermissionScope[], context: McpSession, explicitAccount: boolean) => {
+  const missingScopes = required.filter((scope) => !account.scopes.includes(scope));
+  if (!missingScopes.length) return null;
+  const explanation = `The selected Thingtime token needs the independent ${missingScopes.join(', ')} scope${missingScopes.length === 1 ? '' : 's'}.`;
+  const sameOrigin = typeof context.session.meta?.resource === 'string' && context.session.meta.resource === `${account.endpoint}${CHATGPT_MCP_PATH}`;
+  if (!sameOrigin) return { error: `${explanation} The authorization server cannot grant new permissions on a different account origin.`, status: 403 };
+  if (!explicitAccount) return { error: `${explanation} Select the exact connected account ID before requesting additional access.`, status: 403 };
+  return {
+    error: `${explanation} Use the host’s authorization prompt, then verify the same account and origin before retrying with the newly connected account ID.`,
+    status: 403,
+    authorization: { requiredScopes: [...required], accountId: account.id }
+  };
+};
+
 export const callThingtimeTool = async (name: string, args: Record<string, unknown>, context: McpSession): Promise<unknown> => {
   if (name === 'login_thingtime') {
+    const permissions = readRequiredScopes(args.requiredScopes);
+    if (!permissions) return { error: 'requiredScopes must contain supported independent OAuth permissions', status: 400 };
+    if (args.accountId !== undefined || permissions.length) {
+      if (args.accountId !== undefined && !stringValue(args.accountId)) return { error: 'accountId must be an exact connected account ID', status: 400 };
+      const account = accountFor(context.bundle, args.accountId);
+      if (!account) return { error: 'Unknown Thingtime account id', status: 404 };
+      const permission = missingOAuthPermissions(account, permissions, context, typeof args.accountId === 'string' && !!args.accountId);
+      if (permission) return permission;
+    }
     return {
       authenticated: true,
       defaultAccountId: context.bundle.defaultConnectionId,
@@ -1726,6 +1916,12 @@ export const callThingtimeTool = async (name: string, args: Record<string, unkno
     case 'coordinate_thingtime_agent_task': {
       const externalTaskId = stringValue(args.externalTaskId);
       if (!externalTaskId) return { error: 'externalTaskId is required', status: 400 };
+      const explicitAccount = !!stringValue(args.accountId);
+      if ((args.accountId !== undefined || (name !== 'get_thingtime_agent_task' && readOAuthGrantScopes(context.session.meta?.scope)?.includes('agents.report'))) && !explicitAccount) {
+        return { error: 'Provide the verified connected accountId before using private reporting.', status: 400 };
+      }
+      const permission = missingOAuthPermissions(account, ['agents.report'], context, explicitAccount);
+      if (permission) return permission;
       const ready = await requireAgentReporting(account);
       if (ready.ok === false) return { error: ready.error, status: ready.status };
       const operation = name === 'prepare_thingtime_agent_task' ? 'prepare' : name === 'get_thingtime_agent_task' ? 'get' : name === 'coordinate_thingtime_agent_task' ? 'coordinate' : 'report';
@@ -2203,8 +2399,8 @@ const jsonRpcResponse = (id: unknown, result?: unknown, error?: { code: number; 
   ...(error ? { error } : { result })
 });
 
-const authChallenge = (origin: string) =>
-  `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}", error="invalid_token", error_description="A Thingtime connection is required"`;
+const authChallenge = (origin: string, scope: readonly string[] = [], error: 'invalid_token' | 'insufficient_scope' = 'invalid_token') =>
+  `Bearer resource_metadata="${origin}${CHATGPT_PROTECTED_RESOURCE_METADATA_PATH}", error="${error}", error_description="${error === 'insufficient_scope' ? 'Additional Thingtime permission requires your approval' : 'A Thingtime connection is required'}"${scope.length ? `, scope="${scope.join(' ')}"` : ''}`;
 
 const thingtimeResourceTemplates = [
   {
@@ -2336,13 +2532,13 @@ const mcpAuthorizationDenied = (id: unknown, request: Request, context: Failure)
   return json(jsonRpcResponse(id, denied), { status: context.status, headers: { 'WWW-Authenticate': challenge, ...noStoreHeaders } });
 };
 
-const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: Failure) => {
-  const challenge = authChallenge(requestOrigin(request));
+const mcpToolAuthorizationChallenge = (id: unknown, request: Request, context: { error: string; status?: number; authorization?: Record<string, unknown> }, scope: readonly string[] = [], error?: 'invalid_token' | 'insufficient_scope') => {
+  const challenge = authChallenge(requestOrigin(request), scope, error);
   const denied = {
-    ...mcpToolResult({ error: context.error }, true),
+    ...mcpToolResult(context, true),
     _meta: { 'mcp/www_authenticate': [challenge] }
   };
-  // A login bootstrap is an MCP tool result, not a failed HTTP transport.
+  // A login or step-up challenge is an MCP tool result, not a failed HTTP transport.
   // Returning 200 lets the invoking host read mcp/www_authenticate and own
   // the PKCE browser/callback lifecycle for this exact MCP session.
   return json(jsonRpcResponse(id, denied), { headers: noStoreHeaders });
@@ -2467,13 +2663,24 @@ export const handleChatGptMcp = async ({ request }: { request: Request }, resolv
   }
   const context = await getContext();
   if (context.ok === false) {
-    return name === 'login_thingtime'
-      ? mcpToolAuthorizationChallenge(id, request, context)
-      : mcpAuthorizationDenied(id, request, context);
+    if (name === 'login_thingtime' && context.status === 401) {
+      const permissions = readRequiredScopes(args.requiredScopes);
+      if (!permissions) return json(jsonRpcResponse(id, mcpToolResult({ error: 'requiredScopes must contain supported independent OAuth permissions', status: 400 }, true)));
+      return mcpToolAuthorizationChallenge(id, request, { error: context.error }, permissions.length ? ['thingtime', ...permissions] : []);
+    }
+    return mcpAuthorizationDenied(id, request, context);
   }
   const result = await callThingtimeTool(name, args, context.value);
+  if (notification) return new Response(null, { status: 202 });
+  const resultError = asRecord(result);
+  const authorization = asRecord(resultError?.authorization);
+  const permissions = authorization ? readRequiredScopes(authorization.requiredScopes) : null;
+  if (resultError?.status === 403 && typeof resultError.error === 'string' && permissions?.length) {
+    const scope = [...new Set([...(readOAuthGrantScopes(context.value.session.meta?.scope) || ['thingtime']), ...permissions])];
+    return mcpToolAuthorizationChallenge(id, request, { error: resultError.error, status: 403, authorization: authorization ?? undefined }, scope, 'insufficient_scope');
+  }
   const isError = Boolean(result && typeof result === 'object' && 'error' in result);
-  return notification ? new Response(null, { status: 202 }) : json(jsonRpcResponse(id, mcpToolResult(result, isError)));
+  return json(jsonRpcResponse(id, mcpToolResult(result, isError)));
 };
 
 export const chatGptPluginDiscoveryResponse = async ({ request, includeRuntimeFeatures = false }: { request: Request; includeRuntimeFeatures?: boolean }) => {

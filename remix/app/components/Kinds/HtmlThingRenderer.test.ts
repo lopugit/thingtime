@@ -23,6 +23,19 @@ test('the form-field props the ttAction click wrapper needs are allowed', () => 
 	}
 });
 
+test('authored multiple select preserves string array defaults and rejects non-string entries', () => {
+ const options = ['html', 'css', 'javascript'].map((value) => ({ tag: 'option', props: { value }, children: value }));
+ const select = (value: unknown) => renderToStaticMarkup(React.createElement(HtmlThingRenderer, {
+  node: { tag: 'select', props: { value, multiple: 'true' }, children: options }
+ }));
+ const markup = select(['html', 'css']);
+ assert.match(markup, /<select multiple=""/);
+ assert.match(markup, /<option value="html" selected="">/);
+ assert.match(markup, /<option value="css" selected="">/);
+ assert.doesNotMatch(markup, /<option value="javascript" selected="">/);
+ assert.doesNotMatch(select([{ content: 'html' }]), /selected=/);
+});
+
 test('no author-supplied regex reaches the browser through `pattern`', () => {
 	// Constraint validation compiles and runs `pattern` on the main thread,
 	// with no timeout, as soon as the field has a value — and a template can
@@ -37,6 +50,22 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	for (const prop of ['onClick', 'onclick', 'onError', 'dangerouslySetInnerHTML', 'srcDoc', 'srcdoc', 'formAction', 'xlinkHref']) {
 		assert.equal(ALLOWED_PROPS.has(prop), false, `${prop} must never render from untrusted markup`);
 	}
+});
+
+test('multiple selects render named fields and individually editable option labels', () => {
+	const markup = renderToStaticMarkup(React.createElement(HtmlBlockElement, {
+		tag: 'select', attributes: { name: 'levels', multiple: true, value: ['top-level', 'subtasks'], 'aria-label': 'Task level' },
+		editorProps: { 'data-block-id': 'filter', onClick: () => {} },
+		children: React.createElement(HtmlBlockElement, {
+			tag: 'option', attributes: { value: 'top-level', onClick: 'unsafe()' }, editorProps: { 'data-block-id': 'choice' }, children: 'Top level'
+		})
+	}));
+	assert.match(markup, /data-block-id="filter"/);
+	assert.match(markup, /<div data-block-id="choice"/);
+	assert.match(markup, /<select name="levels" multiple=""/);
+	assert.match(markup, /value="top-level" selected=""/);
+	assert.match(markup, /value="subtasks" selected=""/);
+	assert.doesNotMatch(markup, /unsafe|popover=/);
 });
 
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {

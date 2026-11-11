@@ -25,6 +25,11 @@ export type NativeScanSkip = { ordinal: number; path: string | null; reason: 'cl
 export type NativeSkippedPage = { capture: NativeBackupCapture; offset: number; skipped: NativeScanSkip[]; nextOffset: number | null; totalSkipped: number };
 export type NativeIndexProgress = Pick<NativeBackupStatus, 'state' | 'coverage' | 'consistency' | 'totalEntries' | 'totalSkipped'>;
 export class NativeInventoryRetryWait extends Error {}
+/** This status does not distinguish temporary interruption from an unreadable
+ * subtree. Never treat it as complete or retry it indefinitely. */
+export class NativeStrictInventoryInterrupted extends Error {
+ constructor() { super('Indexing stopped before the whole folder was verified. Existing sync state was preserved.'); }
+}
 export const NATIVE_INVENTORY_BATCH_ENTRIES = 4096;
 const JOURNAL_PAGE_ENTRIES = 128;
 /** Opt-in transport bound; journal pages keep their existing portable format. */
@@ -228,8 +233,8 @@ export async function* readNativeInventory(input: {
 					if ((input.photoGapPolicy ? capture.coverage === undefined || capture.totalSkipped !== status.cloudOriginals : capture.coverage !== undefined) || capture.generation !== generation) throw Error('Native strict capture coverage or generation changed.');
 					break;
 				}
-				if (status.state !== 'running' || response.capture !== undefined)
-					throw Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.');
+				if (status.state === 'interrupted' && response.capture === undefined) throw new NativeStrictInventoryInterrupted();
+				if (status.state !== 'running' || response.capture !== undefined) throw Error('Native strict capture coverage changed.');
 				await waitForPoll();
 				signal.throwIfAborted();
 				response = await request(ownerId, { action: 'scan-status', ...ignoredPolicy, ...photoGaps, rootId, inventoryDeviceId, captureId, capturePolicy: 'strict-async', excludedPaths }, signal);

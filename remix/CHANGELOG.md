@@ -145,6 +145,69 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Integrate current main into the anonymous/local-first feature
+  branch, preserving new archive, Builder and attachment behavior. Record the
+  distinction between existing desktop bundled Nitro, hosted render activation
+  and the remaining native web-bundle update/iOS runtime work.
+  [Integration and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
+- 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
+  the build is still missing from Apple's normal build list. **Codex (AI)**
+
+- 2026-11-11: Continue date-ordered iPhone Photos backup while an iCloud
+  original downloads. Retain deferred originals across interruptions and show
+  measured iCloud retrieval alongside the active upload stage.
+  [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
+
+- 2026-11-11: Keep scoped file-sync reservations out of browser-session draft
+  cleanup. A separate browser sign-out no longer interrupts a still-authorized
+  native upload. Explicit cancellation and expiry still apply.
+  [Verification](../PRs/1451-codex-ios-photos-automatic-retry-resume-interrupted-iphone-photos-backups-and-stream-newest-first-batches.md). **Codex (AI)**
+
+- 2026-11-11: Keep unsaved profile image edits and uploads when Edit profile
+  switches between the desktop dialog and mobile sheet. **Codex (AI)**
+
+- 2026-11-10: Edit profile and subspace images in the shared picker with
+  reversible framing, CSS and image attributes. Builder and image editing use
+  the same standards-based property and attribute inspector. [Verification](../PRs/1447-codex-shared-image-editor-add-shared-image-presentation-and-standards-inspector.md). **Codex (AI)**
+
+- 2026-11-10: Add task-level, status and project multi-selection to the Agent
+  overview read adapter, with pagination-safe filtering and reusable editable
+  Builder multiple-select controls. **Codex (AI)**
+
+- 2026-11-10: Add authored page selection, cursor-backed keyed collections
+  and bounded Action batches. Check exact owner-folder placement in opted-in
+  Action reads. **Codex (AI)**
+
+- 2026-11-10: Discover and upload iPhone Photos originals in newest-first
+  batches, with live counts and capture times. An interrupted iOS background
+  session leaves the saved backup eligible for automatic retry. **Codex (AI)**
+
+- 2026-11-10: Let the existing Thingtime MCP request independent private
+  reporting access through the host's OAuth prompt. Verify the owner before
+  resuming reporting; code exchange and refresh preserve the consented scopes.
+  **Codex (AI)**
+
+- 2026-11-10: Group device folders and their sync configs in one editable
+  management flow, prepare the first backup config on folder selection, and
+  enroll saved configs for background recovery. Add measured per-config activity
+  and same-account shared file content with reference-safe deletion and unique
+  payload accounting. Historical consolidation and shared-data-plane activation
+  retain explicit rollout gates. See [the contract and acceptance checklist](../docs/device-sync-configs.md).
+  [PR 1449 validation and rollout notes](../PRs/1449-codex-device-sync-configs--unify-device-folder-sync-configs-and-share-identical-file-content.md).
+  **Codex (AI)**
+
+- 2026-11-10: Document the production attachment-writer fence and rollback
+  boundary. A tested broad host rule also blocked Vercel Cron and was restored
+  to monitoring; activation remains gated on compatible writers and a narrower
+  retired-host fence. See [deployment notes](../VERCEL_DEPLOYMENTS.md).
+  **Codex (AI)**
+
+- 2026-11-10: Show editable iPhone Photos backup activity with indexed counts,
+  preparation, iCloud retrieval, upload and recent steps. Back up now can
+  request iOS continuation for the same native queue. **Codex (AI)**
+
 - 2026-11-10 — Verify the final recovery renderer through a matching isolated
   provider snapshot and its deployed preview, retaining actual JSON/PNG files.
   Correct browser-fixture online state and capability expectations; explicitly

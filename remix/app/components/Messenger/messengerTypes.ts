@@ -1,3 +1,4 @@
+import type { ImagePresentation } from '../Media/imagePresentation';
 // Client-side mirrors of the /api/v1/chats family wire shapes plus the small
 // pure helpers the messenger components share.
 
@@ -98,6 +99,7 @@ export const aiProviderAvatar = (provider: 'lopu' | 'chatgpt' | 'claude'): { gly
 			: { glyph: '✦', background: '#d97757', color: 'white' };
 
 export type MessengerProfile = {
+  avatarPresentation?: ImagePresentation;
   id: string;
   username: string;
   displayName: string | null;

@@ -166,7 +166,7 @@ test('MCP tool discovery preserves the complete multi-account Thingtime contract
     assert.equal(tool.inputSchema.additionalProperties, false);
     const expectedSecuritySchemes = tool.name === 'login_thingtime'
       ? [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }]
-      : [{ type: 'oauth2', scopes: ['thingtime'] }];
+      : [{ type: 'oauth2', scopes: CHATGPT_MCP_TOOL_FEATURES[tool.name as keyof typeof CHATGPT_MCP_TOOL_FEATURES] === 'chatgpt.agent-reporting' ? ['thingtime', 'agents.report'] : ['thingtime'] }];
     assert.deepEqual(tool.securitySchemes, expectedSecuritySchemes);
     assert.deepEqual(tool._meta.securitySchemes, expectedSecuritySchemes);
     assert.deepEqual(tool.outputSchema, { type: 'object', additionalProperties: true });
@@ -554,6 +554,29 @@ test('agent reporting needs independent authorization and never upgrades existin
   assert.match(result.error, /independent agents.report/);
   assert.equal(fetched, false);
   assert.deepEqual(context.bundle.connections[0].scopes, ['things']);
+});
+
+test('only an explicit same-origin account selection triggers a scoped host-native challenge', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Scope refusal must precede upstream calls'); });
+  const context = { ...connectedContext, session: { ...connectedContext.session, meta: { ...connectedContext.session.meta, scope: ['thingtime', 'offline_access'] } } };
+  const rpc = async (name: string, args: Record<string, unknown>, current = context) => {
+    const response = await handleChatGptMcp({ request: new Request('https://thingtime.com/api/v1/integrations/chatgpt/mcp', {
+      method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })
+    }) }, async () => ({ ok: true, value: current }));
+    assert.equal(response.status, 200);
+    return (await response.json() as any).result;
+  };
+  const selected = { accountId: 'personal', externalTaskId: 'chat-1' };
+  const report = await rpc('get_thingtime_agent_task', selected);
+  assert.equal(report.structuredContent.status, 403);
+  assert.match(report._meta['mcp/www_authenticate'][0], /error="insufficient_scope".+scope="thingtime offline_access agents\.report"/);
+  const login = await rpc('login_thingtime', { accountId: 'personal', requiredScopes: ['agents.report'] });
+  assert.deepEqual(login._meta, report._meta);
+  assert.equal((await rpc('get_thingtime_agent_task', { externalTaskId: 'chat-1' }))._meta, undefined);
+  assert.equal((await rpc('get_thingtime_agent_task', { ...selected, accountId: 'retired-account' }))._meta, undefined);
+  assert.equal((await rpc('login_thingtime', { accountId: 'personal', requiredScopes: ['things'] })).structuredContent.status, 400);
+  const foreign = { ...context, bundle: { ...context.bundle, connections: [{ ...context.bundle.connections[0], endpoint: 'https://other.example' }] } };
+  assert.equal((await rpc('get_thingtime_agent_task', selected, foreign))._meta, undefined);
 });
 
 test('agent reporting rejects wrong-origin and breaking manifests and retries with fresh discovery', async (t) => {

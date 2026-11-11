@@ -59,10 +59,10 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
-	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true }
+	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true; continueInBackground?: true }
 	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
 	| { action: 'run-photo-in-background'; rootId: string; configurationId: string; deviceId: string; configurationRevision: string }
-	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string }
+	| { action: 'cancel-deferred-upload'; rootId: string; configurationId: string; deviceId: string; explicitPause?: true }
 	| { action: 'upload-file'; rootId: string; continueInBackground?: true; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' | 'resources' | 'prepare-upload' | 'pause-photo-runs' }
@@ -178,8 +178,8 @@ export const supportsNativeSourcePaths = (bridge: FolderCapabilities | undefined
 export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
 export const supportsSoleNativePhotoRun = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.2.0');
-export const supportsNativePhotoContinuation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	supportsSoleNativePhotoRun(bridge) && capabilitySatisfies(bridge?.filePhotoContinuationVersion ?? '', '1.0.0');
+export const supportsNativePhotoContinuation = (bridge: FolderCapabilities | undefined = getNativeBridge(), minimum = '1.0.0') =>
+	supportsSoleNativePhotoRun(bridge) && capabilitySatisfies(bridge?.filePhotoContinuationVersion ?? '', minimum);
 export const supportsNativePhotoRuns = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.1.0');
 export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
@@ -981,6 +981,9 @@ function requestMobileFoldersNow(
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
 	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
 		throw Error('This iPhone does not support starting continued Photos work.');
+	if (request.action === 'arm-photo-run' && request.continueInBackground !== undefined &&
+		(request.continueInBackground !== true || request.execution !== 'native' || request.resume !== true || !supportsNativePhotoContinuation(bridge, '1.1.0')))
+		throw Error('This iPhone does not support requesting continued Photos work at backup start.');
 
 	if ((request.action === 'photo-run-status' || request.action === 'pause-photo-runs' || (request.action === 'arm-photo-run' && request.execution === 'native')) &&
 		!supportsSoleNativePhotoRun(bridge)) throw Error('Update Thingtime to use the native Photos runner.');

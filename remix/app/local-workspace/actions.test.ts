@@ -244,3 +244,24 @@ test('concurrent invocations are bounded and a history failure reports the compl
 		await db.close();
 	}
 });
+
+
+test('shared Action runtime preserves owned-folder read admission after extraction', async () => {
+ const { db, things, actions } = fixture();
+ try {
+  const folder = await things.create({thingtime: ['folder'], crystal: {name: 'Allowed'}});
+  const other = await things.create({thingtime: ['folder'], crystal: {name: 'Other'}});
+  const schema = await things.create({thingtime: ['schema'], crystal: {name: 'folder-read', fields: []}});
+  const row = await things.create({thingtime: ['data'], folderId: folder.id, crystal: {schemaId: schema.id, schema: 'folder-read'}});
+  const make = (folderId: string) => things.create(definition([
+   {op: 'things.get', id: row.id, ownedFolderId: folderId},
+   {op: 'return', value: '$step.1'}
+  ], [{capability: 'things.read', schemas: ['folder-read']}]));
+  const permitted = await actions.run({action: (await make(folder.id)).id});
+  assert.equal(permitted.status, 'ok', permitted.error);
+  assert.equal((permitted.result as any).ownedFolderVerified, true);
+  const denied = await actions.run({action: (await make(other.id)).id});
+  assert.equal(denied.status, 'error');
+  assert.match(denied.error || '', /owned Data Thing in the selected folder/);
+ } finally { await db.close(); }
+});

@@ -49,6 +49,12 @@ device bytes. Regression: `accountApi.test.ts` and
 `accountRecordingImport.browser.test.ts`.
 See [local workspaces](../local-workspaces.md#account-file-transfer-imports--2026-10-17).
 
+Archive and Restore in the owner library use the canonical bulk endpoint to
+change protected library placement metadata only. Explicit list and search
+filters apply before pagination. The Archived view finds items across folders;
+restoring keeps the original folder, links and audience. See [the manual
+checklist](../../TESTING.md#things-library-archive).
+
 ## Thing storage choices
 
 `ThingStoragePanel` and the shared Thing context menu expose individually editable
@@ -60,6 +66,11 @@ cloud deletion or imply a completed transfer. See [Thing storage](../thing-stora
 and the Thing storage and device copies checklist in `TESTING.md`.
 
 ## Idempotent Action creation
+
+A server Action can require an exact invoker-owned folder on a `things.get`
+step before using the authorized Data Thing in a composed workflow. The step
+adds a verification flag without exposing placement metadata. See [Action authoring](../builder-browser-actions.md)
+and the real API checks in `remix/scripts/verify-actions.mjs`.
 
 Server Actions use `things.ensure` to create or reuse one owned Data Thing by
 intent. The key is scoped to the invoker and saved Action in the selected data
@@ -740,8 +751,12 @@ Apple photo originals use `apple/FileSync/PhotoLibraryReader` and the PhotoKit
 intent in the existing account/origin Keychain envelope. iOS `MobileFolderBridge`
 owns native source/permission dialogs, rejects photo mutations and projects live
 access into the shared backup-only editor. `PhotoLibraryTests` covers private
-one-resource caching and authority boundaries; `PhotoBackupInstalledTests` drives
-real original-byte cloud acceptance. See `iOS/README.md` for current local-original,
+one-resource caching and authority boundaries. iOS Photos automation 1.4.0
+feeds bounded, newest-first asset groups into the durable queue, streams
+per-asset discovery to the editable activity card, and preserves automatic
+backup after a continued-task interruption. `PhotoBackupInstalledTests`
+drives real original-byte cloud acceptance, including the mixed Photos/video
+fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1`. See `iOS/README.md` for current local-original,
 foreground and inventory limits. Installed Mac PhotoKit UI acceptance remains pending.
 
 ### iOS file-backed multipart upload path
@@ -1719,6 +1734,20 @@ admission and queues a bounded set of already planned originals in
 `pagedForegroundSync` retains canonical cloud folder and Timeline publication.
 See the [iOS runbook](../../iOS/README.md#deferred-photos-transfers) and the
 iOS deferred Photos checklist for installed and physical acceptance.
+
+Native Photos automation 1.3.0 reports the measured activity of the single
+worker through the owner/device/revision-bound status reply. The editable
+connection card exposes the current stage, known counts and recent events.
+On iOS 26+ continuation 1.1.0 can attach an explicit Back up now request to
+that same worker while it prepares the first newest asset group. Subsequent
+selections retain their normal batching. Verify stage reporting, alias-safe
+reopen and signed physical behavior with the Photos launch checklist.
+
+Native Photos automation 1.5.0 uses the same ordered queue's per-asset outcomes
+to retain exact deferred originals and their retry timing. One authorized
+PhotoKit preparation can run alongside date-ordered local selections. Every
+prepared original rejoins the same verified upload and receipt path. Use the
+editable activity panel for measured concurrent iCloud progress.
 
 Explicit iOS Start/Retry recovers changed Photos backup settings for the same
 authorized grant and device with cloud copies retained. It verifies the current

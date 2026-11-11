@@ -10,7 +10,7 @@ test('native Agent Tasks installs, creates, lists and edits children offline; se
  assert.equal(new URL(origin!).hostname,'127.0.0.1');
  const health=await(await fetch(origin+'/api/v1/health/nitro')).json();
  assert.equal(health.testEnvironment.mode,'isolated-agent-test');assert.equal(health.testEnvironment.sessionId,session);
- const manifest=await(await fetch(origin+'/.well-known/thingtime-capabilities.json')).json();assert.equal(manifest.features['api.things-search'].version,'1.4.0');
+ const manifest=await(await fetch(origin+'/.well-known/thingtime-capabilities.json')).json();assert.equal(manifest.features['api.things-search'].version,'1.7.0');
  await mkdir(artifacts!,{recursive:true});
  // Disposable API identities stay entirely inside the enforced test namespace.
  // They have no password, personal browser profile, host credential or external destination.

@@ -34,7 +34,7 @@ test('normal anonymous and account Attach by URL is local, editable and removabl
 test('URL registration and durable removal negotiate exact capabilities and pin account authority',async()=>{
  const saved={window:globalThis.window,fetch:globalThis.fetch};
  try{
-  for(const [index,linkVersion,deleteVersion] of [[0,'1.2.0','1.8.0'],[1,'1.3.0','1.7.0'],[2,'1.3.0','1.8.0']] as const){
+  for(const [index,linkVersion,deleteVersion] of [[0,'1.2.0','1.9.0'],[1,'1.3.0','1.8.0'],[2,'1.3.0','1.9.0']] as const){
    const origin=`https://linked-transport-${index}.test`,scope={kind:'account',origin,ownerId:'owner',dataPlane:'home'} as const,calls:{url:string;init:RequestInit}[]=[];
    rootIdentity.changed();bindLocalWorkspace(false,rootIdentity.read().generation,scope);rootIdentity.confirm(rootIdentity.read().generation);
    Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{

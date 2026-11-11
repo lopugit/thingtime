@@ -520,14 +520,43 @@ unfinished work. iOS chooses when or whether to run it, including after lock,
 force quit, battery constraints and app refresh restrictions. Brief inactive
 transitions such as system prompts preserve the foreground request. A short
 UIKit continuation protects the existing worker across a minimize; a granted
-background processing task joins that same worker. On iOS 26 or later, the
-explicit **Run in Background** action can request an additional system session
-for the current work. It reports the actual originals checked, finishes when
-there is no eligible work and never opens itself again. iOS uses the same
-expiration callback for its resource limit and for Cancel on the system UI;
-either leaves this backup locally paused until **Resume backup**. Normal waits
-for charging, network or data budget end the requested session and use the
-ordinary scheduler when the policy allows work again.
+background processing task joins that same worker. On iOS 26 or later,
+continuation 1.1.0 lets **Back up now** request a system session for the same
+admitted run. **Run in Background** can also request one for a backup that is
+already preparing. The system presentation reports measured discovery work,
+originals checked and bytes sent for the current original. The session ends
+when this check finishes. iOS uses the same callback for its resource limit
+and Cancel on the system UI. Either ends that session and retains the
+automatic backup and its checkpoint. The ordinary scheduler or next permitted
+foreground run can retry after the backoff. A new continued session requires
+an explicit action. **Pause sync** durably stops automatic backup until the
+owner resumes. Existing system-only holds recover with fresh authorization
+for the same connection. Charging, network and budget waits still obey the
+saved transfer settings.
+
+Photos automation 1.4.0 reports each asset as PhotoKit enumerates it, including
+the latest photo or video capture time when available. The scoped **Backup
+activity** also shows measured file counts, the selected batch, iCloud download
+progress, cloud verification, and recent steps. The native queue prepares and
+uploads one newest asset group, including its companions, then discovers and
+uploads successive groups. The remaining original count stays unknown while
+unseen asset records can still contribute originals. The queue keeps exact
+selections and receipts across interruption. When PhotoKit proves the library
+is unchanged and full access is current, discovery can resume at a saved
+date-group boundary. Assets tied on capture and modification dates use
+PhotoKit’s order for that fetch. If the library changed or the cursor cannot be
+verified, discovery rechecks the ordered library against those receipts. Reported network traffic can include retry bytes.
+Measure saved data from verified current Files in the exact destination.
+
+Photos automation 1.5.0 records an unavailable original against its exact asset
+revision. While one authorized iCloud original is fetching, the same backup
+continues preparing and uploading available originals in date-ordered groups.
+The activity panel can show measured iCloud progress alongside the upload
+stage. A deferred original remains pending across interruption. Retries give
+untried originals and older attempts a turn, with newest asset dates first
+among equally eligible items. Wi-Fi-only policy permits a local recheck after
+Photos has made an original available. Completion requires resolving all
+deferred originals visible to the current Photos grant.
 
 Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
 by default. An optional hourly budget uses the measured payload bytes from all

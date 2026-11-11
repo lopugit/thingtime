@@ -459,3 +459,30 @@ test('Builder provenance accompanies ordinary account content without admitting 
  for (const thingtime of [['builder-thing'], ['builder-thing', 'password-manager-entry'], ['component', 'builder-thing', 'user'], []])
   assert.equal(accountThingCanCache({ thingtime }), false);
 });
+
+test('server archive projections survive pending edits, stale reads and sync without entering portable exports', async () => {
+ const f = setup();
+ try {
+  const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Archive cache' } });
+  await f.sync.sync(f.transport);
+  const server = f.remote.get(row.id)!;
+  await f.sync.remember({ ...server, libraryArchived: true, libraryArchiveEligible: true }, 20);
+  assert.equal((await f.sync.view(row.id))?.libraryArchived, true);
+  await f.sync.things.update({ id: row.id, crystal: { name: 'Pending device edit' } });
+  await f.sync.remember({ ...server, libraryArchived: false }, 19);
+  assert.equal((await f.sync.view(row.id))?.libraryArchived, true, 'an older active page cannot unarchive a saved projection');
+  await f.sync.remember(server, 30);
+  assert.equal((await f.sync.view(row.id))?.libraryArchived, true, 'missing projection metadata preserves the known state');
+  assert.equal((await f.sync.view(row.id))?.crystal.name, 'Pending device edit');
+  await f.sync.sync(f.transport);
+  assert.equal((await f.sync.view(row.id))?.libraryArchived, true, 'content acknowledgements preserve independent archive state');
+  assert.equal((await f.sync.things.list({ libraryArchive: 'active' })).things.length, 0);
+  assert.equal((await f.sync.things.list({ libraryArchive: 'archived' })).things[0].id, row.id);
+  const exported = await f.sync.things.export([row.id]);
+  assert.equal('libraryArchived' in exported.manifest.things[0], false);
+  assert.equal('libraryArchiveEligible' in exported.manifest.things[0], false);
+  await f.sync.rememberLibraryArchive([row.id], false, 40);
+  await f.sync.remember({ ...server, libraryArchived: true }, 39);
+  assert.equal((await f.sync.view(row.id))?.libraryArchived, false, 'confirmed restore fences earlier archive reads');
+ } finally { await f.db.close(); }
+});

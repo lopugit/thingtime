@@ -1,8 +1,11 @@
+import { PAGE_COLLECTION_REQUIREMENTS } from '~/schemas/authoredControls';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { ACTION_BATCH_ATTRIBUTE, readActionBatch, runActionBatches } from './actionBatches';
 import React from 'react';
 import { useContentExecutionHeld } from '../Builder/ContentExecutionHold';
 import { isTransientBlockTarget, TRANSIENT_BLOCK_ACTION } from '../Builder/transientBlockActions';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
-import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
+import { LOCAL_UI_ACTION, MODIFIER_ACTION_INPUTS, localQueryFormInput, modifierSelectionInput } from './localUiAction';
 import { useLocation, useNavigate } from 'react-router';
 import { useLidarScanActivation } from '../NativeBridge/LidarScanProvider';
 import { isLidarScanInput } from '../NativeBridge/lidarScanBridge';
@@ -148,6 +151,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 	const fallbackGroupRef = React.useRef(options?.fallbackGroup);
 	fallbackGroupRef.current = options?.fallbackGroup;
 	const busyRef = React.useRef(false);
+	const handledCtrlGesture = React.useRef<HTMLElement | null>(null);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 	const runtime = useWebpageRuntime();
@@ -167,7 +171,11 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 
 	return React.useCallback(
 		(event: React.MouseEvent) => {
-			if (heldRef.current) { event.preventDefault(); event.stopPropagation(); return; }
+			if (event.type === 'mousedown') { handledCtrlGesture.current = null; return; }
+			if (heldRef.current) {
+				if (event.type === 'click') { event.preventDefault(); event.stopPropagation(); }
+				return;
+			}
 			const origin = event.target as HTMLElement | null;
 			if (isTransientBlockTarget(origin)) return;
 			const control = origin?.closest?.('[data-tt-action]') as HTMLElement | null;
@@ -179,9 +187,18 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 			// a click that lands ON a form field is the viewer typing, not firing
 			const tag = origin?.tagName?.toLowerCase();
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
+			const modifier = control.matches('button[type=button]') && modifierSelectionInput(event, control.getAttribute(MODIFIER_ACTION_INPUTS));
+			if (!modifier && event.type !== 'click') return;
 			event.preventDefault();
 			event.stopPropagation();
 			if (control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
+			if (modifier) {
+				// On macOS one Ctrl-primary press can emit both contextmenu and click.
+				if (event.ctrlKey && handledCtrlGesture.current === control) return;
+				if (event.ctrlKey) handledCtrlGesture.current = control;
+				localRef.current?.(modifier);
+				return;
+			}
 			const action = control.getAttribute('data-tt-action') || '';
 			if (action === '$transient') return; // An enclosing transient host owns this intent; never persist or dispatch it.
 			if (!action) return;
@@ -237,6 +254,7 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 				notifyComponentControlActivation(control);
 				return;
 			}
+			const batchValue = control.getAttribute(ACTION_BATCH_ATTRIBUTE);
 			let inputs: Record<string, unknown> = {};
 			try {
 				const parsed = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
@@ -268,13 +286,26 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 			reportPending?.(action);
 			(async () => {
 				try {
+					const batch = batchValue === null ? null : readActionBatch(batchValue);
+					if (batch && (!control.matches('button[type=button]') || runRuntime.source !== 'user' || runRuntime.sharedRun)) {
+						throw new Error('Action batches require a button on your own live page.');
+					}
+					const picked = batch && Object.prototype.hasOwnProperty.call(runRuntime.selection, batch.selectionKey) ? runRuntime.selection[batch.selectionKey] : undefined;
+					if (batch && (!picked?.items.length || picked.context !== batch.context)) throw new Error('Select at least one item for the current batch.');
+					const captured = picked?.items.slice();
 					const fields = await captureComponentFormFields(group, gatherFormFields, () => mountedRef.current && identity === identityRef.current && control.isConnected);
 					if (!mountedRef.current || identity !== identityRef.current) return;
-					inputs = { ...inputs, ...fields };
+					inputs = { ...inputs, ...fields, ...(batch ? { [batch.input]: captured } : {}) };
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
 						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
 					}
+					if (batch) await requireThingtimeCapability('api.actions-run', PAGE_COLLECTION_REQUIREMENTS['api.actions-run']);
+					if (!mountedRef.current || identity !== identityRef.current) return;
+					const run = (values: Record<string, unknown>) => {
+						if (!mountedRef.current || identity !== identityRef.current) throw new Error('Account or page changed.');
+						return runRuntime.sharedRun ? runRuntime.sharedRun(action, values) : runApi.v1.actions.run({ action, inputs: values, source: 'component' });
+					};
 					notifyComponentControlActivation(control);
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
@@ -283,11 +314,8 @@ export const useTtActionClicks = (options?: { executionHeld?: boolean; onUnowned
 					const outcome = await runDelegatedAction({
 						action,
 						inputs,
-						run: () => {
-							if (!mountedRef.current || identity !== identityRef.current) throw new Error('Account changed');
-							return runRuntime.sharedRun ? runRuntime.sharedRun(action, inputs) : runApi.v1.actions.run({ action, inputs, source: 'component' });
-						},
-						onUnowned: async (key, fields) => {
+						run: () => batch ? runActionBatches(batch, inputs, run) : run(inputs),
+						onUnowned: batch ? undefined : async (key, fields) => {
 							if (!mountedRef.current || identity !== identityRef.current) return false;
 							if (key === CATALOG_RECORD_ACTION) {
 								const { installSuiteForWorkspace } = await import('../Builder/installSuite');

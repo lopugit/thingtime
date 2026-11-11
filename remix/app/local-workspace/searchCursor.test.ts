@@ -15,3 +15,10 @@ test('combined search continuations bind the account scope and filters without l
  assert.equal(workspaceSearchCursor('owner:plane', query, null, null), null);
  assert.equal(readWorkspaceSearchCursor(pending, 'owner:plane', query), null);
 });
+
+test('account search cursor cannot cross active and archived library views', () => {
+ const query = { q: 'archive', libraryArchive: 'active' };
+ const cursor = workspaceSearchCursor('owner:home', query, 'remote-page', null);
+ assert.equal(readWorkspaceSearchCursor(cursor, 'owner:home', query)?.remote, 'remote-page');
+ assert.throws(() => readWorkspaceSearchCursor(cursor, 'owner:home', { ...query, libraryArchive: 'archived' }), /scope or filters/);
+});

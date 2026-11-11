@@ -79,6 +79,7 @@ export type SearchGroup = {
 };
 
 export type SearchQuery = {
+  libraryArchive?: unknown;
   scope?: unknown; // 'visible' (default) | 'mine'; mine still preserves all access fences
   near?: unknown;
   radiusKm?: unknown;

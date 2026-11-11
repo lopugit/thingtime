@@ -1,3 +1,4 @@
+import { normalizeImagePresentation, type ImagePresentation } from '~/components/Media/imagePresentation';
 import { effectiveConnectorConfirmations, type ConnectorConfirmationPatch, type ConnectorConfirmations } from '../chatgpt/connectorProtections';
 import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
@@ -64,6 +65,8 @@ export type UserDoc = {
 	bio?: string | null;
 	avatarUrl?: string | null;
 	bannerUrl?: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId?: string | null;
 	bannerAttachmentId?: string | null;
 	emailVerified: boolean;
@@ -92,6 +95,8 @@ export type PublicUser = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	avatarAttachmentId: string | null;
 	bannerAttachmentId: string | null;
 	avatarLinkedUrl: string | null;
@@ -148,6 +153,8 @@ export type PublicProfile = {
 	bio: string | null;
 	avatarUrl: string | null;
 	bannerUrl: string | null;
+	avatarPresentation?: ImagePresentation;
+	bannerPresentation?: ImagePresentation;
 	createdAt: string;
 	temporary?: boolean;
 };
@@ -198,6 +205,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		bio: typeof user.bio === 'string' ? user.bio : null,
 		avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 		bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+		...projectProfilePresentation(user, 'avatar'),
+		...projectProfilePresentation(user, 'banner'),
 		avatarAttachmentId: profileAttachmentIdFromRecord(user, 'avatar'),
 		bannerAttachmentId: profileAttachmentIdFromRecord(user, 'banner'),
 		avatarLinkedUrl: linkedProfileMediaUrl(user, 'avatar'),
@@ -230,6 +239,12 @@ export const toPublicUserWithStorage = async (user: any): Promise<PublicUser> =>
 	return toPublicUser(user, await getSubscription('user', userId));
 };
 
+export const projectProfilePresentation = (user: any, slot: 'avatar' | 'banner'): Partial<Record<'avatarPresentation' | 'bannerPresentation', ImagePresentation>> => {
+	const key = slot === 'avatar' ? 'avatarPresentation' : 'bannerPresentation';
+	const presentation = effectiveProfileMediaUrl(user, slot) && normalizeImagePresentation(user.crystal?.[key] ?? user[key]);
+	return presentation ? { [key]: presentation } : {};
+};
+
 export const toPublicProfile = (user: any): PublicProfile => ({
 	id: String(user._id),
 	username: user.username,
@@ -237,6 +252,8 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 	bio: typeof user.bio === 'string' ? user.bio : null,
 	avatarUrl: effectiveProfileMediaUrl(user, 'avatar'),
 	bannerUrl: effectiveProfileMediaUrl(user, 'banner'),
+	...projectProfilePresentation(user, 'avatar'),
+	...projectProfilePresentation(user, 'banner'),
 	createdAt: new Date(user.createdAt).toISOString(),
 	temporary: user.meta?.temporary === true
 });
@@ -331,6 +348,8 @@ const userThingToDoc = (thing: any): any => {
 		bio: thing.crystal?.bio ?? null,
 		avatarUrl: thing.crystal?.avatarUrl ?? null,
 		bannerUrl: thing.crystal?.bannerUrl ?? null,
+		avatarPresentation: thing.crystal?.avatarPresentation,
+		bannerPresentation: thing.crystal?.bannerPresentation,
 		avatarAttachmentId: thing.avatarAttachmentId ?? null,
 		bannerAttachmentId: thing.bannerAttachmentId ?? null,
 		email: secure.email || '',
@@ -1999,6 +2018,10 @@ export type UpdateProfileInput = {
 	bannerUrl?: unknown;
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
+	avatarPresentation?: unknown;
+	bannerPresentation?: unknown;
+	avatarPresentationSource?: unknown;
+	bannerPresentationSource?: unknown;
 	birthday?: unknown;
 	hideEmailOnProfile?: unknown;
 };
@@ -2103,6 +2126,25 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
+		const presentationUpdates: Partial<Record<'avatar' | 'banner', ImagePresentation | null>> = {};
+		const presentationSources: Partial<Record<'avatar' | 'banner', string>> = {};
+		for (const slot of ['avatar', 'banner'] as const) {
+			const key = `${slot}Presentation` as const;
+			const sourceKey = `${slot}PresentationSource` as const;
+			if (hasOwn(input, sourceKey)) {
+				const source = input[sourceKey];
+				if (!hasOwn(input, key) || media[slot].touched || typeof source !== 'string' || !source) {
+					return { ok: false, status: 400, error: 'An expected image source can only accompany an edit to the current image' };
+				}
+				presentationSources[slot] = source;
+			}
+			if (!hasOwn(input, key)) continue;
+			const presentation = normalizeImagePresentation(input[key]);
+			if (presentation === undefined) return { ok: false, status: 400, error: 'Invalid image presentation' };
+			presentationUpdates[slot] = presentation;
+		}
+		const touchesPresentation = Object.keys(presentationUpdates).length > 0;
+
 		// Birthday and email visibility are PRIVATE state — both live in the secure
 		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
@@ -2120,7 +2162,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			hideEmailOnProfile = input.hideEmailOnProfile;
 		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && !touchesPresentation && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
@@ -2153,7 +2195,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 
 		// Private-only updates never touch the crystal or attachments, so the
 		// transactional write below is skipped entirely for them.
-		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
+		if (Object.keys(set).length || media.avatar.touched || media.banner.touched || touchesPresentation) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {
 					const things = await dependencies.getThings();
@@ -2180,6 +2222,13 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 						user = await collection.findOne({ _id: new ObjectId(userId) }, { session });
 						if (!user) return false;
 						kind = 'legacy';
+					}
+
+					for (const slot of ['avatar', 'banner'] as const) {
+						const expected = presentationSources[slot];
+						if (expected !== undefined && expected !== effectiveProfileMediaUrl(user, slot)) {
+							throw new AttachmentBindingError(409, 'Profile image changed while it was being edited');
+						}
 					}
 
 					const current: ProfileAttachmentRefs = {
@@ -2213,6 +2262,19 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 					const rootSet: Record<string, unknown> = {};
 					const rootUnset: Record<string, ''> = {};
 					const profileSet: Record<string, unknown> = { ...set };
+					const previousProfile = kind === 'thing' ? user.crystal || {} : user;
+					for (const slot of ['avatar', 'banner'] as const) {
+						const urlKey = `${slot}Url` as const;
+						const previousUrl = previousProfile[urlKey] ?? null;
+						const nextUrl = hasOwn(externalUrlUpdates, slot) ? externalUrlUpdates[slot] : previousUrl;
+						const sourceChanged = current[slot] !== desired[slot] || (!desired[slot] && previousUrl !== nextUrl);
+						const next = presentationUpdates[slot];
+						if (next && !desired[slot] && !nextUrl) throw new AttachmentBindingError(400, 'Choose an image before applying its presentation');
+						if (next !== undefined || (sourceChanged && previousProfile[`${slot}Presentation`])) {
+							profileSet[`${slot}Presentation`] = next ?? null;
+						}
+					}
+
 					for (const slot of ['avatar', 'banner'] as const) {
 						if (!media[slot].touched) continue;
 						if (Object.prototype.hasOwnProperty.call(externalUrlUpdates, slot)) {

@@ -1,3 +1,5 @@
+import type { SyncJobFailure } from './syncJobFailure';
+import { parseSyncActivityQuery, parseSyncActivityRecord, parseSyncActivitySnapshot, type SyncActivityQuery, type SyncActivityRecord, type SyncActivitySnapshot } from './syncActivity';
 import { parseDeviceSyncHistoryRange, type DeviceSyncHistoryRange } from './deviceSyncHistory';
 import type { ConflictReviewView } from './conflictReviewController';
 import type { FolderCapabilities, FolderRequest, MobileFolder, MobileTrashRequest } from './mobileFolders.client';
@@ -19,10 +21,11 @@ export type RemoteFolderRequest = Extract<FolderRequest, { action: 'remove' | 'v
 export type RemoteSyncCommand =
 	| { action: 'status'; cursor?: string }
 	| { action: 'history'; range: DeviceSyncHistoryRange }
+	| ({ action: 'connection-activity'; connectionId: string } & SyncActivityQuery)
 	| { action: 'resources'; operation: 'read' }
 	| { action: 'resources'; operation: 'save'; deviceResourceLimits: DeviceSyncResourcePolicy }
 	| { action: 'folders'; request: RemoteFolderRequest }
-	| { action: 'start'; connectionId: string; expectedUpdatedAt: string; intervalMs?: number }
+	| { action: 'start'; connectionId: string; expectedUpdatedAt: string; intervalMs?: number; queueOnly?: true }
 	| { action: 'pause'; connectionId: string }
 	| { action: 'review'; connectionId: string; reviewId: string; operation: 'reload' | 'next' | 'previous' | 'choose' | 'finish' | 'cancel'; path?: string; from?: 'local' | 'remote' | null; revision?: number; resolution?: 'resolve' | 'retain' }
 	| RemoteSyncDetailsCommand;
@@ -31,15 +34,19 @@ export type RemoteSyncStatus = {
 	version: 1; deviceId: string; observedAt: string; roots: MobileFolder[]; rootsReady: boolean; rootsObservedAt?: string; capabilities: FolderCapabilities; nextCursor?: string;
 	resourceUsage?: RemoteSyncResources;
  directionalProgressVersion?: '1.0.0';
-	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number; progress?: Pick<ForegroundSyncProgress, 'directions' | 'totalFinal' | 'indexState' | 'statisticsObservedAt' | 'stage'> }[];
+ connectionActivityVersion?: '1.0.0';
+ folderEnrollmentVersion?: '1.0.0';
+	jobs: { connectionId: string; state: 'runnable' | 'scheduled' | 'paused' | 'attention' | 'complete'; intervalMs?: number; nextRunAt?: number; retryAt?: number; pendingFolderValidation?: true; failureReason?: SyncJobFailure; activity?: SyncActivityRecord; progress?: Pick<ForegroundSyncProgress, 'directions' | 'totalFinal' | 'indexState' | 'statisticsObservedAt' | 'stage'> }[];
 	task: null | { connectionId: string; active: boolean; stopping?: boolean; status?: 'running' | 'paused' | 'error' | 'complete'; waiting?: boolean;
 		progress: ForegroundSyncProgress & { message?: string }; transferRates?: { upload: SpeedReading; download: SpeedReading };
-		progressDescriptor?: SyncProgressDescriptor; inventoryDescriptor?: SyncInventoryDescriptor;
+		activity?: SyncActivitySnapshot; progressDescriptor?: SyncProgressDescriptor; inventoryDescriptor?: SyncInventoryDescriptor;
 		review?: { id: string; view: ConflictReviewView } };
 };
 
 export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
 export const REMOTE_SYNC_DIRECTION_REQUIREMENTS = { 'api.devices-sync-control': '1.3.0' } as const;
+export const REMOTE_SYNC_ENROLLMENT_REQUIREMENTS = { 'api.devices-sync-control': '1.5.0' } as const;
+export const REMOTE_SYNC_ACTIVITY_REQUIREMENTS = { 'api.devices-sync-control': '1.5.0' } as const;
 export const REMOTE_SYNC_HISTORY_REQUIREMENTS = { 'api.devices-sync-control': '1.4.0' } as const;
 export const REMOTE_SYNC_RESOURCE_REQUIREMENTS = { 'api.devices-sync-control': '1.2.0' } as const;
 export type RemoteSyncResources = { deviceResourceLimits: DeviceSyncResourcePolicy; resources?: SyncResourceStatus };
@@ -55,6 +62,16 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 const exact = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every(key => keys.includes(key));
 const invalid = () => Error('Invalid remote sync command.');
 
+export function assertRemoteFolderEnrollment(value: unknown, expected: {
+ connectionId: string; expectedUpdatedAt: string; intervalMs: number;
+}): { pendingFolderValidation: boolean } {
+ if (!object(value) || !exact(value, ['accepted', 'folderEnrollmentVersion', 'connectionId', 'expectedUpdatedAt', 'intervalMs', 'pendingFolderValidation']) ||
+  value.accepted !== true || value.folderEnrollmentVersion !== '1.0.0' || value.connectionId !== expected.connectionId ||
+  value.expectedUpdatedAt !== expected.expectedUpdatedAt || value.intervalMs !== expected.intervalMs || typeof value.pendingFolderValidation !== 'boolean')
+  throw Error('The device did not confirm durable automatic sync. Check its saved sync status before retrying.');
+ return { pendingFolderValidation: value.pendingFolderValidation };
+}
+
 export function parseRemoteSyncResources(value: unknown): RemoteSyncResources {
 	if (!object(value) || !exact(value, ['deviceResourceLimits', 'resources']) || !object(value.deviceResourceLimits) ||
 		!exact(value.deviceResourceLimits, ['transferBytesPerSecond', 'scanBytesPerSecond', 'cpuPercent'])) throw Error('Invalid device resource response.');
@@ -69,9 +86,28 @@ export function parseRemoteSyncResources(value: unknown): RemoteSyncResources {
 	return { deviceResourceLimits, resources: parseSyncResourceStatus(metrics) };
 }
 
+export function validateRemoteSyncStatusActivity(value: unknown) {
+ if (!object(value)) return;
+ const version = value.connectionActivityVersion;
+ const jobs = Array.isArray(value.jobs) ? value.jobs : [];
+ const task = object(value.task) ? value.task : null;
+ if (version !== undefined && version !== '1.0.0') throw invalid();
+ for (const job of jobs) if (object(job) && job.activity !== undefined) {
+  if (version !== '1.0.0') throw invalid();
+  parseSyncActivityRecord(job.activity);
+ }
+ if (task?.activity !== undefined) {
+  if (version !== '1.0.0' || task.active !== true) throw invalid();
+  parseSyncActivitySnapshot(task.activity);
+ }
+}
+
 export function validateRemoteSyncCommand(value: unknown): RemoteSyncCommand {
 	if (!object(value) || new TextEncoder().encode(JSON.stringify(value)).byteLength > REMOTE_SYNC_COMMAND_BYTES) throw invalid();
 	switch (value.action) {
+		case 'connection-activity':
+			if (!exact(value, ['action', 'connectionId', 'before', 'limit']) || !id(value.connectionId)) throw invalid();
+			return { action: 'connection-activity', connectionId: value.connectionId, ...parseSyncActivityQuery(value) };
 		case 'history':
 			if (!exact(value, ['action', 'range'])) throw invalid();
 			return { action: 'history', range: parseDeviceSyncHistoryRange(value.range) };
@@ -84,10 +120,11 @@ export function validateRemoteSyncCommand(value: unknown): RemoteSyncCommand {
 			break;
 		case 'status': if (!exact(value, ['action', 'cursor']) || (value.cursor !== undefined && (typeof value.cursor !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value.cursor) || !Number.isSafeInteger(Number(value.cursor))))) throw invalid(); break;
 		case 'start':
-			if (!exact(value, ['action', 'connectionId', 'expectedUpdatedAt', 'intervalMs']) || !id(value.connectionId) ||
+			if (!exact(value, ['action', 'connectionId', 'expectedUpdatedAt', 'intervalMs', 'queueOnly']) || !id(value.connectionId) ||
 				typeof value.expectedUpdatedAt !== 'string' || value.expectedUpdatedAt.length > 40 || !Number.isFinite(Date.parse(value.expectedUpdatedAt)) ||
 				(value.intervalMs !== undefined && ![60_000, 300_000, 900_000, 3_600_000].includes(Number(value.intervalMs))) ||
-				(value.intervalMs !== undefined && typeof value.intervalMs !== 'number')) throw invalid();
+				(value.intervalMs !== undefined && typeof value.intervalMs !== 'number') ||
+				(value.queueOnly !== undefined && (value.queueOnly !== true || value.intervalMs === undefined))) throw invalid();
 			break;
 		case 'pause': if (!exact(value, ['action', 'connectionId']) || !id(value.connectionId)) throw invalid(); break;
 		case 'review': {

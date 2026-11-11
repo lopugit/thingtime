@@ -24,9 +24,15 @@ const WORKSPACE_HTML = '<tt-service-workspace rootId="hq-root" name="Jim’s Mow
 // walks a flat tag/attribute/text tree — enough for the fixtures below, and
 // deliberately no more (the allowlist renderer, not this parser, is the
 // security boundary under test elsewhere).
-type FakeNode = { nodeType: number; textContent: string; tagName?: string; attributes?: { name: string; value: string }[]; style?: null; childNodes: FakeNode[] & { forEach: FakeNode[]['forEach'] } };
+type FakeNode = { nodeType: number; textContent: string; tagName?: string; attributes?: { name: string; value: string }[]; style?: null; childNodes: FakeNode[]; firstChild?: FakeNode; nextSibling?: FakeNode };
 const parseFragment = (html: string): FakeNode => {
-	const element = (tagName: string, attributes: { name: string; value: string }[] = []): FakeNode => ({ nodeType: 1, tagName, attributes, style: null, childNodes: [], get textContent() { return this.childNodes.map((child: FakeNode) => child.textContent).join(''); } } as FakeNode);
+	const element = (tagName: string, attributes: { name: string; value: string }[] = []): FakeNode => ({ nodeType: 1, tagName, attributes, style: null, childNodes: [], get textContent() { return this.childNodes.map(child => child.textContent).join(''); } });
+	const append = (parent: FakeNode, child: FakeNode) => {
+		const previous = parent.childNodes[parent.childNodes.length - 1];
+		if (previous) previous.nextSibling = child;
+		else parent.firstChild = child;
+		parent.childNodes.push(child);
+	};
 	const root = element('BODY');
 	const stack = [root];
 	const token = /<\/([a-zA-Z][\w-]*)\s*>|<([a-zA-Z][\w-]*)((?:\s+[\w-]+(?:="[^"]*")?)*)\s*(\/?)>|([^<]+)/g;
@@ -38,9 +44,9 @@ const parseFragment = (html: string): FakeNode => {
 		} else if (open) {
 			const attributes = [...(attrText || '').matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(([, name, value]) => ({ name, value: value ?? '' }));
 			const child = element(open.toUpperCase(), attributes);
-			parent.childNodes.push(child);
+			append(parent, child);
 			if (!selfClosing) stack.push(child);
-		} else if (text) parent.childNodes.push({ nodeType: 3, textContent: text, childNodes: [] as any });
+		} else if (text) append(parent, { nodeType: 3, textContent: text, childNodes: [] });
 	}
 	return root;
 };

@@ -8,6 +8,7 @@ import { cloudFileSyncEntry, type CloudFile } from './cloudFile';
 import { fingerprintSource } from './contentFingerprint';
 import type { SyncReceipt } from './execute';
 import { saved, scope } from './foregroundSync.fixture';
+import { SyncConditionsWait } from './foregroundSyncContext';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { sameSyncStamp, type SyncEntry } from './reconcile';
 import { streamingFileFixture } from './streamingFile.fixture';
@@ -16,6 +17,7 @@ import { streamForegroundSync } from './streamingForegroundSync';
 import type { NativeIndexChangesPage } from './streamingIndex';
 import { SyncVolumeRemounted } from './syncConnectionWait';
 
+const isPausedWait = (cause: unknown) => cause instanceof SyncConditionsWait && cause.reason === 'paused';
 const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
 const deferred = () => {
 	let resolve!: () => void;
@@ -593,7 +595,8 @@ test('queued folder deferral cannot hide removal, paused effects or a changed ow
     await assert.rejects(removed.run(), /Fresh strict inventory after removal/); removed.f.journal().close();
     for (const options of [{ pause: true }, { scopeChange: true }]) {
         const x = await folderEchoFixture({ queued: true, ...options });
-        await assert.rejects(x.stream(), /Sync configuration or device approval changed|Sync context changed/);
+        if (options.pause) await assert.rejects(x.stream(), isPausedWait);
+        else await assert.rejects(x.stream(), /Sync context changed/);
         assert.equal(x.f.publications(), 0); assert.equal(x.receipts.size, 0);
         x.f.journal().close();
     }
@@ -702,7 +705,8 @@ for (const change of ['pause', 'remove', 'revision'] as const) test(`deferred an
         } };
     } };
     x.feeds([{ ...x.f.entry(), path: 'Missing/hint' }, x.f.entry()], []);
-    await assert.rejects(x.stream(), /configuration|changed|approved|revision/i);
+    if (change === 'pause') await assert.rejects(x.stream(), isPausedWait);
+    else await assert.rejects(x.stream(), /configuration|changed|approved|revision/i);
     assert.equal(reads, 0);
     assert.equal(x.f.publications(), 0);
     assert.equal(x.receipts.size, 0);

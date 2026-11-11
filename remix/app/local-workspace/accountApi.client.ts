@@ -452,6 +452,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
 			const retain = async (thing: any) => {
 				if (thing.author?.id !== owner.id) return thing;
+				if (args.libraryArchive === 'active' || args.libraryArchive === 'archived') thing = { ...thing, libraryArchived: args.libraryArchive === 'archived', libraryArchiveEligible: thing.libraryArchiveEligible === true };
 				if (thing.thingtime?.some((kind: string) => ['post','comment'].includes(kind)) && Array.isArray(thing.attachments)) {
 					const existing = await sync.view(thing.id);
 					if (existing && existing.syncState !== 'synced') return project(existing);
@@ -890,6 +891,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
 			facadeLease.assertCurrent();
+			if (input?.op === 'archive' || input?.op === 'restore') {
+				const result = await online.things.bulk(input);
+				facadeLease.assertCurrent();
+				const confirmed = (result?.ok === true && Array.isArray(result.results) ? result.results : []).filter((row: any) => row.ok === true && input.ids.includes(row.id)).map((row: any) => row.id);
+				if (confirmed.length) { await worker().sync.rememberLibraryArchive(confirmed, input.op === 'archive', Date.now()); changed(); }
+				return result;
+			}
 			if (input?.op === 'copy') {
 				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) || !Array.isArray(input.ids) || !input.ids.length ||
 					input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
@@ -977,7 +985,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			// `author` is accepted but never trusted: the remote read below pins it
 			// to this workspace's own owner, so a caller cannot widen or redirect it.
-			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author', 'conditions', 'mode'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author', 'conditions', 'mode', 'libraryArchive'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
 			const { sync } = worker();
 			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('local-search:');
 			const canReadRemote = navigator.onLine !== false && canSyncAccountWorkspace(scope) && !!owner.username && !localCursor;
@@ -990,14 +998,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const readRemote = async () => {
 				const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 				const { workspace: _workspace, ...query } = args;
+				const readStartedAt = Date.now();
 				const result = continuation && continuation.remote === null ? { ok: true, things: [], nextCursor: null, total: null } : await online.things.search({ ...query, cursor: continuation?.remote || undefined, author: owner.username }, { signal: options?.signal });
 				remoteLease.assertCurrent(); options?.signal?.throwIfAborted();
 				if (result?.ok === false) throw new WorkspaceError('SEARCH_FAILED', result.error || 'Could not refresh search results.', result.status || 503);
 				const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
 				const fresh = [];
-				for (const row of result.things || []) {
+				for (const resultRow of result.things || []) {
+					const row = args.libraryArchive === 'active' || args.libraryArchive === 'archived' ? { ...resultRow, libraryArchived: args.libraryArchive === 'archived', libraryArchiveEligible: resultRow.libraryArchiveEligible === true } : resultRow;
 					if (accountThingCanCache(row) && row.author?.id === owner.id) {
-						await sync.remember(row);
+						await sync.remember(row, readStartedAt);
 						const current = await sync.view(row.id);
 						if (current && (!pending.has(row.id) || searchLocalLibrary([current], { ...args, cursor: undefined }).things.length)) fresh.push(project(current));
 					} else fresh.push(row);
@@ -1132,7 +1142,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
-			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device', 'builderApp'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
+			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device', 'builderApp', 'libraryArchive'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
 			const { db, lease, sync } = worker();
 			// A cold offline route may never have fetched this exact server page.
 			// List the known local library with its own cursor and explicit partial
@@ -1147,7 +1157,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(query)));
 			const key = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
 			const kinds = typeof args.thingtime === 'string' ? args.thingtime.split(',') : args.thingtime || [];
-			const matches = (row: any) => row && (!args.builderApp || (row.thingtime?.includes('folder') && !row.folderId && row.crystal?.builderApp === true)) && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
+			const matches = (row: any) => row && (args.libraryArchive === 'archived' ? row.libraryArchived === true : row.libraryArchived !== true) && (!args.builderApp || (row.thingtime?.includes('folder') && !row.folderId && row.crystal?.builderApp === true)) && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
 				(!args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
 			const overlay = async (rows: any[]) => {
 				const library = await worker().files.library(), localFiles = new Map(library.things.map(row => [row.id, row]));

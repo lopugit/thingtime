@@ -27,7 +27,7 @@ import { normalizeSavedTheme } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountSuiteAliases, resolveAccountSuiteId } from './accountSuiteIdentity';
 
-export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string; executionHeld?: boolean };
+export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string; executionHeld?: boolean; libraryArchived?: boolean; libraryArchiveEligible?: boolean };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment | LocalLinkedAttachment, previous?: LocalAttachment | LocalLinkedAttachment) => Promise<void>;
 type LocalRecoveredStamp = Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> & {
 	/** Supplied only by the account file recovery adapter after it restores the
@@ -429,7 +429,8 @@ export class LocalThings {
 	async librarySnapshot(): Promise<LocalThing[]> {
 		return this.transaction('readonly', tx => this.librarySnapshotIn(tx));
 	}
-	async list(query: { thingtime?: string | string[]; folder?: string; target?: string; cursor?: string; limit?: number; builderApp?: boolean } = {}) {
+	async list(query: { thingtime?: string | string[]; folder?: string; target?: string; cursor?: string; limit?: number; builderApp?: boolean; libraryArchive?: 'active' | 'archived' } = {}) {
+		if (query.libraryArchive !== undefined && !['active', 'archived'].includes(query.libraryArchive)) fail('INVALID_ARCHIVE_FILTER', 'Choose active or archived Things.');
 		const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
@@ -437,7 +438,7 @@ export class LocalThings {
 				query = { ...query, ...(query.folder ? { folder: await resolveAccountSuiteId(tx,query.folder) } : {}), ...(query.target ? { target: await resolveAccountSuiteId(tx,query.target) } : {}) };
 			}
 			let rows = (await this.librarySnapshotIn(tx, !query.target && (!query.folder || query.folder === 'root') && kinds.every(kind => kind === 'folder')))
-				.filter(row => (!query.builderApp || (row.thingtime.includes('folder') && !row.folderId && row.crystal.builderApp === true)) && isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => (query.libraryArchive === 'archived' ? row.libraryArchived === true : row.libraryArchived !== true) && (!query.builderApp || (row.thingtime.includes('folder') && !row.folderId && row.crystal.builderApp === true)) && isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));

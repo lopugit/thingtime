@@ -21,23 +21,24 @@ if (process.argv[2] !== '--worker') {
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = [
-		['things', 'things', '1.58.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
-		['things-update', 'things/update', '1.23.0', ['POST']],
-		['actions-run', 'actions/run', '1.45.0', ['POST']],
+		['things', 'things', '1.62.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+		['things-search', 'things/search', '1.7.0', ['GET', 'POST']],
+		['things-update', 'things/update', '1.26.0', ['POST']],
+		['actions-run', 'actions/run', '1.46.0', ['POST']],
 		['components-browse', 'components/browse', '1.1.0', ['GET']],
-		['webpages-resolve', 'webpages/resolve', '1.15.0', ['GET', 'POST']],
+		['webpages-resolve', 'webpages/resolve', '1.18.0', ['GET', 'POST']],
 		['files', 'files', '1.12.2', ['GET', 'POST']],
-		['things-bulk', 'things/bulk', '1.7.2', ['POST']],
+		['things-bulk', 'things/bulk', '1.8.0', ['POST']],
 		['things-delete', 'things/delete', '1.1.1', ['POST']],
 		['timeline', 'timeline', '1.23.0', ['GET', 'POST']],
 		['things-export', 'things/export', '1.18.0', ['POST']],
 		['things-import', 'things/import', '1.15.0', ['POST']],
-		['attachment-content', 'attachments/content', '1.19.0', ['GET', 'POST']],
+		['attachment-content', 'attachments/content', '1.20.0', ['GET', 'POST']],
 		['attachment-link', 'attachments/link', '1.3.0', ['POST']],
-		['attachment-upload-abort', 'attachments/uploads/abort', '1.3.0', ['POST']],
+		['attachment-upload-abort', 'attachments/uploads/abort', '1.4.0', ['POST']],
 		['attachment-annotate', 'attachments/annotate', '1.4.0', ['POST']],
-		['attachment-delete', 'attachments/delete', '1.8.0', ['POST']],
-		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.2.0', ['POST']]
+		['attachment-delete', 'attachments/delete', '1.9.0', ['POST']],
+		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']]
 	];
 	const readJson = async path => {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });

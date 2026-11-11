@@ -40,13 +40,13 @@ test('folder-only and empty directional lanes distinguish pending work from no w
 test('a Photos backup has no download meter and starts measuring upload only when bytes are expected', () => {
  const state = { mode: 'backup' as const, active: true, paused: false, online: true };
  const scanning = syncConnectionGlance({ ...state, progress: { stage: 'scanning', total: 0, confirmed: 0 } });
- assert.equal(scanning.download.rate, 'Off for this connection');
+ assert.equal(scanning.download.rate, 'Off for this sync config');
  assert.equal(scanning.download.unknown, true);
  assert.equal(scanning.upload.rate, '—');
  const directions = emptySyncDirections(); addSyncDirection(directions, operation('local', 1000));
  const transferring = syncConnectionGlance({ ...state, progress: { stage: 'transferring', total: 1, confirmed: 0, directions } });
  assert.equal(transferring.upload.rate, 'Measuring live speed…');
- assert.equal(transferring.download.rate, 'Off for this connection');
+ assert.equal(transferring.download.rate, 'Off for this sync config');
 });
 
 test('fetching an iCloud original does not measure upload throughput or mark its plan complete', () => {
@@ -55,5 +55,5 @@ test('fetching an iCloud original does not measure upload throughput or mark its
   progress: { stage: 'transferring', direction: 'upload', total: 1, confirmed: 1, directions, totalFinal: true } });
  assert.equal(view.upload.rate, '—');
  assert.notEqual(view.upload.percent, 100);
- assert.equal(view.download.rate, 'Off for this connection');
+ assert.equal(view.download.rate, 'Off for this sync config');
 });

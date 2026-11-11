@@ -5,7 +5,51 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
-## Current completion gates — 2026-11-10
+## Current integration checkpoint — 2026-11-11
+
+Fetched main `1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5` is reconciled into
+PR #1000's working tree, preserving newer Builder/archive/attachment behavior
+alongside local-first content and recovery. The canonical client/server build,
+full lint (zero errors, 368 warnings), raw TypeScript and zero-error ratchet pass.
+Built-manifest smoke checks pass 18 contracts. MCP checks pass 63 with three
+explicit opt-in skips; an initial parallel Node-wire timing failure passed in
+isolation and in the full sequential rerun without a source change.
+The settled-source workspace rerun finished with 951 passes, one failure and
+113 opt-in skips: the bounded 70 MiB Blob retention case timed out with
+`SYNC_INTERRUPTED` at 50.494 seconds. Its complete file passed 26/26 in isolation
+(the case took 21.537 seconds), and all five shell checks passed. No deterministic
+regression was reproduced; contention is consistent with the result but its
+cause is unproven. The aggregate suite is not fully green. Final-head CI and
+preview/deployment acceptance retain their own source and runtime scope.
+
+Fresh sandboxed Chrome acceptance against the completed full-build draft bundle
+passes actual Render/Download controls, exact text and dependency-complete JSON,
+1440/390/320px captures and a 400×560 card crop, invalid JSON handling, opaque
+storage denial, reload clearing and zero API traffic. The final runner SHA-256
+is `64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5`.
+The canonical JSON and all four PNGs match the earlier fixture byte for byte.
+[Current renderer evidence](../artifacts/anonymous-release-2026-11-11/main-integration-preview/README.md) ·
+[Detailed integration note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+Prior passes below remain scoped to their original source checkpoints.
+
+The canonical hosted connection still has no render/export tool; fresh production
+discovery advertises `api.chatgpt-mcp` 2.2.0 without a rendering feature. Matching
+provider configuration/execution for the changed runner, exact-origin activation
+and an actual connected-host call with downloadable artifacts remain open. The
+prior accepted provider snapshot cannot establish acceptance of changed inputs.
+The expanded native goal needs a versioned web-bundle update contract, verified
+atomic activation/rollback, and iOS bundled offline startup with a local API/runtime
+path. Electron already bundles web/Nitro startup and has a separate whole-app
+release updater; neither it nor service-worker caching delivers that shared
+web-bundle path. Stable installed-app, physical-device, actual origin-migration
+and live-provider acceptance remain distinct requirements.
+
+Private lifecycle reporting and coordination now work through the canonical
+connection. The same private post was read back and bound with `activeOperation`
+null; moderation is no longer a blocker. This checkpoint performs no main merge,
+deployment or stable app installation.
+
+## Prior completion gates — 2026-11-10
 
 Freshly fetched `origin/main` at `cc248ed5336b21948bccfd9b6ebe486239421189`
 is already an ancestor of the feature branch. The latest merge was a no-op.

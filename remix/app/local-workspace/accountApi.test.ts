@@ -593,3 +593,38 @@ test('stale online projections hide deleted parents and comments and reject reti
   if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });
+
+test('archive-aware account reads retain device filtering and cache-first search', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, keyRange: globalThis.IDBKeyRange, fetch: globalThis.fetch, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://archive.thingtime.example', ownerId: 'archive-owner', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async () => { throw Error('Unexpected network'); } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const worker = accountWorkspaceWorker(scope);
+  const row = (id: string, libraryArchived: boolean): AccountThing => ({ id, author: { id: 'archive-owner' }, thingtime: ['data'], crystal: { name: 'Archive fixture' }, createdAt: '2026-11-11T00:00:00Z', updatedAt: '2026-11-11T00:00:00Z', revision: 1, acl: ['tt:user'], visibility: 'private', libraryArchived, libraryArchiveEligible: true });
+  await worker.sync.rememberMany([row('active', false), row('archived', true)]);
+  let remoteCalls = 0;
+  const remote = async () => { remoteCalls++; throw Error('Unexpected remote read'); };
+  const api: any = accountApi({ things: { get: remote, list: remote, search: remote, bulk: remote } }, { id: 'archive-owner', username: 'archive-owner' }, 'home');
+  const list = await api.things.list({ libraryArchive: 'active', folder: 'root' });
+  assert.deepEqual(list.things.map((row: any) => row.id), ['active']);
+  assert.equal(list.incomplete, true);
+  assert.deepEqual((await api.things.list({ libraryArchive: 'archived' })).things.map((row: any) => row.id), ['archived']);
+  for (const libraryArchive of ['active', 'archived']) assert.deepEqual((await api.things.search({ workspace: true, q: 'fixture', libraryArchive })).things.map((row: any) => row.id), [libraryArchive]);
+  assert.equal(remoteCalls, 0, 'archive filters do not bypass the device facade');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  let finish!: (value: any) => void;
+  const online: any = accountApi({ things: { get: remote, list: remote, search: () => new Promise(resolve => { finish = resolve; }), bulk: remote } }, { id: 'archive-owner', username: 'archive-owner' }, 'home');
+  let refreshed!: (value: any) => void;
+  const update = new Promise(resolve => { refreshed = resolve; });
+  const cached = await online.things.search({ workspace: true, q: 'fixture', libraryArchive: 'active' }, { onRefresh: refreshed });
+  assert.equal(cached.refreshing, true);
+  assert.deepEqual(cached.things.map((row: any) => row.id), ['active'], 'local search paints before the network settles');
+  finish({ ok: true, things: [row('active', false)], nextCursor: null });
+  assert.deepEqual((await update as any).things.map((row: any) => row.id), ['active']);
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB, IDBKeyRange: saved.keyRange, fetch: saved.fetch });
+  if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});

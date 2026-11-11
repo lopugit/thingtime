@@ -75,6 +75,7 @@ import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
 import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, authorLinkTarget, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
 import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
+import { PresentedImage } from '../Media/PresentedImage';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
@@ -325,17 +326,16 @@ export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; 
   const initial = author ? getUserDisplayName(author).trim().charAt(0).toUpperCase() : '?';
 
   const circle = author?.avatarUrl ? (
-    <Image
-      src={author.avatarUrl}
-      alt={authorName(author)}
-      loading="lazy"
+    <Box
       flexShrink={0}
       width={size}
       height={size}
       borderRadius="999px"
-      objectFit="cover"
+      overflow="hidden"
       background="var(--tt-surface-alt, #f5f5f7)"
-    />
+    >
+      <PresentedImage src={author.avatarUrl} presentation={author.avatarPresentation} alt={authorName(author)} loading="lazy" />
+    </Box>
   ) : (
     <Center
       flexShrink={0}
@@ -766,7 +766,8 @@ const viewerAsAuthor = (user: any): FeedAuthor | null =>
         username: user.username,
         displayName: user.displayName ?? null,
         ...(user.localOnly ? { localOnly: true as const } : {}),
-        avatarUrl: user.avatarUrl ?? null
+        avatarUrl: user.avatarUrl ?? null,
+        avatarPresentation: user.avatarPresentation
       }
     : null;
 

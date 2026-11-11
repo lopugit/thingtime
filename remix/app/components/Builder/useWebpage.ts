@@ -8,7 +8,7 @@ import { resolveLocalWebpage } from '../../local-workspace/api.client';
 import { isCivilTime } from '~/schemas/civilDates';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { requiresCollectionPagingContract } from './savedCollectionContract';
-import { AUTHORED_CONTROL_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesPassiveSource } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -93,6 +93,7 @@ export const loadWebpageClient = async (target: WebpageTarget, signal?: AbortSig
 		if (!response.ok) return { status: 'error' };
 		const data = await response.json();
 		if (data?.ok !== true || !Object.prototype.hasOwnProperty.call(data, 'page')) return { status: 'error' };
+		if (usesSourceInputReferences(data)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
 		return {
 			status: 'ready',
 			data: {
@@ -193,6 +194,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
+	editorScope?: string;
 	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; componentNotice?: string; useCurrentComponents?: boolean; setUseCurrentComponents?: (value: boolean) => void; retryComponents?: () => void; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
 	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
@@ -425,7 +427,9 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			try {
 				// Device saves validate locally; only remote transport negotiates.
 				if (!isAnonymousWorkspace() && !currentAccountWorkspace()) {
-					if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+					if (usesSourceInputReferences(blocks)) await requireThingtimeCapability('api.webpages-resolve', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.webpages-resolve']);
+					else if (usesPageCollections(blocks)) await requireThingtimeCapability('api.webpages-resolve', PAGE_COLLECTION_REQUIREMENTS['api.webpages-resolve']);
+					else if (usesPassiveSource(blocks)) await requireThingtimeCapability('api.webpages-resolve', PASSIVE_SOURCE_REQUIREMENTS['api.webpages-resolve']);
 					if (usesAuthoredControls(blocks)) {
 						await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things']);
 						await requireThingtimeCapability('api.webpages-resolve', AUTHORED_CONTROL_REQUIREMENTS['api.webpages-resolve']);
@@ -635,6 +639,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	}, [resolved, dirty]);
 
 	return {
+		editorScope: scopeKey,
 		history: {
 			error: history.error, saving: history.saving, recoverable: history.recoverable,
 			dismiss: history.dismissRecovery,

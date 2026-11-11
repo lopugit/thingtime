@@ -9,9 +9,9 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let uploadVersion = "1.5.0"
     static let accessVersion = "1.8.0"
-    static let photoAutomationVersion = "1.2.0"
+    static let photoAutomationVersion = "1.5.0"
     static var photoContinuationVersion: String? {
-        if #available(iOS 26.0, *) { return "1.0.0" }
+        if #available(iOS 26.0, *) { return "1.1.0" }
         return nil
     }
     static let stagingVersion = "1.2.0"
@@ -104,7 +104,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var background: NativeUploadBackgroundLease?
     private var photoTransferContinuation: UIBackgroundTaskIdentifier = .invalid
     var conditionsChanged: (() -> Void)?
-    var photoProgressChanged: (() -> Void)?
+    var photoProgressChanged: ((Bool) -> Void)?
     init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore(), inventories: MobileFolderInventory? = nil) {
         self.inventories = inventories ?? MobileFolderInventory(transport: RustEmbeddedInventoryTransport.default); self.photos = PhotoLibraryReader(transport: RustEmbeddedInventoryTransport.default); self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
@@ -142,7 +142,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             }
         }
         photoProgressObserver = NotificationCenter.default.addObserver(forName: NativeDeferredUpload.photoProgressChanged,
-            object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.photoProgressChanged?() } }
+            object: nil, queue: .main) { [weak self] notice in
+                let immediate = notice.userInfo?["immediate"] as? Bool == true
+                MainActor.assumeIsolated { self?.photoProgressChanged?(immediate) }
+            }
     }
     static func suspendsForLifecycle(state: UIApplication.State, photoPermissionPending: Bool, hasContinuation: Bool) -> Bool {
         state == .background && !photoPermissionPending && !hasContinuation
@@ -660,7 +663,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                       let configurationId = payload["configurationId"] as? String, let deviceId = payload["deviceId"] as? String,
                       [configurationId, deviceId].allSatisfy({ $0.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil })
                 else { throw MobileFolderStore.Failure.invalid }
-                try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId, deviceId: deviceId)
+                try NativeDeferredUpload.shared.pauseLocally(scope: scope, rootId: rootId, configurationId: configurationId,
+                    deviceId: deviceId, explicitPause: payload["explicitPause"] as? Bool == true)
                 let result: [String: Any] = ["rootId": rootId, "cancelled": true, "configurationId": configurationId, "roots": [[String: Any]]()]
                 reply("mobile-files-result", base.merging(result) { _, new in new })
             } catch {
@@ -761,6 +765,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                         let exclusive = payload["execution"] as? String == "native"
                         guard payload["execution"] == nil || exclusive, grant.sourceKind == "photos", let verifyDevice, let cookies else { throw MobileFolderStore.Failure.invalid }
                         let resume = exclusive && payload["resume"] as? Bool == true
+                        let continueInBackground = payload["continueInBackground"] as? Bool == true
+                        guard payload["continueInBackground"] == nil ||
+                              (resume && continueInBackground && Self.photoContinuationVersion != nil && webView.window != nil) else {
+                            throw MobileFolderStore.Failure.invalid
+                        }
                         try await verifyDevice(scope, authorization.scope.deviceId, check); try check()
                         let scheduled = try await self.armPhotoRun(authorization, scope: scope, grant: grant, webView: webView, cookies: cookies,
                                                                   exclusive: exclusive, explicitResume: resume, check: check)
@@ -769,6 +778,16 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             result["deviceId"] = authorization.scope.deviceId
                             result["configurationRevision"] = authorization.updatedAt
                             result["nativeOwnsRun"] = true
+                            if continueInBackground {
+                                // An explicit Back up now action is the user
+                                // gesture. Attach to the admitted native run.
+                                let requested = Task { @MainActor in
+                                    try await NativeDeferredUpload.shared.requestContinuedPhotoRun(scope: scope, rootId: rootId,
+                                        configurationId: authorization.id, deviceId: authorization.scope.deviceId,
+                                        configurationRevision: authorization.updatedAt)
+                                }
+                                _ = try await requested.value
+                            }
                             result["photoRunProgress"] = try NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: authorization.id,
                                 rootId: rootId, deviceId: authorization.scope.deviceId)
                         }

@@ -1,3 +1,4 @@
+import type { SyncActivityRecord } from './syncActivityJournal';
 import { syncScopeKey, type SyncScope } from './reconcile';
 import type { ForegroundSyncProgress, SyncInventoryDescriptor } from './foregroundSync';
 import type { createConflictReviewController } from './conflictReviewController';
@@ -19,6 +20,7 @@ export type SyncTaskSnapshot = {
 	progressDescriptor?: SyncProgressDescriptor;
 	inventoryDescriptor?: SyncInventoryDescriptor;
 	transferSeries?: TransferSpeedSeries;
+	activity?: Pick<SyncActivityRecord, 'startedAt' | 'lastActivityAt' | 'sentBytes' | 'receivedBytes'>;
 	status?: 'running' | 'paused' | 'error' | 'complete';
 	waiting?: boolean;
 	pagedReview?: ReturnType<typeof createConflictReviewController>;
@@ -76,7 +78,7 @@ export function createSyncTaskRuntime() {
 		// the user's durable Stop, so returning to the foreground can recover.
 		suspend(message: string, waiting = false) { if (active && !active.signal.aborted) { suspensionMessage = message; suspensionWaiting = waiting; active.abort(); } },
 		invalidate() { active?.abort(); transferSession?.clear(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>, options?: { automatic?: boolean; persistTerminal?: (progress: ForegroundSyncProgress) => void }) {
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host' | 'activity'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>, options?: { automatic?: boolean; persistTerminal?: (progress: ForegroundSyncProgress) => void }) {
 			if (options?.automatic && pausedScopes.has(syncScopeKey(scope))) return;
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			if (!options?.automatic) pausedScopes.delete(syncScopeKey(scope));
@@ -86,13 +88,13 @@ export function createSyncTaskRuntime() {
 			suspensionMessage = undefined; suspensionWaiting = false;
 			const transfers = createTransferActivitySession(); transferSession = transfers;
 			publish({ scope: structuredClone(scope), active: true, status: 'running', transferSeries: transfers.series, progress: { stage: 'checking', confirmed: 0, total: 0 } });
-			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
+			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host' | 'activity'>> & { transfer?: TransferActivity }) => {
 				controller.signal.throwIfAborted();
 				const { transfer, ...view } = patch;
 				if (view.progress) transfers.stage(view.progress.stage);
 				if (transfer) transfers.add(transfer);
 				if (snapshot) {
-					const immediate = Object.keys(view).some(key => !['progress', 'progressDescriptor', 'inventoryDescriptor'].includes(key)) ||
+					const immediate = Object.keys(view).some(key => !['progress', 'progressDescriptor', 'inventoryDescriptor', 'activity'].includes(key)) ||
 						!!view.progress && (view.progress.stage !== snapshot.progress.stage || view.progress.stage === 'complete' || view.progress.stage === 'reviewing');
 					publish({ ...snapshot, ...view }, immediate);
 				}

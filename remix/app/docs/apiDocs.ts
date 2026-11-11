@@ -396,10 +396,10 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'No independent destination configured', body: { ok: true, destinations: [], availability: 'unavailable', reason: 'not-configured', executionAvailable: false } }]
   }),
   endpoint({
-    id: 'devices-sync-control', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'devices',
+    id: 'devices-sync-control', contractVersion: '1.5.0', featureVersion: '1.5.0', group: 'devices',
     title: 'Device folder sync control', endpoint: '/api/v1/devices/sync-control',
     summary: 'Manage an owned device’s installed folder sync jobs from a logged-in browser.',
-    detail: 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. Version 1.1.0 adds optional owner-private roots[].sourcePath absolute POSIX location metadata in status and folder responses when the native Mac fileAccessVersion is at least 1.15.0. Missing paths require explicit destination selection; paths grant no ancestor access and are never relative file-operation inputs. Version 1.2.0 adds rootless resources read/save commands and optional resourceUsage in status. Device policy contains positive transferBytesPerSecond and scanBytesPerSecond plus integer cpuPercent 1–100. Current CPU, memory, upload/download/scan measurements come from the selected device; unavailable fields stay absent/null. Commands require Mac fileAccessVersion 1.16.0 and fileResourceLimitsVersion 1.1.0, never grant folder access or start jobs, and use the same owner/device/current-pairing/lease fences and immutable retry identities. Version 1.3.0 adds optional per-job directional progress to the same status heartbeat; unavailable measurements remain absent and older status/resource contracts retain their minimum versions. Version 1.4.0 adds the read-only history command with an inclusive start, exclusive end (Unix milliseconds), and 1–240 display buckets. The paired source device aggregates its locally retained observations; gaps and unavailable metrics stay null, and counts identify measured coverage. The source can indicate a current recording storage failure without discarding previously saved observations. No folders, paths, or file bytes cross this command. All responses are private/no-store.',
+    detail: "Version 1.5 acknowledges timed Start after durable enrollment; an untimed Start still requests a one-shot run. Timed folder Start accepts optional queueOnly:true to recover an exact saved revision without prompting for native consent, while respecting prior Pause. The durable receipt binds config, revision and interval. Status may include connectionActivityVersion 1.0.0, latest jobs[].activity and live task.activity. The owning account can read a configuration's attempts using connection-activity with connectionId, optional before:{endedAt,id} and limit; returns records and next. " + 'Home-storage full-user control channel. Enqueue immutable requestId and allowlisted command; poll atomically claims once and returns a leaseId required for completion. GET reads only the exact owner/device/request. Requests stop accepting execution and replies after two minutes, and private operation identities remain for ten minutes to reject delayed replays. Pending work applies backpressure. Transport envelopes are bounded to 64 KiB per command and 2 MiB per result; file bytes never traverse this channel. The installed app rechecks the local account/device and retains native folder approval, jobs, file transfers and conflict journals. A paired, unrevoked device is required for every operation. Version 1.1.0 adds optional owner-private roots[].sourcePath absolute POSIX location metadata in status and folder responses when the native Mac fileAccessVersion is at least 1.15.0. Missing paths require explicit destination selection; paths grant no ancestor access and are never relative file-operation inputs. Version 1.2.0 adds rootless resources read/save commands and optional resourceUsage in status. Device policy contains positive transferBytesPerSecond and scanBytesPerSecond plus integer cpuPercent 1–100. Current CPU, memory, upload/download/scan measurements come from the selected device; unavailable fields stay absent/null. Commands require Mac fileAccessVersion 1.16.0 and fileResourceLimitsVersion 1.1.0, never grant folder access or start jobs, and use the same owner/device/current-pairing/lease fences and immutable retry identities. Version 1.3.0 adds optional per-job directional progress to the same status heartbeat; unavailable measurements remain absent and older status/resource contracts retain their minimum versions. Version 1.4.0 adds the read-only history command with an inclusive start, exclusive end (Unix milliseconds), and 1–240 display buckets. The paired source device aggregates its locally retained observations; gaps and unavailable metrics stay null, and counts identify measured coverage. The source can indicate a current recording storage failure without discarding previously saved observations. No folders, paths, or file bytes cross this command. All responses are private/no-store.',
     auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; home storage only.' }, methods: ['GET', 'POST'],
     steps: ['Keep the installed app running on the selected device.', 'Enqueue a status, folder-management, start, pause or review command.', 'Read its result with the same deviceId and requestId.'],
     requestExamples: [{ name: 'Read device sync state', description: 'Ask the installed app for its current folders, jobs and transfer progress.', method: 'POST', body: { action: 'enqueue', deviceId: 'device-id', requestId: 'status-1', command: { action: 'status' } } }],
@@ -813,23 +813,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Origin manifest with optional gateway metadata.', body: { schemaVersion: 1, origin: 'https://example.test', gateway: null } }]
   }),
   endpoint({
-    id: 'agent-reporting', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things',
+    id: 'agent-reporting', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things',
     title: 'Private agent task reporting', endpoint: '/api/v1/agents/reporting',
     summary: 'Delegate a distinct task Character to an existing private saved workspace and report through its saved Actions.',
-    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes; replay uses the same requestId and inputs. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
+    detail: 'POST prepare binds a stable externalTaskId to the selected origin, exact private saved pages, six workspace schemas, named reporting Actions, and an existing private subspace. It reuses the task Character and never creates replacement workspace definitions. POST get revalidates the binding and reads its private records. POST report runs a named saved Action with a UUID-v4 requestId and immutable inputs. POST coordinate creates or updates one Character-authored post in the bound private subspace with an explicit renderComponent; get includes its exact readback. As of 1.1.0, repeating the same coordinate requestId and immutable payload can reconcile an existing post after text moderation releases it. Reconciliation verifies the exact post and private audience without repeating the post write. The independent agents.report PAT scope does not follow from things. Operation receipts fence duplicate and ambiguous writes. Character/account/token liveness, private membership, saved references, and resolved operation targets are checked. No generic route proxy, owner public identity fallback, credentials, or public ownership links are returned.',
     auth: { mode: 'session-or-bearer', description: 'Owning account session or a PAT explicitly granted agents.report; restricted audience/creation-only PATs and app tokens cannot expand their authority.' },
     methods: ['POST'], steps: ['Negotiate api.agent-reporting 1.0.0, api.auth-characters 1.0.0 and api.agent-overview 2.0.0 at the exact selected origin.', 'Prepare once using stable task identity and exact saved workspace references.', 'Report with stable request identities and verify through get.'],
     requestExamples: [{ name: 'Read an existing task binding', description: 'Read only the authorized task at this origin.', method: 'POST', body: { operation: 'get', origin: 'https://thingtime.example', externalTaskId: '<stable-chat-id>' } }],
     responseExamples: [{ status: 403, description: 'The independent permission or private workspace access is missing.', body: { ok: false, error: 'Agent reporting authorization is required.' } }]
   }),
   endpoint({
-    id: 'agent-overview', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'things',
+    id: 'agent-overview', contractVersion: '2.1.0', featureVersion: '2.1.0', group: 'things',
     title: 'Agent project overview', endpoint: '/api/v1/agent-overview',
     summary: 'Reads authorized project, task and agent Things as a live Builder data source.',
-    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification; classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
+    detail: 'GET accepts caller-selected schema names or IDs, view, projectId, taskId, status, q and cursor. Optional statuses, projectIds and taskLevels accept JSON arrays of strings, repeated keys or comma-separated lists. Each filter matches any selected value and combines with the other filters. Task levels are top-level and subtasks. Passing an empty taskLevels or all selects both levels. Omitting taskLevels preserves the full hierarchy including project and agent rows. Explicit plural statuses and projectIds take precedence over legacy scalar status and projectId, and empty lists clear those filters. Optional comma-separated activeStatuses, blockedStatuses and completeStatuses customize status classification. Filters and classifications are included in the cursor context. Depth is numeric and column status is raw data; labels and layout belong to saved Things. Normal responses contain hierarchy rows, kanban columns, reports, questions and measured usage. stream=1 returns server-sent snapshot events, heartbeat events and explicit access errors; reconnect to reconcile changes and deletions. Every read preserves the current session, Character, personal-token restrictions, app namespace and selected data plane. Unknown measurements remain null. Writes use the ordinary Things and saved Action APIs.',
     auth: { mode: 'session-or-bearer', description: 'Authenticated viewer with things.read; private/no-store.' },
-    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.0.0.', 'Read the selected schema-scoped work graph or connect its live stream.'],
-    requestExamples: [{ name: 'Overview', description: 'Read the installed task schema.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy' } }],
+    methods: ['GET'], steps: ['Negotiate api.agent-overview 2.1.0 to use multi-select filters.', 'Read the selected schema-scoped work graph or connect its live stream.'],
+    requestExamples: [{ name: 'Overview', description: 'Read top-level tasks in either selected status.', method: 'GET', query: { taskSchema: 'agent-tasks-task', view: 'hierarchy', taskLevels: 'top-level', statuses: 'active,blocked' } }],
     responseExamples: [{ status: 200, description: 'Authorized overview snapshot or text/event-stream.' }, { status: 401, description: 'Authentication required.' }]
   }),
   endpoint({
@@ -870,9 +870,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 403, description: 'Wrong identity.', body: { ok: false, error: 'This workflow is not authorized for iOS releases.' } }]
   }),
   endpoint({
-    id: 'auth-characters', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
+    id: 'auth-characters', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'auth', title: 'Characters', endpoint: '/api/v1/auth/characters',
     summary: 'Create private proxy identities and select a session Character.',
-    detail: 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Version 1.1 binds admin credential import approval to the current session identity selection; a change invalidates that approval even if the browser switches back. GET pages owner-only Characters with cursor; direct Character sessions see only their own principal. GET inspect=<characterId> discloses the owner only to administrators. POST create requires a stable UUID requestId, displayName and loginMode (switch, inherit, password). POST select sets the session default; characterId:null restores the authenticated principal. Rename and disable/enable require the owner. X-Thingtime-Character selects an owned identity per request for full sessions only. Character logins cannot become their owner. Public profiles never include ownership. Tier entitlements follow the owner; content and storage usage remain individually accounted. Subspace membership is independent.',
     methods: ['GET', 'POST'], auth: { mode: 'session-or-bearer', description: 'Full account session; scoped credentials cannot manage Characters.' },
     steps: ['Open Settings → Characters and choose a display name and login method.', 'Create with a stable requestId, then select a session identity or use Post as.', 'Owners manage their roster; administrators can inspect a Character ID.'],
     requestExamples: [{ name: 'Session identity', description: 'Select an owned Character.', method: 'POST', body: { operation: 'select', characterId: '<character-id>' } }],
@@ -1434,13 +1435,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-mcp', contractVersion: '2.2.0', featureVersion: '2.2.0',
+    id: 'chatgpt-mcp', contractVersion: '2.3.0', featureVersion: '2.3.0',
     group: 'integrations',
     title: 'ChatGPT MCP gateway',
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. Version 2 adds account-scoped confirmation preferences and removes the connector mutation byte/count/depth admission caps. Large plans may be uploaded as immutable text fragments, then reviewed in pages; compact signed receipts reference encrypted server-side previews and are single-use. Per-request hosting constraints and the underlying Things write contract still apply. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt and separate undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. When the origin advertises chatgpt.render-export 1.0.0, thingtime_render_and_export accepts only caller-supplied portable content without OAuth and returns embedded canonical JSON and PNG files; it cannot read stored Things or run Actions. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+      'Implements MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. Version 2 adds account-scoped confirmation preferences and removes the connector mutation byte/count/depth admission caps. Large plans may be uploaded as immutable text fragments, then reviewed in pages; compact signed receipts reference encrypted server-side previews and are single-use. Per-request hosting constraints and the underlying Things write contract still apply. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. Reporting tools advertise `agents.report`; an explicit same-origin account lacking it, or `login_thingtime` with `accountId` and `requiredScopes`, returns `mcp/www_authenticate` with `insufficient_scope`. Verify the owner and origin before retrying with the new account ID. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt and separate undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. When the origin advertises chatgpt.render-export 1.0.0, thingtime_render_and_export accepts only caller-supplied portable content without OAuth and returns embedded canonical JSON and PNG files; it cannot read stored Things or run Actions. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
     auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for account/data tools. tools/list and login_thingtime are public; unauthenticated login returns a tool-level MCP OAuth challenge without failing the HTTP transport.' },
     methods: ['POST'],
     steps: [
@@ -1476,13 +1477,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-oauth-authorize', contractVersion: '1.2.0', featureVersion: '1.2.0',
+    id: 'chatgpt-oauth-authorize', contractVersion: '1.3.0', featureVersion: '1.3.0',
     group: 'integrations',
     title: 'ChatGPT OAuth authorization',
     endpoint: CHATGPT_AUTHORIZE_PATH,
     summary: 'First-party SSO connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The issuer-bound Codex client `https://chatgpt.com/oauth/codex/client.json` uses `http://127.0.0.1:<port>/callback` or `http://localhost:<port>/callback`. The callback includes the exact discovery issuer. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The first-party page first uses the existing Thingtime SSO handoff: a signed-in account receives a generated, revocable, non-expiring personal access token with the `things` (read/write all) scope and unrestricted visibility. The generated token is returned only to the same-origin page, then encrypted before the connection bundle is persisted; it never enters ChatGPT, Codex, a redirect, OAuth code, or a chat transcript. Advanced settings can narrow scopes or explicitly add the independent agents.report permission for private task reporting, regenerate the generated token (revoking the prior generated token), edit the primary token, or add a manually supplied scoped token for another approved endpoint. POST `intent=prepare` is the same-origin SSO preparation request; ordinary POST submits the encrypted account bundle and redirects only a five-minute single-use authorization code to the approved callback.',
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The issuer-bound Codex client `https://chatgpt.com/oauth/codex/client.json` uses `http://127.0.0.1:<port>/callback` or `http://localhost:<port>/callback`. The callback includes the exact discovery issuer. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials and an advertised independent permission such as `agents.report`. For an independent permission, the consent page shows the requested access and exact signed-in account. A new connection grants only the displayed permissions and optional selected access rules. `intent=prepare` checks the owner without minting a credential; the explicit approval is bound to that live browser session and one authorization request. Cancel returns OAuth `access_denied`. An accepted request returns a code, and only the verified token exchange mints the scoped credential. The ordinary first-party page first uses the existing Thingtime SSO handoff: a signed-in account receives a generated, revocable, non-expiring personal access token with the `things` (read/write all) scope and unrestricted visibility. The generated token is returned only to the same-origin page, then encrypted before the connection bundle is persisted; it never enters ChatGPT, Codex, a redirect, OAuth code, or a chat transcript. Advanced settings can narrow scopes or explicitly add the independent agents.report permission for private task reporting, regenerate the generated token (revoking the prior generated token), edit the primary token, or add a manually supplied scoped token for another approved endpoint. POST `intent=prepare` is the same-origin SSO preparation request; ordinary POST submits the encrypted account bundle and redirects only a five-minute single-use authorization code to the approved callback.',
     auth: { mode: 'none', description: 'OAuth public-client request. The first-party page authenticates the account with Thingtime SSO and generates the default scoped credential server-side.' },
     methods: ['GET', 'POST'],
     steps: [
@@ -1515,13 +1516,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-oauth-register',
+    id: 'chatgpt-oauth-register', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'integrations',
     title: 'ChatGPT OAuth dynamic client registration',
     endpoint: CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH,
     summary: 'Register a bounded loopback public client when a Codex client cannot use CIMD.',
     detail:
-      'OAuth Dynamic Client Registration is a compatibility fallback for Codex clients that do not yet support ChatGPT Client ID Metadata Documents. The endpoint accepts one to eight exact http://127.0.0.1:<port>/callback loopback redirect URIs only, returns a signed opaque public client ID, and never accepts a custom scheme, localhost alias, web URL, query, fragment, or credentialed redirect. The resulting client remains bound to those same registered redirect URIs during authorization-code exchange.',
+      'OAuth Dynamic Client Registration is a compatibility fallback for Codex clients that do not yet support ChatGPT Client ID Metadata Documents. The endpoint accepts one to eight exact http://127.0.0.1:<port>/callback loopback redirect URIs only, returns a signed opaque public client ID, and never accepts a custom scheme, localhost alias, web URL, query, fragment, or credentialed redirect. The resulting client remains bound to those same registered redirect URIs during authorization-code exchange. Optional scope metadata is validated and defaults to `thingtime offline_access`.',
     auth: { mode: 'none', description: 'Public-client registration is safe because every accepted callback is an exact local loopback URL.' },
     methods: ['POST'],
     steps: ['Register exact loopback callbacks before authorization.', 'Use the returned opaque client_id for the matching authorization-code flow.', 'Discard the client ID when the local client no longer needs the connection.'],
@@ -1557,13 +1558,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'chatgpt-oauth-token',
+    id: 'chatgpt-oauth-token', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'integrations',
     title: 'ChatGPT OAuth token exchange',
     endpoint: CHATGPT_TOKEN_PATH,
     summary: 'Exchange an OAuth code or rotate a refresh credential for an MCP-only bridge credential.',
     detail:
-      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. Success returns a non-expiring, server-revocable bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token. Since it does not expire, `expires_in` is omitted.',
+      'For `grant_type=authorization_code`, POST code, client_id, redirect_uri, resource, and code_verifier. The code is one-use and bound atomically to the exact client, callback, resource, and S256 verifier. A `thingtime offline_access` authorization also returns a single-use rotating refresh token. For `grant_type=refresh_token`, POST refresh_token and client_id, plus the same resource when supplied; the token is consumed atomically and replaced. A supplied refresh scope must match the original scope set. Independent consented permissions are returned in `scope` on code exchange and refresh; a revoked underlying permission is not renewed. Success returns a non-expiring, server-revocable bridge access token that only works at the ChatGPT MCP gateway; it cannot authenticate any other Thingtime API route and contains no underlying personal access token. Since it does not expire, `expires_in` is omitted.',
     auth: { mode: 'none', description: 'The one-time code, exact binding, and PKCE verifier are the public-client proof.' },
     methods: ['POST'],
     steps: ['Verify state and issuer at the callback.', 'Exchange with the original S256 verifier.', 'Store only the returned bridge credential and, when issued, replace the previous refresh credential atomically.'],
@@ -2301,11 +2302,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-owned',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Owned accounts',
     endpoint: '/api/v1/auth/accounts/owned',
     summary: 'The accounts you own via admin-assigned links — each can be signed into without credentials.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Lists the accounts (usually service accounts) an admin has assigned to you with an "account" ownership ' +
       'link. The account switcher shows these under "Owned accounts"; POST /api/v1/auth/accounts/assume signs ' +
       "into one. Unlike /api/v1/auth/accounts (this browser's roster), this list follows your links — it is " +
@@ -2329,11 +2333,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-assume',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Assume an owned account',
     endpoint: '/api/v1/auth/accounts/assume',
     summary: 'Sign into an account you own (via an admin-assigned link) without its credentials.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'POST { accountId } — if you hold an "account" ownership link to it, a fresh browser session is minted ' +
       "for the target, folded into this browser's roster (the switcher lists it immediately), and made the " +
       "active account. The authorization is the server-side link, never the roster cookie, so the roster's " +
@@ -2342,6 +2349,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'session', description: 'Requires a signed-in session holding the ownership link.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'GET /api/v1/auth/accounts/owned to find assumable accounts.',
       'POST { accountId } — the response sets tt_auth + tt_accounts cookies.',
       'The assumed account is now active; switch back via /api/v1/auth/accounts/switch.'
@@ -2461,13 +2469,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-sso-session',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Redeem a sign-in code',
     endpoint: '/api/v1/auth/sso-session',
     summary: 'Exchange a handoff code for a first-class session on THIS deployment.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'POST { code } — verifies the signature (deployments share JWT key material), requires the code\'s aud ' +
       'to equal this deployment\'s public origin, claims it atomically exactly once (a second redemption ' +
       'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
@@ -2759,13 +2768,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.2.0',
+    contractVersion: '1.3.1',
     group: 'auth',
-    featureVersion: '1.2.0',
+    featureVersion: '1.3.1',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'POST { response, clientId? } where response is the JSON result of navigator.credentials.get. The ' +
       'credential is looked up by id, revocation is checked BEFORE any cryptography, the assertion is ' +
       'verified (user verification required) against the challenge cookie, and the login then finishes ' +
@@ -2776,6 +2786,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'The signed challenge is bound to this origin; a verified ceremony is consumed atomically and cannot be replayed, even with its saved cookie.',
       'Run startAuthentication(options) in the browser.',
       'POST { response } with credentials; include clientId when the login serves an SSO/app flow.',
@@ -3622,11 +3633,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Account switcher roster',
     endpoint: '/api/v1/auth/accounts',
     summary: 'Lists every account signed in to this browser, marking the active one.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'The account switcher roster is a Mongo document (rosters collection) referenced by an opaque id in the httpOnly tt_accounts cookie; its entries reference sessions by id, so there is no account limit and raw JWTs are never stored or returned. This route resolves each entry to its public user, prunes dead entries (expired, revoked, deleted), and updates the roster + cookie when anything changed.',
     auth: {
       mode: 'optional',
@@ -3668,11 +3682,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-remove',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Remove account from switcher',
     endpoint: '/api/v1/auth/accounts/remove',
     summary: 'Signs one roster account out: revokes its session and drops it from the switcher.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'Use this to remove a single account from the browser without touching the others. Removing the active account promotes the next roster account to active; removing the last account clears both auth cookies, signing the browser out entirely.',
     auth: {
       mode: 'optional',
@@ -3680,6 +3697,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of the roster account to remove.',
       'The account session jti is revoked in MongoDB — the removed token is dead everywhere, not just in this browser.',
       'Read user for the account that is active after the removal (null when none remain).',
@@ -3712,11 +3730,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-accounts-switch',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'auth',
     title: 'Switch active account',
     endpoint: '/api/v1/auth/accounts/switch',
     summary: 'Makes a signed-in roster account the active one without re-entering a password.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Mints a fresh JWT for the chosen roster account live session into tt_auth. Authorization is possession of the httpOnly roster-id cookie, so switching never needs credentials.',
     auth: {
       mode: 'optional',
@@ -3724,6 +3745,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST the user id of a roster account (from /api/v1/auth/accounts).',
       'Store the returned Set-Cookie headers — tt_auth now carries the chosen account token.',
       'Refresh user-scoped state client-side; the active user changed for every subsequent request.',
@@ -3853,13 +3875,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
     summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token. Revoking a live active session records a quiet sign-out notification for that account; expired or repeated calls do not.',
     auth: {
       mode: 'optional',
@@ -3867,6 +3890,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST an empty JSON object, or { "all": true } to sign out every switcher account.',
       'If a token is present, Thingtime verifies it and revokes the session jti in MongoDB.',
       'Read user for the account active after logout — null means the browser is fully signed out.',
@@ -3906,13 +3930,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-me',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'auth',
     title: 'Current user',
     endpoint: '/api/v1/auth/me',
     summary: 'Returns the authenticated public user or null.',
-    detail: 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this route for lightweight auth checks. It supports the same httpOnly cookie and bearer token model as the rest of the API. Returns the selected session Character when present; full sessions may choose an owned identity with X-Thingtime-Character after negotiating api.auth-characters 1.0.0.',
     auth: {
       mode: 'optional',
       description: 'Cookie or Authorization: Bearer token optional. Anonymous callers receive user: null.'
@@ -3968,11 +3993,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-temporary',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Temporary browser user',
     endpoint: '/api/v1/auth/temporary',
     summary: 'Creates or reuses a recoverable temporary browser session user.',
     detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' +
       'This is the first-session bootstrap used by /things. A genuinely anonymous browser receives a normal, private user Thing, bounded storage subscription, browser session, and account-switcher roster entry. Repeating the request with that live session is idempotent and returns the same user; the endpoint never bypasses ordinary Thing ownership or ACL checks.',
     auth: {
       mode: 'optional',
@@ -4125,8 +4153,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    featureVersion: '1.3.2',
+    contractVersion: '1.3.2',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
@@ -4138,6 +4166,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username, password, and email; displayName is optional. With a valid inviteToken, email is optional and omitted profile fields inherit editable invite suggestions. avatarUrl may replace/clear the suggested thumbnail; PNG/JPEG/WebP input data URLs (max 112,000 characters) normalize to a lossless 128px PNG of at most 80 KiB. JSON requests are bounded to 128 KiB. Invites are consumed with account creation and gift credit transfer in one transaction; no extra starter credits or upload/admin privileges are granted. meta is never accepted from public signup.',
       'Store the returned Set-Cookie header for browser clients.',
       'If verificationLink is present, it is a local/preview helper only; production sends email instead.',
@@ -4731,19 +4760,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.1',
+    contractVersion: '1.3.1',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
-    detail: 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+    detail:
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
     },
     methods: ['POST'],
     steps: [
+      'Browser-session cleanup preserves scoped file-sync reservations. Each transfer still requires live authorization.',
       'POST username and password.',
       'If the account has email 2FA enabled, the response is { requiresOtp: true, challenge } and a code is emailed — POST { challenge, code } to this same endpoint to finish.',
       'Store the Set-Cookie response header for browser clients.',
@@ -5974,14 +6005,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.10.0',
-		featureVersion: '1.10.0',
+		contractVersion: '1.11.0',
+		featureVersion: '1.11.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
-			'Version 1.9 preserves original filenames without a product character ceiling and plans objects up to the selected S3 multipart protocol capacity (10,000 parts of at most 5 GiB). Processing parts remain bounded; account storage admission and integrity checks still apply. ' +
+			'Version 1.11 accepts optional canonical contentFingerprint only with exact fileSyncOrigin, requestId and purpose=file. After the home database is explicitly activated, a verified same-account match reserves a distinct ready logical attachment without PUT; a concurrent first writer returns a retryable conflict and the caller reuses the original request. ' +
+      'Version 1.9 preserves original filenames without a product character ceiling and plans objects up to the selected S3 multipart protocol capacity (10,000 parts of at most 5 GiB). Processing parts remain bounded; account storage admission and integrity checks still apply. ' +
 			'Version 1.8 extends verified zero-byte originals to post, comment and message attachments. They use the same conditional object creation, exact-version empty SHA-256 verification and owner/request fencing as files, return partCount=0 with ready state, and retain normal draft expiry until committed. Image-only and recording purposes still require nonempty content. ' +
 			'Version 1.7 adds optional private fileSyncOrigin version 1 for purpose=file with an exact requestId and filename: deviceId, localRootId, optional cloudRootId, fileId, folderId and root-relative path. It is persisted before byte authority and immutable on retries, including explicitly supplied provenance on an exact old queued reservation. It is a client-reported original source/destination hint, never a native grant, current folder path or write authority. Standalone uploads remain unchanged. ' +
 			'Version 1.6.2 creates empty files with a conditional PUT before object verification, so the object-only storage role does not require ListBucket to distinguish missing keys. Existing objects and ambiguous replies still require exact identity, version, size and empty SHA-256 verification under the finalization lease. ' +
@@ -6054,13 +6086,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
 		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
-		detail:
+		detail: 'Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
@@ -6107,14 +6139,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
-		contractVersion: '1.7.0',
-		featureVersion: '1.7.0',
+		contractVersion: '1.8.0',
+		featureVersion: '1.8.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
 		summary: 'Verifies every S3 part and publishes canonical attachment metadata idempotently.',
 		detail:
-			'Version 1.7 preserves original filename metadata without a product character ceiling. ' +
+			'Version 1.8 verifies a reserved sync fingerprint against checksummed parts and the immutable object HEAD, then shares the physical allocation among independent owner references. ' +
+      'Version 1.7 preserves original filename metadata without a product character ceiling. ' +
 			'Version 1.6 extends the verified empty-object completion contract to post, comment and message purposes while preserving their draft retention and exact owner/request identity. Nonempty objects still pass normal quarantine and analysis. ' +
 			'Version 1.5.1 conditionally creates empty objects before HEAD verification; a missing object never requires a ListBucket grant. Conditional conflicts and lost replies reconcile only through the original identity, exact immutable version and empty checksum. Read/write denials are never treated as proof of absence. ' +
 			'Version 1.5 supports idempotent zero-byte file completion through a single-object PUT under the existing finalization lease. It never submits an empty multipart completion. Only server-verified empty file content is stamped moderation-skipped; other objects preserve quarantine and analysis. ' +
@@ -6171,14 +6204,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
 		summary: 'Cancels an unattached upload and safely schedules its reserved-storage refund.',
 		detail:
-			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
+			'Version 1.3 removes only the requested logical sync reference, deleting and refunding the shared exact object version only after the final eligible reference and retention hold expire. ' +
+      'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
@@ -6327,14 +6361,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.8.0',
-		featureVersion: '1.8.0',
+		contractVersion: '1.9.0',
+		featureVersion: '1.9.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
 		summary: 'Deletes an owned attachment object before refunding its storage.',
 		detail:
-			'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
+			'Version 1.3 preserves bytes still referenced by another attachment in the same account and applies the shared byte refund only after final exact-version deletion. ' +
+      'This explicit owner route is idempotent. Unbound drafts accept id alone. An already-bound post or comment attachment requires its exact targetId, preventing an ambiguous cleanup retry from deleting media after a lost successful post response. Completed objects persist their opaque S3 VersionId, and deletion removes that exact version before refunding quota.',
 		auth: {
 			mode: 'session-or-bearer',
 			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
@@ -6370,10 +6405,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-		id: 'file-sync-transfer-admissions', contractVersion: '1.3.1', featureVersion: '1.3.1', group: 'attachments',
+		id: 'file-sync-transfer-admissions', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'attachments',
 		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
 		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
-		detail: 'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
+		detail: 'Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
+      'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
 		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete, publish when explicitly admitted, or revoke only its own admission.' },
 		methods: ['POST'],
 		steps: [
@@ -6394,9 +6430,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
     // 1.2: config3 resource ceilings bind distinct v2 digest domains; legacy digests remain unchanged.
-    id: 'file-sync-batches', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments', title: 'Upload bounded small-file batches',
+    id: 'file-sync-batches', contractVersion: '1.4.0', featureVersion: '1.4.0', group: 'attachments', title: 'Upload bounded small-file batches',
     endpoint: '/api/v1/files/batches', summary: 'Prepare, verify and commit independent original file operations with fresh session authority.',
-    detail: 'Version 1.3.0 preserves optional symbolicLink metadata in observed CloudFile values. Symbolic-link writes use individual canonical file operations under api.files 1.9.0 and are excluded from bulk descriptors, whose existing cross-language digest does not bind link metadata. Link attachments contain only raw POSIX readlink target bytes, never dereferenced. Version 1.2.1 preserves immutable private upload provenance from the authorized descriptor before new byte grants and exact ready/finalizing retry recovery. It is not a native folder grant or a current path assertion. Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
+    detail: 'A verified same-account sync fingerprint can return a distinct ready reference without a PUT. A competing first upload returns a retryable member result. ' +
+      'Version 1.3.0 preserves optional symbolicLink metadata in observed CloudFile values. Symbolic-link writes use individual canonical file operations under api.files 1.9.0 and are excluded from bulk descriptors, whose existing cross-language digest does not bind link metadata. Link attachments contain only raw POSIX readlink target bytes, never dereferenced. Version 1.2.1 preserves immutable private upload provenance from the authorized descriptor before new byte grants and exact ready/finalizing retry recovery. It is not a native folder grant or a current path assertion. Home-plane private regular files only, absent destinations and already confirmed parents. An immutable descriptor digest binds source, scope, saved configuration and original operation identities; it never grants authority. Existing attachment MPU leases, quota and immutable file Timeline receipts remain authoritative.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user session only; no device, PAT, app or service upload authority.' }, methods: ['POST'],
     steps: [
       'In 1.1.0 POST phase=folder-probe with a separate kind:folders v1 descriptor and domain-separated digest. At most256 original local folder-copy operations,320 KiB descriptor and512 KiB request/response. Parents are reviewed root, explicit existing actual ID or an earlier member ordinal whose original operation ID is already pinned as folderId. Aggregate owner-bound canonical Timeline receipts in chunks of128; exact accepted history is returned before source IO. No S3, payload, alternate receipt store or delete authority.',
@@ -6447,17 +6484,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// 1.17.0 keeps that streamed retention alongside the owner-only signed
 		// exact-range targets promoted on main.
 		// 1.19.0 combines receipt-pinned original streams and owner retention with the main content contract.
-		contractVersion: '1.19.0',
-		featureVersion: '1.19.0',
+		contractVersion: '1.20.0',
+		featureVersion: '1.20.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Version 1.19.0 adds cache=original-bytes&download=1 through ordinary live attachment authorization, including sharedRoot and legacy key audiences. Negotiate 1.19.0, obtain cache=validate&download=1, and send If-Match with the receipt cacheKey followed by :v1 inside double quotes. Missing/stale preconditions return 412. Only id,cache,download,sharedRoot,key are accepted, once each. The direct private/no-store stream returns exact Content-Length and ETag without storage URLs, counts bytes with backpressure, propagates cancellation and withholds its final chunk until the principal, audience and exact object are rechecked. Shared server/client per-file transport budgets are ten minutes overall and thirty seconds of inactivity while awaiting upstream reads; consumer backpressure does not spend the inactivity budget. Metadata receipts retain their separate thirty-second deadline. Truncation, excess bytes, changed authority/version or upstream failure aborts the stream. Clients revalidate the receipt and complete export closure before atomic independent import; keys, receipts and source authority never enter the portable bundle. This grants no owner retention, hold, mutation or signed-target authority. Existing limits/rates and protected-purpose, moderation, expiry, data-plane and storage gates remain unchanged. ' +
+			'Version 1.20 authorizes each logical sync attachment independently and resolves verified shared bytes while preserving attachment-specific version, disposition and retention. ' +
+			'Version 1.20.0 adds cache=original-bytes&download=1 through ordinary live attachment authorization, including sharedRoot and legacy key audiences. Negotiate 1.20.0, obtain cache=validate&download=1, and send If-Match with the receipt cacheKey followed by :v1 inside double quotes. Missing/stale preconditions return 412. Only id,cache,download,sharedRoot,key are accepted, once each. The direct private/no-store stream returns exact Content-Length and ETag without storage URLs, counts bytes with backpressure, propagates cancellation and withholds its final chunk until the principal, audience and exact object are rechecked. Shared server/client per-file transport budgets are ten minutes overall and thirty seconds of inactivity while awaiting upstream reads; consumer backpressure does not spend the inactivity budget. Metadata receipts retain their separate thirty-second deadline. Truncation, excess bytes, changed authority/version or upstream failure aborts the stream. Clients revalidate the receipt and complete export closure before atomic independent import; keys, receipts and source authority never enter the portable bundle. This grants no owner retention, hold, mutation or signed-target authority. Existing limits/rates and protected-purpose, moderation, expiry, data-plane and storage gates remain unchanged. ' +
 			'Version 1.17.2 serves exact-version verified zero-byte cache reads after a successful backing object GET even when the storage response has no stream. Version 1.17.1 accepts the passive builder-thing provenance marker alongside an otherwise supported standalone content root for shared dependency, media, action, copy and export traversal. The marker alone, unknown/control kinds, target-attached roots and inaccessible audiences remain refused.Version 1.17 adds owner-only target=1 with an exact range, returning a 60-second signed GET target whose Range header and stored object version are signature-bound. The JSON fingerprint describes the whole attachment. URLs are transient transport authority: never log, persist or cache them. Providers without exact signed-range support fail closed. Legacy redirects, ranges, fingerprints and retention remain unchanged. Version 1.16 fingerprints stored empty file content with algorithm sha256-parts-v1, partSizeBytes=8388608, partCount=0 and the exact SHA-256 of empty input. Verification requires an exact-version FULL_OBJECT storage checksum, size zero and the canonical attachment identity. Ordinary authorized GET returns the real stored zero-byte object; no placeholder bytes or absent-object inference is used. ' +
 			'Optional character=<id> selects an owned Character for media elements; unauthorized identities return 401. ' +
-			'Version 1.19.0 includes cache=retain-bytes&download=1 for streamed owned originals, with the same full-user, same-origin, exact-owner and durable-binding gates as cache=retain. Both retention modes admit valid stored originals without the former 16 MiB ceiling. Bytes carry the descriptor ETag and exact Content-Length; responses are private/no-store, use backpressure and propagate disconnect cancellation. Clients negotiate 1.19.0 before retention, validate exact bytes and recheck the descriptor before atomic scoped storage. Existing generic cache=bytes keeps its media-cache budget. ' +
+			'Version 1.20.0 includes cache=retain-bytes&download=1 for streamed owned originals, with the same full-user, same-origin, exact-owner and durable-binding gates as cache=retain. Both retention modes admit valid stored originals without the former 16 MiB ceiling. Bytes carry the descriptor ETag and exact Content-Length; responses are private/no-store, use backpressure and propagate disconnect cancellation. Clients negotiate 1.20.0 before retention, validate exact bytes and recheck the descriptor before atomic scoped storage. Existing generic cache=bytes keeps its media-cache budget. ' +
 			'Version 1.15.0: cache=retain also admits owned, durably bound post/comment originals and returns file.targetId. Revalidate the parent and atomically admit its complete binding before enabling local editing. Other bound purposes remain excluded. ' +
 			'Version 1.14.0: cache=retain also admits owned durable standalone recordings and returns file.purpose (file or recording). Purpose is preserved in local exports, uploads and deletion receipts. Existing moderation, scope, expiry and object-version gates still apply. ' +
 			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked files, unsupported bound purposes and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
@@ -6632,14 +6670,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-cleanup',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Reap expired attachment drafts',
 		endpoint: '/api/v1/attachments/cleanup',
 		summary: 'Internal hourly job that deletes expired private objects before refunding reserved storage.',
 		detail:
-			'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
+			'Version 1.3 retains shared exact bytes while an eligible sync reference exists; only final-reference cleanup can purge and refund those bytes. ' +
+      'Durable standalone file-purpose attachments are excluded from draft expiry; unfinished file imports retain draft expiry. ' +
       'Vercel Cron calls this bounded, idempotent GET at minute 17 each hour. It scans at most 1,000 cleanup intents in expiry order with five workers and a 25-second wall-clock budget. Pending multipart cancellations that issued a part URL stay billed through an eight-day lifecycle-backed settlement window, then require two empty Abort/ListParts checks at least one hour apart before HEAD verification, exact-version deletion, and refund. MPUs with no issued part URL can refund after one empty verification. Deleting tombstones remain sweepable even after a post cascade crash. ' +
 			'There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
@@ -7067,13 +7106,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'messenger',
     title: 'Chats',
     endpoint: '/api/v1/chats',
     summary: 'Lists every conversation the caller is in, or creates a channel, group, or DM.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Subspace general channels are reconciled for active subspace members on Messenger entry. All linked chat previews and unread counters are filtered by current subspace membership and live parent existence. ' +
       'GET returns every conversation the caller belongs to — community channels, groups, and DMs — each with an ' +
       'unread count, a lastMessage preview, and the caller membership entry (role, nickname, state, muted, read ' +
@@ -7153,13 +7193,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-get',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'messenger',
     title: 'Chat detail',
     endpoint: '/api/v1/chats/get',
     summary: 'Reads one chat with its full member list.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Returns a single chat by id along with every member — profile, role, nickname, and per-member read ' +
       'receipt — plus communityName for channels. Read receipts follow the privacy parity rule: a member who ' +
@@ -7268,13 +7309,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-members',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'messenger',
     title: 'Chat members',
     endpoint: '/api/v1/chats/members',
     summary: 'Manages chat membership with one verb per call: join, add, remove, role, nickname, or mute.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Linked spaces manage member additions, removals and roles through subspace controls. Per-chat nickname and mute preferences remain editable. ' +
       'POST the chatId plus exactly one verb. join: true joins a public channel of a community you belong to. ' +
       'add lists user ids to bring in (any member may add to a group; private channels need an admin, and everyone ' +
@@ -7388,13 +7430,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Version 1.5 adds lopu.deviceTranscript:true for an unverified device-reported assistant transcript, without hosted provider, model, billing or tool metadata. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
@@ -7485,14 +7528,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages-edit',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     notes: ['Version 1.2.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', 'Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
     endpoint: '/api/v1/chats/messages/edit',
     summary: 'Edits the text of a message the caller sent.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Only the author can edit a message. The new text replaces the old and the message is stamped with ' +
 			'editedAt so clients can show an edited marker. No product character limit is imposed, as on send. Text may be empty only while at least one existing attachment remains.',
     auth: {
@@ -9758,8 +9802,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.52.1: private backup coordinator Things remain inaccessible through generic exact and inherited reads.
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
-    featureVersion: '1.58.0',
-    contractVersion: '1.58.0',
+    // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
+    featureVersion: '1.62.0',
+    contractVersion: '1.62.0',
 
 
     group: 'things',
@@ -9769,7 +9814,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.58 adds version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.56 authored content contract. ' +
+      'Version 1.62 combines version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.61 authored content contract. ' +
+      'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
+      'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
+      'Version 1.61 accepts Webpage CSS declarations without the former per-block count, name and value lengths, accepts vendor names and literal case-sensitive custom property identifiers, and stores complete raw/rich HTML source. Existing CSS security, rendering, sharing, authorization and storage checks remain. ' +
+      'Version 1.58 validates passive cursor-backed webpage collection descriptors and opt-in Action ownedFolderId predicates. ' +
       'Version 1.57 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources. Execution requires api.actions-run 1.45.0. ' +
       'Version 1.55 allows a same-origin owning account on the home data plane to send expectedStoragePolicyRevision on PATCH for an automatic cloud write. Use null when no policy is saved. A changed or paused policy returns 409 within the same transaction as the source and any attachment ordering or binding. Requests without this field keep their ordinary explicit cloud semantics. ' +
       'Version 1.56 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction descriptors. Execution requires api.actions-run 1.44.0. Saved map pointsSource descriptors load a separate optional cursor-paged points layer with interval refresh. Source points may set fitBounds:false to retain the marker and exclude it from automatic viewport fitting. ' +
@@ -10213,14 +10263,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    // 1.6.0: optional presentation metadata follows existing avatar projections.
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Optional scope: mine restricts results to the authenticated actor’s own Things without a username lookup; omitted or visible preserves normal search. All existing ACL, app namespace, token, and subspace fences still apply. ' +
+      'Version 1.7 combines explicit owner scope with home-library archive filtering and saved image presentation. Optional scope: mine restricts results to the authenticated actor’s own Things without a username lookup; omitted or visible preserves normal search. All existing ACL, app namespace, token, and subspace fences still apply. ' +
+      'For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
@@ -10359,13 +10412,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.11.0',
-    contractVersion: '1.11.0',
+    featureVersion: '1.12.0',
+    contractVersion: '1.12.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Rich Thingtime comments accept the same bounded thing-collection reference envelope as posts, and comment/feed/profile projections carry permission-checked linkedThings. Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root ACL through the complete reply and media-parent chain, so private or circle-limited content stays private.',
     auth: {
@@ -10476,17 +10530,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
+    // 1.8.0: first-party owners can archive and restore their library placements.
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     // 1.7.2: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
-    featureVersion: '1.7.2',
-    contractVersion: '1.7.2',
     // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
-    title: 'Bulk move / copy / delete / share',
+    title: 'Bulk organise Things',
     endpoint: '/api/v1/things/bulk',
-    summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
+    summary: 'Multi-select operations for /things: move, copy, delete, share, archive, or restore owned Things.',
     detail:
+      'Archive and restore require a same-origin first-party home library owner. They toggle private library placement metadata on each selected Thing without moving it or changing its audience, links, contents, or timestamps. Folder operations do not recurse. Use libraryArchive=archived on the owner list to find archived items across folders. ' +
       'Copying a webpage omits its optional automatic Action opt-in, including pages nested inside copied folders. ' +
       'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
@@ -10524,6 +10580,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Make a folder and everything inside it friends-visible.',
         method: 'POST',
         body: { op: 'share', ids: ['folder_abc'], acl: ['-tt:all', 'tt:userFriends', 'tt:user'], recursive: true }
+      },
+      {
+        name: 'Archive Things',
+        description: 'Hide the selected Things from active library browsing without moving them.',
+        method: 'POST',
+        body: { op: 'archive', ids: ['thing_1', 'thing_2'] }
+      },
+      {
+        name: 'Restore Things',
+        description: 'Return archived Things to active browsing in their original folders.',
+        method: 'POST',
+        body: { op: 'restore', ids: ['thing_1', 'thing_2'] }
       },
       {
         name: 'Bulk delete',
@@ -10575,13 +10643,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
     // non-members, every other fence intact); the response echoes scope; an
     // unknown scope answers 400 (S6, additive)
-    featureVersion: '1.9.0',
-    contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'algorithm also accepts hot, new, top, rising, controversial, local, global and political. Vote rankings use the newest 400 matching candidates; rising restricts to 24 hours. Local uses lat/lng with radiusKm (default 50, max 1000), otherwise localTag; no location means an empty feed. Political matches politics/political tags; Global ranks public posts. Existing filters remain conjunctive. The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
@@ -10954,13 +11023,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
+      'Branding may include iconPresentation and bannerPresentation for existing media. ' +
       'Every newly created subspace atomically receives a linked Messenger space and general channel. Projections include stable messagesCommunityId and messagesChatId. The idempotent admin subspace-messaging-spaces migration provisions all existing live subspaces. ' +
       'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
       'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
@@ -11065,13 +11135,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // additive)
     // 1.4.0: moderators get openReportCount — open reports waiting in the
     // Reports queue (S5, additive)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
+      'Branding may include iconPresentation and bannerPresentation for existing media. ' +
       'Returns stable messagesCommunityId and messagesChatId for the subspace Messages view. Active subspace membership is required for Messenger history; pending, left and banned members cannot read it. ' +
       'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
       'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
@@ -11137,13 +11208,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
     summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes the URL, access and the 18+ flag.',
     detail:
+      'Optional mediaPresentation: { icon?, banner? } sets framing, local CSS declarations and passive HTML image attributes independently of image bytes. Send null to reset a slot. Replacements clear stale presentation unless the same request supplies a new presentation. For presentation-only edits or resets, mediaPresentationSources: { icon?, banner? } can name the expected effective URLs; a different current source returns 409. ' +
       'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
       'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
@@ -11193,13 +11265,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
     // 1.3.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Join subspace',
     endpoint: '/api/v1/subspaces/join',
     summary: 'Joins a public or restricted subspace, or files a join request with the moderators of a private one.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug }. Public and restricted subspaces: creates the caller’s relational subspace-member doc (or ' +
       'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
       'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
@@ -11231,13 +11304,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
     // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
     // 1.3.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Leave subspace',
     endpoint: '/api/v1/subspaces/leave',
     summary: 'Leaves a subspace — or cancels a pending join request (owners can’t leave their own).',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug }. Removes the caller’s member doc — an active membership ends, a pending join request to a ' +
       'private subspace is cancelled (its row goes, the moderators’ queue no longer lists it); a banned member’s ' +
       'doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
@@ -11555,13 +11629,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.2.0: the subspace block carries removalReasons (S4, additive)
     // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
     // against the post (S5, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
     summary: 'The posts of one subspace with hot/new/top/rising/controversial sorts.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'GET ?slug=&sort=hot|new|top|rising|controversial&range=hour|day|week|month|year|all&cursor=&limit=. ' +
       '`new` pages by (createdAt, id) cursor with pinned posts leading the first page; the ranked sorts score a ' +
       'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
@@ -11591,13 +11666,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.2.2',
-    contractVersion: '1.2.2',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
     summary: 'The owner hands the subspace and its linked messages space to an active member; the previous owner becomes a moderator.',
     detail:
+      'Subspace branding may include iconPresentation and bannerPresentation for existing media. ' +
       'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
       'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
       'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
@@ -11786,13 +11862,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
     summary: 'Creates a share post that points back to a visible root post. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+    detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' + 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
     auth: {
       mode: 'session-or-bearer',
@@ -11866,8 +11943,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.23.0',
-    contractVersion: '1.23.0',
+    featureVersion: '1.26.0',
+    contractVersion: '1.26.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11876,6 +11953,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
+      'Version 1.26 accepts expanded Webpage CSS and HTML authoring under the same validation as api.things 1.61.0 and existing revision checks. ' +
+      'Version 1.25 preserves and validates saved Component and Webpage source input references under the same revision checks. ' +
+      'Version 1.24 preserves validated passive cursor-backed webpage collection descriptors and Action ownedFolderId predicates. ' +
       'Version 1.23 validates ordered things.ensure batches, exact matching fields, private webpage cutoff bindings and passive webpage sources under revision checks. ' +
       'Version 1.22 validates and preserves server Action things.ensure steps and optional saved Webpage activationAction and map pointsSource descriptors under ordinary revision checks. Execution requires api.actions-run 1.44.0. ' +
       'Version 1.18.1 corrects page Component discovery and identity comparison for large/deep valid authored block trees using cycle-safe iterative traversal. Existing Component ACL/capture and revision contracts remain unchanged. Version 1.18 preserves authored Collection source offsetInput, limitInput and totalPath mappings, explicit total bindings, selectedKey/itemKey/revealSelected presentation, and Map onSelectQueryParams/onRouteSelectQueryParams. These generic saved bindings grant no read or mutation authority. ' +
@@ -11948,13 +12029,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
     summary: 'Returns posts for a public profile, filtered by viewer visibility. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
+    detail:
+      'Existing avatar projections may include optional avatarPresentation for a styled source. ' + 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
@@ -12215,13 +12297,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'users-profile',
 		// 1.1.0: private hideEmailOnProfile preference for the owner's own profile UI.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
     group: 'profile',
     title: 'User profile',
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
+      'Optional avatarPresentation and bannerPresentation change framing, local CSS declarations and passive HTML image attributes without changing the image source. Send null to reset. A replacement or removal clears stale presentation unless the same request specifies a replacement presentation. For a presentation-only edit/reset, send avatarPresentationSource or bannerPresentationSource equal to the effective URL read by the editor; a different current source returns 409. ' +
 		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
       'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
       'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
@@ -13525,8 +13608,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
     // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.45.0',
-    contractVersion: '1.45.0',
+    featureVersion: '1.46.0',
+    contractVersion: '1.46.0',
 
     notes: ['Version1.42 combines full shared-content Data values with the authored-descriptor contract introduced independently in1.41. Clients requiring complete shared values reject1.41-only origins.', "Version1.41 accepts typed Action descriptors above the former fixed count while retaining names, type validation, scoped capabilities and serialized input/execution budgets. Saved rich-text forms await their latest Editor.js snapshot before confirmation/dispatch."],
     group: 'actions',
@@ -13534,6 +13617,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Version 1.46 supports optional ownedFolderId on things.get, requiring the resolved Data Thing to be owned by the invoker and in that exact folder. A successful guarded read adds ownedFolderVerified:true. Shared-root execution refuses the predicate. ' +
       'Version 1.45 adds ordered things.ensure batches and civilDateRange. Owner activation permits batch keys only from its trusted civil-date range. An owner-private cutoff source requires its resolved activationScheduleRevision and is rechecked before writes. An outdated schedule is refused before execution with 409 and reason activation-schedule-changed. ' +
       'Version 1.44 adds saved private webpage activation: source=activation, exact action, activationPageId, activationPageRevision and activationOnceKey. The server requires the full owning account, expected actor and expected database, rechecks the current private page and exact private Action revision, derives all inputs from that binding, and permits only read or ensure steps. An ensure key must be literal or the bound civil-date input. No shared, temporary, Character or held execution. ' +
       'Version 1.44 adds server Action things.ensure {schema, key, values, folderId?}. Declare things.read and things.create for the schema. A non-empty text key binds one Data Thing per invoker, saved Action ID, and selected data plane. First creation validates the optional owned folder and uses owner-private ACL. Reuse returns the readable current Thing with the exact resolved schema and preserves its content, placement, and audience. Deleting the Thing frees its key. Shared read-only, restricted, and browser runtimes refuse this operation. ' +
@@ -13753,14 +13837,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.15.0',
-    featureVersion: '1.15.0',
+    contractVersion: '1.18.0',
+    featureVersion: '1.18.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
+      'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +
+      'Version 1.16 resolves named passive cursor-backed collections alongside authored selection and keyed repetition. ' +
       'Version 1.15 includes private activationSchedule { cutoffTime, revision } for the eligible owning account when the binding uses an exact private settings Thing. An unavailable source returns null and cannot activate. Passive webpage sources provide data scope and preserve descendant form controls. ' +
       'Version 1.14 resolves the optional saved activationAction descriptor for private standalone pages. Only the full owning account in live mode can activate it; editor, branch, shared, gallery and held surfaces remain inert. It also preserves independent map pointsSource bindings for their normal authorized Action path. ' +
       'Version 1.13 includes server-derived executionHeld on the page and resolved Components. A held page or Component renders as an inert preview until its exact creation operation completes. ' +
@@ -14447,13 +14534,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
     summary: 'Runs (or dry-runs) a registered schema-version migration.',
     detail:
+      'activate-sync-attachment-blobs enables shared storage after all origins sharing this home database are upgraded. consolidate-sync-attachment-blobs adopts verified same-account sync bytes and preserves every logical version. A subsequent pass starts the signed URL drain after the alias commits. After that deadline, another pass deletes redundant exact object versions and refunds storage. Deploy compatible storage readers and cleanup on every origin sharing the database first. ' +
       'cleanup-accidental-catalog-account-2026-10-18 removes only the exact idle incident fixture and its bootstrap/auth records in a home-database transaction. Identity, empty storage, revoked sessions and complete document preimages are checked; the automatic logout history entry must match a revoked incident session within 30 seconds; unexpected activity aborts cleanup. Dry-run first, then confirm: true. Email delivery and migration audit records remain. ' +
       'Migrations are idempotent, so re-running after a partial failure only touches what is left. The things v1→v2 ' +
       'migration explodes embedded comments/reactions into standalone things, converts share posts to thingtime ' +

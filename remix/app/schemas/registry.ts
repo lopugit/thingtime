@@ -1,3 +1,5 @@
+import { isCssPropertyName, isSafeWebpageCssValue, normalizeCssPropertyName } from './cssDeclarationNames';
+import { pageCollectionBinding } from './pageCollections';
 import { THING_METADATA_KIND } from '../utils/thingMetadata.ts';
 import { THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND, THING_STORAGE_POLICY_KIND } from '../utils/thingStoragePolicy.ts';
 import { MAX_STORABLE_NESTING } from './storableLimits';
@@ -5,6 +7,7 @@ import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
+import { parseSourceInputArgument } from './sourceInputs';
 import { parseWebpageActivation } from './webpageActivation.ts';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
@@ -48,7 +51,7 @@ import {
 	ATTACHMENT_PROFILE_SLOTS,
 	ATTACHMENT_PURPOSES,
 	ATTACHMENT_STATES,
-	ATTACHMENT_THINGTIME,
+	ATTACHMENT_THINGTIME, ATTACHMENT_BLOB_THINGTIME,
 	MAX_ATTACHMENT_CONTENT_TYPE_CHARS,
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
@@ -1466,13 +1469,9 @@ export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
 export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
 export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
 export const WEBPAGE_ROUTE_PATTERN = /^\/[a-z0-9\-/_]*$/;
-// Figma-style per-block custom CSS + rich/raw HTML bounds. HTML is never
-// trusted at render (the client parses it through the sanitising allowlist
-// renderer); the gate bounds size and blocks the classic CSS escape hatches.
-export const MAX_WEBPAGE_CSS_PROPS = 40;
-export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
-export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
-export const MAX_WEBPAGE_HTML_CHARS = 20000;
+// HTML is stored as source and never trusted at render. The renderer applies
+// its sanitizing allowlist and execution budgets; document/transport storage
+// boundaries remain independent of the amount of authored CSS and HTML.
 export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
 // source-bound blocks may poll on an interval (a clock, a live tally):
 // bounded below so one page can never hammer the executor
@@ -1481,7 +1480,6 @@ export const MAX_WEBPAGE_SOURCE_INTERVAL_MS = 3_600_000;
 export const DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS = 15_000;
 export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
 export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
-export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
 
 const componentSchema: ThingtimeSchema = {
 	id: 'component',
@@ -2027,6 +2025,8 @@ const subspaceSchema: ThingtimeSchema = {
         { name: 'icon', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Emoji icon.' },
         { name: 'iconUrl', type: 'string', required: false, description: 'http(s) icon image URL.' },
         { name: 'bannerUrl', type: 'string', required: false, description: 'http(s) banner image URL.' },
+        { name: 'iconPresentation', type: 'object', required: false, description: 'Optional framing, CSS declarations and HTML attributes for the current icon.' },
+        { name: 'bannerPresentation', type: 'object', required: false, description: 'Optional framing, CSS declarations and HTML attributes for the current banner.' },
         { name: 'accent', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'CSS accent color.' }
       ]
     }
@@ -4299,7 +4299,7 @@ export const PROTECTED_THINGTIME = [
   'lopu-instruction-transfer', 'lopu-instruction-part',
   THING_METADATA_KIND,
   THING_STORAGE_POLICY_KIND, THING_DEVICE_STORAGE_POLICY_KIND, THING_STORAGE_POLICY_INDEX_KIND,
-  'backup-job', 'backup-job-event',
+  'backup-job', 'backup-job-event', ATTACHMENT_BLOB_THINGTIME,
   STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',
@@ -5636,18 +5636,30 @@ const sanitizeSourceBinding = (input: unknown, allowPassive = false): { ok: true
 		return fail(400, 'Passive sources belong on ordinary webpage blocks');
 	}
 	if (rawSource.passive) source.passive = true;
+	if (rawSource.collection !== undefined) {
+		const collection = pageCollectionBinding(rawSource.collection);
+		if (!collection || !source.passive || rawSource.refresh === 'live') {
+			return fail(400, 'A keyed collection requires a passive cursor-backed webpage source.');
+		}
+		source.collection = collection;
+	}
 	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
 		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
+			return fail(400, `Component/page source.inputs must be an object of scalar values or ttArg bindings`);
 		}
 		const inputs: Record<string, unknown> = {};
 		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
 		for (const [key, value] of entries) {
-			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS || PROTOTYPE_POLLUTION_KEYS.has(key)) {
 				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
 			}
+			const binding = parseSourceInputArgument(value);
+			if (binding) {
+				inputs[key] = binding;
+				continue;
+			}
 			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
+			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a scalar or a ttArg path binding`);
 			if (scalar !== null) inputs[key] = scalar;
 		}
 		if (Object.keys(inputs).length) source.inputs = inputs;
@@ -5783,23 +5795,6 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 // where a built-in app screen renders and only ever resolve on the matching
 // site route — /p/ pages ignore them.
 
-// One css declaration value: no nested rules/markup, no expression()/@import,
-// no javascript: url — url() only with https/site-relative/data-image targets.
-const isSafeWebpageCssValue = (value: string): boolean => {
-	// no markup/nested-rule characters; `;` stays legal (data: URIs need it, and
-	// values are applied per-property through style objects, where a semicolon
-	// can never open a second declaration)
-	if (/[<>{}]/.test(value)) return false;
-	const lower = value.toLowerCase();
-	if (lower.includes('expression(') || lower.includes('@import') || lower.includes('javascript:')) return false;
-	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
-	for (const match of urlMatches) {
-		const target = (match[1] || '').trim();
-		if (!/^(https:\/\/|\/(?![/\\])|data:image\/)/.test(target)) return false;
-	}
-	return true;
-};
-
 // Site-relative or explicit https. The second character matters: the WHATWG URL
 // parser folds `\` into `/` for special schemes, so `/\evil.example` resolves to
 // https://evil.example — a protocol-relative URL wearing a site-relative coat.
@@ -5857,19 +5852,13 @@ const sanitizeWebpageBlock = (
 		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
 			return fail(400, `Block ${id} css must be an object of css property → value`);
 		}
-		const entries = Object.entries(raw.css as Record<string, unknown>);
-		if (entries.length > MAX_WEBPAGE_CSS_PROPS) {
-			return fail(400, `Block ${id} css can hold at most ${MAX_WEBPAGE_CSS_PROPS} properties`);
-		}
 		const css: Record<string, string> = {};
-		for (const [key, value] of entries) {
-			if (!WEBPAGE_CSS_KEY_PATTERN.test(key) || key.length > MAX_WEBPAGE_CSS_KEY_CHARS) {
-				return fail(400, `Block ${id} css key "${key.slice(0, 40)}" must be a kebab-case css property`);
+		for (const [name, value] of Object.entries(raw.css as Record<string, unknown>)) {
+			const key = normalizeCssPropertyName(name);
+			if (!isCssPropertyName(key) || name !== key) {
+				return fail(400, `Block ${id} css key "${name.slice(0, 40)}" must be a CSS property name`);
 			}
 			if (typeof value !== 'string' || !value.trim()) continue;
-			if (value.length > MAX_WEBPAGE_CSS_VALUE_CHARS) {
-				return fail(400, `Block ${id} css value for ${key} is too long (max ${MAX_WEBPAGE_CSS_VALUE_CHARS})`);
-			}
 			if (!isSafeWebpageCssValue(value)) {
 				return fail(400, `Block ${id} css value for ${key} contains a blocked construct`);
 			}
@@ -5989,11 +5978,7 @@ const sanitizeWebpageBlock = (
 		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
 		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
 		if (html.trim()) {
-			// rich WYSIWYG content — size-bounded here; the client renders it ONLY
-			// through the sanitising allowlist renderer (tags/props/urls/styles)
-			if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-				return fail(400, `Block ${id} rich text is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-			}
+			// Rich WYSIWYG HTML goes through the sanitizing renderer.
 			block.html = html;
 		}
 		const style = typeof raw.style === 'string' ? raw.style : '';
@@ -6041,9 +6026,6 @@ const sanitizeWebpageBlock = (
 	if (type === 'html') {
 		const html = typeof raw.html === 'string' ? raw.html : '';
 		if (!html.trim()) return fail(400, `Block ${id} needs html`);
-		if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-			return fail(400, `Block ${id} html is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-		}
 		// stored verbatim, never rendered raw: the client parses it into the
 		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
 		block.html = html;
@@ -6622,7 +6604,8 @@ const sanitizeActionSteps = (
 				}
 			}
 		} else if (op === 'things.get') {
-			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read');
+			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.read') ||
+				(raw.ownedFolderId === undefined ? null : checkRefString(raw.ownedFolderId, 'ownedFolderId'));
 		} else if (op === 'things.search') {
 			if (raw.schema !== undefined && raw.schema !== null) {
 				const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);

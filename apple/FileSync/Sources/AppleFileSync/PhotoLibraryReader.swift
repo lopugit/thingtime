@@ -30,24 +30,52 @@ public struct PhotoResource: Equatable, Sendable {
 /// Select the order by asset before opening any original bytes. Every original
 /// and companion of the same asset stays together; opaque paths do not change.
 enum PhotoBackupAssetOrder {
+    static func precedes(_ a: (Date?, Date?, String), _ b: (Date?, Date?, String)) -> Bool {
+        let aDate = a.0 ?? a.1 ?? .distantPast
+        let bDate = b.0 ?? b.1 ?? .distantPast
+        if aDate != bDate { return aDate > bDate }
+        let aModified = a.1 ?? .distantPast
+        let bModified = b.1 ?? .distantPast
+        if aModified != bModified { return aModified > bModified }
+        return a.2.utf8.lexicographicallyPrecedes(b.2.utf8)
+    }
     static func groups(_ resources: [PhotoResource]) -> [[PhotoResource]] {
         Dictionary(grouping: resources, by: \.asset).values
             .map { $0.sorted { $0.index < $1.index } }
             .sorted { left, right in
                 let a = left[0], b = right[0]
-                let aDate = a.capturedAt ?? a.modifiedAt ?? .distantPast
-                let bDate = b.capturedAt ?? b.modifiedAt ?? .distantPast
-                if aDate != bDate { return aDate > bDate }
-                let aModified = a.modifiedAt ?? .distantPast
-                let bModified = b.modifiedAt ?? .distantPast
-                if aModified != bModified { return aModified > bModified }
-                return a.asset.utf8.lexicographicallyPrecedes(b.asset.utf8)
+                return precedes((a.capturedAt, a.modifiedAt, a.asset), (b.capturedAt, b.modifiedAt, b.asset))
             }
     }
 }
+
+// The native queue can consume date-ordered asset groups from providers that
+// can produce a stable ordered snapshot without expanding every resource.
+struct OrderedPhotoCheckpoint: Codable {
+    let libraryToken: Data?
+    var dated = 0
+    var undated = 0
+    var indexed = PhotoLibraryReader.IndexedLibrary()
+    var unavailable = 0
+    var passID: UUID? = UUID()
+}
+
+protocol OrderedPhotoInventory: AnyObject {
+    var progress: PhotoLibraryReader.InventoryProgress { get }
+    var checkpoint: OrderedPhotoCheckpoint { get }
+    func isCurrent() throws -> Bool
+    func next() throws -> [PhotoResource]?
+}
+
+protocol OrderedPhotoResourceProvider: PhotoResourceProvider {
+    func orderedInventory(resuming: OrderedPhotoCheckpoint?) throws -> any OrderedPhotoInventory
+    func orderedResources(identifiers: [String]) throws -> [[PhotoResource]]
+}
+
 public protocol PhotoResourceProvider: Sendable {
     func access() -> String
     func inventory() throws -> [PhotoResource]
+    func inventory(progress: (PhotoLibraryReader.InventoryProgress) -> Void) throws -> [PhotoResource]
     /// Nil means the provider does not promise change notifications.
     func membershipStamp() -> UInt64?
     func validate(_ resource: PhotoResource) throws
@@ -56,6 +84,7 @@ public protocol PhotoResourceProvider: Sendable {
 }
 public extension PhotoResourceProvider {
     func membershipStamp() -> UInt64? { nil }
+    func inventory(progress: (PhotoLibraryReader.InventoryProgress) -> Void) throws -> [PhotoResource] { try inventory() }
     func download(_ resource: PhotoResource, to url: URL, control: PhotoOriginalDownloadControl) throws {
         throw PhotoLibraryReader.Failure.cloudOriginal
     }
@@ -79,6 +108,26 @@ public struct PhotoOriginalDownloadControl: Sendable {
 /// in one Data value. The cache is private, ephemeral and partitioned by grant.
 public final class PhotoLibraryReader: @unchecked Sendable {
     public typealias Scope = MobileFolderInventory.Scope
+    public struct IndexedLibrary: Codable, Equatable, Sendable {
+        public var photos = 0, videos = 0, files = 0
+    }
+    public struct InventoryProgress: Sendable {
+        public struct Item: Codable, Equatable, Sendable {
+            public enum Kind: String, Codable, Sendable { case photo, video }
+            public let kind: Kind
+            public let capturedAt: Date?
+        }
+        public let inspected: Int
+        public let total: Int
+        public let indexed: IndexedLibrary
+        public let latest: Item?
+    }
+    public enum CaptureProgress: Sendable {
+        case enumerating(InventoryProgress)
+        case hashing(completed: Int, total: Int)
+        case indexed(IndexedLibrary)
+        case checking(completed: Int, selected: Int, ahead: Int?)
+    }
     public struct OriginalIdentity: Equatable, Sendable {
         public let group: String, resource: String, kind: String?
         public let count: Int
@@ -126,11 +175,25 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         let revision: String
         let orderRevision: String
         let resources: [PhotoResource]
+        let indexed: IndexedLibrary
     }
     private var queueSnapshot: (stamp: UInt64, access: String, value: Snapshot)?
     private var queue: (scope: Scope, value: PhotoBackupQueue)?
     private let queueDirectory: URL?
     private var membership: (scope: Scope, revision: String?, resources: [String: PhotoResource])?
+    /// A verified network read remains pinned while the same asset group is
+    /// staged and published. Its directory is independent of the regular cache.
+    public final class PreparedCloudOriginal: @unchecked Sendable {
+        fileprivate let scope: Scope
+        fileprivate let resource: PhotoResource
+        fileprivate let directory: URL
+        fileprivate init(scope: Scope, resource: PhotoResource, directory: URL) {
+            self.scope = scope; self.resource = resource; self.directory = directory
+        }
+        deinit { try? FileManager.default.removeItem(at: directory) }
+        public var assetKey: String { PhotoLibraryReader.hash(Data(resource.asset.utf8)) }
+    }
+    private var prefetched: PreparedCloudOriginal?
     private var cached: (scope: Scope, resource: PhotoResource, entry: MobileFolderReader.Entry, native: MobileFolderReader.Entry, bookmark: Data)?
     public init(provider: any PhotoResourceProvider = SystemPhotoResources(), transport: (any RustInventoryTransport)? = nil,
                 queueDirectory: URL? = nil) {
@@ -266,6 +329,14 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         }
         _ = try requireClient()
         clear()
+        if let prefetched, prefetched.scope == scope, prefetched.resource == resource {
+            let bookmark = try FolderBookmark.create(prefetched.directory)
+            let native = try observe(bookmark: bookmark, scope: scope, resource: resource)
+            try require(); try provider.validate(resource)
+            let entry = try project(native, resource: resource)
+            cached = (scope, resource, entry, native, bookmark)
+            return (entry, native, bookmark)
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700]); directory = root
         do {
@@ -332,16 +403,27 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return membership?.resources[path]
     }
 
-    private func snapshot(reuseForQueue: Bool = false) throws -> Snapshot {
+    private func snapshot(reuseForQueue: Bool = false, activity: (CaptureProgress) -> Void = { _ in }) throws -> Snapshot {
         try require()
         let access = provider.access(), stamp = reuseForQueue ? provider.membershipStamp() : nil
         if let stamp, let cached = queueSnapshot, cached.stamp == stamp, cached.access == access { return cached.value }
-        let resources = try provider.inventory().sorted { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
-        var digest = SHA256(), ordering = SHA256(), previous: String?
-        for resource in resources {
+        let inventory = try reuseForQueue ? provider.inventory { activity(.enumerating($0)) } : provider.inventory()
+        let resources = inventory.sorted { $0.path.utf8.lexicographicallyPrecedes($1.path.utf8) }
+        var digest = SHA256(), ordering = SHA256(), previous: String?, previousAsset: String?
+        var indexed = IndexedLibrary()
+        activity(.hashing(completed: 0, total: resources.count))
+        for (offset, resource) in resources.enumerated() {
             try Task.checkCancellation()
             guard resource.path != previous else { throw Failure.changed }
             previous = resource.path
+            // The opaque path begins with the asset hash, so the sorted
+            // originals and companions of each asset are contiguous.
+            if resource.asset != previousAsset {
+                if resource.assetKind == "photo" { indexed.photos += 1 }
+                if resource.assetKind == "video" { indexed.videos += 1 }
+                previousAsset = resource.asset
+            }
+            indexed.files += 1
             for value in [resource.path, resource.identity, resource.revision] {
                 let data = Data(SHA256.hash(data: Data(value.utf8)))
                 digest.update(data: data); ordering.update(data: data)
@@ -351,11 +433,14 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                     ordering.update(data: Data(SHA256.hash(data: Data(String(value?.timeIntervalSince1970 ?? -.infinity).utf8))))
                 }
             }
+            if (offset + 1) % 64 == 0 || offset + 1 == resources.count {
+                activity(.hashing(completed: offset + 1, total: resources.count))
+            }
         }
         try require()
         guard access == provider.access(), stamp == (reuseForQueue ? provider.membershipStamp() : nil) else { throw Failure.changed }
         let result = Snapshot(revision: digest.finalize().map { String(format: "%02x", $0) }.joined(),
-            orderRevision: ordering.finalize().map { String(format: "%02x", $0) }.joined(), resources: resources)
+            orderRevision: ordering.finalize().map { String(format: "%02x", $0) }.joined(), resources: resources, indexed: indexed)
         if let stamp { queueSnapshot = (stamp, access, result) }
         return result
     }
@@ -377,11 +462,25 @@ public final class PhotoLibraryReader: @unchecked Sendable {
         return store
     }
 
-    private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false) throws -> (Snapshot, PhotoBackupQueue.Work) {
-        let library = try snapshot(reuseForQueue: true)
-        let work = try store.select(revision: library.orderRevision, resources: library.resources, replaceStale: replaceStale)
+    private func batchSnapshot(scope: Scope, store: PhotoBackupQueue, replaceStale: Bool = false,
+                               startWithSingleAsset: Bool = false, preparedDeferred: PhotoResource? = nil,
+                               activity: (CaptureProgress) -> Void = { _ in }) throws -> (Snapshot, PhotoBackupQueue.Work) {
+        let work: PhotoBackupQueue.Work
+        let indexed: IndexedLibrary
+        if let ordered = provider as? any OrderedPhotoResourceProvider,
+           try store.usesOrderedSelection(preferred: startWithSingleAsset) {
+            work = try store.selectOrdered(provider: ordered, replaceStale: replaceStale, preparedDeferred: preparedDeferred) {
+                activity(.enumerating($0))
+            }
+            indexed = work.selection.orderedCursor?.indexed ?? .init()
+        } else {
+            let library = try snapshot(reuseForQueue: true, activity: activity)
+            work = try store.select(revision: library.orderRevision, resources: library.resources, replaceStale: replaceStale,
+                                    startWithSingleAsset: startWithSingleAsset)
+            indexed = library.indexed
+        }
         let revision = Self.hash(Data((work.selection.id.uuidString + work.selection.stamps.map(\.version).joined()).utf8))
-        return (.init(revision: revision, orderRevision: revision, resources: work.assets.flatMap(\.resources)), work)
+        return (.init(revision: revision, orderRevision: revision, resources: work.assets.flatMap(\.resources), indexed: indexed), work)
     }
 
     private func capturedSnapshot(scope: Scope, batch: PhotoBackupQueueBatch?) throws -> Snapshot {
@@ -395,13 +494,71 @@ public final class PhotoLibraryReader: @unchecked Sendable {
     public func queueBatchEntries(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws -> [MobileFolderReader.Entry] {
         lock.lock(); defer { lock.unlock() }
         try require()
-        return try queueStore(scope: scope, request: request).entriesForVerification(batchId)
+        let store = try queueStore(scope: scope, request: request)
+        let entries = try store.entriesForVerification(batchId)
+        if !entries.isEmpty, try store.usesOrderedSelection(preferred: false) {
+            let (source, work) = try batchSnapshot(scope: scope, store: store)
+            guard work.selection.id == batchId else { throw Failure.changed }
+            try remember(source.resources, scope: scope, revision: source.revision)
+        }
+        return entries
     }
 
     public func finishQueueBatch(scope: Scope, request: PhotoBackupQueueRequest, batchId: UUID) throws {
         lock.lock(); defer { lock.unlock() }
         try require()
-        try queueStore(scope: scope, request: request).finish(batchId)
+        let store = try queueStore(scope: scope, request: request)
+        if try store.shouldLoadOrderedAssets(batchId) {
+            let (_, work) = try batchSnapshot(scope: scope, store: store)
+            guard work.selection.id == batchId else { throw Failure.changed }
+            try store.finish(batchId, orderedAssets: work.assets)
+        } else {
+            try store.finish(batchId)
+        }
+    }
+
+    public func hasDeferredCloudOriginals(scope: Scope, request: PhotoBackupQueueRequest) throws -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        return try queueStore(scope: scope, request: request).hasDeferredOriginals()
+    }
+
+    public func nextDeferredCloudOriginal(scope: Scope, request: PhotoBackupQueueRequest, now: Date = Date()) throws -> PhotoResource? {
+        lock.lock(); defer { lock.unlock() }
+        try require()
+        guard let ordered = provider as? any OrderedPhotoResourceProvider else { return nil }
+        return try queueStore(scope: scope, request: request).nextDeferred(provider: ordered, now: now)
+    }
+
+    public func prepareDeferredCloudOriginal(scope: Scope, resource: PhotoResource,
+                                             control: PhotoOriginalDownloadControl?,
+                                             authorize: () throws -> Void = {}) throws -> PreparedCloudOriginal {
+        // Do not hold the ordinary inventory/cache lock while PhotoKit reads
+        // iCloud. The caller owns one scoped preparation task and its lifetime.
+        try require(); try authorize(); try control?.authorize(); try provider.validate(resource)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-photo-cloud-" + UUID().uuidString, isDirectory: true)
+        var attributes: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        #if os(iOS)
+        attributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
+        #endif
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: attributes)
+        do {
+            let prepared = PreparedCloudOriginal(scope: scope, resource: resource, directory: directory)
+            let original = directory.appendingPathComponent("original")
+            if let control { try provider.download(resource, to: original, control: control) }
+            else { try provider.write(resource, to: original) }
+            try require(); try authorize(); try control?.authorize(); try provider.validate(resource)
+            return prepared
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
+    }
+
+    public func releaseDeferredCloudOriginal(_ prepared: PreparedCloudOriginal) {
+        lock.lock(); defer { lock.unlock() }
+        guard prefetched === prepared else { return }
+        clear(); prefetched = nil
     }
 
     public func capture(scope: Scope, id: String) throws -> MobileFolderInventory.Capture {
@@ -418,15 +575,27 @@ public final class PhotoLibraryReader: @unchecked Sendable {
 
     public func prepareCapture(scope: Scope, id: String, generation: String, allowCloudGaps: Bool,
                                download: PhotoOriginalDownloadControl? = nil, maximumCloudDownloads: Int? = nil,
-                               queueRequest: PhotoBackupQueueRequest? = nil, progress: (Int, Int) -> Void = { _, _ in }, authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
+                               queueRequest: PhotoBackupQueueRequest? = nil, startWithSingleAsset: Bool = false,
+                               preparedDeferred: PreparedCloudOriginal? = nil,
+                               progress: (Int, Int) -> Void = { _, _ in }, activity: (CaptureProgress) -> Void = { _ in },
+                               authorize: () throws -> Void = {}) throws -> MobileFolderInventory.Capture {
         lock.lock(); defer { lock.unlock() }
         guard UUID(uuidString: id) != nil, id.lowercased() == generation.lowercased() else { throw MobileFolderStore.Failure.invalid }
         let client = try requireClient(), generation = generation.lowercased()
         try authorize()
         guard queueRequest == nil || allowCloudGaps else { throw Failure.changed }
+        if let preparedDeferred {
+            guard queueRequest != nil, preparedDeferred.scope == scope else { throw Failure.changed }
+            try provider.validate(preparedDeferred.resource)
+            prefetched = preparedDeferred
+        }
         let batchStore = try queueRequest.map { try queueStore(scope: scope, request: $0) }
-        let batch = try batchStore.map { try batchSnapshot(scope: scope, store: $0, replaceStale: true) }
+        let batch = try batchStore.map {
+            try batchSnapshot(scope: scope, store: $0, replaceStale: true, startWithSingleAsset: startWithSingleAsset,
+                              preparedDeferred: preparedDeferred?.resource, activity: activity)
+        }
         let start = try batch?.0 ?? snapshot()
+        activity(.indexed(start.indexed))
         var batchStatus = batch?.1.descriptor
         var began = false
         do {
@@ -438,6 +607,12 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             }
             began = true
             var indexed = prepared.entryCount, skipped = prepared.gapCount, cloudDownloads = 0
+            func report(legacy: Bool = true) {
+                if legacy { progress(indexed, skipped) }
+                activity(.checking(completed: indexed, selected: start.resources.count,
+                    ahead: batchStatus?.remainingKnown == false ? nil : batchStatus?.pending ?? 0))
+            }
+            report(legacy: false)
             let retainedGaps = Set(batch?.1.selection.attempts?.flatMap(\.unavailable) ?? [])
             var batchGaps = Set<String>(), batchEntries: [MobileFolderReader.Entry] = []
             if prepared.coverage == "scanning" {
@@ -450,12 +625,12 @@ public final class PhotoLibraryReader: @unchecked Sendable {
                     skipped += gaps.count
                     let eligible = resources.filter { !retainedGaps.contains($0.path) }
                     let entries = try scanEntries(eligible[...], scope: scope, authorize: authorize, allowCloudGaps: allowCloudGaps, download: download, beginDownload: {
-                            if batch == nil, let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
+                            if let maximumCloudDownloads, cloudDownloads >= maximumCloudDownloads { return false }
                             cloudDownloads += 1
                             return true
                         }, cloudGap: { resource in
-                            gaps.insert(resource.path); skipped += 1; progress(indexed, skipped)
-                        }) { indexed += 1; progress(indexed, skipped) }
+                            gaps.insert(resource.path); skipped += 1; report()
+                        }) { indexed += 1; report() }
                     if !entries.isEmpty {
                         if batch != nil { batchEntries += entries }
                         let _: RustInventoryClient.Status = try client.run("appendPhotoCapture", scope: scope,
@@ -662,22 +837,47 @@ private final class PhotoMembershipChanges: NSObject, PHPhotoLibraryChangeObserv
     static let shared = PhotoMembershipChanges()
     private let lock = NSLock()
     private var revision: UInt64 = 0
-    private var tracked: PHFetchResult<PHAsset>?
+    private var tracked: [PHFetchResult<PHAsset>] = []
+    private var cursors: [UUID: [PHFetchResult<PHAsset>]] = [:]
     override init() { super.init(); PHPhotoLibrary.shared().register(self) }
     deinit { PHPhotoLibrary.shared().unregisterChangeObserver(self) }
-    func track(_ assets: PHFetchResult<PHAsset>) { lock.lock(); defer { lock.unlock() }; tracked = assets }
+    func track(_ results: [PHFetchResult<PHAsset>], cursor: UUID? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        if let cursor { cursors[cursor] = results } else { tracked = results }
+    }
+    func untrack(_ cursor: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        cursors.removeValue(forKey: cursor)
+    }
     func photoLibraryDidChange(_ changeInstance: PHChange) {
         lock.lock(); defer { lock.unlock() }
-        guard let tracked else { revision &+= 1; return }
-        guard let changes = changeInstance.changeDetails(for: tracked) else { return }
-        self.tracked = changes.fetchResultAfterChanges
-        if !changes.hasIncrementalChanges || !changes.insertedObjects.isEmpty || !changes.removedObjects.isEmpty ||
-            !changes.changedObjects.isEmpty || changes.hasMoves { revision &+= 1 }
+        if tracked.isEmpty && cursors.isEmpty { revision &+= 1; return }
+        func refresh(_ results: inout [PHFetchResult<PHAsset>]) -> Bool {
+            var changed = false
+            for index in results.indices {
+                guard let details = changeInstance.changeDetails(for: results[index]) else { continue }
+                results[index] = details.fetchResultAfterChanges
+                if !details.hasIncrementalChanges || !details.insertedObjects.isEmpty || !details.removedObjects.isEmpty ||
+                    !details.changedObjects.isEmpty || details.hasMoves { changed = true }
+            }
+            return changed
+        }
+        var changed = refresh(&tracked)
+        // A separate foreground or legacy inventory cannot replace the
+        // snapshots that a live limited-library cursor depends on.
+        for key in Array(cursors.keys) {
+            if var results = cursors[key] {
+                let updated = refresh(&results)
+                cursors[key] = results
+                changed = changed || updated
+            }
+        }
+        if changed { revision &+= 1 }
     }
     func stamp() -> UInt64 { lock.lock(); defer { lock.unlock() }; return revision }
 }
 
-public struct SystemPhotoResources: PhotoResourceProvider {
+public final class SystemPhotoResources: PhotoResourceProvider, OrderedPhotoResourceProvider, @unchecked Sendable {
     public init() {}
     public func membershipStamp() -> UInt64? { PhotoMembershipChanges.shared.stamp() }
     public func access() -> String {
@@ -700,18 +900,141 @@ public struct SystemPhotoResources: PhotoResourceProvider {
                    originalCount: rows.count), $0.element)
         }
     }
-    public func inventory() throws -> [PhotoResource] {
-        try require(); let options = PHFetchOptions()
+    private func photoOptions() -> PHFetchOptions {
+        let options = PHFetchOptions()
         options.includeHiddenAssets = true; options.includeAllBurstAssets = true
         options.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d", PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
-        let assets = PHAsset.fetchAssets(with: options)
-        PhotoMembershipChanges.shared.track(assets)
-        var result: [PhotoResource] = []
-        for index in 0..<assets.count {
-            try require(); result += try resources(assets.object(at: index)).map(\.0)
-        }
-        try require(); return result.sorted { $0.path < $1.path }
+        return options
     }
+
+    public func inventory() throws -> [PhotoResource] {
+        try inventory(progress: { _ in }).sorted { $0.path < $1.path }
+    }
+    public func inventory(progress: (PhotoLibraryReader.InventoryProgress) -> Void) throws -> [PhotoResource] {
+        try require()
+        let assets = PHAsset.fetchAssets(with: photoOptions())
+        PhotoMembershipChanges.shared.track([assets])
+        var result: [PhotoResource] = [], indexed = PhotoLibraryReader.IndexedLibrary()
+        progress(.init(inspected: 0, total: assets.count, indexed: indexed, latest: nil))
+        for index in 0..<assets.count {
+            try require()
+            let asset = assets.object(at: index), originals = try resources(asset)
+            result.append(contentsOf: originals.map(\.0))
+            if asset.mediaType == .video { indexed.videos += 1 } else { indexed.photos += 1 }
+            indexed.files += originals.count
+            progress(.init(inspected: index + 1, total: assets.count, indexed: indexed,
+                latest: .init(kind: asset.mediaType == .video ? .video : .photo, capturedAt: asset.creationDate)))
+        }
+        return result
+    }
+
+    private final class DateOrderedInventory: OrderedPhotoInventory {
+        let provider: SystemPhotoResources
+        let dated: PHFetchResult<PHAsset>
+        let undated: PHFetchResult<PHAsset>
+        let stamp: UInt64?
+        let access: String
+        let token: PHPersistentChangeToken?
+        private let observerID = UUID()
+        private var position: OrderedPhotoCheckpoint
+        private var latest: PhotoLibraryReader.InventoryProgress.Item?
+        var checkpoint: OrderedPhotoCheckpoint {
+            var saved = position
+            // PhotoKit rejects sorting by localIdentifier on iOS. Equal dates
+            // have stable positions in this fetch result, but may be reordered
+            // on reopen. Only checkpoint across complete date groups.
+            func isDateBoundary(_ results: PHFetchResult<PHAsset>, _ index: Int) -> Bool {
+                guard index > 0, index < results.count else { return true }
+                let previous = results.object(at: index - 1), next = results.object(at: index)
+                return previous.creationDate != next.creationDate || previous.modificationDate != next.modificationDate
+            }
+            if !isDateBoundary(dated, position.dated) || !isDateBoundary(undated, position.undated) {
+                saved = .init(libraryToken: nil, dated: position.dated, undated: position.undated,
+                              indexed: position.indexed, unavailable: position.unavailable, passID: position.passID)
+            }
+            return saved
+        }
+        var progress: PhotoLibraryReader.InventoryProgress {
+            .init(inspected: position.dated + position.undated, total: dated.count + undated.count,
+                  indexed: position.indexed, latest: latest)
+        }
+        init(provider: SystemPhotoResources, dated: PHFetchResult<PHAsset>, undated: PHFetchResult<PHAsset>,
+             stamp: UInt64?, access: String, token: PHPersistentChangeToken?, checkpoint: OrderedPhotoCheckpoint) {
+            self.provider = provider; self.dated = dated; self.undated = undated
+            self.stamp = stamp; self.access = access; self.token = token; self.position = checkpoint
+            PhotoMembershipChanges.shared.track([dated, undated], cursor: observerID)
+        }
+        deinit { PhotoMembershipChanges.shared.untrack(observerID) }
+        func isCurrent() throws -> Bool {
+            try provider.require()
+            return provider.access() == access && provider.membershipStamp() == stamp &&
+                (token == nil || token == PHPhotoLibrary.shared().currentChangeToken)
+        }
+        func next() throws -> [PhotoResource]? {
+            try provider.require()
+            let a = position.dated < dated.count ? dated.object(at: position.dated) : nil
+            let b = position.undated < undated.count ? undated.object(at: position.undated) : nil
+            guard let asset = [a, b].compactMap({ $0 }).min(by: { left, right in
+                PhotoBackupAssetOrder.precedes((left.creationDate, left.modificationDate, left.localIdentifier),
+                                              (right.creationDate, right.modificationDate, right.localIdentifier))
+            }) else { return nil }
+            let resources = try provider.resources(asset).map(\.0)
+            if asset.creationDate == nil { position.undated += 1 } else { position.dated += 1 }
+            if asset.mediaType == .video { position.indexed.videos += 1 } else { position.indexed.photos += 1 }
+            position.indexed.files += resources.count
+            latest = .init(kind: asset.mediaType == .video ? .video : .photo, capturedAt: asset.creationDate)
+            return resources
+        }
+    }
+
+    func orderedInventory(resuming: OrderedPhotoCheckpoint?) throws -> any OrderedPhotoInventory {
+        try require()
+        let access = access(), stamp = membershipStamp()
+        let library = PHPhotoLibrary.shared()
+        let token: PHPersistentChangeToken? = access == "full" ? library.currentChangeToken : nil
+        let datedOptions = photoOptions(), undatedOptions = photoOptions()
+        datedOptions.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datedOptions.predicate!,
+            NSPredicate(format: "creationDate != nil")])
+        undatedOptions.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [undatedOptions.predicate!,
+            NSPredicate(format: "creationDate == nil")])
+        let modified = NSSortDescriptor(key: "modificationDate", ascending: false)
+        datedOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false), modified]
+        undatedOptions.sortDescriptors = [modified]
+        let dated = PHAsset.fetchAssets(with: datedOptions), undated = PHAsset.fetchAssets(with: undatedOptions)
+        var checkpoint: OrderedPhotoCheckpoint
+        if let resuming, let token, let data = resuming.libraryToken,
+           (try? NSKeyedUnarchiver.unarchivedObject(ofClass: PHPersistentChangeToken.self, from: data)) == token,
+           (0...dated.count).contains(resuming.dated), (0...undated.count).contains(resuming.undated),
+           (0...(resuming.dated + resuming.undated)).contains(resuming.indexed.photos),
+           resuming.indexed.videos == resuming.dated + resuming.undated - resuming.indexed.photos,
+           resuming.indexed.files >= 0, (0...resuming.indexed.files).contains(resuming.unavailable) {
+            checkpoint = resuming
+        } else {
+            checkpoint = .init(libraryToken: token.flatMap { try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true) })
+        }
+        if checkpoint.passID == nil { checkpoint.passID = UUID() }
+        let inventory = DateOrderedInventory(provider: self, dated: dated, undated: undated, stamp: stamp, access: access,
+                                             token: token, checkpoint: checkpoint)
+        guard try inventory.isCurrent() else { throw PhotoLibraryReader.Failure.changed }
+        return inventory
+    }
+
+    func orderedResources(identifiers: [String]) throws -> [[PhotoResource]] {
+        try require()
+        guard !identifiers.isEmpty else { return [] }
+        let matches = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: photoOptions())
+        var assets: [String: PHAsset] = [:]
+        for index in 0..<matches.count {
+            let asset = matches.object(at: index)
+            assets[asset.localIdentifier] = asset
+        }
+        return try identifiers.map { id in
+            try require()
+            guard let asset = assets[id] else { throw PhotoLibraryReader.Failure.changed }
+            return try resources(asset).map(\.0)
+        }
+    }
+
     private func resolve(_ resource: PhotoResource) throws -> PHAssetResource {
         try require(); let assets = PHAsset.fetchAssets(withLocalIdentifiers: [resource.asset], options: nil)
         guard assets.count == 1 else { throw PhotoLibraryReader.Failure.unavailable }
@@ -743,7 +1066,11 @@ public struct SystemPhotoResources: PhotoResourceProvider {
         do {
             while state.finished.wait(timeout: .now() + 0.1) == .timedOut {
                 try require(); try download?.authorize(); try state.result()
-                if download != nil && state.stalled() { throw PhotoLibraryReader.Failure.cloudOriginal }
+                if state.stalled() {
+                    // A quiet PhotoKit request can outlive the foreground
+                    // assertion even when network access was disabled.
+                    throw download == nil ? PhotoLibraryReader.Failure.readFailed : PhotoLibraryReader.Failure.cloudOriginal
+                }
             }
             try state.result(); try require(); try download?.authorize(); try validate(resource)
         } catch { manager.cancelDataRequest(request); state.cancel(); throw error }

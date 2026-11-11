@@ -110,8 +110,16 @@ export const loader = async ({ request }: { request: Request }) => {
   if (params.has('ids') && (params.getAll('ids').length !== 1 || Array.from(params.keys()).some(key => key !== 'ids' && key !== 'key') || params.getAll('key').length > 1))
     return json({ ok: false, error: 'ids requires an exact batch read without list or projection parameters' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
 
+  const libraryArchive = params.get('libraryArchive');
+  if (libraryArchive && (actor.kind !== 'user' || user?.accountKind !== 'user' || user.temporary))
+    return json({ ok: false, error: 'The library archive filter requires a first-party owner' }, { status: 403, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+  if (params.has('libraryArchive') && (params.getAll('libraryArchive').length !== 1 ||
+      (libraryArchive !== 'active' && libraryArchive !== 'archived') ||
+      ['id', 'target', 'archive', 'sharedRoot', 'maxCrystalField', 'commentProjection'].some(key => params.has(key))))
+    return json({ ok: false, error: 'Invalid owner library archive filter' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+
   const countRequested = params.get('count') === 'true';
-  const countKeys = new Set(['count', 'thingtime', 'schemaId', 'parentId', 'target', 'folder', 'appId', 'builderApp', 'excludeArchived', 'key']);
+  const countKeys = new Set(['count', 'thingtime', 'schemaId', 'parentId', 'target', 'folder', 'appId', 'builderApp', 'excludeArchived', 'libraryArchive', 'key']);
   if (['count', 'excludeArchived'].some(key => params.getAll(key).length > 1 || (params.has(key) && params.get(key) !== 'true' && params.get(key) !== 'false')) ||
       (countRequested && Array.from(params.keys()).some(key => !countKeys.has(key) || params.getAll(key).length !== 1)))
     return json({ ok: false, error: 'Invalid unpaged Things count or archive filter' }, { status: 400, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
@@ -236,6 +244,7 @@ export const loader = async ({ request }: { request: Request }) => {
       appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
       builderAppOnly: params.get('builderApp') === 'true',
       excludeArchived: params.get('excludeArchived') === 'true',
+      libraryArchive: libraryArchive === 'active' || libraryArchive === 'archived' ? libraryArchive : undefined,
       offset: params.has('offset') ? Number(params.get('offset')) : undefined
     },
     app,

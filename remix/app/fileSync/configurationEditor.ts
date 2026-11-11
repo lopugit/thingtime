@@ -1,8 +1,13 @@
+import { SYNC_INTERVALS } from './syncJobJournal';
 import type { SyncResourceDraft } from '../components/Devices/syncResourceControlsBlocks';
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
 
 export type PhotoAutomationDraft = { speed: string; speedUnit: 'Mbps' | 'MB/s'; data: string; dataUnit: 'MB' | 'GB'; notificationIntervalMs: string };
+/** Explicit Save & sync authorization survives the boundary between the
+ * verified cloud save and the device journal. The revision is set only from
+ * exact private readback; retrying cannot arm an intervening edit. */
+export type SyncEnrollmentIntent = { intervalMs: number; savedRevision?: string; transport?: 'local' | 'remote' };
 export type ConfigurationDraft = {
 	version: 1;
 	id: string;
@@ -10,11 +15,29 @@ export type ConfigurationDraft = {
 	configuration: FileSyncConfiguration;
 	exclusions: string;
 	pending: boolean;
+	enrollment?: SyncEnrollmentIntent;
 	resourceDraft?: SyncResourceDraft;
 	photoAutomationDraft?: PhotoAutomationDraft;
 };
 export type ConfigurationEditorScope = { origin: string; ownerId: string; dataPlane: string; deviceId: string };
-export const configurationDraftKey = (scope: ConfigurationEditorScope) => 'tt:sync-editor:v1:' + JSON.stringify(scope);
+export const CONFIGURATION_DRAFT_PREFIX = 'tt:sync-editor:v1:';
+export const SYNC_ENROLLMENT_RECOVERED_EVENT = 'tt:sync-enrollment-recovered';
+export const SYNC_ENROLLMENT_WAKE_EVENT = 'tt:sync-enrollment-wake';
+export const configurationDraftKey = (scope: ConfigurationEditorScope) => CONFIGURATION_DRAFT_PREFIX + JSON.stringify(scope);
+const enrollmentClaims = new Map<string, { cancellation?: AbortController }>();
+/** UI and background discovery share the same draft storage fence. */
+export function claimSyncEnrollment(scope: ConfigurationEditorScope, cancellation?: AbortController) {
+	const key = configurationDraftKey(scope);
+	if (enrollmentClaims.has(key)) return null;
+	const claim = { cancellation };
+	enrollmentClaims.set(key, claim);
+	return () => {
+		if (enrollmentClaims.get(key) === claim) enrollmentClaims.delete(key);
+	};
+}
+export function cancelSyncEnrollmentRecovery(scope: ConfigurationEditorScope) {
+	enrollmentClaims.get(configurationDraftKey(scope))?.cancellation?.abort();
+}
 const validId = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 export function readConfigurationDraft(raw: string | null, deviceId: string): ConfigurationDraft | null {
 	if (raw === null) return null;
@@ -50,6 +73,12 @@ export function readConfigurationDraft(raw: string | null, deviceId: string): Co
 	if (photo !== undefined && (!photo || typeof photo.speed !== 'string' || typeof photo.data !== 'string' ||
 		typeof photo.notificationIntervalMs !== 'string' || !['Mbps', 'MB/s'].includes(photo.speedUnit) ||
 		!['MB', 'GB'].includes(photo.dataUnit))) throw Error('The saved Photos automation draft needs recovery; it has not been replaced.');
+	const enrollment = draft.enrollment;
+	if (enrollment !== undefined && (!draft.pending || !enrollment ||
+		!SYNC_INTERVALS.some(interval => interval === enrollment.intervalMs) ||
+		(enrollment.transport !== undefined && enrollment.transport !== 'local' && enrollment.transport !== 'remote') ||
+		(enrollment.savedRevision !== undefined && (typeof enrollment.savedRevision !== 'string' || !Number.isFinite(Date.parse(enrollment.savedRevision))))))
+		throw Error('The saved automatic sync request needs recovery; it has not been replaced.');
 	if (draft.pending) canonicalDraftConfiguration(draft);
 	return draft;
 }
@@ -124,6 +153,47 @@ export function readOwnedSyncFolder(value: unknown, ownerId: string): { id: stri
 	return { id: row.id, name: typeof row.crystal?.name === 'string' ? row.crystal.name : 'Untitled folder' };
 }
 const status = (error: unknown) => (error as { status?: number })?.status;
+/** Reopening setup never writes cloud settings again or follows a newer
+ * revision. A different save must be reviewed and explicitly enrolled. */
+export async function readPendingSyncEnrollment(draft: ConfigurationDraft, scope: ConfigurationEditorScope,
+	api: Pick<ConfigurationEditorTransport, 'get' | 'assertCurrent'>): Promise<SavedFileSyncConfiguration> {
+	const saved = await readSavedSyncEnrollment(draft, scope, api);
+	if (!saved) throw Error('No confirmed automatic sync setup is available.');
+	return saved;
+}
+
+export async function readSavedSyncEnrollment(
+	draft: ConfigurationDraft,
+	scope: ConfigurationEditorScope,
+	api: Pick<ConfigurationEditorTransport, 'get' | 'assertCurrent'>
+): Promise<SavedFileSyncConfiguration | null> {
+	const intent = draft.enrollment, revision = intent?.savedRevision;
+	if (!draft.pending || !intent || draft.configuration.deviceId !== scope.deviceId)
+		throw Error('No automatic sync setup is available.');
+	api.assertCurrent();
+	let value: unknown;
+	try { value = await api.get(draft.id); }
+	catch (cause) {
+		api.assertCurrent();
+		if (status(cause) === 404) {
+			if (!revision && draft.baseUpdatedAt === null) return null;
+			throw new ConfigurationConflict(null);
+		}
+		throw cause;
+	}
+	api.assertCurrent();
+	const saved = readOwnedFileSyncConfiguration(value, scope.ownerId);
+	if (saved.id !== draft.id || saved.configuration.deviceId !== scope.deviceId) throw Error('The selected sync config changed.');
+	const matches = JSON.stringify(saved.configuration) === JSON.stringify(canonicalDraftConfiguration(draft));
+	if ((revision && saved.updatedAt !== revision) || !matches) {
+		// The original write may never have left the browser. Never write on
+		// startup; keep the exact immutable draft for an explicit save retry.
+		if (!revision && saved.updatedAt === draft.baseUpdatedAt) return null;
+		throw new ConfigurationConflict(saved);
+	}
+	return saved;
+}
+
 /** Only call with a durably saved, immutable pending draft. Retrying reads the
  * fixed ID before writing. Lost replies never mint a new ID or bypass CAS.
  * Read-back equality confirms current state, not an immutable operation receipt. */

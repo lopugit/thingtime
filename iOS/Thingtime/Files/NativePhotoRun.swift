@@ -23,12 +23,17 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     var minimumPartBytes: Int64?
     var pendingOriginals: Int?
     var unavailableOriginals: Int?
+    // Older builds used this for the OS callback. New writes keep policy
+    // pause separate and recover old holds only after fresh authorization.
     var continuedHold: Bool?
+    var userPaused: Bool?
+    var activity: NativePhotoRunActivity.Snapshot?
 
     var rootId: String { authorization.configuration.localRootId }
     var queue: PhotoBackupQueueRequest { .init(epoch: epoch, configurationId: authorization.id, configurationRevision: authorization.updatedAt) }
     var photoScope: PhotoLibraryReader.Scope { .init(owner: scope, deviceId: NativeUploadPartStaging.inventoryIdentity, rootId: rootId) }
     var nativeOwnsRun: Bool { foregroundOwner == true }
+    var legacySystemInterruption: Bool { continuedHold == true && userPaused != true }
     func validate() throws {
         try authorization.validate(owner: scope, rootId: rootId, photos: true)
         guard scope == (try FileSyncOwnerScope(ownerId: scope.ownerId, url: scope.origin)),
@@ -46,15 +51,14 @@ struct NativePhotoRunRecord: Codable, Equatable, Sendable {
     func sameRun(_ other: Self) -> Bool {
         sameScope(other) && runId == other.runId && authorization == other.authorization && nativeOwnsRun == other.nativeOwnsRun
     }
-    mutating func holdContinuedExecution() {
-        continuedHold = true; armed = false; stage = "paused"
-        syncWait = nil; minimumPartBytes = nil
+    mutating func deferAfterSystemInterruption(now: Date = Date()) {
+        guard armed, userPaused != true else { return }
+        stage = "waiting"
+        retryAt = max(retryAt, now.addingTimeInterval(300))
     }
-    mutating func preserveContinuedDecision(from current: Self, explicitResume: Bool) {
-        guard current.sameScope(self), current.continuedHold == true else { return }
-        if explicitResume {
-            continuedHold = nil; retryAt = .distantPast; stage = "ready"
-        } else { holdContinuedExecution() }
+    mutating func pauseByUser() {
+        armed = false; userPaused = true; continuedHold = nil; stage = "paused"
+        activity?.backgroundRequest = nil
     }
 }
 

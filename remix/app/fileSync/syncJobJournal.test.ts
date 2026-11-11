@@ -394,3 +394,37 @@ test('Photos retry persists the typed wait, keeps the allowance deadline, and fe
  assert.equal(await jobs.begin(scheduled, 910_000, 'stale-scheduled', { wakeConditions: true }), null);
  journal.close();
 });
+
+test('scheduled preflight waits retain cadence and explicit Stop wins after a restart', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'scheduled-first', 60_000);
+ const next = (await jobs.finish(first, 1))!;
+ const waiting = (await jobs.defer(next, 60_002, 120_000))!;
+ assert.equal(waiting.state, 'scheduled');
+ assert.equal(waiting.nextRunAt, next.nextRunAt);
+ assert.equal(waiting.retryAt, 180_002);
+ assert.equal(syncJobDue(waiting, 180_001, true), false);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ assert.equal((await jobs.read())!.retryAt, waiting.retryAt);
+ const stopped = (await jobs.pause(waiting))!;
+ assert.equal(await jobs.begin(waiting, 180_002, 'stale-wake'), null);
+ assert.equal(syncJobDue(stopped, 999_999, true), false);
+ await assert.rejects(jobs.admit(saved(), 'stale-enrollment', 60_000, undefined, undefined, { previous: waiting }), /changed/);
+ journal.close();
+});
+
+test('strict scan interruption gets one durable verified retry before attention', async () => {
+ const factory = new IDBFactory(); let journal = await open(factory), jobs = jobsFor(journal);
+ const first = await jobs.admit(saved(), 'strict-first', 60_000);
+ const waiting = (await jobs.retryStrictCapture(first, 100))!;
+ assert.equal(await jobs.begin(waiting, 30_099, 'too-soon', undefined, true), null);
+ journal.close(); journal = await open(factory); jobs = jobsFor(journal);
+ const resumed = (await jobs.begin((await jobs.read())!, 30_100, 'not-a-new-cycle'))!;
+ assert.equal(resumed.id, first.id);
+ assert.equal(resumed.strictCaptureRetries, 1);
+ assert.equal(await jobs.retryStrictCapture(resumed, 30_101), null);
+ const attention = (await jobs.attention(resumed, Error('Indexing stopped before the whole folder was verified. Existing sync state was preserved.')))!;
+ assert.equal(attention.failureReason, 'indexing-incomplete');
+ assert.equal(syncJobDue(attention, 999_999, true), false);
+ journal.close();
+});

@@ -142,7 +142,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Account: {item.usernameLabel}');
   await page.getByRole('button',{name:'Close builder',exact:true}).click();
   await cards.locator('[data-block-id="pp-icon"]').last().click();
-  await page.getByRole('textbox',{name:'Element title',exact:true}).fill('Credential icon');
+  await page.getByLabel('Element title', { exact: true }).fill('Credential icon');
   await page.getByRole('button',{name:'Close builder',exact:true}).click();
   const savedLayout=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/v1/things'&&response.request().method()==='POST');
   await cards.getByRole('button',{name:'Save layout',exact:true}).click();assert.equal((await savedLayout).status(),200);
@@ -170,7 +170,7 @@ export async function runPasswordVerificationUI({vite,load,ownerId,username,pass
   await enableCurrentPageBuilder(page);
   await preferences.getByRole('button',{name:'Edit layout',exact:true}).click();
   await preferences.locator('[data-block-id="pv-reuse"]').last().click();
-  await page.getByRole('textbox',{name:'Element title',exact:true}).fill('Controls repeated password verification');
+  await page.getByLabel('Element title', { exact: true }).fill('Controls repeated password verification');
   await page.getByRole('button',{name:'Close builder',exact:true}).click();
   await preferences.locator('[data-block-id="pv-reuse-text"]').last().click();
   await page.getByRole('textbox',{name:'Block text',exact:true}).fill('Reuse verified device');

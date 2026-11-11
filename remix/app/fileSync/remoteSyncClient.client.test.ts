@@ -64,6 +64,18 @@ test('expired missing receipts do not permanently block later actions', async ()
 	await next.send({ action: 'folders', request: { action: 'remove', rootId: 'root' } }); assert.equal(posts, 1); assert.equal(input.storage.data.size, 0);
 });
 
+test('queue-only enrollment negotiates the remote server contract before dispatch', async () => {
+	const input = base();
+	const command = { action: 'start', connectionId: 'connection', expectedUpdatedAt: '2026-10-23T00:00:00.000Z', intervalMs: 300_000, queueOnly: true } as const;
+	let dispatched = false;
+	const client = createRemoteSyncClient({ ...input, requireCapability: async (feature, minimum) => {
+		assert.equal(feature, 'api.devices-sync-control'); assert.equal(minimum, '1.5.0'); throw Error('Older server');
+	}, fetch: async () => { dispatched = true; throw Error('Unexpected dispatch'); } });
+	await assert.rejects(client.send(command), /updated, reachable Thingtime server/);
+	assert.equal(dispatched, false);
+	assert.equal(input.storage.data.size, 0);
+});
+
 test('pause remains available when an earlier start reply was lost', async () => {
 	const input = base(), commands: string[] = [];
 	const client = createRemoteSyncClient({ ...input, fetch: async (_url, init) => {
@@ -126,4 +138,28 @@ test('history negotiates 1.4.0 before dispatch and cannot borrow a client for an
  assert.equal(posts, 0);
  client.assertHistoryScope({ origin: input.origin, ownerId: input.ownerId, deviceId: input.deviceId, dataPlane: 'home' });
  assert.throws(() => client.assertHistoryScope({ origin: input.origin, ownerId: input.ownerId, deviceId: 'other', dataPlane: 'home' }), /device changed/);
+});
+
+test('remote config activity negotiates 1.5.0 before sending and validates config-bound receipts', async () => {
+ const { readRemoteSyncActivity } = await import('./remoteSyncClient.client');
+ const input = base();
+ let dispatches = 0;
+ const older = createRemoteSyncClient({ ...input, requireCapability: async (_feature, minimum) => {
+  assert.equal(minimum, '1.5.0'); throw Error('Old server');
+ }, fetch: async () => { dispatches++; return reply({}); } });
+ await assert.rejects(readRemoteSyncActivity(older, 'config'), /updated, reachable/);
+ assert.equal(dispatches, 0);
+ const record = { id: 'attempt', startedAt: 50, endedAt: 75, lastActivityAt: 75, status: 'complete', sentBytes: 0, receivedBytes: null };
+ let connectionId = 'config';
+ const client = createRemoteSyncClient({ ...input, requireCapability: async (_feature, minimum) => { assert.equal(minimum, '1.5.0'); },
+  fetch: async (_url, init) => {
+   dispatches++;
+   assert.deepEqual(JSON.parse(init!.body as string).command, { action: 'connection-activity', connectionId: 'config', limit: 1 });
+   return reply({ ok: true, status: 'complete', result: { connectionId, records: [record], next: null } });
+  } });
+ assert.deepEqual(await readRemoteSyncActivity(client, 'config', { limit: 1 }), { connectionId, records: [record], next: null });
+ assert.equal(input.storage.data.size, 0, 'history is read-only and has no pending mutation receipt');
+ connectionId = 'other';
+ await assert.rejects(readRemoteSyncActivity(client, 'config', { limit: 1 }), /Invalid sync activity/);
+ assert.equal(dispatches, 2);
 });

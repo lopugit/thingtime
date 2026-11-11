@@ -1,3 +1,4 @@
+import { syncActivityJournal } from './syncActivityJournal';
 import { deviceSyncHistoryJournal, upgradeDeviceSyncHistoryJournal } from './deviceSyncHistoryJournal';
 import { syncPriorityJournal, upgradeSyncPriorityJournal } from './syncPriorityJournal';
 import { upgradeJournalRetention } from './journalRetention';
@@ -140,7 +141,7 @@ export const openSyncJournal = async (factory: IDBFactory = indexedDB, name = 't
 			tx.onabort = tx.onerror = () => reject(tx.error ?? Error('Could not save sync completion.'));
 		});
 	};
-	return { read, persist, checkpoint, complete, deviceHistory: (access: Parameters<typeof deviceSyncHistoryJournal>[1]) => deviceSyncHistoryJournal(db, access, keyRange), priorities: (access: Parameters<typeof syncPriorityJournal>[1]) => syncPriorityJournal(db, access, keyRange),
+	return { read, persist, checkpoint, complete, syncActivity: (access: Parameters<typeof syncActivityJournal>[1]) => syncActivityJournal(db, access, keyRange), deviceHistory: (access: Parameters<typeof deviceSyncHistoryJournal>[1]) => deviceSyncHistoryJournal(db, access, keyRange), priorities: (access: Parameters<typeof syncPriorityJournal>[1]) => syncPriorityJournal(db, access, keyRange),
 		jobs: (access: Parameters<typeof syncJobJournal>[1]) => syncJobJournal(db, access, keyRange), reviewDrafts: (access: Parameters<typeof reviewDraftJournal>[1]) => reviewDraftJournal(db, access, keyRange), maintenance: (access: Parameters<typeof journalMaintenance>[1]) => journalMaintenance(db, access, keyRange), pagedCheckpoints: (access: Parameters<typeof pagedCheckpointJournal>[1]) => pagedCheckpointJournal(db, access, keyRange), pagedRuns: (access: Parameters<typeof pagedRunJournal>[1]) => pagedRunJournal(db, access, keyRange), plans: (access: Parameters<typeof pagedPlanJournal>[1]) => pagedPlanJournal(db, access, keyRange), inventory: (access: Parameters<typeof inventoryJournal>[1]) => inventoryJournal(db, access, keyRange), close: () => db.close() };
 };
 

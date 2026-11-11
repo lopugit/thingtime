@@ -4,6 +4,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useMountedRef } from '~/hooks/useMountedRef';
 import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
 import { LidarScanControls } from '../NativeBridge/LidarScanControls';
@@ -22,8 +23,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, thingBrowseHref, thingInspectHref, readLibraryDestination, homeLibraryHref, type ThingsLocationState } from './thingsLocation';
 
-import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Spinner, Text } from '@chakra-ui/react';
+import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Package, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -180,7 +181,7 @@ const ThingsPageContents = ({ builderMode = false }: { builderMode?: boolean }) 
   const view = useLocalApiView();
   // Device surfaces read the account plane, so the local-first home view falls
   // through to the library instead of opening the synced-file browser.
-  return !builderMode && params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : !builderMode && params.get("deviceFiles") && !params.get("folder") && !view.localPlane ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage builderMode={builderMode} key={`${scope}:${view.localPlane || "selected"}`} />;
+  return !builderMode && params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : !builderMode && params.get("deviceFiles") && !params.get("folder") && !view.localPlane ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage builderMode={builderMode} key={`${scope}:${view.localPlane || "selected"}:${params.get("libraryArchive") === "1"}`} />;
 };
 
 const ThingsLocationLibrary = ({ locationPicker }: { locationPicker: ThingsLocationPicker }) => {
@@ -220,6 +221,35 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const navigate = useNavigate();
   const isMobile = useIsMobileViewport();
   const [searchParams, setSearchParams] = useSearchParams();
+  const archiveOnly = !locationPicker && !builderMode && searchParams.get('libraryArchive') === '1';
+  const archiveScope = !locationPicker && !builderMode && !homeView && canUseAccountLinks && dataPlane === 'home' && user?.accountKind === 'user' && !user.temporary && !user.localOnly ? user.id : null;
+  const [archiveSupport, setArchiveSupport] = useState<{ owner: string; supported: boolean } | null>(null);
+  const archiveReady = !!archiveScope && archiveSupport?.owner === archiveScope && archiveSupport.supported;
+  const archivePending = !!archiveScope && archiveSupport?.owner !== archiveScope;
+  useEffect(() => {
+    if (!archiveScope) return;
+    let current = true;
+    const origin = window.location.origin;
+    void Promise.all([
+      requireThingtimeCapability('api.things', '1.59.0', origin),
+      requireThingtimeCapability('api.things-search', '1.5.0', origin),
+      requireThingtimeCapability('api.things-bulk', '1.8.0', origin)
+    ]).then(
+      () => { if (current) setArchiveSupport({ owner: archiveScope, supported: true }); },
+      () => { if (current) setArchiveSupport({ owner: archiveScope, supported: false }); }
+    );
+    return () => { current = false; };
+  }, [archiveScope]);
+  const changeArchiveView = useCallback(() => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (archiveOnly) next.delete('libraryArchive');
+    else {
+      next.set('libraryArchive', '1');
+      next.delete('folder');
+    }
+    next.delete('preview');
+    return next;
+  }), [archiveOnly, setSearchParams]);
 
   const apiRef = useRef(api);
   // A save-location picker has one explicit storage/identity destination.
@@ -237,7 +267,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   recordingOwner.current = user?.id;
   const recordingHandoffBusy = useRef(false);
 
-  const folderId = searchParams.get('folder') || null;
+  const folderId = archiveOnly ? null : searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
 	// Embedded destination pickers retain their containing page URL, but must
 	// browse folders rather than recursively render that page's device view.
@@ -248,7 +278,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = Boolean(!locationPicker && !builderMode && !homeView && authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
+	const devicesEnabled = Boolean(!archiveOnly && !locationPicker && !builderMode && !homeView && authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,
@@ -271,11 +301,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 	const executeLocalDeviceAction = localNode.executeAction;
 
   // Never seed a destination with the ambiguous legacy account-only cache.
-  const cacheKey = `${thingsWorkspaceCacheKey(scope, localView.localPlane)}${locationPicker ? ":share-picker" : builderMode ? `:builder:${folderId || "root"}:${searchParams.get("kind") || "apps"}` : ""}`;
-  const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
+  const cacheKey = `${thingsWorkspaceCacheKey(scope, localView.localPlane)}${archiveOnly ? ":archived" : ""}${locationPicker ? ":share-picker" : builderMode ? `:builder:${folderId || "root"}:${searchParams.get("kind") || "apps"}` : ""}`;
+  const cached = useMemo(() => archiveOnly && !archiveScope ? null : readLocalCache<ThingsCache>(cacheKey), [cacheKey, archiveOnly, archiveScope]);
 
   const locationState = readThingsLocation(searchParams, cached);
-  const { q: urlQ, view, display: displayMode, sort, group: groupBy } = locationState;
+  const { q: urlQ, view: selectedView, display: displayMode, sort, group: groupBy } = locationState;
+  const view = archiveOnly && selectedView === 'columns' ? 'list' : selectedView;
   const kindFilter = builderMode && !searchParams.has('kind') ? (folderId ? 'all' : 'apps') : locationState.kind;
   // Router navigation may transition asynchronously; the input itself must
   // update synchronously so fast typing/paste cannot lose characters.
@@ -389,12 +420,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   useEffect(() => {
     const action = searchParams.get('widget');
     if (!user || (action !== 'search' && action !== 'newFolder')) return;
-    if (action === 'newFolder') openNewFolder(folderId);
+    if (action === 'newFolder' && !archiveOnly) openNewFolder(folderId);
     else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
     const next = new URLSearchParams(searchParams);
     next.delete('widget');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, user, folderId, openNewFolder]);
+  }, [searchParams, setSearchParams, user, folderId, openNewFolder, archiveOnly]);
 
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -429,12 +460,14 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const fetchFolder = useCallback(
     async (targetFolderId: string | null, cursor?: string | null) => {
+      if (archivePending || (archiveOnly && !archiveReady)) return;
       const key = folderKeyOf(targetFolderId);
       const seq = (fetchSeqRef.current[key] = (fetchSeqRef.current[key] || 0) + 1);
       setLoadingKeys((prev) => new Set(prev).add(key));
       try {
         const resp = await apiRef.current.v1.things.list({
-          folder: targetFolderId || (builderMode && kindFilter !== 'apps' ? undefined : 'root'),
+          libraryArchive: archiveReady ? archiveOnly ? 'archived' : 'active' : undefined,
+          folder: archiveOnly ? undefined : targetFolderId || (builderMode && kindFilter !== 'apps' ? undefined : 'root'),
           ...(!targetFolderId && kindFilter === 'apps' ? { builderApp: true } : {}),
           ...(builderMode && !targetFolderId && kindFilter !== 'apps' && kindFilter !== 'all' ? { thingtime: kindFilter } : {}),
           cursor: cursor || undefined,
@@ -462,7 +495,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     },
     // searchParams identity changes per navigation; the guard only reads it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rememberFolderMeta, builderMode, kindFilter]
+    [rememberFolderMeta, builderMode, kindFilter, archiveOnly, archiveReady, archivePending]
   );
 
   const ensureLoaded = useCallback(
@@ -480,7 +513,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     if (!user) return;
     fetchFolder(folderId);
     if (currentKey !== 'root') ensureLoaded(null);
-  }, [user?.id, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, folderId, archiveReady, archivePending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync conflict choices and other tabs mutate the same local workspace.
   // Refresh visible folders as well as search, retaining their current paint.
@@ -558,7 +591,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   // owned remote results without replacing the local view with a blank screen.
   const fetchSearch = useCallback(async (cursor?: string) => {
     const query = q.trim();
-    if (!user?.id || !query) return;
+    if (!user?.id || !query || archivePending || (archiveOnly && !archiveReady)) return;
     const seq = ++searchRequest.current;
     searchAbort.current?.abort();
     const controller = new AbortController(); searchAbort.current = controller;
@@ -582,6 +615,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       // the library never widens into other authors' public Things. Local-only
       // and offline workspaces are already single-owner and refuse the filter.
       const result = await apiRef.current.v1.things.search({ q: query, workspace: true,
+        libraryArchive: archiveReady ? archiveOnly ? 'archived' : 'active' : undefined,
         author: user.localOnly || user.offline ? undefined : user.username,
         thingtime: kindFilter === 'apps' ? 'folder' : kindFilter === 'all' ? undefined : kindFilter,
         ...(builderMode || kindFilter === 'apps' ? { conditions: [
@@ -591,7 +625,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         { signal: controller.signal, onRefresh: (resp: any) => { refreshed = true; accept(resp); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
       if (!refreshed) accept(refreshFailed ? { ...result, refreshing: false } : result);
     } catch (error) { failed(error); }
-  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly, builderMode, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly, builderMode, folderId, archiveOnly, archiveReady, archivePending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!q.trim() || !user?.id) {
@@ -616,12 +650,12 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
-    if (!user) return;
+    if (!user || (archiveOnly && !archiveReady)) return;
     const folders: Record<string, ThingsThing[]> = {};
     for (const [key, things] of Object.entries(folderPages)) folders[key] = things.slice(0, PAGE_SIZE);
     const cachedRenders = Object.fromEntries(Object.entries(schemaRenders).slice(0, MAX_CACHED_SCHEMA_RENDERS));
 		writeLocalCache(cacheKey, { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache);
-  }, [user?.id, cacheKey, view, displayMode, sort, groupBy, folderPages, folderMeta, schemaRenders]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, cacheKey, view, displayMode, sort, groupBy, folderPages, folderMeta, schemaRenders, archiveOnly, archiveReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // custom sort/group orders the WHOLE folder, so keep pulling pages until the
   // cursor runs dry (bounded) — the default newest order pages lazily as before
@@ -669,13 +703,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const itemsFor = useCallback(
     (targetFolderId: string | null): ThingsThing[] | undefined => {
       const page = folderPages[folderKeyOf(targetFolderId)];
-      if (!page) return undefined;
+      if (!page || (archiveOnly && !archiveReady)) return undefined;
       return sortThings(
-        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (builderMode || targetFolderId !== null || isTopLevelLibraryThing(thing))),
+        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived && (builderMode || targetFolderId !== null || isTopLevelLibraryThing(thing)))),
         sort
       );
     },
-    [folderPages, sort, builderMode]
+    [folderPages, sort, builderMode, archiveOnly, archiveReady]
   );
 
   const browseItems = useMemo(() => {
@@ -710,12 +744,14 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 	}, [deviceStore.devices, devicesEnabled, folderId, kindFilter, q, searchMode]);
 
   const displayItems = useMemo(() => {
-    const rows = searchMode ? searchResults || [] : browseItems;
+    const rows = searchMode
+      ? (searchResults || []).filter(thing => archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived)
+      : browseItems;
     if (searchMode || folderId || locationPicker || !visibleDevices.length) return rows;
     const represented = new Map(visibleDevices.map(device => [device.deviceId, device.summary?.rootFolderId]));
     return rows.filter(thing => !(isFolder(thing) && thing.author?.id === user?.id &&
       thing.crystal?.metadata?.deviceFolderRole === 'root' && represented.get(thing.crystal?.metadata?.deviceId) === thing.id));
-  }, [browseItems, folderId, locationPicker, searchMode, searchResults, user?.id, visibleDevices]);
+  }, [archiveOnly, archiveReady, browseItems, folderId, locationPicker, searchMode, searchResults, user?.id, visibleDevices]);
 
   const breadcrumbs = useMemo(() => {
     const trail: { id: string; name: string; icon?: string }[] = [];
@@ -746,6 +782,18 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     const byId = new Map(all.map((thing) => [thing.id, thing]));
     return [...selection].map((id) => byId.get(id)).filter(Boolean) as ThingsThing[];
   }, [selection, folderPages, searchMode, searchResults]);
+
+  const [libraryArchivePending, setLibraryArchivePending] = useState(false);
+  const libraryActionFor = useCallback((thing: ThingsThing) => {
+    if (!archiveReady || !archiveScope || libraryArchivePending || thing.inode || thing.executionHeld || (thing.creationProgress && thing.creationProgress.phase !== 'complete')) return;
+    const count = selection.has(thing.id) ? Math.max(1, selection.size) : 1;
+    const group = count > 1 ? selectedThings : [thing];
+    const archived = thing.libraryArchived === true;
+    if (group.length !== count || group.some(entry => entry.author?.id !== archiveScope || entry.libraryArchiveEligible !== true ||
+        entry.inode || entry.executionHeld || (entry.creationProgress && entry.creationProgress.phase !== 'complete') ||
+        entry.id.startsWith('timeline-folder-') || (entry.libraryArchived === true) !== archived)) return;
+    return archived ? 'restore' as const : 'archive' as const;
+  }, [archiveReady, archiveScope, libraryArchivePending, selection, selectedThings]);
 
   // ------------------------------------------------------------------ actions
 
@@ -805,6 +853,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           if (builderMode) next.set('kind', targetFolderId ? 'all' : 'apps');
           next.delete('q');
           next.delete('preview');
+          next.delete('libraryArchive');
 					next.delete('device');
           return next;
         },
@@ -1264,6 +1313,57 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     } finally { recordingHandoffBusy.current = false; }
   }, [homeView, selectedPlane]);
 
+  const libraryArchiveBusy = useRef(false);
+  const changeLibraryArchive = useCallback(async (group: ThingsThing[], action: 'archive' | 'restore') => {
+    if (!archiveScope || libraryArchiveBusy.current) return;
+    const scope = { expectedActor: archiveScope, expectedApiOrigin: window.location.origin, expectedDataPlane: 'home' };
+    const stillInScope = () => mounted.current && deviceFolderScope.current.ownerId === archiveScope &&
+      deviceFolderScope.current.dataPlane === 'home' && window.location.origin === scope.expectedApiOrigin;
+    const ids = group.map(thing => thing.id);
+    const completed = new Set<string>();
+    let skipped = 0, failure: string | undefined;
+    libraryArchiveBusy.current = true;
+    setLibraryArchivePending(true);
+    try {
+      for (let offset = 0; offset < ids.length && stillInScope(); offset += 100) {
+        const batch = ids.slice(offset, offset + 100);
+        const response = await apiRef.current.v1.things.bulk({ op: action, ids: batch }, scope);
+        if (!response?.ok || !Array.isArray(response.results)) throw new Error(response?.error || 'The change could not be confirmed.');
+        for (const result of response.results) {
+          if (result.ok && batch.includes(result.id)) completed.add(result.id);
+          else { skipped++; failure ||= result.error; }
+        }
+      }
+    } catch (error: any) {
+      failure = error?.error || error?.message || 'The change could not be confirmed.';
+    } finally {
+      libraryArchiveBusy.current = false;
+      if (stillInScope()) setLibraryArchivePending(false);
+    }
+    if (!stillInScope()) return;
+    const reconcile = (entries: ThingsThing[]) => entries.filter(entry => !completed.has(entry.id));
+    if (completed.size) {
+      setFolderPages(previous => Object.fromEntries(Object.entries(previous).map(([key, entries]) => [key, reconcile(entries)])));
+      setSearchResults(previous => previous ? reconcile(previous) : null);
+      setSelection(previous => new Set([...previous].filter(id => !completed.has(id))));
+      if (anchorRef.current && completed.has(anchorRef.current)) anchorRef.current = null;
+      requestAnimationFrame(() => {
+        const focused = document.activeElement;
+        if (stillInScope() && (!focused || focused === document.body)) libraryHeadingRef.current?.focus();
+      });
+    }
+    refreshAfterMutation([...sourceKeysOf(ids), ...group.map(thing => thing.folderId)]);
+    setSearchSeq(previous => previous + 1);
+    const verb = action === 'archive' ? 'Archived' : 'Restored';
+    if (failure || skipped) {
+      lopuRef.current({ title: completed.size ? `${verb} ${completed.size} of ${ids.length}` : action === 'archive' ? 'Could not archive' : 'Could not restore',
+        description: failure, status: completed.size ? 'info' : 'error' });
+    } else {
+      lopuRef.current({ title: completed.size === 1 ? `${verb} Thing` : `${verb} ${completed.size} Things`, status: 'success' });
+    }
+  }, [archiveScope, mounted, refreshAfterMutation, sourceKeysOf]);
+  const libraryHeadingRef = useRef<HTMLHeadingElement>(null);
+
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
       if (homeView && selectedPlane !== 'home' && ['download-archive', 'share-download-link'].includes(action)) {
@@ -1311,6 +1411,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           if (builderMode && isBuilderApp(thing)) setBuilderAppDialog(thing);
           else setRenameThing(thing);
           break;
+        case 'archive':
+        case 'restore':
+          if (libraryActionFor(thing) === action) void changeLibraryArchive(group, action);
+          break;
         case 'move':
           setSelection(new Set(group.map((entry) => entry.id)));
           if (builderMode) setAssignOpen(true);
@@ -1344,7 +1448,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, homeView, selectedPlane, searchParams, builderMode, user?.id, canUseAccountLinks]
+    [dataPlane, changeLibraryArchive, libraryActionFor, archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, homeView, selectedPlane, searchParams, builderMode, user?.id, canUseAccountLinks]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1442,8 +1546,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane, canUseAccountLinks]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(menuThing) }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane, canUseAccountLinks, archiveOnly, libraryActionFor]
   );
 
   const onItemMenuAction = useCallback(
@@ -1484,6 +1588,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         case 'edit':
           onItemAction(menuThing, 'rename');
           break;
+        case 'archive':
+        case 'restore':
+          onItemAction(menuThing, action.command);
+          break;
         case 'move':
           onItemAction(menuThing, 'move');
           break;
@@ -1515,17 +1623,18 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       buildThingsBackgroundMenu({
         clipboardCount: clipboard?.ids.length || 0,
         itemCount: displayItems.length,
+        allowCreation: !archiveOnly,
         sort,
         groupBy,
         view,
         displayMode
       }),
-    [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
+    [clipboard?.ids.length, displayItems.length, archiveOnly, sort, groupBy, view, displayMode]
   );
 	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
 		id: 'open-device-page', label: 'Open device page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
 	}, { id: 'open-device-settings', label: 'Quick view', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
-	}, { id: 'open-device-sync', label: 'File sync & backup', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-sync', label: 'Folders & sync configs', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncPageHref(menuDeviceId) : '/things'
 	}, { id: 'show-device-folder', label: 'Show Folder', icon: '🗂️', lucide: 'folder', command: 'show-device-folder'
 	}, { id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
 	}] }] }), [menuDeviceId]);
@@ -1611,7 +1720,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     // Native paste supplies the text without requiring clipboard-read permission.
     // Leave editable controls and other dialogs' clipboard handling untouched.
     const onPaste = (event: ClipboardEvent) => {
-      if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
+      if (archiveOnly || event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
       const target = event.target as HTMLElement | null;
       // Paste can target a non-Element node (the document) when nothing is
       // focused; call closest() optionally so the listener cannot throw.
@@ -1624,7 +1733,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('paste', onPaste);
     return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection, locationPicker]);
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection, locationPicker, archiveOnly]);
 
   // ------------------------------------------------------------------ render
 
@@ -1664,7 +1773,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const eventlessItemContextMenu: ThingsItemHandlers['onItemContextMenu'] = (_thing, event) => { event.preventDefault(); event.stopPropagation(); };
   const itemHandlers: ThingsItemHandlers = {
     builderMode,
-    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true, dataPlane, canUseAccountLinks }) } : {}),
+    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) }) }),
     itemHref: (thing: ThingsThing) => locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
 
     locationSearch: searchParams.toString(),
@@ -1702,7 +1811,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       : {})
   });
 
-  const loading = loadingKeys.has(currentKey) && !folderPages[currentKey];
+  const loading = archivePending || (loadingKeys.has(currentKey) && !folderPages[currentKey]);
 	const deviceSurfaceLoading = devicesEnabled && kindFilter === 'all' && (searchMode || !folderId) && deviceStore.loading && !visibleDevices.length;
 	const canPaintContent = !loading || visibleDevices.length > 0;
   const allSelected = displayItems.length > 0 && displayItems.every((thing) => selection.has(thing.id));
@@ -1722,8 +1831,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 	if (deviceView === 'sync' && deviceParam) return (
     <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
       <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
-        <DeviceSyncPanel deviceId={deviceParam} devicePlatform={deviceStore.devices.find(device => device.summary?.id === deviceParam)?.summary?.platform} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
-        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} syncAnchor /> : null}
+        <DeviceSyncPanel initiallyOpen deviceId={deviceParam} devicePlatform={deviceStore.devices.find(device => device.summary?.id === deviceParam)?.summary?.platform} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
+        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} showFolderEditor={false} /> : null}
         {devicesEnabled && localNode.available ? <LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} /> : null}
       </Flex>
     </Flex>
@@ -1760,10 +1869,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         {!locationPicker && <CharacterWorkspacePicker />}
         <Flex alignItems="baseline" gap={3} wrap="wrap">
-          {!locationPicker && !builderMode && !homeView && !folderId && !searchMode && devicesEnabled && <MobileDeviceSetupEntry />}
+          {!archiveOnly && !locationPicker && !builderMode && !homeView && !folderId && !searchMode && devicesEnabled && <MobileDeviceSetupEntry />}
           <Text {...monoLabel}>Thingtime · {builderMode ? 'Builder' : 'Things'}</Text>
           {!locationPicker && (builderMode ? <Button as={RouterLink} to={contentPath("/things")} size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to={contentPath("/things?files=thingtime")} size="sm" variant="ghost">Browse files</Button>)}
-          {!locationPicker && !builderMode && !folderId && !searchMode ? <Button as={RouterLink} to={contentPath("/things?unfiled=attachments")} size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
+          {!archiveOnly && !locationPicker && !builderMode && !folderId && !searchMode ? <Button as={RouterLink} to={contentPath("/things?unfiled=attachments")} size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
           {!locationPicker && user && !user.localOnly ? <Flex gap={2} wrap="wrap" aria-label="Library storage">
             <Button as={RouterLink} to={contentPath("/things")} size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
             <Button as={RouterLink} to={contentPath(homeLibraryHref(user.id))} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
@@ -1773,6 +1882,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"
+            ref={libraryHeadingRef}
+            tabIndex={-1}
             fontSize={['28px', '34px']}
             fontWeight={800}
             sx={{
@@ -1783,14 +1894,20 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               animation: 'moving-rainbow 12s linear infinite'
             }}
           >
-            {builderMode ? 'Builder' : 'Things'}
+            {builderMode ? 'Builder' : archiveOnly ? 'Archived Things' : 'Things'}
           </Text>
           <Box flex={1} />
+          {(archiveReady || archiveOnly) && <Button {...pillProps(archiveOnly)} leftIcon={<Package size={14} />}
+            aria-pressed={archiveOnly} onClick={changeArchiveView} isDisabled={libraryArchivePending}>
+            {archiveOnly ? 'Active Things' : 'Archived'}
+          </Button>}
+          {(libraryArchivePending || archivePending || (archiveOnly && loading)) &&
+            <Spinner size="xs" sx={{ '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }} label={libraryArchivePending ? 'Updating library archive' : 'Loading Things'} /> }
           <Menu placement="bottom-end" closeOnSelect={false}>
             <MenuButton as={Button} size="sm" variant="ghost" aria-label="Things settings" minW="36px" px={2}><Settings size={18} /></MenuButton>
             <Portal><MenuList zIndex={10250} maxH="70vh" overflowY="auto" maxW="calc(100vw - 32px)">
               <MenuOptionGroup title="Layout" type="radio" value={view} onChange={value => setView(value as ThingsView)}>
-                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption><MenuItemOption value="columns">Folder columns</MenuItemOption>
+                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption>{!archiveOnly && <MenuItemOption value="columns">Folder columns</MenuItemOption>}
               </MenuOptionGroup>
               <MenuOptionGroup title="Display" type="radio" value={displayMode} onChange={value => setDisplayMode(value as ThingsDisplayMode)}>
                 <MenuItemOption value="name">Names</MenuItemOption><MenuItemOption value="preview">Rendered previews</MenuItemOption>
@@ -1798,13 +1915,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               <MenuOptionGroup title="Sort" type="radio" value={sort} onChange={value => setSort(value as ThingsSort)}>{THINGS_SORT_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
               <MenuOptionGroup title="Group" type="radio" value={groupBy} onChange={value => setGroupBy(value as ThingsGroupBy)}>{THINGS_GROUP_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
               <MenuDivider />
-              <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
-              <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
+              {!archiveOnly && <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>}
+              <MenuItem onClick={() => void fetchFolder(folderId)}>{archiveOnly ? 'Refresh archive' : 'Refresh this folder'}</MenuItem>
               <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
               {!locationPicker && <><MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem></>}
             </MenuList></Portal>
           </Menu>
-          <Menu placement="bottom-end">
+          {!archiveOnly && <Menu placement="bottom-end">
             <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
@@ -1823,9 +1940,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
                 </MenuItem>}
               </MenuList>
             </Portal>
-          </Menu>
+          </Menu>}
         </Flex>
-        {!locationPicker && !builderMode && !homeView && !folderId && !searchMode && devicesEnabled ? <LidarScanControls onSaved={() => { void fetchFolder(null); }} /> : null}
+        {!archiveOnly && !locationPicker && !builderMode && !homeView && !folderId && !searchMode && devicesEnabled ? <LidarScanControls onSaved={() => { void fetchFolder(null); }} /> : null}
         {builderMode && <Flex alignItems="center" justifyContent="space-between" gap={3} wrap="wrap">
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
             {folderId ? 'This app contains independent Things. Moving one here changes its organization, not who can read it.' : 'Group pages, components, Actions, schemas and data into apps. Ungrouped Things remain in their type views.'}
@@ -1857,7 +1974,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               onChange={(event) => setQ(event.target.value)}
               padding={0}
 							id="thingtime-things-search"
-                            placeholder={builderMode ? 'Search this Builder view…' : 'Search all your things and computers…'}
+                            placeholder={builderMode ? 'Search this Builder view…' : archiveOnly ? 'Search archived Things…' : 'Search all your things and computers…'}
               value={q}
               variant="unstyled"
             />
@@ -1872,8 +1989,10 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         {/* toolbar: browse controls stay available while contextual selection actions appear below */}
         <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
           {user?.id && <>
-            <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
-            <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
+            {!archiveOnly && <>
+              <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
+              <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
+            </>}
             {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
             {folderId && folderArchive ? (
               <Button {...pillProps(false)} leftIcon={<FolderDown size={13} />} title="Every stored file in this folder (and its sub-folders) as one ZIP" onClick={() => void archive.download(folderId, 'folder')}>
@@ -1888,9 +2007,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
             <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
               List
             </Button>
-            <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
+            {!archiveOnly && <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
               Columns
-            </Button>
+            </Button>}
           </ToolbarGroup>
           <ToolbarGroup label="show">
             <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
@@ -1937,7 +2056,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               </Button>
             ))}
           </ToolbarGroup>
-          {clipboard?.ids.length ? (
+          {!archiveOnly && clipboard?.ids.length ? (
             <>
               <Box flex={1} />
               <Button {...pillProps(true)} onClick={pasteClipboard}>
@@ -2029,8 +2148,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
           <Box>
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
 						{searching
-							? (builderMode ? (folderId ? 'Searching this app…' : 'Searching this Builder view…') : 'Searching all your folders…')
-							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} ${builderMode ? (folderId ? 'in this app' : 'in this Builder view') : 'across your things and computers'}`}
+							? (builderMode ? (folderId ? 'Searching this app…' : 'Searching this Builder view…') : archiveOnly ? 'Searching archived Things…' : 'Searching all your folders…')
+							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} ${builderMode ? (folderId ? 'in this app' : 'in this Builder view') : archiveOnly ? 'in Archived' : 'across your things and computers'}`}
           </Text>
           {searchIncomplete && <Text fontSize="sm">Showing Things saved on this device. Your account may contain more results.</Text>}
           {searchError && <Box role="alert"><Text color="var(--tt-danger, #e5484d)" fontSize="sm">{searchError}</Text><Button size="sm" onClick={() => void fetchSearch()}>Retry search</Button></Box>}
@@ -2039,14 +2158,14 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
         <Flex alignItems="flex-start" gap={4}>
           {/* folder tree sidebar (desktop, browse mode) */}
-          {!isMobile && !searchMode && view !== 'columns' && (!builderMode || kindFilter === 'apps' || !!folderId) && (
+          {!archiveOnly && !isMobile && !searchMode && view !== 'columns' && (!builderMode || kindFilter === 'apps' || !!folderId) && (
             <Box flexShrink={0} paddingTop={1} width="220px">
 							<FolderTree handlers={itemHandlers} currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={builderMode ? undefined : openNewFolder} rootLabel={builderMode ? 'All apps' : undefined} />
             </Box>
           )}
 
           <Box flex={1} minHeight="45vh" minWidth={0} onContextMenu={onBackgroundContextMenu}>
-						{loading && !visibleDevices.length && (
+						{loading && !archivePending && !archiveOnly && !visibleDevices.length && (
               <Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
                 Loading your things… 🌀
               </Text>
@@ -2173,7 +2292,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
                 paddingY={10}
               >
                 <Text fontSize="28px">{searchMode ? '🔍' : builderMode ? '▦' : '🪺'}</Text>
-								<Text fontSize="13px">{searchMode ? 'Nothing matched that search.' : builderMode && kindFilter === 'apps' ? 'No Builder apps yet. Create one to group your Things.' : builderMode ? 'No Things in this Builder view yet.' : 'Nothing here yet — create something with New ✨'}</Text>
+								<Text fontSize="13px">{searchMode ? 'Nothing matched that search.' : archiveOnly ? archiveReady ? 'No archived Things.' : archivePending ? '' : 'The archive is unavailable for this library.' : builderMode && kindFilter === 'apps' ? 'No Builder apps yet. Create one to group your Things.' : builderMode ? 'No Things in this Builder view yet.' : 'Nothing here yet — create something with New ✨'}</Text>
               </Flex>
             )}
 
@@ -2187,7 +2306,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
                 </Button>
               </Flex>
             )}
-            {builderMode && searchMode && searchCursor && (
+            {(builderMode || archiveOnly) && searchMode && searchCursor && (
               <Flex justifyContent="center" paddingY={4}>
                 <Button onClick={() => void loadMoreBuilderSearch()} isLoading={searching} size="sm" variant="outline">Load more results</Button>
               </Flex>

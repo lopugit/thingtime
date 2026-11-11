@@ -2,6 +2,58 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main integration and capability audit — 2026-11-11
+
+Resolved the integration of fetched main `1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5` into the
+feature branch. This brings 64 main-side commits since the prior common base,
+including Builder collections/selection, library archive, image presentation,
+attachment deduplication, reporting scope upgrades and iOS Photos recovery.
+Conflict resolution preserves both feature and main behavior. Combined contracts
+use Things 1.62, search 1.7, attachment content 1.20, delete 1.9, upload abort 1.4
+and hosted MCP 2.3 so either parent alone cannot claim the merged behavior.
+
+Fresh local browser acceptance passes the actual Render and Download controls,
+canonical JSON, dependency closure, exact text and all four PNGs. The final canonical full-build
+runner is `64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5`;
+its output JSON and PNGs match the previous fixture byte for byte. Invalid input,
+opaque storage denial, reload clearing and zero API traffic pass.
+[Fresh renderer evidence](../artifacts/anonymous-release-2026-11-11/main-integration-preview/README.md).
+MCP unit checks pass 63 with three explicit opt-in skips in the sequential run.
+An initial concurrent run timed out one Node-wire timing test; that exact test
+passed alone and the full sequential run passed without source changes.
+The canonical client/server build, full lint (zero errors, 368 warnings), raw
+TypeScript and zero-error ratchet pass. Built-manifest smoke checks pass all
+18 contracts. The settled-source workspace suite finished with 951 passes, one
+failure and 113 opt-in skips: the bounded 70 MiB Blob retention test timed out
+with `SYNC_INTERRUPTED` at 50.494 seconds. The complete file subsequently passed
+26/26 in isolation, with that case taking 21.537 seconds; five shell checks also
+passed. No deterministic regression was reproduced. Contention is consistent
+with the timing, but the cause remains unproven; the aggregate suite is not fully
+green. Final-head CI and deployed acceptance remain separate from local results.
+
+The core no-login renderer, dependency-complete canonical transfer, real PNG
+capture, posting/draft independence and scoped local workspace foundations have
+recorded acceptance below. Electron already bundles the web app and starts its
+local Nitro server before opening the window. Its existing updater replaces a
+complete signed application; it is not independent API-delivered web-bundle
+updates. iOS still opens the selected hosted URL and has no bundled Node/Nitro
+runtime or web-bundle build phase in the inspected target.
+
+Remaining priorities are merged-tree validation, matching hosted renderer
+activation and real connected-host downloads, then the versioned native
+web-bundle update/rollback contract and iOS offline runtime/startup. Stable
+installed and physical-device acceptance, actual origin migration and live
+provider behavior must retain their distinct evidence boundaries. Fresh public
+production discovery advertises `api.chatgpt-mcp` 2.2.0 but no rendering feature;
+the current canonical tool inventory has no render/export tool. The earlier
+provider snapshot cannot be relabelled as acceptance of changed renderer inputs.
+
+Private reporting access is now restored through the canonical connection.
+The existing stable chat identity is registered; the private coordination post
+was independently read back, the same post is bound, and `activeOperation` is
+null. There is no remaining moderation blocker. This checkpoint
+does not perform a primary-branch merge, deployment or stable app installation.
+
 ## Matching provider, preview and identity acceptance — 2026-11-10
 
 Published recovery checkpoint `4492bc7e` uses renderer `021173e8`. The matching

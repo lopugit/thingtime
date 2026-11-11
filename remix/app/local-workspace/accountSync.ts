@@ -45,6 +45,8 @@ export type AccountSyncRecord = {
 	recoveryFileIds?: string[];
 	// Server-projected execution state can change without a content revision.
 	executionRead?: { at: number; held: boolean };
+	/** Protected server projection; never accepted through Thing writes/imports. */
+	libraryArchiveRead?: { at: number; archived: boolean; eligible?: boolean };
 	pending?: FrozenWrite | FrozenDelete; deleted?: Pick<LocalThing, 'id' | 'revision' | 'updatedAt'>; claim?: { token: string; expiresAt: number }; attempts: number; retryAt: number; error?: string;
 };
 type SyncRecord = AccountSyncRecord;
@@ -217,6 +219,8 @@ export class AccountThingSync {
 		return snapshotTransferValue({ id: input.id, thingtime: checked.thingtime, crystal: checked.crystal,
 			extended: input.extended ?? null, tags: input.tags || [], folderId: input.folderId || null, targetId: input.targetId || null,
 			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1,
+			...(typeof input.libraryArchived === 'boolean' ? { libraryArchived: input.libraryArchived } : {}),
+			...(typeof input.libraryArchiveEligible === 'boolean' ? { libraryArchiveEligible: input.libraryArchiveEligible } : {}),
 			...(typeof input.executionHeld === 'boolean' ? { executionHeld: input.executionHeld } : {}), ...(input.thingtime.includes('post') ? { accountAttachmentIds: attachments.map((file: any) => file.id) } : {}),
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
@@ -238,6 +242,18 @@ export class AccountThingSync {
 		let sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
 		if (sync?.deleted) return undefined;
 		let previous = await tx.get<LocalThing>('things', remote.id);
+		const archiveKnown = sync?.libraryArchiveRead;
+		const archiveObserved = typeof remote.libraryArchived === 'boolean' &&
+			(!archiveKnown || startedAt > archiveKnown.at || (startedAt === archiveKnown.at && remote.libraryArchived))
+			? { at: startedAt, archived: remote.libraryArchived, ...(typeof remote.libraryArchiveEligible === 'boolean' ? { eligible: remote.libraryArchiveEligible } : {}) } : archiveKnown;
+		if (archiveObserved) {
+			const projection = { libraryArchived: archiveObserved.archived, ...(archiveObserved.eligible !== undefined ? { libraryArchiveEligible: archiveObserved.eligible } : {}) };
+			remote = { ...remote, ...projection };
+			if (archiveObserved !== archiveKnown) {
+				if (sync) { sync = { ...sync, libraryArchiveRead: archiveObserved }; await tx.put(COLLECTION, remote.id, sync); }
+				if (previous) { previous = { ...previous, ...projection }; await tx.put('things', remote.id, previous); }
+			}
+		}
 		const known = sync?.executionRead;
 		const observed = typeof remote.executionHeld === 'boolean' &&
 			(!known || startedAt > known.at || (startedAt === known.at && remote.executionHeld))
@@ -269,8 +285,19 @@ export class AccountThingSync {
 			updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
 		const device = this.files?.restore ? await this.files.restore(tx, cached) : cached;
 		await tx.put('things', remote.id, device);
-		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, ...(observed ? { executionRead: observed } : {}), ...(admitFiles ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}), audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
+		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, ...(observed ? { executionRead: observed } : {}), ...(archiveObserved ? { libraryArchiveRead: archiveObserved } : {}), ...(admitFiles ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}), audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 		return device;
+	}
+	/** Only confirmed online bulk results may reconcile this protected state. */
+	async rememberLibraryArchive(ids: string[], archived: boolean, at = this.now()) {
+		return this.tx('readwrite', async tx => {
+			for (const id of ids) {
+				const state = await tx.get<SyncRecord>(COLLECTION, id), row = await tx.get<LocalThing>('things', id);
+				if (!state || !row || state.deleted || (state.libraryArchiveRead && state.libraryArchiveRead.at > at)) continue;
+				await tx.put(COLLECTION, id, { ...state, libraryArchiveRead: { ...state.libraryArchiveRead, at, archived } });
+				await tx.put('things', id, { ...row, libraryArchived: archived });
+			}
+		});
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
 		if (!this.files && row.thingtime.some(kind => ['post','comment'].includes(kind)) && (await tx.list<LocalThing>('things')).some(item => item.value.thingtime.includes('attachment') && item.value.targetId === row.id)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_MEDIA', 'Bound post media requires its account binding adapter.', 409);
@@ -487,10 +514,11 @@ export class AccountThingSync {
 			if (choice.keep === 'remote') {
 				if (state.deleted) await this.files?.restoreParent?.(tx, choice.id, remote.accountAttachmentIds || []);
 				await tx.delete(DELETED_CONTENT, choice.id);
-				await tx.put('things', choice.id, { ...remote, ...(state.executionRead ? { executionHeld: state.executionRead.held } : {}), revision: local.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString() });
+				await tx.put('things', choice.id, { ...remote, ...(state.executionRead ? { executionHeld: state.executionRead.held } : {}), ...(state.libraryArchiveRead ? { libraryArchived: state.libraryArchiveRead.archived, ...(state.libraryArchiveRead.eligible !== undefined ? { libraryArchiveEligible: state.libraryArchiveRead.eligible } : {}) } : {}), revision: local.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString() });
 			}
 			await tx.put(COLLECTION, choice.id, { id: choice.id, state: choice.keep === 'local' ? 'pending' : 'synced', base: remote,
 				...(state.executionRead ? { executionRead: state.executionRead } : {}),
+				...(state.libraryArchiveRead ? { libraryArchiveRead: state.libraryArchiveRead } : {}),
 				...(choice.keep === 'local' && state.deleted ? { deleted: state.deleted } : {}),
 				...(choice.keep === 'local' && state.deleted && state.cascadeChildIds ? { cascadeChildIds: state.cascadeChildIds } : {}),
 				...(choice.keep === 'local' && state.deleted && state.recoveryCoverage ? { recoveryCoverage: state.recoveryCoverage, recoveryFileIds: state.recoveryFileIds } : {}),
@@ -636,9 +664,10 @@ export class AccountThingSync {
 					const row = await tx.get<LocalThing>('things', pending.id);
 					const newer = !!latest.deleted || (row && row.revision !== pending.version);
 					const device = this.files?.restore ? await this.files.restore(tx, remote) : remote;
-					if (!newer) await tx.put('things', pending.id, { ...device, ...(latest.executionRead ? { executionHeld: latest.executionRead.held } : {}), ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
+					if (!newer) await tx.put('things', pending.id, { ...device, ...(latest.executionRead ? { executionHeld: latest.executionRead.held } : {}), ...(latest.libraryArchiveRead ? { libraryArchived: latest.libraryArchiveRead.archived, ...(latest.libraryArchiveRead.eligible !== undefined ? { libraryArchiveEligible: latest.libraryArchiveRead.eligible } : {}) } : {}), ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
 					await tx.put(COLLECTION, pending.id, { id: pending.id, state: newer ? 'pending' : 'synced', base: remote,
 						...(latest.executionRead ? { executionRead: latest.executionRead } : {}),
+						...(latest.libraryArchiveRead ? { libraryArchiveRead: latest.libraryArchiveRead } : {}),
 						...(this.files && Array.isArray(pending.body.attachmentIds) ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}),
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
 						...(latest.deleted && latest.cascadeChildIds ? { cascadeChildIds: latest.cascadeChildIds } : {}),

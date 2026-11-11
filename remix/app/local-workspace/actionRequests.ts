@@ -42,7 +42,7 @@ const onlyFields = (value: unknown, allowed: string[]) => value === undefined ||
 const localSearchSupported = (step: Record<string, unknown>) => {
 	const body = step.body as Record<string, unknown> | undefined;
 	return step.path === '/api/v1/things/search' && step.method === 'POST' && step.feature === 'api.things-search'
-		&& capabilitySatisfies('1.4.0', String(step.minimumVersion)) && onlyFields(step.query, [])
+		&& capabilitySatisfies('1.7.0', String(step.minimumVersion)) && onlyFields(step.query, [])
 		&& onlyFields(body, ['scope', 'mode', 'conditions', 'thingtime', 'sort', 'cursor', 'limit']) && body?.scope === 'mine'
 		&& (body.sort === undefined || body.sort === 'newest' || body.sort === 'oldest');
 };

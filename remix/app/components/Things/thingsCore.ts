@@ -32,6 +32,9 @@ export type ThingsThing = {
   parentId?: string | null;
   folderId: string | null;
   timelineHeadId?: string;
+  libraryArchived?: true;
+  libraryArchiveEligible?: true;
+  creationProgress?: { phase: 'planning' | 'restoring' | 'complete' };
   crystal: Record<string, any>;
   extended: unknown | null;
   tags: string[];

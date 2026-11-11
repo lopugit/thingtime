@@ -31,6 +31,57 @@ export function photoDownloadPreparation(download?: { fraction: number }): SyncF
 
 export type PhotoQueueProgress = { pending: number; unavailable: number };
 
+const activityMuted = { color: 'var(--tt-muted, #71717a)' };
+const activityText = (id: string, tag: string, text: string, css?: Record<string, string>): WebpageBlock =>
+ ({ id: 'folder-card-activity-' + id, type: 'element', tag, text, css });
+const activityMetric = (id: string, label: string): WebpageBlock => ({
+ id: 'folder-card-activity-' + id + '-state', type: 'condition', condition: { arg: 'folder.activity.' + id }, children: [
+  { id: 'folder-card-activity-' + id, type: 'element', tag: 'div',
+   css: { display: 'flex', 'flex-wrap': 'wrap', gap: '2px 8px' }, children: [
+    activityText(id + '-label', 'dt', label, activityMuted),
+    activityText(id + '-value', 'dd', '{folder.activity.' + id + '}', { 'font-variant-numeric': 'tabular-nums' })
+   ] }
+ ]
+});
+
+const syncFolderActivityBlock: WebpageBlock = {
+ id: 'folder-card-activity-state', type: 'condition', condition: { arg: 'folder.hasActivity', equals: true }, children: [
+  { id: 'folder-card-activity', type: 'element', tag: 'details',
+   css: { 'margin-top': '8px', 'border-top': '1px solid var(--tt-border, #ececef)', 'min-width': '0', 'font-size': '13px' }, children: [
+    { id: 'folder-card-activity-summary', type: 'element', tag: 'summary',
+     css: { cursor: 'pointer', 'min-height': '44px', 'align-content': 'center', 'padding-block': '8px', 'overflow-wrap': 'anywhere' }, children: [
+      activityText('title', 'span', 'Backup activity', { 'font-weight': '600' }),
+      activityText('phase', 'span', '{folder.activity.phase}', { ...activityMuted, display: 'block', 'margin-block-start': '2px' })
+     ] },
+    { id: 'folder-card-activity-reason-state', type: 'condition', condition: { arg: 'folder.activity.reason' }, children: [
+     activityText('reason', 'p', '{folder.activity.reason}', { ...activityMuted, 'margin-bottom': '8px' })
+    ] },
+    { id: 'folder-card-activity-counts', type: 'element', tag: 'dl', css: { display: 'grid', gap: '4px' }, children: [
+     activityMetric('indexed', 'Library indexed'),
+     activityMetric('prepared', 'Originals prepared in this batch'),
+     activityMetric('backlog', 'Originals in queue')
+    ] },
+    { id: 'folder-card-activity-download-state', type: 'condition', condition: { arg: 'folder.activityHasDownload', equals: true }, children: [
+     activityText('download-label', 'p', 'Current iCloud download · {folder.activity.downloadPercent}%', { 'margin-top': '6px' }),
+     { id: 'folder-card-activity-download-progress', type: 'element', tag: 'progress',
+      props: { max: 100, value: '{folder.activity.downloadPercent}', 'aria-label': 'Current iCloud download' },
+      css: { width: '100%', height: '8px', 'accent-color': 'var(--tt-accent, #7864d9)' } }
+    ] },
+    activityText('history-title', 'h5', 'Recent activity', { 'margin-top': '10px', 'margin-bottom': '4px', 'font-weight': '600' }),
+    { id: 'folder-card-activity-history', type: 'collection',
+     props: { itemsPath: 'folder.activity.events', label: 'Recent backup activity', hideSearch: true, hideSize: true,
+      hideCount: true, size: 'all', transparent: true, empty: 'No activity history reported by this iPhone yet.' },
+     children: [{ id: 'folder-card-activity-event', type: 'element', tag: 'div',
+      css: { display: 'flex', 'justify-content': 'space-between', 'flex-wrap': 'wrap', gap: '2px 12px', padding: '4px 0',
+       'border-top': '1px solid var(--tt-border, #ececef)' }, children: [
+       activityText('event-label', 'span', '{item.label}'),
+       { ...activityText('event-time', 'span', '{item.time}', activityMuted), props: { title: '{item.at}' } }
+      ] }]
+    }
+   ] }
+ ]
+};
+
 export function photoQueueDisplay(queue?: PhotoQueueProgress) {
  if (!queue || !Number.isSafeInteger(queue.pending) || queue.pending < 0 ||
   !Number.isSafeInteger(queue.unavailable) || queue.unavailable < 0) return undefined;
@@ -133,7 +184,20 @@ export const syncFolderQuickBlocks: WebpageBlock[] = [
  { id: 'folder-card-background-status-state', type: 'condition', condition: { arg: 'folder.hasContinuationStatus', equals: true }, children: [
   { id: 'folder-card-background-status', type: 'element', tag: 'p', text: '{folder.continuationStatus}', props: { role: 'status' },
    css: { 'font-size': '12px', 'overflow-wrap': 'anywhere' } }
- ] }
+ ] },
+ { id: 'folder-card-activity-indexing-state', type: 'condition', condition: { arg: 'folder.activity.indexing' }, children: [
+  { id: 'folder-card-activity-indexing', type: 'element', tag: 'div', props: { role: 'status', 'aria-atomic': true },
+   css: { display: 'grid', gap: '2px', 'font-size': '13px', 'overflow-wrap': 'anywhere' }, children: [
+    activityText('indexing-count', 'p', '{folder.activity.indexing}', activityMuted),
+    { id: 'folder-card-activity-live-indexed-state', type: 'condition', condition: { arg: 'folder.activity.indexed' }, children: [
+     activityText('live-indexed', 'p', '{folder.activity.indexed}', activityMuted)
+    ] },
+    { id: 'folder-card-activity-latest-found-state', type: 'condition', condition: { arg: 'folder.activity.latestFound' }, children: [
+     activityText('latest-found', 'p', '{folder.activity.latestFound}')
+    ] }
+   ] }
+ ] },
+ syncFolderActivityBlock
 ];
 export function withSyncFolderQuickBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
  const existing = JSON.stringify(blocks);

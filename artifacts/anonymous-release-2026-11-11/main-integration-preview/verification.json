@@ -1,0 +1,141 @@
+{
+  "observedAt": "2026-11-11T03:57:42.098Z",
+  "scope": "local merged-tree static native draft renderer; no hosted MCP or production activation",
+  "chromiumSandbox": true,
+  "runnerSha256": "64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5",
+  "policy": "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads",
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "documentWidth": 1440,
+      "card": {
+        "x": 520,
+        "y": 220,
+        "width": 400,
+        "height": 560,
+        "right": 920,
+        "bottom": 780
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "documentWidth": 390,
+      "card": {
+        "x": 24,
+        "y": 182.59375,
+        "width": 342,
+        "height": 478.796875,
+        "right": 366,
+        "bottom": 661.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    },
+    {
+      "width": 320,
+      "height": 844,
+      "documentWidth": 320,
+      "card": {
+        "x": 24,
+        "y": 231.59375,
+        "width": 272,
+        "height": 380.796875,
+        "right": 296,
+        "bottom": 612.390625
+      },
+      "font": "Georgia, serif",
+      "whiteSpace": "pre-wrap"
+    }
+  ],
+  "requests": [
+    "http://127.0.0.1:22741/draft-preview/index.html",
+    "http://127.0.0.1:22741/draft-preview/runner.js",
+    "http://127.0.0.1:22741/draft-preview/index.html",
+    "http://127.0.0.1:22741/draft-preview/runner.js"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "chromiumVersion": "149.0.7827.55",
+  "jsonSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "componentComplete": true,
+  "exactText": true,
+  "opaqueStorageDenied": true,
+  "invalidJsonRejected": true,
+  "lastGoodPreviewRetained": true,
+  "emptyAfterReload": true,
+  "privateApiRequests": 0,
+  "ok": true,
+  "browserClosed": true,
+  "serverClosed": true,
+  "artifacts": [
+    {
+      "name": "card.png",
+      "bytes": 101897,
+      "sha256": "a6e9686439ed0f4f35c852c261f0ad669bc9930a57202b2edd1287cb38e0663c",
+      "width": 400,
+      "height": 560
+    },
+    {
+      "name": "editor-1440x1000.png",
+      "bytes": 216408,
+      "sha256": "f5852cb06f029fa385bc83e23dffffaac0439147121e0a02181ae97c1206a731",
+      "width": 1440,
+      "height": 2024
+    },
+    {
+      "name": "thingtime-draft.json",
+      "bytes": 2081,
+      "sha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4"
+    },
+    {
+      "name": "viewport-1440x1000.png",
+      "bytes": 122808,
+      "sha256": "3d4b01b805da7fe4ca5bd053f016c705de9da62cd30e99278f28564ee1bfe4b6",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "name": "viewport-320x844.png",
+      "bytes": 61521,
+      "sha256": "ad97da06f748a0faed18c14b80928ef7c43a14d1b28e905912af427ca0e24f19",
+      "width": 320,
+      "height": 844
+    },
+    {
+      "name": "viewport-390x844.png",
+      "bytes": 84324,
+      "sha256": "88d3c8f949d7077a7057bed07cb0bdb68220910d21f4db5a34f6c3fd6495b745",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "sourceAssociation": {
+    "head": "8a454a0cadf6921ffa526aff5341d682cefcb94c",
+    "mergedMain": "1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5",
+    "state": "resolved integration working tree before merge commit; actual completed canonical full-build draft assets, no acceptance rebuild",
+    "files": {
+      "remix/app/components/Kinds/HtmlThingRenderer.tsx": "fde2722e52d22460e1a53a3aa208463d7aecb8fe649758a868ce197126577bda",
+      "remix/app/components/Builder/WebpageBlocksRenderer.tsx": "90ab6d6af957d42e248a62fb2005a2d732be67492b6c40d64c4a4d5658f0e218",
+      "remix/app/draftPreview/entry.tsx": "90acdbae2e01f637b6e13b09c139222919dde45a1228c8e76d28d7e5a3da6385",
+      "remix/app/draftPreview/prepare.ts": "5a7d7c905a4ecaa2b36fd409a465464c84f83fc8ee37bf58a2795ecb1913f6e3",
+      "remix/vite.draft.config.ts": "add86e141fb94b50da86e62f9f4346aa576039c9c41ab93e0d0eed56ca207092"
+    }
+  },
+  "priorLocalAcceptance": {
+    "runnerSha256": "7bc124e916f882183bca7b6b8a6572c1e1aa4ceb5c94e000b0b3dd80fc031584",
+    "build": "standalone build:draft before full canonical build",
+    "ok": true
+  },
+  "outputComparison": "Canonical JSON and all four final PNGs byte-identical to previously visually inspected captures and final-preview reference.",
+  "visualInspection": {
+    "desktop": true,
+    "mobile390": true,
+    "narrow320": true,
+    "card": true,
+    "result": "Earlier visual inspection retained because final captures are verified byte-identical; exact line breaks, centered card, preserved margins, no clipping or overlap."
+  }
+}

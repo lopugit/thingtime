@@ -12,7 +12,7 @@ import { searchOwnerScope } from '../api/utils/things/searchGrammar';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 const scope = { kind: 'anonymous' } as const;
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
-const step = (body: Record<string, unknown>) => ({ path: '/api/v1/things/search', method: 'POST', feature: 'api.things-search', minimumVersion: '1.4.0', query: {}, body, maxResultBytes: 65536 });
+const step = (body: Record<string, unknown>) => ({ path: '/api/v1/things/search', method: 'POST', feature: 'api.things-search', minimumVersion: '1.7.0', query: {}, body, maxResultBytes: 65536 });
 test('mine scope binds to the authenticated actor and negotiates the additive contract', () => {
  assert.deepEqual(searchOwnerScope(undefined), {}); assert.deepEqual(searchOwnerScope('visible', 'owner'), {});
  assert.deepEqual(searchOwnerScope('mine', 'owner'), { ownerId: 'owner' });

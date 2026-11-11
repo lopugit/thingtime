@@ -1,7 +1,7 @@
 import { WorkspaceError } from './storage';
 const prefix = 'workspace-search:';
 type Continuation = { key: string; remote: string | null; pending: string | null };
-const keyOf = (scope: string, query: Record<string, unknown>) => JSON.stringify([scope, query.q || '', query.thingtime || '', ...(query.conditions !== undefined || query.mode !== undefined ? [query.conditions || [], query.mode || 'all'] : [])]);
+const keyOf = (scope: string, query: Record<string, unknown>) => JSON.stringify([scope, query.q || '', query.thingtime || '', ...(query.libraryArchive !== undefined ? [query.libraryArchive] : []), ...(query.conditions !== undefined || query.mode !== undefined ? [query.conditions || [], query.mode || 'all'] : [])]);
 export function readWorkspaceSearchCursor(cursor: unknown, scope: string, query: Record<string, unknown>): Continuation | null {
  if (!cursor || (typeof cursor === 'string' && cursor.startsWith('local-search:'))) return null;
  try {

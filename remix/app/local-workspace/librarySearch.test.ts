@@ -50,3 +50,14 @@ test('Builder searches preserve folder and app conditions through local paging',
  assert.throws(() => searchLocalLibrary(rows, { q: 'example', conditions: [], cursor: first.nextCursor }), /changed/ );
  assert.throws(() => searchLocalLibrary(rows, { conditions: [{ field: '$where', op: 'eq', value: true }] }), /field/i);
 });
+
+test('archive search filters before paging and binds continuations to the same view', () => {
+ const row: LocalThing = { id: 'a', thingtime: ['data'], crystal: { name: 'Needle' }, createdAt: '2026-11-11', updatedAt: '2026-11-11', revision: 1 };
+ const rows = [row, { ...row, id: 'b', libraryArchived: true }, { ...row, id: 'c', libraryArchived: true }, { ...row, id: 'd', libraryArchived: false }];
+ assert.deepEqual(searchLocalLibrary(rows, { q: 'needle', libraryArchive: 'active' }).things.map(row => row.id), ['d', 'a']);
+ const first = searchLocalLibrary(rows, { q: 'needle', libraryArchive: 'archived', limit: 1 });
+ const last = searchLocalLibrary(rows, { q: 'needle', libraryArchive: 'archived', cursor: first.nextCursor, limit: 1 });
+ assert.deepEqual([...first.things, ...last.things].map(row => row.id), ['c', 'b']);
+ assert.throws(() => searchLocalLibrary(rows, { q: 'needle', libraryArchive: 'active', cursor: first.nextCursor }), /cursor|filters/);
+ assert.throws(() => searchLocalLibrary(rows, { libraryArchive: 'invalid' }), /archive/);
+});

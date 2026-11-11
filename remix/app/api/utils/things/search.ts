@@ -1,4 +1,5 @@
 import { buildGroup, csvList, parseDate, parseCount, searchOwnerScope, textLengthExpr, MAX_TEXT_QUERY_CHARS, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_RANKED_OFFSET, ENGAGEMENT_CANDIDATE_WINDOW, MAX_AUTHOR_CHARS, GENERIC_SEARCH_EXCLUDED_THINGTIME, type SearchQuery } from './searchGrammar';
+import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
@@ -96,7 +97,7 @@ const projectVisiblePage = async (
   const lookup = batchedThingLookup();
   const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
   const visible = page.filter((_, index) => verdicts[index]);
-  const things = await toPublicThings(visible, viewer);
+  const things = await toPublicThings(visible, viewer, false, true);
   const postDocs = visible.filter((doc) => isPostThing(doc));
   const reactionTargets = await Promise.all(
     visible.map(async (doc) =>
@@ -138,6 +139,11 @@ export const searchThings = async (
 
   const clauses: Record<string, any>[] = [];
   if (ownerScope.ownerId) clauses.push(ownerScope);
+  if (query.libraryArchive !== undefined) {
+    if (query.libraryArchive !== 'active' && query.libraryArchive !== 'archived') return fail(400, 'Invalid owner library archive filter');
+    if (!viewer?.id || viewer.pat || app || isCustomMongoEndpointActive()) return fail(403, 'The library archive filter requires the owner in their home Things library');
+    clauses.push({ ownerId: viewer.id, ...(query.libraryArchive === 'archived' ? { appId: null, libraryArchived: true } : { libraryArchived: { $ne: true } }) });
+  }
   if (query.near !== undefined) {
     const point = parseGeo(query.near);
     const radius = query.radiusKm === undefined ? 50 : query.radiusKm;
