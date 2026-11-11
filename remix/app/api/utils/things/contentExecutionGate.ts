@@ -4,6 +4,7 @@ import { readTimelineEntries } from '../timeline/repository';
 import type { TimelineEvent } from '../../../timeline/contract';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore';
 import { applyUserStorageDelta } from '../storage/userStorage';
+import { withBoundTimelineRead } from './persistenceContext';
 
 export const CREATION_COMPLETION_ADAPTER = 'reviewed-creation-graph-result';
 export type ContentExecutionHold = {
@@ -68,8 +69,10 @@ export async function contentExecutionHeld(doc: { ownerId?: string; executionHol
 	if (doc.executionHold === undefined) return false;
 	const hold = contentExecutionHold(doc.executionHold);
 	if (!doc.ownerId) return true;
-	const collection = things ?? await getThingsCollection();
-	const accepted = (await readTimelineEntries(collection, doc.ownerId, [hold.completionEventId], session))[0]?.event;
+	const entries = things != null ? await readTimelineEntries(things, doc.ownerId, [hold.completionEventId], session) :
+		await (withBoundTimelineRead(doc.ownerId, port => readTimelineEntries(port, doc.ownerId!, [hold.completionEventId])) ??
+			getThingsCollection().then(collection => readTimelineEntries(collection, doc.ownerId!, [hold.completionEventId], session)));
+	const accepted = entries[0]?.event;
 	return !holdCompleted(doc.ownerId, hold, accepted);
 }
 function holdCompleted(ownerId: string, hold: ContentExecutionHold, accepted?: TimelineEvent) {
@@ -93,12 +96,17 @@ export async function contentExecutionStates(docs: { shareId: string; ownerId: s
 		group.set(hold.completionEventId, hold); groups.set(doc.ownerId, group);
 	}
 	if (!groups.size) return states;
-	const things = await getThingsCollection();
+	let mongoThings: any;
 	for (const [ownerId, group] of groups) {
 		const ids = [...group.keys()], entries = new Map<string, TimelineEvent>();
-		for (let offset = 0; offset < ids.length; offset += 128) {
-			for (const entry of await readTimelineEntries(things, ownerId, ids.slice(offset, offset + 128))) entries.set(entry.event.id, entry.event);
-		}
+		const read = async (things: any) => {
+			for (let offset = 0; offset < ids.length; offset += 128) {
+				for (const entry of await readTimelineEntries(things, ownerId, ids.slice(offset, offset + 128))) entries.set(entry.event.id, entry.event);
+			}
+		};
+		const native = withBoundTimelineRead(ownerId, read);
+		if (native) await native;
+		else { mongoThings ??= await getThingsCollection(); await read(mongoThings); }
 		for (const doc of docs) if (doc.ownerId === ownerId && doc.executionHold) {
 			const hold = contentExecutionHold(doc.executionHold);
 			states.set(doc.shareId, !holdCompleted(ownerId, hold, entries.get(hold.completionEventId)));

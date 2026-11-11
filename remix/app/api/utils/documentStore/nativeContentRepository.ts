@@ -33,11 +33,15 @@ function reads(collections: CollectionTransaction): ThingsDriverReads {
   async window(selection, after) {
    // Collection identity order is unrelated to content chronology. Scan every
    // internal batch, sort eligible rows, then select the requested window.
-   const rows: StoredThing[] = []; let cursor: any = undefined;
+   const rows: StoredThing[] = [], excludedKinds = new Set(selection.excludedKinds); let cursor: any = undefined;
    do {
     const page = collection().find({ filter: selectionFilter(selection), after: cursor, limit: 128 });
     for (const bytes of page.documents) {
      const row = BSON.deserialize(bytes);
+     // Exclusions are semantic selection predicates, applied during this one
+     // scan before chronological pagination. Native filters intentionally have
+     // no implicit Mongo-style array negation or missing/null coercion.
+     if ((Array.isArray(row.thingtime) && row.thingtime.some((kind: unknown) => typeof kind === 'string' && excludedKinds.has(kind))) || (selection.excludeArchived && row.crystal?.archived === true)) continue;
      if (!(row.createdAt instanceof Date) || !Number.isFinite(+row.createdAt) || typeof row.shareId !== 'string') return thingsPersistenceError('invalid stored chronology');
      if (!after || +row.createdAt < +after.createdAt || (+row.createdAt === +after.createdAt && compareShareIds(row.shareId, after.id) > 0)) rows.push(row);
     }

@@ -2,6 +2,36 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Canonical native Things services — 12 November 2026
+
+The canonical Data/Folder services now use the protected native request scope
+and real SQLite persistence for validated create/get/batch/list/update, folder
+moves and child-preserving deletion. Existing ACLs and public projections remain
+authoritative. Friend/group/subspace-role reads and execution receipts use local
+records. History, Published heads and accounting share each content transaction.
+Folder draining retains the existing per-child transaction behavior: a later
+refusal can leave earlier moves committed. Legacy child history requires normal
+quota admission before the root refund.
+
+Review and regressions cover Mongo folder ancestry, unsupported private-item
+existence privacy, legacy child quota, request/provider/lifetime fencing and
+protected/archived filtering before pagination. All 15 final commands pass:
+1,300 test passes, three explicitly skipped checks, zero failures; TypeScript,
+zero-error ratchet, full lint (0 errors/374 warnings), canonical packaged build
+and inventory, actual Mongo HTTP (including folder/restart) and actual SQLite
+account/root-data HTTP with macOS safeStorage. All 5,257 inventoried source files
+stayed unchanged. Nitro SHA-256:
+`756f299d694d02ab319145defeb1494cd159e1f3d2d61fc763bc66d7d1ed7550`.
+The plan was checked at 1440/390/320px in isolated Chromium.
+
+Generic native Things HTTP remains unavailable. Broader schema/composition,
+app/PAT namespaces, managed kinds, trusted hooks and cascades must be supported
+before advertising the complete contract. Remaining history note/version-name
+writes, saved-page captures, indexed queries, native UI/iOS and hosted-MCP/
+production acceptance are still open. This checkpoint does not deploy, replace
+the stable app or mutate existing account content.
+[Source, command and artifact evidence](../artifacts/anonymous-release-2026-11-12/native-things-services/README.md).
+
 ## Shared content and history persistence — 12 November 2026
 
 Semantic Things adapters cover Mongo and SQLite reads, pagination, physical

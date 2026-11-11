@@ -8,6 +8,8 @@ import { createCollectionProvider } from './collectionProvider';
 import { openSqliteDocumentStore } from './sqliteStore';
 import { createNativeAccountHttpHome } from './nativeAccountHttpHome';
 import { NATIVE_HOME_HOST_KEY } from './nativeHomeSelection';
+import { getBoundThingsPersistence, withBoundTimelineRead } from '../things/persistenceContext';
+import type { ThingsPersistence } from '../things/persistence';
 import { registerUser } from '../auth/registerUser';
 import { action as register } from '~/routes/api/v1/auth/register/_register';
 import { action as login } from '~/routes/api/v1/login/_login';
@@ -97,4 +99,22 @@ test('native registration refuses invitations, preserves OTP enforcement and doe
  });
  assert.equal(home.supportedOperations.some(op => op.path === 'v1/root-data' || op.path === 'v1/things' || op.path === 'v1/auth/temporary'), false);
  home.close(); assert.throws(() => home.run(() => true));
+});
+
+test('protected account bootstrap binds semantic content and readonly Timeline without enabling generic HTTP routes', async t => {
+ const open = await fixture(t), home = await open(); let cached!: ThingsPersistence, id = '';
+ await home.run(async () => {
+  const created = await registerUser({ ...credentials('content-context'), origin });
+  assert.equal(created.ok, true); if (!created.ok) throw Error('Expected synthetic native account');
+  id = created.user.id; cached = getBoundThingsPersistence(id)!;
+  assert.equal(cached.scope.ownerId, id); assert.equal(cached.scope.homePlaneId, 'test-home');
+  assert.equal((await getBoundThingsPersistence(null)!.readExact(id))?.ownerId, id);
+  await withBoundTimelineRead(id, async port => assert.equal(await port.recordByIdentity('no-receipt'), null));
+ });
+ await assert.rejects(cached.readExact(id), /request scope/);
+ assert.throws(() => getBoundThingsPersistence(id), /request scope/);
+ assert.equal(home.supportedOperations.some(op => op.path === 'v1/things'), false);
+ const foreign = await open('foreign-content.sqlite');
+ await assert.rejects(foreign.run(() => cached.readExact(id)), /request scope/);
+ await home.run(async () => assert.equal((await getBoundThingsPersistence(null)!.readExact(id))?.ownerId, id));
 });

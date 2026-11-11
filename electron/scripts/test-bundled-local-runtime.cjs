@@ -109,6 +109,29 @@ async function fixture(directory) {
    assert.ok([403, 404].includes(refusedEdit.status), 'A different local account cannot edit private content.');
   };
   await assertPrivate();
+  // Keep the normal Mongo folder ancestry/drain path covered while its shared
+  // services acquire native persistence. A projection omission once made every
+  // existing destination look like a cycle.
+  const createFolder = async (name, folderId) => {
+   const result = await api('POST', '/api/v1/things', { thingtime: ['folder'], crystal: { name }, visibility: 'private', ...(folderId ? { folderId } : {}) });
+   assert.equal(result.status, 200, 'Canonical folder creation must succeed.');
+   assert.equal(result.body.ok, true); return result.body.thing;
+  };
+  const folderA = await createFolder('First parent'), folderB = await createFolder('Second parent');
+  const nestedFolder = await createFolder('Nested child', folderA.id);
+  const folderItem = await api('POST', '/api/v1/things', { thingtime: ['data'], crystal: { text: 'Keep this editable child' }, visibility: 'private', folderId: nestedFolder.id });
+  assert.equal(folderItem.status, 200); assert.equal(folderItem.body.ok, true);
+  const movedFolder = await api('PATCH', '/api/v1/things', { id: nestedFolder.id, folderId: folderB.id, expectedUpdatedAt: nestedFolder.updatedAt });
+  assert.equal(movedFolder.status, 200, 'Moving a folder into an existing valid destination must succeed.');
+  assert.equal(movedFolder.body.thing.folderId, folderB.id);
+  const cycle = await api('PATCH', '/api/v1/things', { id: folderB.id, folderId: nestedFolder.id, expectedUpdatedAt: folderB.updatedAt });
+  assert.ok([400, 409].includes(cycle.status), 'A folder cannot move into its own descendant.');
+  const removedFolder = await api('DELETE', '/api/v1/things', { id: nestedFolder.id, expectedUpdatedAt: movedFolder.body.thing.updatedAt });
+  assert.equal(removedFolder.status, 200); assert.equal(removedFolder.body.ok, true);
+  const folderItemPath = '/api/v1/things?id=' + encodeURIComponent(folderItem.body.thing.id);
+  const reparented = await api('GET', folderItemPath);
+  assert.equal(reparented.body.thing.folderId, folderB.id);
+  assert.equal(reparented.body.thing.crystal.text, 'Keep this editable child');
   const changedContent = { ...privateContent, text: 'Saved before restart\nand retained offline.', nested: { count: 2 } };
   const changed = await api('PATCH', '/api/v1/things', { id: thing.id, crystal: changedContent, expectedUpdatedAt: thing.updatedAt });
   assert.equal(changed.status, 200);
@@ -126,6 +149,11 @@ async function fixture(directory) {
   assert.equal(retained.body.thing?.id, thing.id);
   assert.equal(retained.body.thing?.visibility, 'private');
   assert.deepEqual(retained.body.thing?.crystal, changedContent, 'Canonical API edits must survive server and database restart.');
+  const retainedFolderItem = await api('GET', folderItemPath);
+  assert.equal(retainedFolderItem.status, 200);
+  assert.equal(retainedFolderItem.body.thing.folderId, folderB.id, 'Folder drain placement must survive managed restart.');
+  assert.equal(retainedFolderItem.body.thing.crystal.text, 'Keep this editable child');
+  assert.equal((await api('GET', '/api/v1/things?id=' + encodeURIComponent(nestedFolder.id))).status, 404);
   await assertPrivate();
   const stale = await api('PATCH', '/api/v1/things', { id: thing.id, crystal: { text: 'stale overwrite' }, expectedUpdatedAt: thing.updatedAt });
   assert.equal(stale.status, 409, 'Restart must preserve revision conflict detection.');
@@ -134,7 +162,11 @@ async function fixture(directory) {
   assert.equal(deleted.status, 200);
   assert.equal(deleted.body.ok, true);
   assert.equal((await api('GET', readPath)).status, 404);
-  console.log('PASS bundled MongoDB default bootstrap, authenticated replica, normal API registration/private CRUD/session retention across restart, cross-account ACL and stale-revision refusal, denied anonymous DB reads, and deliberate offline network boundary.');
+  for (const id of [folderItem.body.thing.id, folderA.id, folderB.id]) {
+   const current = await api('GET', '/api/v1/things?id=' + encodeURIComponent(id)); assert.equal(current.status, 200);
+   assert.equal((await api('DELETE', '/api/v1/things', { id, expectedUpdatedAt: current.body.thing.updatedAt })).status, 200);
+  }
+  console.log('PASS bundled MongoDB default bootstrap, authenticated replica, normal API registration/private CRUD/session retention across restart, valid folder moves/cycle refusal/child-preserving deletion and restart, cross-account ACL and stale-revision refusal, denied anonymous DB reads, and deliberate offline network boundary.');
  } finally { await stopServer(); await runtime.stop(); }
 }
 async function run() {

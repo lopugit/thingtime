@@ -1,5 +1,14 @@
 # Things and folders
 
+The native service integration uses `things/persistenceContext.ts` for protected
+request lifetime and `nativeOrdinaryPersistence.ts` for Data/Folder writes and
+canonical Timeline. `nativeAudienceReads.ts` supplies real friend/group/role
+candidates; `contentExecutionGate.ts` uses native receipt reads. Generic native
+HTTP remains unavailable until the declared Things contract is implemented.
+Service regressions: `nativeOrdinaryService.test.ts`, `persistenceContext.test.ts`,
+`nativeAudienceReads.test.ts`, `contentExecutionGate.native.test.ts`; the bundled
+Mongo HTTP fixture covers valid folder moves and child-preserving deletion.
+
 Native persistence foundation (12 November 2026):
 `things/persistence.ts` defines internal semantic content reads/transactions,
 `things/mongoPersistence.ts` preserves Mongo behavior, and

@@ -13,6 +13,7 @@ import { withHomeSubscriptionRepository } from '../subscriptions/subscriptionRep
 import { withHomeEmailRepository } from '../email/repository';
 import { withHomeNotificationRepository } from '../notifications/repository';
 import { withHomeRateLimitRepository } from '../rateLimit/repository';
+import { createNativeThingsPersistenceContext } from '../things/persistenceContext';
 
 const supportedOperations = Object.freeze([
  ['GET', 'root-data'],
@@ -44,6 +45,7 @@ export async function createNativeAccountHttpHome(input: {
   check();
   const { provider, homePlaneId, keyId } = input;
   const auth = await createNativeAccountCreationRepositories(provider, homePlaneId);
+  const things = createNativeThingsPersistenceContext(provider, homePlaneId);
   const roster = await createNativeRosterRepository(provider, homePlaneId);
   const verification = await createNativeEmailVerificationRepository(provider, homePlaneId);
   const subscriptions = await createNativeSubscriptionRepository(provider, homePlaneId);
@@ -56,12 +58,12 @@ export async function createNativeAccountHttpHome(input: {
    supportedOperations,
    run<T>(work: () => T | Promise<T>): Promise<T> {
     check();
-    return auth.run(() => withHomeSubscriptionRepository(subscriptions, () =>
+    return auth.run(() => things.run(() => withHomeSubscriptionRepository(subscriptions, () =>
      withHomeRosterRepository(roster, homePlaneId, () => withHomeEmailVerificationRepository(verification, homePlaneId, () =>
       withHomeEmailRepository(email, homePlaneId, () => withHomeNotificationRepository(notifications, () =>
-       withHomeRateLimitRepository(limiter, work)))))));
+       withHomeRateLimitRepository(limiter, work))))))));
    },
-   close() { closed = true; vault.fill(0); outbox.fill(0); }
+   close() { closed = true; things.close(); vault.fill(0); outbox.fill(0); }
   });
  } catch (error) { vault.fill(0); outbox.fill(0); throw error; }
 }

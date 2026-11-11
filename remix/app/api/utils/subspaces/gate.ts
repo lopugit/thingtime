@@ -1,4 +1,6 @@
 import { subspaceMediaUrl } from './subspaceMediaCore';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
+import { nativeAudienceRows } from '../things/nativeAudienceReads';
 // The subspace posting/visibility gate — the small, things.ts-safe half of the
 // subspace family. things.ts imports THIS module (never subspaces.ts, which
 // imports things.ts for projections), so everything here talks to the
@@ -124,6 +126,16 @@ export const membershipOf = async (subspaceId: string, userId: string | null | u
 export const loadViewerSubspaceRoles = async (userId: string | null | undefined): Promise<ViewerSubspaceRoles> => {
 	const roles = new Map<string, SubspaceMembership>();
 	if (!userId) return roles;
+	const native = getBoundThingsPersistence(null);
+	if (native) {
+		const docs = await nativeAudienceRows(native, { kinds: ['subspace-member'], ownerId: userId });
+		const now = Date.now();
+		for (const doc of docs) {
+			const membership = membershipOfDoc(doc, now);
+			if (membership.subspaceId) roles.set(membership.subspaceId, membership);
+		}
+		return roles;
+	}
 	const things = await getThingsCollection();
 	const docs = await things
 		.find({ thingtime: 'subspace-member', ownerId: userId } as any)

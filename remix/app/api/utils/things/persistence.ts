@@ -9,7 +9,7 @@ import type { NativeUserStorageSession } from '../documentStore/nativeUserStorag
 export type StoredThing = Record<string, any>;
 export type ThingsScope = Readonly<{ ownerId: string | null; homePlaneId: string; contentPlaneId: string; providerId: string }>;
 export type ThingsSelection = {
- ownerId?: string; kinds?: readonly string[]; folder?: { kind: 'root' } | { kind: 'id'; id: string };
+ ownerId?: string; kinds?: readonly string[]; excludedKinds?: readonly string[]; excludeArchived?: boolean; folder?: { kind: 'root' } | { kind: 'id'; id: string };
  targetId?: string; schemaId?: string; parentId?: string; cursor?: string | null; limit: number;
 };
 export type ThingsWindow = { documents: StoredThing[]; nextCursor: string | null };
@@ -42,7 +42,9 @@ export function normalizeThingsSelection(input: ThingsSelection): Omit<ThingsSel
  if (!input || !Number.isSafeInteger(input.limit) || input.limit < 1) return thingsPersistenceError('invalid page size');
  const folder = input.folder;
  if (folder && (folder.kind !== 'root' && folder.kind !== 'id')) return thingsPersistenceError('invalid folder selection');
+ if (input.excludeArchived !== undefined && typeof input.excludeArchived !== 'boolean') return thingsPersistenceError('invalid archive selection');
  return { limit: input.limit, ...(input.ownerId !== undefined ? { ownerId: string(input.ownerId) } : {}), ...(input.kinds ? { kinds: [...new Set(input.kinds.map(string))].sort() } : {}),
+ ...(input.excludedKinds ? { excludedKinds: [...new Set(input.excludedKinds.map(string))].sort() } : {}), ...(input.excludeArchived === true ? { excludeArchived: true } : {}),
  ...(folder ? { folder: folder.kind === 'root' ? { kind: 'root' as const } : { kind: 'id' as const, id: string(folder.id) } } : {}),
  ...(input.targetId !== undefined ? { targetId: string(input.targetId) } : {}),
  ...(input.schemaId !== undefined ? { schemaId: string(input.schemaId) } : {}),

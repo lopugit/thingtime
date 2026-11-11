@@ -1,3 +1,18 @@
+## Native Things service integration — 12 November 2026
+
+Native Things service regressions: run `nativeOrdinaryService.test.ts`,
+`persistenceContext.test.ts`, `nativeAudienceReads.test.ts` and
+`contentExecutionGate.native.test.ts`, plus normal Things, Timeline, storage and
+subspace suites. Check actual SQLite CRUD/projection, stale revisions, folder
+moves/cycles, child-preserving deletion, legacy baseline quota, exact ledger and
+reopen. A private unsupported Thing must look missing to other/anonymous viewers.
+Check both accepted-friend directions, full group/role pagination, exact provider
+and async lifetime, receipt binding and no Mongo fallback. Preserve canonical
+multi-transaction folder-drain behavior; do not claim route-wide atomicity.
+The bundled Mongo HTTP fixture must also move into a valid existing folder,
+refuse a cycle, preserve/reparent children on deletion and retain them on restart.
+Generic native Things HTTP and broad capability publication remain separate gates.
+
 ## Native deletion accounting and iOS profile bootstrap — 12 November 2026
 
 - Run `nativeUserStorage.test.ts`: deletion-only refunds may fund retained history

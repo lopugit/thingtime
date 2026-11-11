@@ -1,5 +1,30 @@
 # Native web bundles and offline runtime
 
+## Canonical native content services — 12 November 2026
+
+The canonical Things service now has a first native Data/Folder path: existing
+crystal validation and public projection, exact/list reads, optimistic updates,
+folder moves/cycle refusal, child-preserving deletion, accounting and Timeline.
+The request scope binds the real provider and home identity, rejects escaped
+handles, and never selects a store from HTTP input. Friend/group membership,
+viewer subspace roles and execution-completion receipts read the selected native
+store; missing native data never borrows hosted records.
+
+Folder deletion follows the existing Mongo drain model. Each child move and its
+history commit together, then an exact physical-root check guards final deletion.
+A later refusal may leave earlier child moves committed. Legacy children without
+history require normal quota admission before the root refund; existing history
+and final deletion retain the cleanup lane. A retry cannot delete a replacement
+root that happens to reuse the same portable ID.
+
+Generic native Things HTTP remains unavailable. This service slice does not yet
+support the full `api.things` contract: app/PAT namespaces, composed hooks, schema
+provenance, managed kinds and target cascades require their canonical adapters.
+Unsupported private items retain the ordinary not-found response for unauthorized
+viewers. Do not advertise the whole feature merely because its HTTP verbs could
+be dispatched. Real SQLite service tests and hosted Mongo HTTP regression are
+separate acceptance layers. See [service evidence](../artifacts/anonymous-release-2026-11-12/native-things-services/README.md).
+
 ## Content and Timeline persistence — 12 November 2026
 
 The shared Things persistence contract now has Mongo and native SQLite adapters
@@ -19,11 +44,12 @@ projection uses the selected native identity repository without falling back to
 hosted or legacy account data.
 
 These foundations do **not** enable generic native Things HTTP routes. Remaining
-work includes canonical service/request integration, complete saved-page component
+work includes broader canonical service coverage and request integration, complete saved-page component
 captures, native note/version-name writes, indexed native query planning, and
 real HTTP plus desktop/mobile UI acceptance. Native Webpage after-image capture
-currently refuses before history append. SQLite scans use internal batches but
-are still O(n); this is not a performance-parity claim. See the
+currently refuses before history append. Queries still use full scans and may
+rescan rows across internal batches; there is no indexed-query or performance
+parity claim. See the
 [content/history evidence](../artifacts/anonymous-release-2026-11-12/native-content-history/README.md).
 
 <!-- Native app-shell bootstrap contract, 12 November 2026 -->
@@ -44,8 +70,9 @@ only history covered by that transaction's refunds; ordinary growth cannot reuse
 those credits. Unknown or malformed ledgers remain unavailable, and trusted
 unready ledgers are fenced for reconciliation. No native reconciliation worker is
 claimed. Semantic Things/Timeline adapters now share the transaction boundary;
-canonical Things service and HTTP integration remain pending. These prerequisites
-do not activate their routes.
+ordinary Data/Folder services now use them. Broader canonical service coverage
+and generic HTTP integration remain pending; these prerequisites do not activate
+their routes.
 
 The isolated iOS development target now includes a Keychain-backed native account
 profile and private-pipe bootstrap before Nitro imports. Its account lane is

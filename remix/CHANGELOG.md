@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Connect canonical Data/Folder services to scoped native persistence,
+  including real audience/receipt reads, optimistic writes and child-preserving
+  folder deletion. Keep full native Things HTTP unavailable pending broader
+  contract support. Add Mongo folder-move/restart regression coverage.
+  **Codex (AI)**
+
 - 2026-11-12: Add shared Things and Timeline persistence adapters for native SQLite,
   preserving canonical mutation validation, atomic history/accounting, and Mongo
   behavior. Native author projection stays on its selected identity repository.

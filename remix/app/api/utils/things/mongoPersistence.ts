@@ -15,6 +15,8 @@ export async function createMongoThingsPersistence(scope: Omit<ThingsScope, 'pro
    const filters: any[] = [];
    if (selection.ownerId !== undefined) filters.push({ ownerId: selection.ownerId });
    if (selection.kinds?.length) filters.push({ thingtime: { $in: selection.kinds } });
+   if (selection.excludedKinds?.length) filters.push({ thingtime: { $nin: selection.excludedKinds } });
+   if (selection.excludeArchived) filters.push({ 'crystal.archived': { $ne: true } });
    if (selection.folder) filters.push(selection.folder.kind === 'id' ? { folderId: selection.folder.id } : { folderId: null });
    if (selection.targetId !== undefined) filters.push({ targetId: selection.targetId });
    if (selection.schemaId !== undefined) filters.push({ 'crystal.schemaId': selection.schemaId });

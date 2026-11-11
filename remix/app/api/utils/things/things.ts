@@ -1,3 +1,5 @@
+import { getBoundThingsPersistence } from './persistenceContext';
+import { nativeOrdinaryThingSupported, nativeOrdinaryUnavailable, insertNativeOrdinaryThing, updateNativeOrdinaryThing, deleteNativeOrdinaryThing } from './nativeOrdinaryPersistence';
 import { withGatewayWork } from '../deployment/environmentGateway';
 import { currentUserIdentityRepository } from '../auth/userIdentityRepository';
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
@@ -1312,6 +1314,12 @@ const resolveFolderAssignment = async (
   if (thingtime.some((id) => FOLDER_UNFILEABLE.includes(id))) {
     return fail(400, `${thingtime.join('+')} things live under their target and cannot be filed in folders`);
   }
+  const repository = getBoundThingsPersistence(ownerId);
+  if (repository) {
+    const folder = await repository.readExact(rawFolderId.trim());
+    if (!folder || folder.ownerId !== ownerId || !isFolderThing(folder)) return fail(404, 'Folder not found');
+    return { ok: true, folderId: folder.shareId };
+  }
   const things = await getThingsCollection();
   const folder = (await things.findOne({
     shareId: rawFolderId.trim(),
@@ -1327,17 +1335,19 @@ const resolveFolderAssignment = async (
 // Cycle-safe (visited set) and depth-capped; anything suspicious reads as
 // "contains" so the move fails closed.
 const folderAncestryContains = async (ownerId: string, folderId: string, needleId: string): Promise<boolean> => {
-  const things = await getThingsCollection();
+  const repository = getBoundThingsPersistence(ownerId);
+  const things = repository ? null : await getThingsCollection();
   const visited = new Set<string>();
   let current: string | null = folderId;
   for (let hop = 0; current && hop < MAX_FOLDER_DEPTH; hop += 1) {
     if (current === needleId) return true;
     if (visited.has(current)) return true; // existing cycle — fail closed
     visited.add(current);
-    const doc = (await things.findOne(
+    const doc = (repository ? await repository.readExact(current) : await things!.findOne(
       { shareId: current, ownerId, ...folderThingMatch() } as any,
       { projection: { folderId: 1 } } as any
-    )) as any as ThingDoc | null;
+    )) as ThingDoc | null;
+    if (repository && doc && (doc.ownerId !== ownerId || !isFolderThing(doc))) return true;
     if (!doc) return false; // chain ends at root (or a since-deleted parent)
     current = doc.folderId || null;
   }
@@ -1452,6 +1462,7 @@ export const createThing = async (
 		postAttachments: hooks.postAttachments
 	});
   if (isFail(validated)) return validated;
+  const nativeRepository = getBoundThingsPersistence(ownerId);
 	const activation = validated.thingtime.includes('webpage') ? parseWebpageActivation(validated.crystal.activationAction) : null;
 	if (activation && typeof activation.cutoffTime === 'object' && (app || !(await readWebpageActivationCutoff(asOwner, activation.cutoffTime, hooks.transaction?.session))))
 		return fail(400, 'The activation cutoff must reference an exact private settings Thing you can read');
@@ -1463,6 +1474,7 @@ export const createThing = async (
   if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
+  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => key !== 'timelineCapture') || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }) || validated.crystal.schemaId !== undefined)) return nativeOrdinaryUnavailable();
 
   // saves (the user's personal library) and shares (public social reposting)
   // are first-party surfaces — an app acting as the user must not write into
@@ -1637,7 +1649,7 @@ export const createThing = async (
     if (capped) return capped;
   }
 
-  const things = await getThingsCollection();
+  const things: any = nativeRepository ? null : await getThingsCollection();
   const now = input.createdAt instanceof Date ? input.createdAt : new Date();
 
   const tokenAclDoc = [...(viewer?.pat ? [tokenAclEntryFor(viewer.pat.tokenId)] : []), ...(requestedTokenAcl || [])].filter(
@@ -1718,6 +1730,11 @@ export const createThing = async (
 	}
 
 	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? hooks.timelineCapture ?? newThingMutationCapture(viewer?.id ?? ownerId) : null;
+  if (nativeRepository) {
+    if (!nativeOrdinaryThingSupported(doc)) return nativeOrdinaryUnavailable();
+    try { return { ok: true, doc: await insertNativeOrdinaryThing(nativeRepository, doc, timelineCapture!) as ThingDoc }; }
+    catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
+  }
   try {
 		if (billable || registeredApp || target || doc.folderId || hooks.afterInsert || timelineCapture || hooks.transaction) {
 			const write = async (session: any) => {
@@ -2844,8 +2861,14 @@ const toPublicDiscussionPage = async (
   const linked = new Map((await toPublicThings(linkedDocs, viewer)).map(thing => [thing.id, thing]));
   const attachments = new Map<string, AttachmentPublicMetadata[]>();
   if (readable.length) {
-    const things = await getThingsCollection();
-    const attachmentDocs = await things.find(withMatch(
+    const repository = getBoundThingsPersistence(null);
+    const nativeDocs: any[] = [];
+    if (repository) for (const doc of readable) {
+      let cursor: string | null = null;
+      do { const page = await repository.readWindow({ kinds: ['attachment'], targetId: doc.shareId, ownerId: doc.ownerId, limit: 128, cursor }); nativeDocs.push(...page.documents.filter(row => !attachmentIsBlocked(row) && (attachmentModerationStatus(row) !== 'pending' || row.ownerId === viewer?.id))); cursor = page.nextCursor; } while (cursor);
+    }
+    const things = repository ? null : await getThingsCollection();
+    const attachmentDocs = repository ? nativeDocs : await things!.find(withMatch(
       { thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
       { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
         attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
@@ -3107,6 +3130,7 @@ export const canViewInherited = async (
   });
   if (ancestorDenied) return false;
   if (terminal) {
+    if (getBoundThingsPersistence(null) && (hasExtSourcedAudience(terminal) || hasExtacctAudience(terminal) || workspaceRootFor(terminal))) return false;
     // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
     // their comment chains) resolve live against the viewer's connections —
     // loaded lazily here and memoised on the viewer object for the request path.
@@ -3119,6 +3143,7 @@ export const canViewInherited = async (
     if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
+    if (getBoundThingsPersistence(null)) return false;
     if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
@@ -3165,8 +3190,8 @@ export const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | n
       batch.promise = Promise.resolve().then(async () => {
         // the microtask runs after every same-tick caller has added its id
         pending = null;
-        const things = await getThingsCollection();
-        const docs = (await things.find({ shareId: { $in: [...batch.ids] } } as any).toArray()) as any as ThingDoc[];
+        const repository = getBoundThingsPersistence(null);
+        const docs = (repository ? await repository.readBatch([...batch.ids]) : await (await getThingsCollection()).find({ shareId: { $in: [...batch.ids] } } as any).toArray()) as ThingDoc[];
         return new Map(docs.map((doc) => [doc.shareId, doc]));
       });
       pending = batch;
@@ -3285,6 +3310,11 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
 
 const findThing = async (shareId: unknown, session?: any): Promise<ThingDoc | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
+  const repository = getBoundThingsPersistence(null);
+  if (repository) {
+    if (session) throw new Error('Native reads require the active semantic transaction');
+    return await repository.readExact(shareId.trim()) as ThingDoc | null;
+  }
   const things = await getThingsCollection();
   return (await things.findOne({ shareId: shareId.trim() } as any, session ? { session } : {})) as any as ThingDoc | null;
 };
@@ -3778,6 +3808,16 @@ export async function getThing(
   app: AppLens = null,
   options: PostProjectionOptions & { commentProjection?: boolean } = {}
 ): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>> {
+  const nativeRepository = getBoundThingsPersistence(null);
+  if (nativeRepository) {
+    if (app || asViewer(viewerInput)?.pat || options.rememberDiscovery) return nativeOrdinaryUnavailable();
+    const candidate = typeof shareId === 'string' ? await nativeRepository.readExact(shareId.trim()) : null;
+    if (candidate && genericThingReadBlocked(candidate as ThingDoc)) return fail(404, 'Thing not found');
+    if (candidate && !nativeOrdinaryThingSupported(candidate)) {
+      const viewer = withThingLink(await withFriendIds(asViewer(viewerInput)), candidate.shareId);
+      return canView(candidate as ThingDoc, viewer) ? nativeOrdinaryUnavailable() : fail(404, 'Thing not found');
+    }
+  }
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
@@ -3880,11 +3920,13 @@ export const getThings = async (
     context.signal?.throwIfAborted();
     const viewer = await withFriendIds(asViewer(viewerInput));
     const unique = [...new Set(ids as string[])], projectedById = new Map<string, PublicThing>();
-    const collection = await getThingsCollection();
+    const repository = getBoundThingsPersistence(null);
+    if (repository && (app || viewer?.pat)) return nativeOrdinaryUnavailable();
+    const collection = repository ? null : await getThingsCollection();
     for (let offset = 0; offset < unique.length; offset += 100) {
       context.signal?.throwIfAborted();
       const match = withMatch({ shareId: { $in: unique.slice(offset, offset + 100) } }, ...(app ? appMatchClauses(app) : []));
-      const docs = (await collection.find(match as any, context.signal ? { signal: context.signal } : undefined).toArray()) as unknown as ThingDoc[];
+      const docs = (repository ? await repository.readBatch(unique.slice(offset, offset + 100)) : await collection!.find(match as any, context.signal ? { signal: context.signal } : undefined).toArray()) as ThingDoc[];
       const candidates = docs.filter(doc => !genericThingReadBlocked(doc));
       let visible: ThingDoc[];
       if (app) visible = await appVisiblePage(app, candidates);
@@ -3899,6 +3941,7 @@ export const getThings = async (
       if (!app && !isCustomMongoEndpointActive()) for (let index = 0; index < visible.length; index++) {
         if (!visible[index].appId) shapeDirectThingBody(visible[index], viewer, projected[index]);
       }
+      if (repository && visible.some(doc => !nativeOrdinaryThingSupported(doc))) return nativeOrdinaryUnavailable();
       if (app) await appShapeProjections(app, visible, projected);
       else if (!viewer?.pat) for (let index = 0; index < visible.length; index++) {
         const origin = ownerFileSyncUploadOrigin(visible[index] as any, viewer?.id);
@@ -4161,6 +4204,31 @@ export const listThings = async (
   app: AppLens = null,
   context: ThingsListContext = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; offset?: number; nextOffset?: number | null; comments?: PublicCommentPageItem[] }> => {
+  const nativeRepository = getBoundThingsPersistence(asViewer(viewerInput)?.id ?? null);
+  if (nativeRepository) {
+    const viewer = await withFriendIds(asViewer(viewerInput));
+    if (!viewer?.id) return fail(401, 'Unauthorized');
+    if (app || viewer.pat || query.targetId || query.appId || query.offset !== undefined || query.libraryArchive || query.builderAppOnly || query.commentProjection) return nativeOrdinaryUnavailable();
+    const kinds = query.thingtime?.length ? query.thingtime : undefined;
+    if (kinds?.some(kind => !['data', 'folder'].includes(kind))) return nativeOrdinaryUnavailable();
+    const schemaFilter = listSchemaIdMatch(query.schemaId), parentFilter = listCrystalIdMatch('parentId', query.parentId);
+    if (isFail(schemaFilter)) return schemaFilter; if (isFail(parentFilter)) return parentFilter;
+    const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
+    if (folder && folder !== 'root') { const assignment = await resolveFolderAssignment(viewer.id, folder, []); if (isFail(assignment)) return assignment; }
+    context.signal?.throwIfAborted();
+    try {
+      const managedLibraryKinds = new Set(['theme', 'file', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment']);
+      const excludedKinds = [...new Set([...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME, ...DEVICE_CONTROL_THINGTIME])].filter(kind => !managedLibraryKinds.has(kind));
+      const page = await nativeRepository.readWindow({ ownerId: viewer.id, kinds, excludedKinds, excludeArchived: query.excludeArchived, limit: Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT), cursor: query.cursor,
+        ...(folder ? { folder: folder === 'root' ? { kind: 'root' as const } : { kind: 'id' as const, id: folder } } : {}),
+        ...(typeof query.schemaId === 'string' ? { schemaId: query.schemaId } : {}), ...(typeof query.parentId === 'string' ? { parentId: query.parentId } : {}) });
+      if (!kinds && page.documents.some(doc => thingtimeOf(doc as ThingDoc).some(kind => ['theme', 'file', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment'].includes(kind)))) return nativeOrdinaryUnavailable();
+      const candidates = page.documents.filter(doc => !isProtectedThingtime(thingtimeOf(doc as ThingDoc)) && !thingtimeOf(doc as ThingDoc).some(kind => [...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME].includes(kind as any)) && !genericThingReadBlocked(doc as ThingDoc));
+      if (candidates.some(doc => !nativeOrdinaryThingSupported(doc))) return nativeOrdinaryUnavailable();
+      const visible = await visibleThingsPage(candidates as ThingDoc[], viewer, null);
+      return { ok: true, things: await toPublicThings(visible, viewer), nextCursor: page.nextCursor };
+    } catch (error) { if (error instanceof Error && /Things persistence:.*cursor/.test(error.message)) return fail(400, 'Invalid Things cursor'); throw error; }
+  }
   const prepared = await prepareThingsList(viewerInput, query, app, context);
   if (isFail(prepared)) return prepared;
   const { viewer, match, discussionTarget, discussionCursor, cursorScope, limit } = prepared;
@@ -5480,6 +5548,20 @@ export const deleteThing = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   if (shareId.trim().startsWith('timeline-')) return fail(403, 'Timeline records are managed through History');
+  const nativeRepository = getBoundThingsPersistence(viewer.id);
+  if (nativeRepository) {
+    if (app || viewer.pat || Object.keys(hooks).some(key => !['expectedUpdatedAt', 'timelineCapture'].includes(key))) return nativeOrdinaryUnavailable();
+    const initial = await nativeRepository.readExact(shareId.trim());
+    if (!initial || initial.ownerId !== viewer.id) return fail(404, 'Thing not found');
+    if (isProtectedThingtime(thingtimeOf(initial as ThingDoc))) return fail(403, 'This Thing is managed through its own endpoint');
+    if (!nativeOrdinaryThingSupported(initial)) return nativeOrdinaryUnavailable();
+    if (hooks.expectedUpdatedAt != null) {
+      if (typeof hooks.expectedUpdatedAt !== 'string' || !Number.isFinite(+new Date(hooks.expectedUpdatedAt))) return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
+      if (+new Date(hooks.expectedUpdatedAt) !== +initial.updatedAt) return fail(409, 'Thing changed after the preview — build a new preview before deleting');
+    }
+    try { await deleteNativeOrdinaryThing(nativeRepository, initial, hooks.timelineCapture ?? newThingMutationCapture(viewer.id)); return { ok: true }; }
+    catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
+  }
   const things = await getThingsCollection();
   // system kinds (a user's own account thing!) are never deletable through the
   // generic DELETE — $nin on the multikey array excludes them atomically. Their
@@ -5654,8 +5736,12 @@ export const updateThing = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   if (shareId.trim().startsWith('timeline-')) return fail(403, 'Timeline records are managed through History');
-  const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as any as ThingDoc | null;
+  const nativeRepository = getBoundThingsPersistence(viewer.id);
+  if (nativeRepository && (app || viewer.pat || Object.keys(options).some(key => !['replaceCrystal', 'expectedUpdatedAt'].includes(key)))) return nativeOrdinaryUnavailable();
+  const things: any = nativeRepository ? null : await getThingsCollection();
+  const doc = (nativeRepository ? await nativeRepository.readExact(shareId.trim()) : await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as ThingDoc | null;
+  if (nativeRepository && doc?.ownerId === viewer.id && isProtectedThingtime(thingtimeOf(doc))) return fail(403, 'This Thing is managed through its own endpoint');
+  if (nativeRepository && doc && (!nativeOrdinaryThingSupported(doc) || doc.ownerId !== viewer.id)) return doc.ownerId !== viewer.id ? fail(404, 'Thing not found') : nativeOrdinaryUnavailable();
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
   const storageCloudWrite = options.storageCloudWrite;
   const ownsPlacement = doc.ownerId === viewer.id && doc.appId == null;
@@ -5780,6 +5866,7 @@ export const updateThing = async (
     typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
       ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
       : undefined;
+  if (nativeRepository && validated.crystal.schemaId !== undefined) return nativeOrdinaryUnavailable();
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
     const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer, options.transaction);
     if (isFail(provenance)) return provenance;
@@ -5986,6 +6073,15 @@ export const updateThing = async (
     : {};
   if (options.mutation && storageScope?.sandbox) throw new Error('Composed updates require a persistent content transaction');
   const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? options.mutation?.capture ?? newThingMutationCapture(viewer.id) : null;
+  if (nativeRepository) {
+    const next = { ...doc, ...set, updatedAt: new Date(Math.max(+doc.updatedAt + 1, +now)) } as ThingDoc;
+    for (const key of Object.keys(unset)) delete (next as any)[key];
+    if (!nativeOrdinaryThingSupported(next)) return nativeOrdinaryUnavailable();
+    try {
+      const updated = await updateNativeOrdinaryThing(nativeRepository, doc, next, timelineCapture!);
+      return { ok: true, thing: (await toPublicThings([updated as ThingDoc], viewer))[0], post: null };
+    } catch (error) { const storageFail = storageMutationFail(error); if (storageFail) return storageFail; throw error; }
+  }
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {

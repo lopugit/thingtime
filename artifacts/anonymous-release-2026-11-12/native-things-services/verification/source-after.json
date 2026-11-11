@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-11T22:51:08.838129+00:00",
+  "baseCommit": "a87cc9c7f3cdef7ccd1db5348460669259513cf6",
+  "scope": "Tracked and nonignored source under remix, electron, native-bundles and MCP; generated build outputs excluded by git ignore",
+  "fileCount": 5257,
+  "filesIdenticalTo": "source-before.json",
+  "filesCanonicalJsonSha256": "f46d956dd477943f8b398e79594f1e053299a1eecba1b7cf313db2709742b285",
+  "hashEncoding": "UTF-8 JSON of files map, sorted keys, separators comma/colon",
+  "sourceUnchanged": true
+}
