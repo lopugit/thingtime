@@ -52,7 +52,9 @@ const MongoClient=factory?driver[factory]().MongoClient:driver.MongoClient??driv
 if(!MongoClient)throw new Error('Built MongoDB driver has no MongoClient export.');
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
-for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
+for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};
+const close=MongoClient.prototype.close;
+MongoClient.prototype.close=async function(...args){const result=await close.apply(this,args);appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event:'clientClosed'})+'\\n');return result};`);
 function start(executable, args, extra = {}) {
   const child = spawn('/usr/bin/sandbox-exec', ['-f', policy, executable, ...args], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     PATH: process.env.PATH, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', HOST: '127.0.0.1',
@@ -70,13 +72,22 @@ const startNitro = (key, extra = {}) => start(process.execPath, ['--import', ins
 async function indexTrace(key) {
   let lines;
   try { lines = (await readFile(join(dir, `${key}-index.jsonl`), 'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse); }
-  catch (error) { if (error.code === 'ENOENT') return { creates: 0, drops: 0, peak: 0 }; throw error; }
-  const active = new Set(); let peak = 0, creates = 0, drops = 0;
+  catch (error) { if (error.code === 'ENOENT') return { creates: 0, drops: 0, peak: 0, clientsClosed: 0 }; throw error; }
+  const active = new Set(); let peak = 0, creates = 0, drops = 0, clientsClosed = 0;
   for (const event of lines) {
     if (event.event === 'commandStarted') { active.add(event.id); if (event.command === 'createIndexes') creates++; else drops++; peak = Math.max(peak, active.size); }
+    else if (event.event === 'clientClosed') clientsClosed++;
     else active.delete(event.id);
   }
-  return { creates, drops, peak };
+  return { creates, drops, peak, clientsClosed };
+}
+async function expectPoolDrain(key, previous) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const closed = (await indexTrace(key)).clientsClosed;
+    if (closed > previous) return closed;
+    await delay(50);
+  }
+  assert.fail(`${key} must finish closing its MongoDB client after demotion.`);
 }
 async function ready(server, key) {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -176,13 +187,15 @@ try {
   const successor = startNitro('successor'); await ready(successor, 'successor');
   routeTo = 'successor'; await delay(5_100);
   assert.equal((await api('owner', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
+  const ownerClientsClosed = await expectPoolDrain('owner', initialized.clientsClosed);
   await api('successor', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Unchanged cold plan' }, acl: ['tt:all'] } });
   const unchanged = await indexTrace('successor'); assert.equal(unchanged.creates, 0); assert.equal(unchanged.drops, 0);
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
+  const successorClientsClosed = await expectPoolDrain('successor', unchanged.clientsClosed);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
   console.log(JSON.stringify({ ok: true, transport: 'built-nitro', viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
-    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
+    ownerClientsClosed, successorClientsClosed, initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }
