@@ -1,4 +1,5 @@
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { rootIdentity } from '../utils/rootIdentity';
 import {
 	claimSyncEnrollment, CONFIGURATION_DRAFT_PREFIX, configurationDraftKey, persistConfigurationDrafts,
@@ -6,8 +7,9 @@ import {
 } from './configurationEditor';
 import { createNativeSyncHost, isNativeSyncAdapterCurrent, type NativeSyncAdapter } from './nativeSyncHost.client';
 import { enrollNativeFolderSync, nativeSyncTasks } from './nativeSyncTasks.client';
+import { openSyncJournal } from './journal.client';
 import { createRemoteSyncClient } from './remoteSyncClient.client';
-import { assertRemoteFolderEnrollment, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { assertRemoteFolderEnrollment, REMOTE_SYNC_ENROLLMENT_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS, type RemoteSyncStatus } from './remoteSyncProtocol';
 import { validateSyncScope } from './reconcile';
 
 const retryAfter = new Map<string, number>();
@@ -21,6 +23,16 @@ function savedScope(key: string, ownerId: string): ConfigurationEditorScope | nu
 		validateSyncScope({ ...value, rootId: 'automatic-setup-recovery' });
 		return value;
 	} catch { return null; }
+}
+
+/** A status heartbeat is only an advisory choice of command. The device
+ * revalidates its journal, native lane and Pause under the root lock. */
+export function chooseSavedIntentRecovery(status: RemoteSyncStatus, candidate: RemoteSyncStatus['jobs'][number] | undefined,
+ deviceId: string, intervalMs: number, serverCompatible: boolean): boolean {
+ return serverCompatible && status.deviceId === deviceId && status.folderEnrollmentVersion === '1.0.0' &&
+  capabilitySatisfies(status.folderEnrollmentRecoveryVersion, '1.0.0') && status.task?.active !== true &&
+  candidate?.state === 'attention' && candidate.strictCapturePending === true && candidate.nextRunAt === undefined && candidate.intervalMs === intervalMs &&
+  !candidate.pendingFolderValidation;
 }
 
 /** Resume only cloud commits the user already authorized through Save & sync.
@@ -102,15 +114,45 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 				if (!intent.savedRevision) writeDrafts(state.drafts.map(row => row.id === draft.id ? { ...row, enrollment: { ...intent, savedRevision: saved.updatedAt } } : row));
 				current();
 				if (local) {
-					const job = await enrollNativeFolderSync(saved, binding, generation, intent.intervalMs, deadline, { queue: true, respectPause: true });
+					let recoverSavedIntent = false;
+					if (!nativeSyncTasks.read()?.active) {
+						const journal = await openSyncJournal();
+						try {
+							const prior = await journal.jobs({ scope: binding, currentScope: () => { current(); return binding; }, signal: deadline }).read();
+							recoverSavedIntent = prior?.state === 'attention' && prior.nextRunAt === undefined && !!prior.strictCaptureId &&
+								!prior.folderSetupPaused && prior.intervalMs === intent.intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(saved);
+						} finally { journal.close(); }
+					}
+					current();
+					const job = await enrollNativeFolderSync(saved, binding, generation, intent.intervalMs, deadline,
+						recoverSavedIntent ? { recoverSavedIntent: true, respectPause: true } : { queue: true, respectPause: true });
 					if (job.reviewed.updatedAt !== saved.updatedAt || job.intervalMs !== intent.intervalMs) throw Error('The saved automatic setup was not confirmed.');
 				} else {
 					const client = createRemoteSyncClient({ ...scope, signal: deadline, assertCurrent: current });
-					const status = await client.send<RemoteSyncStatus>({ action: 'status' }, { timeoutMs: 6_000 });
+					let status = await client.send<RemoteSyncStatus>({ action: 'status' }, { timeoutMs: 6_000 });
 					current();
 					if (status.deviceId !== scope.deviceId || status.folderEnrollmentVersion !== '1.0.0') throw Error('The device could not confirm automatic setup.');
+					let candidate = status.jobs.find(job => job.connectionId === saved.id);
+					const first = status;
+					while (!candidate && status.nextCursor) {
+						const cursor = status.nextCursor;
+						const next = await client.send<RemoteSyncStatus>({ action: 'status', cursor }, { timeoutMs: 6_000 });
+						current();
+						if (next.deviceId !== scope.deviceId || next.folderEnrollmentVersion !== '1.0.0' ||
+							(next.nextCursor !== undefined && Number(next.nextCursor) <= Number(cursor))) throw Error('The device status changed during automatic setup.');
+						candidate = next.jobs.find(job => job.connectionId === saved.id);
+						status = next;
+					}
+					let recoveryCompatible = false;
+					if (capabilitySatisfies(first.folderEnrollmentRecoveryVersion, '1.0.0')) {
+						try { await requireThingtimeCapability('api.devices-sync-control', REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS['api.devices-sync-control'], scope.origin); recoveryCompatible = true; }
+						catch { /* Old or unavailable origins keep the original queue-only contract. */ }
+						current();
+					}
+					const recoverSavedIntent = chooseSavedIntentRecovery(first, candidate, scope.deviceId, intent.intervalMs, recoveryCompatible);
 					const expected = { connectionId: saved.id, expectedUpdatedAt: saved.updatedAt, intervalMs: intent.intervalMs };
-					assertRemoteFolderEnrollment(await client.send({ action: 'start', ...expected, queueOnly: true }), expected);
+					assertRemoteFolderEnrollment(await client.send({ action: 'start', ...expected,
+						...(recoverSavedIntent ? { recoverSavedIntent: true as const } : { queueOnly: true as const }) }), expected);
 				}
 				writeDrafts(state.drafts.filter(row => row.id !== saved.id));
 			} catch {

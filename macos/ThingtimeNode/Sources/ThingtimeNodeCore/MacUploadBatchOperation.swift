@@ -3,8 +3,38 @@ import Foundation
 
 enum MacUploadBatchOperation {
     typealias Callback = @Sendable (JSONValue, TimeInterval) async throws -> JSONValue
-    struct Outcome: Sendable { let ordinal: Int; let result: JSONValue; let uploadId: String?; let payload: JSONValue? }
+    struct SourceFailure: Sendable { let stage: String; let reason: String }
+    struct Outcome: Sendable {
+        let ordinal: Int; let result: JSONValue; let uploadId: String?; let payload: JSONValue?; let sourceFailure: SourceFailure?
+        init(ordinal: Int, result: JSONValue, uploadId: String?, payload: JSONValue?, sourceFailure: SourceFailure? = nil) {
+            self.ordinal = ordinal; self.result = result; self.uploadId = uploadId; self.payload = payload; self.sourceFailure = sourceFailure
+        }
+    }
     static let failureCodes: Set<String> = ["conflict", "temporarily-unavailable", "authority-changed", "invalid-member", "source-changed", "cancelled", "deadline"]
+    private static let sourceStages = ["server-lookup", "native-initial-read", "server-checksum-prepare", "native-payload-read", "native-pre-put-read", "server-put", "native-post-put-read", "server-verify", "native-final-read", "unknown"]
+    private static func sourceReason(_ error: Error) -> String {
+        if case MobileFolderStore.Failure.unavailable = error { return "unavailable" }
+        // The existing reader collapses identity, stamp, and digest failures
+        // into .changed. Do not guess which field differed.
+        return "unknown"
+    }
+    private static func sourceChanged(_ value: JSONValue) -> Bool {
+        guard case .object(let row) = value else { return false }
+        return row["status"] == .string("failed") && row["code"] == .string("source-changed")
+    }
+    private static func sourceDiagnostic(_ results: [Int: JSONValue], _ failures: [Int: SourceFailure]) -> String? {
+        let ordinals = results.keys.filter { sourceChanged(results[$0]!) }
+        guard !ordinals.isEmpty else { return nil }
+        var stages: [String: Int] = [:], reasons: [String: Int] = [:]
+        for ordinal in ordinals {
+            let failure = failures[ordinal] ?? SourceFailure(stage: "unknown", reason: "unknown")
+            stages[failure.stage, default: 0] += 1
+            reasons[failure.reason, default: 0] += 1
+        }
+        return "Upload batch source-changed total=\(ordinals.count) " +
+            sourceStages.map { "\($0)=\(stages[$0, default: 0])" }.joined(separator: " ") +
+            " unavailable=\(reasons["unavailable", default: 0]) unknown-reason=\(reasons["unknown", default: 0])"
+    }
     private static func validVersion(_ value: String) -> Bool { value.utf8.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) } }
     static func failure(_ ordinal: Int, _ code: String) -> JSONValue {
         .object(["ordinal": .number(Double(ordinal)), "status": .string("failed"), "statusCode": .number(code == "source-changed" ? 409 : 503),
@@ -25,7 +55,8 @@ enum MacUploadBatchOperation {
     }
 
     static func run(_ batch: MacUploadBatchDescriptor, started: TimeInterval, bookmark: Data,
-                    check: @escaping @Sendable () async throws -> Void, callback: @escaping Callback) async throws -> JSONValue {
+                    check: @escaping @Sendable () async throws -> Void, callback: @escaping Callback,
+                    diagnostic: @Sendable (String) -> Void = { ThingtimeNodeLog.actions.notice("\($0, privacy: .public)") }) async throws -> JSONValue {
         let governedPayload = batch.resourceLimits?.uploadBytesPerSecond != nil || batch.resourceLimits?.cpuPercent != nil
         func remaining() throws -> TimeInterval {
             try Task.checkCancellation()
@@ -50,7 +81,7 @@ enum MacUploadBatchOperation {
             } else { reply = try await callback(value, min(seconds, remaining())) }
             try await check(); _ = try remaining(); return reply
         }
-        var digests: [Int: String] = [:], results: [Int: JSONValue] = [:]
+        var digests: [Int: String] = [:], results: [Int: JSONValue] = [:], sourceFailures: [Int: SourceFailure] = [:]
         // Receipt-only lookup precedes ALL source IO. An accepted original
         // operation remains recoverable after its local source changed/deleted.
         let lookup = try await call(.object(["kind": .string("prepare-ready"), "checksums": .array([])]), seconds: 60)
@@ -68,6 +99,7 @@ enum MacUploadBatchOperation {
                 let code = try BatchJSON.string(row, "code")
                 guard failureCodes.contains(code), code != "authority-changed" else { throw MobileFolderStore.Failure.changed }
                 results[index] = value
+                if code == "source-changed" { sourceFailures[index] = SourceFailure(stage: "server-lookup", reason: "unknown") }
             default: throw MobileFolderStore.Failure.invalid
             }
         }
@@ -75,7 +107,10 @@ enum MacUploadBatchOperation {
             try await check(); _ = try remaining()
             do { digests[member.ordinal] = try await read(bookmark, member).sha256 }
             catch is CancellationError { throw CancellationError() }
-            catch { results[member.ordinal] = failure(member.ordinal, "source-changed") }
+            catch {
+                results[member.ordinal] = failure(member.ordinal, "source-changed")
+                sourceFailures[member.ordinal] = SourceFailure(stage: "native-initial-read", reason: sourceReason(error))
+            }
         }
         let checksums = digests.keys.sorted().map { JSONValue.object(["ordinal": .number(Double($0)), "sha256": .string(digests[$0]!)]) }
         let prepared = required.isEmpty ? lookup : try await call(.object(["kind": .string("prepare-ready"), "checksums": .array(checksums)]), seconds: 60)
@@ -98,6 +133,9 @@ enum MacUploadBatchOperation {
                 let code = try BatchJSON.string(row, "code")
                 guard failureCodes.contains(code), code != "authority-changed" else { throw MobileFolderStore.Failure.changed }
                 results[index] = value
+                if code == "source-changed" && sourceFailures[index] == nil {
+                    sourceFailures[index] = SourceFailure(stage: required.isEmpty ? "server-lookup" : "server-checksum-prepare", reason: "unknown")
+                }
             default: throw MobileFolderStore.Failure.invalid
             }
         }
@@ -116,7 +154,8 @@ enum MacUploadBatchOperation {
                     let bytes: Data
                     do { bytes = try await read(bookmark, member, sha).bytes }
                     catch is CancellationError { throw CancellationError() }
-                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: nil, payload: nil) }
+                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: nil, payload: nil,
+                        sourceFailure: SourceFailure(stage: "native-payload-read", reason: sourceReason(error))) }
                     for offset in stride(from: 0, to: bytes.count, by: 65_536) {
                         let end = min(offset + 65_536, bytes.count)
                         let ack = try await call(.object(["kind": .string("chunk"), "ordinal": .number(Double(ordinal)),
@@ -131,7 +170,8 @@ enum MacUploadBatchOperation {
                     // before allowing the host to dispatch this exact PUT.
                     do { _ = try await read(bookmark, member, sha) }
                     catch is CancellationError { throw CancellationError() }
-                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: nil, payload: nil) }
+                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: nil, payload: nil,
+                        sourceFailure: SourceFailure(stage: "native-pre-put-read", reason: sourceReason(error))) }
                     try await check()
                     guard governedPayload || ProcessInfo.processInfo.systemUptime - started < 30 else {
                         return Outcome(ordinal: ordinal, result: failure(ordinal, "deadline"), uploadId: nil, payload: nil)
@@ -142,19 +182,22 @@ enum MacUploadBatchOperation {
                     if status == "failed" {
                         let code = try BatchJSON.string(ack, "code")
                         guard failureCodes.contains(code), code != "authority-changed" else { throw MobileFolderStore.Failure.changed }
-                        return Outcome(ordinal: ordinal, result: failure(ordinal, code), uploadId: nil, payload: nil)
+                        return Outcome(ordinal: ordinal, result: failure(ordinal, code), uploadId: nil, payload: nil,
+                            sourceFailure: code == "source-changed" ? SourceFailure(stage: "server-put", reason: "unknown") : nil)
                     }
                     guard status != "accepted" || ack["payloadBytes"] == .number(Double(member.source.size)) else { throw MobileFolderStore.Failure.invalid }
                     let payload = JSONValue.object(["ordinal": .number(Double(ordinal)), "bytes": status == "accepted" ? .number(Double(member.source.size)) : .null])
                     do { _ = try await read(bookmark, member, sha) }
                     catch is CancellationError { throw CancellationError() }
-                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: uploadIDs[ordinal], payload: payload) }
+                    catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: uploadIDs[ordinal], payload: payload,
+                        sourceFailure: SourceFailure(stage: "native-post-put-read", reason: sourceReason(error))) }
                     return Outcome(ordinal: ordinal, result: .null, uploadId: uploadIDs[ordinal], payload: payload)
                 }
             }
             while next < min(batch.resourceLimits?.transferConcurrency ?? 16, 16, selected.count) { add(selected[next]); next += 1 }
             for try await outcome in group {
                 results[outcome.ordinal] = outcome.result
+                if let sourceFailure = outcome.sourceFailure { sourceFailures[outcome.ordinal] = sourceFailure }
                 if let id = outcome.uploadId { verifyUploads[outcome.ordinal] = id }
                 if let payload = outcome.payload { payloads[outcome.ordinal] = payload }
                 if next < selected.count { add(selected[next]); next += 1 }
@@ -171,6 +214,9 @@ enum MacUploadBatchOperation {
                 if row["status"] == .string("failed") {
                     let code = try BatchJSON.string(row, "code")
                     guard failureCodes.contains(code), code != "authority-changed" else { throw MobileFolderStore.Failure.changed }
+                    if code == "source-changed" && sourceFailures[ordinal] == nil {
+                        sourceFailures[ordinal] = SourceFailure(stage: "server-verify", reason: "unknown")
+                    }
                     if results[ordinal] == .null { results[ordinal] = value }; continue
                 }
                 guard row["status"] == .string("verified") else { throw MobileFolderStore.Failure.invalid }
@@ -193,9 +239,13 @@ enum MacUploadBatchOperation {
             try await check()
             do { _ = try await read(bookmark, member, expectedDigests[member.ordinal]) }
             catch is CancellationError { throw CancellationError() }
-            catch { results[member.ordinal] = failure(member.ordinal, "source-changed") }
+            catch {
+                results[member.ordinal] = failure(member.ordinal, "source-changed")
+                sourceFailures[member.ordinal] = SourceFailure(stage: "native-final-read", reason: sourceReason(error))
+            }
         }
         try await check(); _ = try remaining()
+        if let summary = sourceDiagnostic(results, sourceFailures) { diagnostic(summary) }
         return .object(["ok": .bool(true), "version": .number(1), "batchId": .string(batch.batchId), "digest": .string(batch.digest),
                         "results": .array(batch.members.map { results[$0.ordinal] ?? failure($0.ordinal, "temporarily-unavailable") }),
                         "payloads": .array(batch.members.map { payloads[$0.ordinal] ?? .object(["ordinal": .number(Double($0.ordinal)), "bytes": .number(0)]) })])

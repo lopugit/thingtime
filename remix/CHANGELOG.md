@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Recover an exact saved automatic folder intent after an idle
+  strict scanner using the original job identity and a separately advertised
+  worker contract (`api.devices-sync-control` 1.6.0). Defer one-way child hints
+  whose parent has not arrived until a complete sealed inventory can order
+  creation safely. Retain earlier receipts and strict refusal on incomplete
+  or conflicting inventories. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
+
 - 2026-11-11: Refresh a Mac folder-sync context's selected-origin capability
   manifest once when a saved operation encounters an incompatible cached
   version after deployment. Keep exact account/window fences and SemVer refusal;

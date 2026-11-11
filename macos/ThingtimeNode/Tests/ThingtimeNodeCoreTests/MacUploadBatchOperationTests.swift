@@ -3,6 +3,28 @@ import CryptoKit
 import XCTest
 @testable import ThingtimeNodeCore
 
+private final class BatchDiagnosticCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    func record(_ value: String) { lock.lock(); values.append(value); lock.unlock() }
+    var messages: [String] { lock.lock(); defer { lock.unlock() }; return values }
+}
+
+private actor DiagnosticPreparePeer {
+    let refuseChecksum: Bool
+    private var calls = 0
+    init(refuseChecksum: Bool) { self.refuseChecksum = refuseChecksum }
+    func exchange(_ value: JSONValue, _: TimeInterval) throws -> JSONValue {
+        let frame = try BatchJSON.object(value, keys: ["kind", "checksums"])
+        guard frame["kind"] == .string("prepare-ready") else { throw MobileFolderStore.Failure.invalid }
+        calls += 1
+        let failed = JSONValue.object(["ordinal": .number(0), "status": .string("failed"), "code": .string("source-changed"),
+                                       "statusCode": .number(409), "retryable": .bool(false)])
+        let source = JSONValue.object(["ordinal": .number(0), "status": .string("source-required")])
+        return .object(["results": .array([refuseChecksum && calls == 1 ? source : failed])])
+    }
+}
+
 private actor BatchOperationPeer {
     let batch: MacUploadBatchDescriptor, root: URL
     let replay: Bool, changeAfterVerify: Bool, mixed: Bool
@@ -74,7 +96,7 @@ private actor BatchOperationPeer {
 }
 
 @MainActor final class MacUploadBatchOperationTests: XCTestCase {
-    private func fixture(count: Int = 1) throws -> (URL, MobileFolderStore, FileSyncOwnerScope, MobileFolderStore.Grant, MacUploadBatchDescriptor, JSONValue) {
+    private func fixture(count: Int = 1, rustCapture: Bool = false) throws -> (URL, MobileFolderStore, FileSyncOwnerScope, MobileFolderStore.Grant, MacUploadBatchDescriptor, JSONValue) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
@@ -85,10 +107,33 @@ private actor BatchOperationPeer {
         let batchId = UUID().uuidString.lowercased(), updated = "2026-10-21T00:00:00.000Z"
         var members: [JSONValue] = [], fields = ["thingtime-upload-batch-v1", batchId, "https://sync.test", "owner", "home", "connection", "device", "connection", updated,
             "1", "Backup", "device", grant.id, "folder", "cloud-root", "backup", "0", "0", "wifi", "0", "0", "", String(count)]
+        for i in 0..<count { try Data("payload-\(i)".utf8).write(to: root.appendingPathComponent("file-\(i)")) }
+        let captured: [MobileFolderReader.Entry]
+        if rustCapture {
+            let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            let helper = ProcessInfo.processInfo.environment["THINGTIME_TEST_COMMANDER_INDEXER"].map { URL(fileURLWithPath: $0) }
+                ?? project.appendingPathComponent("filesystem-indexer/target/debug/commander-indexer")
+            guard FileManager.default.isExecutableFile(atPath: helper.path) else {
+                throw NSError(domain: "Build the canonical filesystem-indexer fixture first.", code: 1)
+            }
+            let index = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            addTeardownBlock { try? FileManager.default.removeItem(at: index) }
+            let database = index.appendingPathComponent("filesystem-index.sqlite3")
+            let inventory = MobileFolderInventory(directory: index.appendingPathComponent("captures"),
+                transport: RustProcessInventoryTransport(helper: helper, database: database), database: database)
+            let inventoryScope = MobileFolderInventory.Scope(owner: owner, deviceId: "device", rootId: grant.id)
+            let id = UUID().uuidString.lowercased()
+            _ = try inventory.beginStream(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: [], ignoreRules: nil)
+            try inventory.runStream(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: [], ignoreRules: nil, wake: {})
+            try inventory.finishStream(inventoryScope, id: id, bookmark: grant.bookmark, state: "complete")
+            captured = try inventory.streamChanges(inventoryScope, id: id, bookmark: grant.bookmark, excludedPaths: [], ignoreRules: nil,
+                afterSequence: 0).changes.map(\.entry)
+            XCTAssertEqual(captured.count, count)
+        } else { captured = [] }
         for i in 0..<count {
             let path = "file-\(i)", operationId = UUID().uuidString.lowercased()
-            try Data("payload-\(i)".utf8).write(to: root.appendingPathComponent(path))
-            let source = try XCTUnwrap(MobileFolderReader.inspect(bookmark: grant.bookmark, path: path)), f = source.fingerprint!
+            let source = try XCTUnwrap(rustCapture ? captured.first(where: { $0.path == path }) : MobileFolderReader.inspect(bookmark: grant.bookmark, path: path)), f = source.fingerprint!
             fields += [String(i), operationId, "cloud-root", "cloud-parent", path, source.id, source.version, String(source.size), "", f.algorithm, String(f.partSizeBytes), "1", f.sha256]
             members.append(.object(["ordinal": .number(Double(i)), "write": .object(["scope": scope, "folderId": .string("cloud-parent"), "cloudRootId": .string("cloud-root"), "before": .null,
                 "operation": .object(["id": .string(operationId), "confirmed": .bool(false), "mutation": .object(["kind": .string("copy"), "from": .string("local"), "path": .string(path), "expectedTarget": .null, "source": try JSONValue.from(source)])])])]))
@@ -100,6 +145,43 @@ private actor BatchOperationPeer {
         let digest = SHA256.hash(data: Data(fields.map { "\($0.utf8.count):\($0)" }.joined().utf8)).map { String(format: "%02x", $0) }.joined()
         let value: JSONValue = .object(["descriptor": descriptor, "digest": .string(digest)])
         return (root, store, owner, grant, try MacUploadBatchDescriptor(value), value)
+    }
+    func testRustCaptureBatchDiagnosticSeparatesUnchangedAndStaleNativeSource() async throws {
+        let (root, _, _, grant, batch, _) = try fixture(rustCapture: true)
+        let success = BatchDiagnosticCapture(), peer = BatchOperationPeer(batch, root: root, replay: false, change: false)
+        let accepted = try await MacUploadBatchOperation.run(batch, started: ProcessInfo.processInfo.systemUptime,
+            bookmark: grant.bookmark, check: {}, callback: { try await peer.exchange($0, $1) }, diagnostic: success.record)
+        let acceptedBody = try accepted.decode([String: JSONValue].self)
+        XCTAssertEqual(try BatchJSON.array(acceptedBody["results"]!)[0].decode([String: JSONValue].self)["status"], .string("verified"))
+        XCTAssertTrue(success.messages.isEmpty, "unchanged Rust source emits no failure diagnostic")
+
+        let (staleRoot, _, _, staleGrant, staleBatch, _) = try fixture(rustCapture: true)
+        try Data("replacement".utf8).write(to: staleRoot.appendingPathComponent("file-0"), options: .atomic)
+        let stale = BatchDiagnosticCapture(), stalePeer = BatchOperationPeer(staleBatch, root: staleRoot, replay: false, change: false)
+        let rejected = try await MacUploadBatchOperation.run(staleBatch, started: ProcessInfo.processInfo.systemUptime,
+            bookmark: staleGrant.bookmark, check: {}, callback: { try await stalePeer.exchange($0, $1) }, diagnostic: stale.record)
+        let rejectedBody = try rejected.decode([String: JSONValue].self)
+        XCTAssertEqual(try BatchJSON.array(rejectedBody["results"]!)[0].decode([String: JSONValue].self)["code"], .string("source-changed"))
+        XCTAssertEqual(stale.messages.count, 1)
+        XCTAssertTrue(stale.messages[0].contains("native-initial-read=1"))
+        XCTAssertTrue(stale.messages[0].contains("server-checksum-prepare=0"), "a second source-required reply keeps the first failure stage")
+        let staleRounds = await stalePeer.rounds, stalePuts = await stalePeer.puts
+        XCTAssertEqual(staleRounds, 2)
+        XCTAssertEqual(stalePuts, 0)
+        XCTAssertFalse(stale.messages[0].contains("file-0"))
+    }
+    func testServerPrepareRefusalsHaveDistinctSafeDiagnosticStages() async throws {
+        for checksum in [false, true] {
+            let (_, _, _, grant, batch, _) = try fixture()
+            let sink = BatchDiagnosticCapture(), peer = DiagnosticPreparePeer(refuseChecksum: checksum)
+            let reply = try await MacUploadBatchOperation.run(batch, started: ProcessInfo.processInfo.systemUptime,
+                bookmark: grant.bookmark, check: {}, callback: { try await peer.exchange($0, $1) }, diagnostic: sink.record)
+            let body = try reply.decode([String: JSONValue].self)
+            XCTAssertEqual(try BatchJSON.array(body["results"]!)[0].decode([String: JSONValue].self)["code"], .string("source-changed"))
+            XCTAssertEqual(sink.messages.count, 1)
+            XCTAssertTrue(sink.messages[0].contains(checksum ? "server-checksum-prepare=1" : "server-lookup=1"))
+            XCTAssertFalse(sink.messages[0].contains("file-0"))
+        }
     }
     func test256RealFilesUseFreshBoundedWindowsWithoutRepeatingPUTs() async throws {
         let (root, store, _, grant, batch, raw) = try fixture(count: 256); var authorizations = 0
@@ -164,10 +246,14 @@ private actor BatchOperationPeer {
             let (root, _, _, grant, batch, _) = try fixture()
             if replay { try FileManager.default.removeItem(at: root.appendingPathComponent("file-0")) }
             let peer = BatchOperationPeer(batch, root: root, replay: replay, change: !replay)
-            let result = try await MacUploadBatchOperation.run(batch, started: ProcessInfo.processInfo.systemUptime, bookmark: grant.bookmark, check: {}, callback: { try await peer.exchange($0, $1) })
+            let sink = BatchDiagnosticCapture()
+            let result = try await MacUploadBatchOperation.run(batch, started: ProcessInfo.processInfo.systemUptime, bookmark: grant.bookmark, check: {},
+                callback: { try await peer.exchange($0, $1) }, diagnostic: sink.record)
             let body = try result.decode([String: JSONValue].self), row = try BatchJSON.array(body["results"]!)[0].decode([String: JSONValue].self)
             XCTAssertEqual(row["status"], .string(replay ? "confirmed" : "failed"))
             if !replay { XCTAssertEqual(row["code"], .string("source-changed")); let stored = await peer.stored; XCTAssertTrue(stored) }
+            XCTAssertEqual(sink.messages.count, replay ? 0 : 1)
+            if !replay { XCTAssertTrue(sink.messages[0].contains("native-final-read=1")) }
             let puts = await peer.puts; XCTAssertEqual(puts, replay ? 0 : 1)
         }
     }
