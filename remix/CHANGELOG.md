@@ -151,6 +151,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   add native/browser security coverage. Signed-app and live-provider acceptance
   remain separate checks. [Review and acceptance notes](../PRs/PR-1479-native-authenticator-intake.md). **Codex (AI)**
 
+- 2026-11-12: Retire only exact native source-changed file-batch members
+  proven never canonically dispatched, preserving all marked or ambiguous
+  original receipts. A lost journal reply is idempotent, and fresh sealed
+  backup reconciliation must publish any replacement identity. A saved terminal
+  local feed now drains its pending original receipts before completion even
+  when a batch admission misses. A sealed local feed recovers superseded parent
+  dependents through their original receipts, retiring only proven unpublished
+  children before a fresh full scan; ambiguous publication stays retained.
+  The native identity diagnostic remains value-free. See [PR 1478](../PRs/1478-codex-sync-source-identity-and-batch-recovery.md). **Codex (AI)**
+
+- 2026-11-12: Show the current indexed-entry count during a resumed folder scan
+  even when an older saved hierarchy remains visible; label its total as still
+  being discovered and retain the saved tree separately. **Codex (AI)**
+
 - 2026-11-11: Correct AppID compatibility to WebAuthn's documented same-site
   browser rule using one private-PSL-aware validator in the hook and provider;
   accept parent paths and same-host ports while preserving RP-bound signing,

@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import { prepareCloudInventoryWrite } from './cloudWrite';
-import type { PagedRunSpec } from './pagedRunJournal';
+import { PAGED_RUN_STORES, REVIEW_STORE, type PagedRunSpec } from './pagedRunJournal';
+import { syncScopeKey } from './reconcile';
 import type { SyncEntry } from './reconcile';
 import type { SyncOperation } from './execute';
 import { executeCloudUploadBatch } from './cloudUploadBatch.client';
@@ -148,6 +149,69 @@ test('partial source failure forces individual recovery and unknown canonical di
 	await f.runs().skipUnpublishedStreamOperation(f.s, undispatched!.id, false);
 	assert.equal((await f.runs().active())!.progress.operations, 2);
 	assert.equal((await f.runs().streamState(f.s)).terminal, false);
+	f.f.journal().close();
+});
+
+test('native source-change retires only exact never-dispatched members across journal reopen', async () => {
+	const f = await setup(5), batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	await f.runs().markUploadBatchCommit(f.s, batch.batchId, [1]);
+	await f.runs().confirm(f.s, receipt(batch.members[0].write.operation));
+	// An old saved batch can lack a dispatch marker. Make that one member
+	// ambiguous in the isolated IndexedDB fixture; it must retain its ID.
+	await new Promise<void>((resolve, reject) => {
+		const open = f.f.factory.open('thingtime-file-sync-v1', 16);
+		open.onerror = () => reject(open.error);
+		open.onsuccess = () => {
+			const db = open.result, key = syncScopeKey(scope), operationId = batch.members[2].write.operation.id;
+			const tx = db.transaction([REVIEW_STORE, PAGED_RUN_STORES[1]], 'readwrite');
+			const memberStore = tx.objectStore(REVIEW_STORE), memberKey = [key, f.s.id, 'batch-member', batch.batchId, 2];
+			const member = memberStore.get(memberKey);
+			member.onsuccess = () => { delete member.result.canonicalDispatched; memberStore.put(member.result, memberKey); };
+			const row = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').openCursor(IDBKeyRange.only([key, operationId]));
+			row.onsuccess = () => {
+				if (!row.result) { tx.abort(); return; }
+				const value = row.result.value; delete value.canonicalDispatched; row.result.update(value);
+			};
+			tx.oncomplete = () => { db.close(); resolve(); };
+			tx.onabort = tx.onerror = () => { db.close(); reject(tx.error ?? Error('Synthetic legacy batch mutation failed.')); };
+		};
+	});
+	await f.runs().recoverUploadBatch(f.s);
+	const failed = [1, 2, 3].map(ordinal => ({ ordinal, status: 'failed' as const, statusCode: 409,
+		code: 'source-changed' as const, retryable: false }));
+	assert.equal(await f.runs().retireUndispatchedUploadBatchFailures(f.s, batch, failed), 1);
+	await f.reopen(); // A lost response after retirement cannot re-key the original batch.
+	assert.equal(await f.runs().retireUndispatchedUploadBatchFailures(f.s, batch, failed), 0,
+		'a repeated exact callback verifies retained retirement and never changes counters twice');
+	assert.equal((await f.runs().active())!.progress.operations, 4);
+	assert.equal((await f.runs().active())!.progress.confirmed, 1);
+	assert.equal(await f.runs().claimUploadBatch(f.s, saved), null);
+	const marked = await f.runs().claimNext(f.s);
+	assert.equal(marked!.id, batch.members[1].write.operation.id);
+	await assert.rejects(f.runs().skipUnpublishedStreamOperation(f.s, marked!.id, false), /may still be in flight/);
+	await f.runs().confirm(f.s, receipt(marked!)); // Late accepted receipt keeps its original ID.
+	const ambiguous = await f.runs().claimNext(f.s);
+	assert.equal(ambiguous!.id, batch.members[2].write.operation.id);
+	await assert.rejects(f.runs().skipUnpublishedStreamOperation(f.s, ambiguous!.id, false), /Preserve the published or uncertain/);
+	await f.runs().confirm(f.s, receipt(ambiguous!));
+	const untouched = await f.runs().claimNext(f.s);
+	assert.equal(untouched!.id, batch.members[4].write.operation.id);
+	await f.runs().confirm(f.s, receipt(untouched!));
+	assert.equal((await f.runs().active())!.progress.confirmed, 4);
+	assert.equal(await f.runs().claimNext(f.s), null);
+	f.f.journal().close();
+});
+
+test('a fully retired failed batch accepts only its exact durable no-op reply', async () => {
+	const f = await setup(1), batch = (await f.runs().claimUploadBatch(f.s, saved))!;
+	const failed = [{ ordinal: 0, status: 'failed' as const, statusCode: 409,
+		code: 'source-changed' as const, retryable: false }];
+	await f.runs().recoverUploadBatch(f.s);
+	assert.equal(await f.runs().retireUndispatchedUploadBatchFailures(f.s, batch, failed), 1);
+	await f.reopen();
+	assert.equal(await f.runs().retireUndispatchedUploadBatchFailures(f.s, batch, failed), 0);
+	assert.equal((await f.runs().active())!.progress.operations, 0);
+	assert.equal(await f.runs().claimNext(f.s), null);
 	f.f.journal().close();
 });
 
