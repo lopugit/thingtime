@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-11-11T19:22:08.453260+00:00",
+  "scope": "Exact immutable provider identity for native home repository composition; no runtime/API activation",
+  "sourceHashes": {
+    "remix/app/api/utils/auth/homeRepositoryScope.ts": "ac1334fc9b4a2ac170fccb2399210a5eff42612fa083957940274f7e14d495da",
+    "remix/app/api/utils/auth/userIdentityRepository.ts": "b178b2b13602f75c96e94e15d8e1cab4b878af2cb30119dfd7d5c2b20e77df8d",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "f6dca3477bca1824fea4c236414c33db5eaa4ebb5e9aff8f958409116e63a9b1",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "8e9cc3ec9e218b59ec07c337b44406289fc26f9427b47b0c4a3549eddbaf7517",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.test.ts": "dad89e96bd73c5e6324ce46147d9fa9eb17530e568ba3465796d3c2d74145a6b"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/nativeUserIdentities.test.ts app/api/utils/documentStore/nativeSessions.test.ts",
+      "exitCode": 0,
+      "tests": 19,
+      "pass": 19,
+      "fail": 0,
+      "skip": 0,
+      "log": "pr1000-home-provider-scope-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/auth/homeRepositoryScope.ts app/api/utils/auth/userIdentityRepository.ts app/api/utils/documentStore/nativeSessions.ts app/api/utils/documentStore/nativeUserIdentities.ts app/api/utils/documentStore/nativeUserIdentities.test.ts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "pr1000-home-provider-scope-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit",
+      "exitCode": 0,
+      "log": "pr1000-home-provider-scope-types.log"
+    }
+  ],
+  "helperContract": {
+    "registerHomeRepositoryProvider": "Immutable WeakMap registration; repeated identical pair allowed, rebinding refused",
+    "assertSameHomeRepositoryProvider": "Both repositories must have the same registered provider object; absent/different binding throws HOME_REPOSITORY_SCOPE",
+    "imports": "No native/SQLite imports, store opening, credentials or public selection"
+  },
+  "coverage": "Two different SQLite files labeled home cannot pair identity and session repositories; callback never entered. Valid native factory pairs accepted, absent bindings and immutable rebinding refused. Active identity accessor and scope entry both enforce exact provider identity.",
+  "integration": "Root owns roster assertions/10test rerun; token worker owns token assertion/rerun. Parent owns one combined aggregate/types/ratchet/full lint/build/Mongo HTTP. This worker made no shared build or Git/Graphify mutations."
+}

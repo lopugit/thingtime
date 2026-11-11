@@ -1,4 +1,5 @@
-import { BSON } from 'mongodb';
+import { registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
+import { BSON, Binary } from 'mongodb';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { assertSessionRepositoryScope, SessionRepositoryError, type SessionRepository } from '../auth/sessionRepository';
 import { REVOKED_SESSION_REAP_MS } from '../auth/sessionCore';
@@ -22,7 +23,7 @@ export async function createNativeSessionRepository(provider: CollectionProvider
  let repository: SessionRepository;
  const transaction = <T>(work: (session: CollectionTransaction) => T): Promise<T> => {
   assertSessionRepositoryScope(repository);
-  return provider.transaction(s => { assertSessionRepositoryScope(repository); return work(s); });
+  return provider.transaction(async s => { assertSessionRepositoryScope(repository); const result = await work(s); assertSessionRepositoryScope(repository); return result; });
  };
  repository = Object.freeze({
   kind: 'native-home' as const, homePlaneId,
@@ -43,6 +44,18 @@ export async function createNativeSessionRepository(provider: CollectionProvider
     return rows[0] ? BSON.deserialize(rows[0]) as SessionDoc : null;
    });
   },
+  async bindVaultEnvelope(binding) {
+   assertSessionRepositoryScope(repository);
+   const checked = BSON.deserialize(encodeCollectionDocument(binding,'jti'));validateJti(checked.jti);
+   if (typeof checked.ownerId !== 'string' || !checked.ownerId || !(checked.envelope instanceof Binary) || !(checked.at instanceof Date) || !(checked.expiresAt === null || checked.expiresAt instanceof Date)) throw new SessionRepositoryError('SESSION_REPOSITORY_SCOPE','Invalid native session vault binding');
+   return transaction(s => {
+    const collection=s.collection(namespace),bytes=collection.find({filter:filter(checked.jti),limit:1}).documents[0];if(!bytes)return false;
+    const stored=BSON.deserialize(bytes),now=Math.max(Date.now(),checked.at.getTime());
+    if(stored.userId!==checked.ownerId||stored.revokedAt!==null||![undefined,'browser','service'].includes(stored.purpose)||!(stored.expiresAt===null||stored.expiresAt instanceof Date)||(stored.expiresAt&&stored.expiresAt.getTime()<=now))return false;
+    if((stored.expiresAt===null)!==(checked.expiresAt===null)||(stored.expiresAt&&stored.expiresAt.getTime()!==checked.expiresAt.getTime()))return false;
+    return collection.updateOne({op:'and',filters:[filter(checked.jti),{op:'eq',path:['userId'],value:checked.ownerId},{op:'eq',path:['revokedAt'],value:null},{op:'eq',path:['expiresAt'],value:checked.expiresAt}]},[{op:'set',path:['secureVaultKey'],value:checked.envelope}]).matched;
+   });
+  },
   async revoke(jti: string, at: Date) {
    validateJti(jti);
    const milliseconds = at instanceof Date ? Date.prototype.getTime.call(at) : NaN;
@@ -61,5 +74,6 @@ export async function createNativeSessionRepository(provider: CollectionProvider
    });
   }
  });
+ registerHomeRepositoryProvider(repository, provider);
  return repository;
 }

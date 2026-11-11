@@ -1,5 +1,21 @@
 # Native web bundles and offline runtime
 
+## Managed-local acceptance checkpoint — 12 November 2026
+
+The current isolated Electron run proves signed automatic replacement with a real
+local account: actual safeStorage and bundled Mongo,70-second dirty-input hold,
+normal persistence/reload,45-second authenticated HTTP-write hold, then fresh app
+and Mongo processes retaining the same browser/API sessions, private Thing and
+revision/edit, and encrypted profile. Pending release confirmation,1440/390
+drawer draft/cancel and cleanup pass. The new closed-notification-panel lifecycle
+fix preserves the native safety guard and open-panel protection.
+
+This is a library-idle development run using a synthetic release signer. Home-
+specific idle behavior, native AutoFill session recovery, production trust,
+physical iOS and full SQLite account HTTP remain separate requirements.
+[Receipt and exact source attribution](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-dialog/verification.json).
+
+
 Status: implementation in progress, 11 November 2026. This extends the anonymous
 and local-first work in PR #1000; release API delivery and production updater acceptance remain incomplete.
 

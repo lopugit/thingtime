@@ -31,6 +31,7 @@ export const NotificationsBell = () => {
     cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0
   );
   const [open, setOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLElement | null>(null);
   const badgeGeneration = React.useRef(0);
   const markingRead = React.useRef(false);
   const ownerRef = React.useRef(user?.id);
@@ -137,6 +138,7 @@ export const NotificationsBell = () => {
     <Popover isOpen={open} onOpen={handleOpen} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
       <PopoverTrigger>
         <Center
+          ref={element => { triggerRef.current = element; }}
           as="button"
           type="button"
           position="relative"
@@ -171,7 +173,14 @@ export const NotificationsBell = () => {
           )}
         </Center>
       </PopoverTrigger>
-      <PopoverContent
+      {/* Chakra's lazy mode removes children but retains a hidden dialog shell.
+          A closed notification panel must not remain an active dialog. */}
+      {open && <PopoverContent
+        onKeyDown={event => {
+          // Return Escape focus before unmount. Outside clicks retain their own
+          // target; an IME Escape remains available to the composing control.
+          if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.currentTarget.contains(document.activeElement)) triggerRef.current?.focus();
+        }}
         width={['calc(100vw - 24px)', '360px']}
         maxWidth="calc(100vw - 24px)"
         maxHeight="70vh"
@@ -221,7 +230,7 @@ export const NotificationsBell = () => {
             <NotificationRow key={item.id} item={item} dense onClick={handleItemClick} />
           ))}
         </Flex>
-      </PopoverContent>
+      </PopoverContent>}
     </Popover>
   );
 };

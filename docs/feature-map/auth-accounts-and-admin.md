@@ -823,3 +823,38 @@ Canonical tiers bootstrap per provider without overwriting valid published bodie
 Run `test:document-store`, `test:subscriptions`, `test:storage`, and the fresh built
 Mongo HTTP fixture after changes. `registerUser` refuses native activation until
 vault, outbox, notification, roster, entitlement and readiness adapters exist.
+
+`auth/rosterRepository.ts` separates account-switcher persistence from the
+canonical cookie ownership and live-session checks in `auth/accounts.ts`.
+`documentStore/nativeRosters.ts` stores the same roster/session references in an
+explicit native home scope. Canonical persist/reopen/delete, concurrent version
+guards, expiry, planted cookie/Bearer refusal and expired/foreign scope tests are
+part of `test:document-store`; a controlled Mongo fixture preserves driver query
+shapes. This does not enable native HTTP registration or replace session/identity
+authorization. Native TTL cleanup and full authenticated switching acceptance
+remain required before profile activation.
+
+Canonical vault/password helpers now use `UserIdentityRepository` secure-blob
+snapshots and `SessionRepository.bindVaultEnvelope` for native persistence.
+`nativeVault.test.ts` runs actual cryptography/JWTs against temporary SQLite
+files in a credential-sanitized child process. It covers reset/reopen/revocation,
+concurrent email-flag CAS, typed legacy versions and private-preimage isolation.
+The existing hosted Mongo secure-CAS/session filters are preserved. Production
+native profile-key provisioning remains required; synthetic test keys do not
+establish protected profile key lifecycle or full HTTP signup.
+
+`auth/singleUseTokenRepository.ts` and `documentStore/nativeSingleUseTokens.ts`
+extend the canonical email-verification helpers with exact-provider native
+storage. SQLite stores SHA-256 token digests, claims once transactionally and
+rechecks expiry after queued admission. Hosted Mongo retains the deployed token
+format so older binaries can consume newly issued links after rollback.
+`nativeSingleUseTokens.test.ts` covers actual files, process/handle contention,
+reopen, replay, expired scopes, queued expiry and same-label foreign providers.
+Unsupported native password-reset persistence refuses Mongo fallback. Delivery,
+notifications, wider account verification transactions and runtime activation
+remain separate prerequisites.
+
+`auth/homeRepositoryScope.ts` binds native repositories to an opaque shared
+provider identity, not merely a matching home label. Identity/session, roster and
+verification composition must reject different SQLite providers bearing the same
+label. The registry contains no database paths, credentials or public selectors.

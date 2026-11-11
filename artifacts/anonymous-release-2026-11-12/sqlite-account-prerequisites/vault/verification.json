@@ -1,0 +1,79 @@
+{
+  "observedAt": "2026-11-11T19:17:10.623717+00:00",
+  "baseCommit": "5a03111cd (parent supplied) plus owned nine-file changes and separately-owned roster/verification work",
+  "scope": "Canonical user secure CAS and native session vault-envelope persistence; actual cryptography/file-backed module tests, not full HTTP registration/provider activation",
+  "sourceHashes": {
+    "remix/app/api/utils/auth/users.ts": "048fea90c8fdc7855023e9a0dc4a2f8407c1675f4e55fe37459fca772d3d24f4",
+    "remix/app/api/utils/auth/vaultKeys.ts": "7552ec12fe989b7c6a6b8ff9226d7d79a7c9131f5e27ac2d437a3e0626506a3f",
+    "remix/app/api/utils/auth/sessionRepository.ts": "ca1ec85849dd995f7c023becd981a823fd855f5d4bf06c038283bf8bc59087f3",
+    "remix/app/api/utils/auth/userIdentityRepository.ts": "aff8fc839c8a240df0bf06e8bc6705cd360f3a5f43b92aab4850ebffd0295e41",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "878a31ab95a12de9c6bdc2bff32b7abda5e64dfb2b12e4b8381f1d9b7b21b95a",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "17fc66ab9e9339ea16fb7a154ccb5a09932c8627106c46d97ca17f5e74f48438",
+    "remix/app/api/utils/documentStore/nativeVault.test.ts": "1f8bb50d5e866a35d372e7b34d8cc4d1b2b2ab733997820e83cfbc3baba04a36",
+    "remix/app/api/utils/documentStore/nativeVault.crypto.fixture.mts": "75ea84f12d16aa9008e950b3322da40940b0d5eb4885682e6cf20420c19c07fa",
+    "remix/app/api/utils/documentStore/nativeVault.mongo.fixture.mts": "b82d7a34da769b5a8fe0c190777cf3a81e34014695cb2d87d4caa4f76c5e1bc0"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "exitCode": 0,
+      "tests": 83,
+      "pass": 83,
+      "fail": 0,
+      "skip": 0,
+      "includes": "Two vault wrapper tests, one of which additionally asserts eight isolated child crypto/file tests passed",
+      "log": "pr1000-native-vault-store.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/nativeVault.test.ts",
+      "exitCode": 0,
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "skip": 0,
+      "nestedRealFileCryptoTests": 8,
+      "nestedPass": 8,
+      "log": "pr1000-native-vault-crypto.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --experimental-test-module-mocks --import tsx --test app/api/utils/connections/vaultKeys.test.mts",
+      "exitCode": 0,
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "skip": 0,
+      "log": "pr1000-native-vault-mongo.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit",
+      "exitCode": 0,
+      "log": "pr1000-native-vault-types.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/auth/users.ts app/api/utils/auth/vaultKeys.ts app/api/utils/auth/sessionRepository.ts app/api/utils/auth/userIdentityRepository.ts app/api/utils/documentStore/nativeUserIdentities.ts app/api/utils/documentStore/nativeSessions.ts app/api/utils/documentStore/nativeVault.test.ts app/api/utils/documentStore/nativeVault.crypto.fixture.mts app/api/utils/documentStore/nativeVault.mongo.fixture.mts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "pr1000-native-vault-lint.log"
+    }
+  ],
+  "implemented": [
+    "Shared canonical secure-payload parse/mutation/retry for native and hosted Mongo",
+    "Native owner/profile/request-bound opaque snapshot CAS, independent typed BSON preimage, secure blob plus version predicate, typed Long/Double preservation and absent version admission",
+    "Canonical bindVaultPassword/ensureUserVaultKey/resetVaultPassword using actual file-backed accounts and real scrypt/AES",
+    "Session envelope persistence through semantic repository; native atomic owner/expiry/liveness/purpose checks and unchanged hosted Mongo conditional filter",
+    "Real JWT request access, reopen, revocation and stable encrypted data across reset",
+    "Controlled concurrent markEmailVerified race without lost secure fields; stale preimage protection even without version change",
+    "Hostile Binary/accessor refusal, corrupt recovery refusal, cross-profile/expired snapshot and queued session-scope refusal",
+    "Hosted Mongo shapes and hosted imports without native/SQLite dependencies"
+  ],
+  "keyEvidence": "BSON deserialization initially shared Binary input views; tampered-snapshot regression exposed this and private preimage now deserializes an independent Uint8Array copy",
+  "limitations": [
+    "Native HTTP/registerUser selection remains disabled",
+    "Protected per-profile vault master key provisioning/persistence is not implemented here; tests use random disposable process-only keys with sanitized environment",
+    "Native secure mutations explicitly refuse caller-owned wider transactions; canonical markEmailVerified uses standalone optimistic CAS",
+    "getSubscription/native resolveSessionUser entitlement projection remains unsupported; account/roster/outbox/readiness completeness is not established by this receipt",
+    "No production credentials, environment/profile/app data, UI, shared build output, Git or Graphify output changed by this worker"
+  ],
+  "cleanup": "Owned stores, temporary SQLite files and sanitized child HOME/TMPDIR are closed/removed in finally/test.after; no servers/native apps launched"
+}

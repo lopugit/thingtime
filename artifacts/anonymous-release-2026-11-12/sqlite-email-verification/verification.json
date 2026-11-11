@@ -1,0 +1,61 @@
+{
+  "outcome": "Semantic email-verification token persistence implemented; full native account HTTP remains disabled",
+  "baseRevision": "5a03111cd",
+  "ownedSourceHashes": {
+    "remix/app/api/utils/auth/emailVerifications.ts": "c23844a7fae07cc5fcdc9e319d45774e5ccf7db61925a67c50c88c91a98879c8",
+    "remix/app/api/utils/auth/singleUseTokens.ts": "7f4e1f017b0140b48d12bc0fbc7093d1e7a2fa5fcd7699ffcfef56672570c441",
+    "remix/app/api/utils/auth/singleUseTokenRepository.ts": "3fcb1e4ce6e5dfaf6a49d52f0f30def7e5de9926e2f2e6f54ca375d786cd0ec4",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.ts": "d143642ac24d27a75ee6a4d8f8713bad8068caed384b5fc7a19feb30d73cf4c3",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.test.ts": "1c305a49df17f25a5bcc6d7aa1dbb44393fa4d44865e7508e4d8dcd73ed75917",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.restart.fixture.mts": "6c0287b5b750043554d53c761d750215c9c6c8d5c757ebf8fb5162e943c8c0e5",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.mongo.fixture.mts": "f26bff7f7dec251bdcf2556e366e618cf3adf495a16d177b09c202a01491ed40"
+  },
+  "canonicalSignatures": "createEmailVerification/consumeEmailVerification and existing shared getCollection helper calls preserved; verify-email still calls canonical markEmailVerified(userId), route unchanged",
+  "nativeEncoding": "SHA256 namespace in native indexed token field; raw issued token exists only transiently/caller delivery; replaying stored digest fails",
+  "hostedEncoding": "Original raw token field and findOneAndUpdate claim preserved for old readers, rollback and outstanding links. No hosted token migration in this checkpoint.",
+  "securityScope": "homePlaneId PLUS immutable exact CollectionProvider binding to current native identities; unsupported shared-token families refuse before opening Mongo; expired/detached/queued/post-await scopes refuse/rollback",
+  "verification": {
+    "sqlite": {
+      "command": "cd remix && node --import tsx --test app/api/utils/documentStore/nativeSingleUseTokens.test.ts",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "coverage": [
+        "actual canonical issue/consume helpers on realSQLite files",
+        "hash-only persistence and BSON Dates after close/reopen",
+        "strict expiry and stored-digest bearer refusal",
+        "16independent-handle claims plus4separate-process claims with one winner",
+        "separate process issue/consume/replay after restart",
+        "queued expired token remains unconsumed",
+        "scope exiting after actual mutation rolls transaction back",
+        "same-label/different-file provider refuses foreign reads/writes",
+        "actual passwordReset native call refuses Mongo fallback"
+      ]
+    },
+    "mongo": {
+      "passed": true,
+      "command": "cd remix && node --import tsx app/api/utils/documentStore/nativeSingleUseTokens.mongo.fixture.mts",
+      "scope": "Owned genuine mongod loopback synthetic database",
+      "coverage": "raw storage, unmodified old-reader consumption of new hosted link,12claimrace one winner, outstanding legacy links, expiry/invalid",
+      "cleanup": {
+        "processExited": true,
+        "listenerClosed": true
+      }
+    },
+    "focusedLint": "passed (ESLint-config deprecation notice retained)",
+    "typecheck": "passed",
+    "ratchet": "passed",
+    "finalCombinedValidation": "Parent-owned; no repeated test/build started after parent freeze"
+  },
+  "remainingContractGaps": [
+    "Native runtime/bootstrap has not bound or activated this repository for account HTTP",
+    "Canonical mail service still uses Mongo outbox/suppression/unsubscribe satellites and configured real transport",
+    "Admin notification and email delivery acceptance not supplied here; no no-op or offline delivery substitute",
+    "Verification sender currently omits sensitive:true and stores its link in hosted outbox; existing security follow-up outside token ownership",
+    "Hosted raw token persistence remains an explicit security follow-up requiring coordinated rollout/rollback plan"
+  ],
+  "reporting": "No retained child binding ID: gateway child preparation previously refused workspace despite valid parent readback; parent-report actual outcome, no fabricated IDs",
+  "noNativeBuildOrSimulatorRun": true,
+  "observedAt": "2026-11-11T19:24:37.560771+00:00",
+  "sourceFrozen": true
+}

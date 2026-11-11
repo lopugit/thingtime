@@ -75,7 +75,7 @@ test('bounded passive activity observation records only event/mutation kinds and
  class Element { constructor(tagName) { this.tagName = tagName; this.value = 'private-value'; this.textContent = 'private-text'; } }
  const window = { addEventListener: (kind, fn, options) => { assert.deepEqual(JSON.parse(JSON.stringify(options)), { capture: true, passive: true }); handlers.set(kind, fn); } };
  const document = { documentElement: Object.freeze({}) };
- class MutationObserver { constructor(fn) { mutated = fn; } observe(target, options) { assert.equal(target, document.documentElement); observed = options; } }
+ class MutationObserver { constructor(fn) { mutated = fn; } observe(target, options) { assert.equal(target, document); observed = options; } }
  vm.runInNewContext(`(${installActivityObserver})()`, { window, document, MutationObserver, Element, Date });
  assert.equal(observed.attributes, true); assert.equal(handlers.size, 7);
  handlers.get('input')({ type: 'input', isTrusted: true, target: new Element('INPUT'), data: 'private-key' });
@@ -87,6 +87,18 @@ test('bounded passive activity observation records only event/mutation kinds and
  assert.doesNotMatch(JSON.stringify(rows), /private/);
  for (let i = 0; i < 700; i++) handlers.get('focus')({ type: 'focus', isTrusted: false, target: new Element('BUTTON') });
  assert.equal(window.__nativeAutoActivity.length, 512); assert.equal(Object.isFrozen(document.documentElement), true);
+});
+test('activity observation starts before documentElement exists without losing its diagnostic array', () => {
+ const document = Object.freeze({ documentElement: null }); let observed;
+ const window = { addEventListener() {} };
+ class Element {}
+ class MutationObserver {
+  constructor() {}
+  observe(target) { assert.equal(target, document, 'The created Document is already a valid observation root'); observed = target; }
+ }
+ assert.doesNotThrow(() => vm.runInNewContext(`(${installActivityObserver})()`, { window, document, MutationObserver, Element, Date }));
+ assert.equal(observed, document); assert.equal(Array.isArray(window.__nativeAutoActivity), true);
+ assert.equal(document.documentElement, null, 'Observation must not create or replace DOM roots');
 });
 test('active work uses a real incomplete HTTP mutation then exactly one complete commit', async t => {
  let admittedResolve, ended = 0;

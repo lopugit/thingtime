@@ -1,0 +1,27 @@
+✔ canonical session creation, live reads and revocation persist in a real SQLite file across reopen (20.215792ms)
+✔ canonical expiry and non-expiring revocation retention preserve existing expiry and remove vault authority (7.632625ms)
+✔ preallocated canonical session identities have one winner across two SQLite handles (4.680083ms)
+✔ concurrent home repositories remain isolated and nested/wrong-plane scopes fail closed (6.580667ms)
+✔ expired async descendants and unawaited queued work cannot fall back or mutate after repository scope closes (3.723917ms)
+✔ unimplemented caller-owned native transaction is refused before session insertion (3.082125ms)
+✔ existing exported Mongo revocation pipeline retains its exact update and key-removal contract (0.284833ms)
+✔ normal hosted session helper import loads neither native provider nor SQLite (200.707084ms)
+✔ canonical session metadata cannot execute accessors or serialization hooks before native BSON admission (3.9575ms)
+✔ saved native repository calls refuse after scope expiry instead of borrowing default Mongo authority (3.770625ms)
+✔ canonical identity envelope, projection and session survive a real SQLite reopen (56.203792ms)
+✔ canonical username and hashed-email uniqueness have one winner across independent handles (10.392709ms)
+✔ native identities remain home isolated; missing identity binding and unsupported Mongo operations refuse (22.034959ms)
+✔ caller transactions refuse before creating an identity (7.730458ms)
+✔ expired descendants and work queued behind a transaction cannot write after scope exit (5.813416ms)
+✔ native adapter refuses foreign ownership and does not persist an invalid identity (6.455542ms)
+✔ default canonical Mongo identity queries, legacy precedence and transaction forwarding stay unchanged (391.2995ms)
+✔ canonical batch identities preserve requested ordering and dedup with one provider transaction per batch (6.653625ms)
+✔ same home label cannot pair identities and sessions from different SQLite files or unregistered providers (4.605666ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 885.534709

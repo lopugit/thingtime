@@ -1,0 +1,61 @@
+{
+  "passed": true,
+  "receiptSha256": "ee3154356a42eb6aae593f4e59dc2d81ab20fcc8db50e41fa087c8e063e570dc",
+  "cleanupVerified": true,
+  "independentNoOwnedProcesses": true,
+  "independentPortsFree": [
+    52056,
+    52057,
+    52058
+  ],
+  "taskQaAppAndProfileRemoved": true,
+  "sourceAndPayloadHashesUnchanged": true,
+  "actualNativePids": [
+    66777,
+    83677
+  ],
+  "actualMongoPids": [
+    66788,
+    83862
+  ],
+  "signedActiveRelease": "09a9a21487e5791686b56d9c6273c9516d88d7cfc73b36a890fc59f11e2e8a69",
+  "pendingCleared": true,
+  "manualRestartCalled": false,
+  "localAccount": {
+    "sameAccount": true,
+    "browserSessionRetained": true,
+    "independentSessionRetained": true,
+    "samePrivateThing": true,
+    "sameRevision": true,
+    "durableEditRetained": true,
+    "staleRevisionRefused": true,
+    "anonymousAndOtherAccountRefused": true,
+    "baselineMongoPid": 66788,
+    "replacementMongoPid": 83862,
+    "managedMongoRestarted": true,
+    "realElectronSafeStorage": true,
+    "encryptedProfileRetained": true,
+    "nativeAutoFillBound": false,
+    "activeWork": {
+      "actualCanonicalHttpMutation": true,
+      "heldMs": 45409,
+      "processUnchanged": true,
+      "pending": true,
+      "completedAndReadBack": true
+    }
+  },
+  "helperExecutableSha256": "542b8ff8af8cd23f1b784379180ce42defb0ca40b4482e390c0ddfc63133bbcf",
+  "emptyHelperGroupVerified": true,
+  "reviewedScreenshots": [
+    "automatically-confirmed.png",
+    "library-idle.png",
+    "drawer-editor-390.png"
+  ],
+  "homeBlockerRemovedObserved": true,
+  "homeSpecificAutomaticActivationVerified": false,
+  "nativeAutoFillOrVaultBindingVerified": false,
+  "productionSignedDistributionVerified": false,
+  "retainedVerifiedPriorDevelopmentAppUntouched": "/Users/lopu/Applications/Thingtime Dev native-bundle-dev-pr1000.app",
+  "historicalFailureProfilesAndReceiptsPreserved": true,
+  "newSourceEditsOrFurtherRuns": false
+}

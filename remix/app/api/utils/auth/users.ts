@@ -749,10 +749,12 @@ export const insertUser = async (
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
 const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload, stored: any) => void | Promise<void>, strict = false, session?: ClientSession): Promise<SecureMutateResult> => {
-	const things = await getThingsCollection();
+	const native = currentUserIdentityRepository();
+	const things = native ? null : await getThingsCollection();
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
-		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
+		const snapshot = native ? await native.readUserSecure(userId, session) : null;
+		const thing = native ? snapshot?.stored : await things!.findOne(base, { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
 		if (!thing) return 'missing';
 		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
 		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
@@ -760,7 +762,7 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
 		await mutate(secure, thing);
 		// guard on the exact version we read — a missing field guards on its absence
 		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
-		const res = await things.updateOne(
+		const res = native ? { modifiedCount: await native.replaceUserSecure(snapshot!, packSecure(secure), new Date()) ? 1 : 0 } : await things!.updateOne(
 			{ ...base, ...guard },
 			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } },
 			{ ...(session ? { session } : {}) }
@@ -785,8 +787,10 @@ const strictVaultPayload = (value: unknown): SecurePayload => {
 // Key material never enters UserDoc/public projections. This bounded registry
 // lives in the home user secure blob; session wrappers live on session rows.
 export const readUserVaultKey = async (userId: string): Promise<UserVaultKeyRegistry | null> => {
- const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+ const native = currentUserIdentityRepository();
+ const thing = native ? (await native.readUserSecure(userId))?.stored : await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
  if (thing) return strictVaultPayload(thing.secure).vaultKey ?? null;
+ if (native) throw new Error('Vault owner was not found.');
  if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
  const legacy = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { vaultKey: 1 } });
  if (!legacy) throw new Error('Vault owner was not found.');
@@ -806,6 +810,7 @@ export const mutateUserVaultKey = async (
  const result = await mutateUserThingSecure(userId, apply, true);
  if (result === 'mutated') return saved;
  if (result === 'contended') throw new SecureWriteContendedError(userId);
+ if (currentUserIdentityRepository()) throw new Error('Vault owner was not found.');
  if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
  const users = await getUsersCollection();
  for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {

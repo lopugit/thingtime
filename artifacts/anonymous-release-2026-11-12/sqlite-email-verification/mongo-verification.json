@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "port": 64180,
+  "pid": 47401,
+  "scope": "Owned loopback synthetic Mongo; unchanged raw-token writer/reader rollback contract",
+  "mongoVersion": "db version v8.0.1",
+  "exitCode": 0,
+  "stdout": "genuine-mongo-token-compatibility-ok: original raw storage, old-reader rollback compatibility, atomic race, outstanding links, expiry, invalid\n",
+  "stderr": "",
+  "processExited": true,
+  "listenerClosed": true,
+  "observedAt": "2026-11-11T19:22:06.372720+00:00"
+}

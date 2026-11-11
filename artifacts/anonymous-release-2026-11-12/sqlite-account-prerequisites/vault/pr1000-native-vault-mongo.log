@@ -1,0 +1,17 @@
+(node:5251) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5251) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ password, session and background access unlock the same owner key without storing plaintext credentials (394.947458ms)
+✔ password recovery rewraps the stable key atomically and old passwords cannot unlock it (783.6485ms)
+✔ concurrent first-use writers share one key and separate users cannot open each other’s values (1.626375ms)
+✔ revoked, expired, forged, foreign and scoped sessions fail without falling back to recovery (15.249292ms)
+✔ passkey and switched sessions lazily receive independent grants; parallel requests retain their owners (23.310167ms)
+✔ wrong exact password and corrupted recovery never replace the only saved key (338.2955ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1921.461416

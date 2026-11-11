@@ -8,6 +8,7 @@ import { Binary } from 'mongodb';
 import { insertUser, findUserById, findUserByEmail, findUserByUsername, findUsersByIds, findUsersByUsernames, toPublicUser, setUserAdmin, type UserDoc } from '../auth/users';
 import { createSession, getLiveSession, revokeSession } from '../auth/sessions';
 import { currentUserIdentityRepository, withHomeAuthRepositories } from '../auth/userIdentityRepository';
+import { registerHomeRepositoryProvider, assertSameHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 import { withHomeSessionRepository } from '../auth/sessionRepository';
 import { createNativeHomeAuthRepositories } from './nativeUserIdentities';
 import { openSqliteDocumentStore } from './sqliteStore';
@@ -121,4 +122,19 @@ test('canonical batch identities preserve requested ordering and dedup with one 
   assert.deepEqual((await findUsersByUsernames([' BATCH-C ','batch-a','missing','batch-b','batch-c'])).map(x=>x._id),[rows[2]._id,rows[0]._id,rows[1]._id]);
   assert.equal(transactions,1);
  });
+});
+
+
+test('same home label cannot pair identities and sessions from different SQLite files or unregistered providers',async t=>{
+ const open=await fixture(t),a=await open('profile-a.sqlite','home'),b=await open('profile-b.sqlite','home');let entered=false;
+ await assert.rejects(withHomeAuthRepositories(a.identities,b.sessions,()=>{entered=true;}),code('HOME_REPOSITORY_SCOPE'));
+ assert.equal(entered,false);
+ await a.run(async()=>{assert.equal(await findUserByUsername('must-not-exist'),null);});
+ const missing={},provider={};
+ assert.throws(()=>assertSameHomeRepositoryProvider(missing,a.identities),code('HOME_REPOSITORY_SCOPE'));
+ registerHomeRepositoryProvider(missing,provider);registerHomeRepositoryProvider(missing,provider);
+ assert.throws(()=>registerHomeRepositoryProvider(missing,{}),code('HOME_REPOSITORY_SCOPE'));
+ assert.throws(()=>assertSameHomeRepositoryProvider(missing,a.identities),code('HOME_REPOSITORY_SCOPE'));
+ assertSameHomeRepositoryProvider(a.identities,a.sessions);
+ assertSameHomeRepositoryProvider(b.identities,b.sessions);
 });

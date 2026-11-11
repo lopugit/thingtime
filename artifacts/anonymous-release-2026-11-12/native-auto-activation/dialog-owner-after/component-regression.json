@@ -1,0 +1,44 @@
+{
+  "scope": "Actual bell/Chakra/guard browser regression; synthetic account/API/avatar only; no app/Mongo acceptance",
+  "browserVersion": "149.0.7827.55",
+  "sourceSha256": "f8ab16e8f2e69eb81a3c4cf3b8b0f01ce869b086012cdc4586333d0c7bc5dab5",
+  "observations": [
+    {
+      "case": "cold-closed-authenticated",
+      "guard": false,
+      "dialogs": [],
+      "calls": [
+        {
+          "operation": "list",
+          "limit": 1
+        }
+      ],
+      "documentStartObserverActive": true
+    },
+    {
+      "case": "open-close-refresh",
+      "width": 1440,
+      "openGuarded": true,
+      "closedUnguarded": true,
+      "keyboardFocusReturned": true,
+      "outsideClickFocusRetained": true,
+      "cachedRowsRetained": true,
+      "noOverflow": true
+    },
+    {
+      "case": "open-close-refresh",
+      "width": 390,
+      "openGuarded": true,
+      "closedUnguarded": true,
+      "keyboardFocusReturned": true,
+      "outsideClickFocusRetained": true,
+      "cachedRowsRetained": true,
+      "noOverflow": true
+    },
+    {
+      "case": "identity-withdrawal",
+      "panelRemoved": true,
+      "lateResultNotRendered": true
+    }
+  ]
+}

@@ -19391,3 +19391,34 @@ never print the file-download JSON, encryption metadata or signed URL.
   Exercise desktop/mobile drawer draft and cancel, then verify owned-resource
   cleanup. An empty helper group does not prove account/vault recovery; synthetic
   signing does not prove production release trust.
+
+### Native account roster persistence (12 November 2026)
+
+- Run `test:document-store` and require real-file canonical roster cookie,
+  persist, reopen and guarded-delete coverage. Two handles must not both win an
+  update at one version; a stale delete must preserve the winner. Expired and
+  planted roster pointers, including Bearer-only requests, must not surface
+  accounts. Keep live-session ownership checks in the normal resolver.
+- Refuse foreign/nested/expired home scopes and detached or queued writes after
+  scope exit. Freeze queued input, reject hostile accessors without executing
+  them, and preserve Mongo query shapes without loading SQLite on hosted imports.
+  These module checks do not prove authenticated native switching, HTTP signup,
+  profile selection or a TTL cleanup worker; require those separately.
+
+### Native vault and notification lifecycle (12 November 2026)
+
+- Run the actual native vault crypto subprocess through `test:document-store`:
+  password binding/reset, same-key reopen, signed session access, revocation and
+  racing secure edits must retain real cryptographic checks. Mutating returned
+  BSON bytes must not mutate the private CAS preimage. Foreign, consumed or
+  expired snapshots and changed owner/expiry/session purpose must refuse writes.
+  Keep hosted vault/Mongo regression coverage and real protected profile-key
+  provisioning acceptance separate from random isolated test keys.
+- Run `corepack pnpm --dir remix run test:notifications:browser` after installing
+  the existing MCP test dependencies (`npm --prefix MCP ci`) and Chromium
+  (`npm --prefix MCP exec -- playwright install chromium`). Check actual Chakra
+  notification panels at desktop/mobile: no dialog shell while closed, open
+  panel still blocks native replacement, Escape restores trigger focus, outside
+  clicks retain their target, cached rows survive refresh and identity changes
+  clear protected content. Scroll the panel and page to their bottoms.
+  Synthetic account/API transport does not prove native automatic replacement.

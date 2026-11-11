@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
 import { getLiveSession } from './sessions';
-import { getSessionsCollection } from '../mongodb/collections';
+import { currentSessionRepository } from './sessionRepository';
 import { fromBin, toBin } from './binary';
 import { mutateUserVaultKey, readUserVaultKey } from './users';
 import { decryptOwnerValue, encryptOwnerValue, ownerVaultConfigured, type EncryptedVaultValue } from './vaultCipher';
@@ -115,13 +115,11 @@ const sessionKey = async (ownerId: string, token: string, registry: UserVaultKey
   try {
     const expiresAt = session.expiresAt ? new Date(session.expiresAt).getTime() : now + 86_400_000;
     const envelope = wrapVaultKeyWithSession(ownerId, key, { id: session.jti, token, expiresAt }, now);
-    const result = await (
-      await getSessionsCollection()
-    ).updateOne(
-      { jti: session.jti, userId: ownerId, revokedAt: null, expiresAt: session.expiresAt },
-      { $set: { secureVaultKey: toBin(JSON.stringify({ tokenHash, envelope })) } }
-    );
-    if (!result.matchedCount) throw unavailable();
+    const bound = await currentSessionRepository().bindVaultEnvelope({
+      jti: session.jti, ownerId, expiresAt: session.expiresAt, at: new Date(),
+      envelope: toBin(JSON.stringify({ tokenHash, envelope }))
+    });
+    if (!bound) throw unavailable();
     return unwrapVaultKeyWithSession(ownerId, { id: session.jti, token, expiresAt }, envelope, now);
   } finally {
     key.bytes.fill(0);

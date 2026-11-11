@@ -2,7 +2,43 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
-## Latest actual native results — 12 November 2026
+## Account prerequisites and notification lifecycle — 12 November 2026
+
+Canonical SQLite vault/password and session-envelope persistence now exercise
+real crypto/JWT/file operations. Roster persistence keeps cookie/session ownership
+in the canonical helpers; ten focused tests include races, expiry, reopened files,
+planted pointers and queued/lifetime refusal. One-use email verification stores
+hashes in SQLite, with seven checks covering replay, actual process contention,
+queued expiry and rollback. Hosted Mongo token storage remains unchanged so old
+binaries still consume newly issued links after rollback. Exact-provider bindings
+reject different SQLite files with the same home label across auth and adapters.
+Full HTTP signup remains disabled pending entitlement projection, notification/
+email-outbox adapters, protected profile keys and runtime readiness. Current
+`sendVerificationEmail` outbox sensitivity is a separate audited follow-up; hash-
+only native token records do not establish link redaction in other mail stores.
+
+Actual-component browser reproduction identifies `NotificationsBell` as the
+hidden empty Chakra dialog. Closed panel content now unmounts; open protection,
+Escape/outside focus, identity withdrawal and cached refresh pass at1440/390.
+Three browser tests and50 native/fixture controls pass. The unchanged native guard
+is not weakened. The fresh managed-local run now passes automatic app and Mongo process
+replacement, same browser/independent sessions, private Thing/revision/edit and
+encrypted profile retention, signed release confirmation,70.092s dirty refusal
+and45.409s active HTTP-work protection. Desktop/mobile drawers and cleanup pass.
+The idle replacement leg runs in the library; Home-specific automatic idle and
+native AutoFill recovery remain separate. Prior failures are preserved.
+[Actual managed-local receipt](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-dialog/verification.json).
+The new combined build passes88document-store,10authentication-introspection and
+55+14notification checks, typecheck/ratchet and full lint(0errors/374warnings).
+All5,437inputs stay unchanged through canonical build/inventory and genuine Mongo
+HTTP account/private CRUD/ACL/restart verification. NitroSHA36e46bb6a…946d3.
+[Combined receipt](../artifacts/anonymous-release-2026-11-12/account-prerequisites-build/README.md).
+
+[Dialog evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/dialog-owner-fix/README.md),
+[rosters](../artifacts/anonymous-release-2026-11-12/sqlite-account-prerequisites/rosters/README.md),
+[vault](../artifacts/anonymous-release-2026-11-12/sqlite-account-prerequisites/vault/README.md).
+
+## Earlier native checkpoint — 12 November 2026
 
 The foreground-controlled iOS simulator now passes ordinary device-home
 initialization, New folder, Rename and real WKWebView reload, with the same local
@@ -12,9 +48,10 @@ page-reload persistence, not full SQLite account HTTP, process restart, physical
 device or production distribution. Account APIs still correctly return503.
 [Run08 outcome](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/foreground-acceptance-08/outcome.json).
 
-The corrected desktop library run also stops safely before replacement: a mounted
-SECTION role=dialog remains in the protection scan despite no visible modal. Its
-component owner is not yet established. Account/Mongo/safeStorage startup,
+At this earlier checkpoint the desktop library run stopped safely before replacement:
+a mounted SECTION role=dialog remained in the protection scan despite no visible
+modal. The owner was not yet established; the later notification fix and successful
+managed-local replacement are recorded above. Account/Mongo/safeStorage startup,
 private CRUD/ACLs, signed staging, dirty refusal and editor persistence/reload
 pass; automatic process/account recovery remains unverified. Prior45-second HTTP
 work evidence belongs to the separate Home run. Both test processes clean up.
@@ -147,8 +184,9 @@ not new merged-app acceptance. [Integration record](../artifacts/anonymous-relea
 Both providers are retained. The desktop package pins MongoDB Community 8.0.34
 for macOS arm64/x64 with source and license notices. Its managed runtime uses an
 authenticated loopback replica set and profile-scoped data; the fresh actual API
-receipt below covers registration, private CRUD and restart persistence. Final
-signed installed-app and OS credential-store acceptance remain open.
+receipt below covers registration, private CRUD and restart persistence. The later managed-local development-app check above also verifies actual
+OS credential-store use and automatic app/database replacement. Production signed
+distribution remains separate.
 
 SQLite provides the native BSON/collection, transaction, accounting and session
 foundations, with iOS simulator storage/crash evidence. It is not yet a complete

@@ -1,0 +1,10 @@
+✔ eight real-file canonical native vault/security regressions run with disposable process-only crypto configuration (3166.652042ms)
+✔ hosted secure CAS and conditional session vault persistence retain exact Mongo contracts without native imports (345.757625ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3750.514

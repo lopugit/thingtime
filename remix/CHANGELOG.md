@@ -145,6 +145,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add explicit SQLite vault/session-envelope and account-roster
+  persistence plus hashed one-use verification tokens behind canonical account
+  helpers; preserve Mongo token format/rollback compatibility and refuse
+  cross-provider binding even when home labels match. Unmount closed popovers while
+  preserving open-dialog update protection and Escape focus. Full native account
+  HTTP and automatic-update acceptance remain separate gates. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-11-12: Add canonical SQLite account creation with atomic identity/initial
   ledger, provider-scoped tiers and caught-error/scope rollback. Preserve local
   MongoDB and hosted behavior. Add managed-local automatic-update acceptance

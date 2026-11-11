@@ -1,4 +1,4 @@
-import { getEmailVerificationsCollection } from '../mongodb/collections';
+import { currentEmailVerificationRepository } from './singleUseTokenRepository';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import { consumeSingleUseToken, createSingleUseToken, type ConsumeTokenResult } from './singleUseTokens';
@@ -17,7 +17,7 @@ export const createEmailVerification = ({
   expiresInMs?: number;
 }) =>
   createSingleUseToken({
-    getCollection: getEmailVerificationsCollection,
+    repository: currentEmailVerificationRepository(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.emailVerifications,
     userId,
     email,
@@ -29,4 +29,4 @@ export type ConsumeResult = ConsumeTokenResult;
 // Validate + burn a token atomically. Single-use: if two clicks race, only one
 // update can match consumedAt: null; the loser sees the token as used.
 export const consumeEmailVerification = (token: string): Promise<ConsumeResult> =>
-  consumeSingleUseToken(getEmailVerificationsCollection, token);
+  consumeSingleUseToken(currentEmailVerificationRepository(), token);

@@ -1,0 +1,115 @@
+{
+  "format": 1,
+  "recordedAt": "2026-11-11T19:18:59.178149+00:00",
+  "head": "5a03111cdda16a8d4af3385fb3fec5f0f010259c",
+  "status": "source-frozen-awaiting-parent-combined-build",
+  "sourceHashes": {
+    "remix/app/components/Nav/NotificationsBell.tsx": "f8ab16e8f2e69eb81a3c4cf3b8b0f01ce869b086012cdc4586333d0c7bc5dab5",
+    "remix/app/components/Nav/NotificationsBell.browser.test.mjs": "e57f34427cf1ba9c006f9d77d8ba8c7004429d135beb117e26e83fa6fb1af9aa",
+    "electron/test/fixtures/native-auto-local.cjs": "0aeb1933797c99b226a7c2af8b8dc7de1be4a998ec0121e82daa0f2b9370f3e3",
+    "electron/test/native-auto-local.test.cjs": "16716667b9dd89cb16bf1f811a806c2e627e18eb33c9865a6653fc11aa0f6181",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bc227f899829029cde4cecc571ef77a976627f7564d554c6f038ab39288eaa33",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "2cc0cca6abd61285991b8dd68661dbbb686bc4e095055e5de01ec8ec6aab82dc"
+  },
+  "unchangedNativeDraftGuard": {
+    "path": "remix/app/utils/desktopBundleActivation.ts",
+    "sha256": "8b57d7cd6bc849e3c49e6ae85acb0f115bfb1cd049800499f834f25fc453d6ec",
+    "matchesHead": true
+  },
+  "tests": {
+    "browserPassed": 3,
+    "nativeFixturePassed": 50,
+    "failed": 0,
+    "focusedLintPassed": true,
+    "syntaxAndDiffChecksPassed": true
+  },
+  "logs": {
+    "browser": {
+      "exitCode": 0,
+      "sha256": "5bfd9aea0094c2ff77956fcdde8f6df4e6094dd05b2bae3ed34f7bbc7d5697e9"
+    },
+    "native": {
+      "exitCode": 0,
+      "sha256": "50e19348bbd94da505643d2b22ee91fe1c80ca8e5302742d508f2b2f3a6bd826"
+    },
+    "lint": {
+      "exitCode": 0,
+      "sha256": "04d969bf7deb2b5f81bd315c895d2323ef5b9b19fa8ffa8be2173a5f18822619"
+    }
+  },
+  "actualOwnerMechanism": {
+    "component": "NotificationsBell",
+    "installedChakraVersion": "2.10.10",
+    "before": {
+      "case": "cold-closed-authenticated",
+      "guard": true,
+      "dialogs": [
+        {
+          "tag": "SECTION",
+          "role": "dialog",
+          "notificationPopover": true,
+          "children": 0,
+          "visibility": "hidden"
+        }
+      ],
+      "calls": [
+        {
+          "operation": "list",
+          "limit": 1
+        }
+      ]
+    },
+    "after": {
+      "case": "cold-closed-authenticated",
+      "guard": false,
+      "dialogs": [],
+      "calls": [
+        {
+          "operation": "list",
+          "limit": 1
+        }
+      ],
+      "documentStartObserverActive": true
+    }
+  },
+  "visualChecks": {
+    "browserVersion": "149.0.7827.55",
+    "widths": [
+      1440,
+      390
+    ],
+    "openedAndClosed": true,
+    "panelAndPageBottomScrolled": true,
+    "noOverflow": true,
+    "escapeFocusReturned": true,
+    "outsideClickFocusRetained": true,
+    "openDialogStillProtected": true
+  },
+  "designReferences": {
+    "uiUxProMax": "Focus state and focus-not-obscured guidance; keep keyboard focus visible",
+    "inspo": "Novu inbox reference found; no verified closed-popover lifecycle reference. Existing Thingtime appearance retained."
+  },
+  "historicalHomeAndLibraryFailuresPreserved": true,
+  "newNativeAcceptanceRun": false,
+  "sharedWebBuildRun": false,
+  "nextCommand": {
+    "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+    "environment": {
+      "THINGTIME_NATIVE_BUNDLE_QA": "1",
+      "THINGTIME_NATIVE_LOCAL_BUILD_READY": "1"
+    },
+    "executable": "node",
+    "arguments": [
+      "electron/scripts/verify-web-bundle-auto-activation.mjs",
+      "--local-api",
+      "--workspace=native-bundle-qa-auto-local-dialog-pr1000",
+      "--output=artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-dialog",
+      "--password-helper-app=/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Passwords.app",
+      "--password-fixture-app=/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Password Fixture.app",
+      "--password-helper-host=com.thingtime.passwords.dev.nativeautopr1000",
+      "--password-helper-team=6DQQ9V7C84",
+      "--password-helper-signing-identity=Apple Development: lopudesigns@gmail.com (9BTZ4XB356)"
+    ]
+  },
+  "nextAcceptancePrerequisite": "Parent-reviewed fresh combined canonical build with exact input/output hash notice; then one changed-prerequisite isolated managed-local automatic replacement run."
+}

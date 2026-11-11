@@ -66,7 +66,8 @@ function installActivityObserver() {
   window.addEventListener(kind, event => record({ kind: event.type, trusted: event.isTrusted === true, tag: tag(event.target) }), { capture: true, passive: true });
  new MutationObserver(changes => { for (const change of changes) record({ kind: 'mutation', type: change.type,
   attribute: change.type === 'attributes' ? attributes.has(change.attributeName) ? change.attributeName : 'other' : null, tag: tag(change.target) });
- }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
+ // A Document exists at init-script time, before its documentElement does.
+ }).observe(document, { childList: true, subtree: true, characterData: true, attributes: true });
  window.__nativeAutoActivity = records;
 }
 

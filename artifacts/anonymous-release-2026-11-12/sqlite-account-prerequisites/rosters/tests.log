@@ -1,0 +1,18 @@
+✔ canonical roster persistence and cookies survive real SQLite reopen, guarded updates and logout deletion (42.93125ms)
+✔ competing canonical writes on two SQLite handles have one winner; stale delete preserves the winner (8.090542ms)
+✔ expired roster, planted pointer and Bearer-only request cannot expose account entries (6.360209ms)
+✔ profile isolation and expired or nested home scopes refuse saved repository access (7.161125ms)
+✔ native identity scope without its matching roster binding cannot fall back to Mongo (8.41025ms)
+✔ different SQLite providers with the same home label cannot combine identity and roster authority (8.210209ms)
+✔ detached and queued roster writes refuse after the home scope closes (6.230375ms)
+✔ native roster admission rejects malformed dates and hostile getters without executing them (4.897542ms)
+✔ native queued update snapshots caller entries before waiting (4.715583ms)
+✔ hosted roster repository preserves Mongo operation shapes and never imports SQLite (209.293167ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 832.836375

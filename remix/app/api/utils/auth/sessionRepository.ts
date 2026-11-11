@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Binary } from 'mongodb';
 import type { SessionDoc } from './sessions';
 import { revokedSessionPipeline } from './sessionCore';
 
@@ -6,12 +7,14 @@ import { revokedSessionPipeline } from './sessionCore';
  * default implementation retains home-pinned Mongo behavior. A future native
  * request bootstrap must explicitly bind a repository for its exact home plane;
  * no request body, endpoint failure or fallback chooses one here. */
+export type SessionVaultEnvelopeBinding = { jti:string; ownerId:string; expiresAt:Date|null; at:Date; envelope:Binary };
 export interface SessionRepository {
  readonly kind: 'mongo-home' | 'native-home';
  readonly homePlaneId: string;
  insert(document: SessionDoc, transaction?: unknown): Promise<void>;
  findByJti(jti: string): Promise<SessionDoc | null>;
  revoke(jti: string, at: Date): Promise<void>;
+ bindVaultEnvelope(binding: SessionVaultEnvelopeBinding): Promise<boolean>;
 }
 export class SessionRepositoryError extends Error {
  constructor(public readonly code: 'SESSION_REPOSITORY_SCOPE' | 'SESSION_TRANSACTION_UNSUPPORTED', message: string) { super(message); this.name = 'SessionRepositoryError'; }
@@ -27,6 +30,14 @@ const mongo: SessionRepository = Object.freeze({
  async findByJti(jti: string) {
   const { getSessionsCollection } = await import('../mongodb/collections');
   return (await getSessionsCollection()).findOne({ jti });
+ },
+ async bindVaultEnvelope(binding: SessionVaultEnvelopeBinding) {
+  const { getSessionsCollection } = await import('../mongodb/collections');
+  const result = await (await getSessionsCollection()).updateOne(
+   { jti: binding.jti, userId: binding.ownerId, revokedAt: null, expiresAt: binding.expiresAt },
+   { $set: { secureVaultKey: binding.envelope } }
+  );
+  return result.matchedCount === 1;
  },
  async revoke(jti: string, at: Date) {
   const { getSessionsCollection } = await import('../mongodb/collections');

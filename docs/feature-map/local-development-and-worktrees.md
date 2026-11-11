@@ -1,5 +1,17 @@
 # Local development and worktrees
 
+## Current managed-local update acceptance
+
+The `managed-local-dialog` receipt on the36e46bb6 payload proves actual
+safeStorage/bundled Mongo, normal browser login, signed staging,70-second dirty
+refusal, canonical persistence/reload,45-second real HTTP-work protection and
+automatic fresh app/Mongo processes with the same account sessions, exact private
+Thing/revision/edit and encrypted profile. The pending release clears after
+confirmation; desktop/mobile drawer checks and cleanup pass. The idle leg is the
+library, not Home-specific idle or native AutoFill recovery. Source, focused UI,
+build/API, installed development acceptance and production trust remain distinct.
+[Actual receipt](../../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-dialog/verification.json).
+
 ## Native web bundle releases
 
 `native-bundles/{release,inventory,host}.cjs` owns signed executable inventories and
