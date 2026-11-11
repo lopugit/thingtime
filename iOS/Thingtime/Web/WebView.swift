@@ -140,10 +140,10 @@ struct WebView: UIViewRepresentable {
                       let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
                 self.sendToWeb(type: "mobile-files-conditions-changed", payload: [String: String]())
             }
-            mobileFolders.photoProgressChanged = { [weak self] in
+            mobileFolders.photoProgressChanged = { [weak self] immediate in
                 guard let self, UIApplication.shared.applicationState == .active, let root = self.loadedRootURL,
                       let url = self.webView?.url, LopuVoiceContract.sameOrigin(url, root) else { return }
-                self.sendToWeb(type: "mobile-files-photo-progress", payload: [String: String]())
+                self.sendToWeb(type: "mobile-files-photo-progress", payload: ["immediate": immediate])
             }
             lopuChats.register = { [weak self] root, owner, activityId, token, contextKey, chats in
                 await self?.registerChatActivity(root: root, owner: owner, activityId: activityId, token: token, contextKey: contextKey, chats: chats)

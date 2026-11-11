@@ -56,6 +56,51 @@ final class NativeFileUploadJobTests: XCTestCase {
         }
     }
 
+    func testInterruptedPhotosRemainArmedAndLegacyHoldRenewsAtExactCheckpoint() throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory)
+        let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler())
+        worker.activate(foreground: false)
+        let auth = try authorization(sourceKind: "photos")
+        let grant = String(repeating: "a", count: 64)
+        let expiry = Date(timeIntervalSinceNow: 3600)
+        var old = NativePhotoRunRecord(scope: scope, authorization: auth, grantRevision: grant, runId: "old", expiresAt: expiry)
+        old.captureId = UUID().uuidString.lowercased()
+        let now = Date()
+        old.deferAfterSystemInterruption(now: now)
+        XCTAssertTrue(old.armed)
+        XCTAssertEqual(old.stage, "waiting")
+        XCTAssertEqual(old.retryAt, now.addingTimeInterval(300))
+
+        old.armed = false; old.continuedHold = true
+        try store.write(old)
+        XCTAssertEqual(try store.lookup(old)?.legacySystemInterruption, true)
+        let renewed = NativePhotoRunRecord(scope: scope, authorization: auth, grantRevision: grant, runId: "new", expiresAt: expiry)
+        XCTAssertTrue(try worker.armPhotoRun(renewed))
+        var current = try XCTUnwrap(store.lookup(renewed))
+        XCTAssertEqual(current.epoch, old.epoch)
+        XCTAssertEqual(current.captureId, old.captureId)
+        XCTAssertEqual(current.stage, "ready")
+        XCTAssertTrue(current.armed)
+        XCTAssertNil(current.continuedHold)
+        XCTAssertThrowsError(try store.update(old), "Expired work cannot update a replacement run")
+
+        current.pauseByUser()
+        try store.write(current)
+        current.deferAfterSystemInterruption(now: now)
+        XCTAssertEqual(current.stage, "paused")
+        XCTAssertFalse(current.armed)
+        XCTAssertThrowsError(try worker.armPhotoRun(renewed), "Ordinary retries respect the durable Pause")
+        let replacedGrant = NativePhotoRunRecord(scope: scope, authorization: auth, grantRevision: String(repeating: "b", count: 64),
+            runId: "replacement-grant", expiresAt: expiry)
+        XCTAssertThrowsError(try worker.armPhotoRun(replacedGrant), "A renewed grant does not undo a deliberate Pause")
+        XCTAssertTrue(try worker.armPhotoRun(renewed, explicitResume: true))
+        XCTAssertEqual(try store.lookup(renewed)?.armed, true)
+        XCTAssertNil(try store.lookup(renewed)?.userPaused)
+    }
+
     func testDeviceBudgetCountsPartialRetryAndRetainsUncertainBytesAcrossRelaunch() throws {
         let owner = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
         let other = try FileSyncOwnerScope(ownerId: "other", url: owner.origin)

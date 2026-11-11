@@ -1,5 +1,9 @@
 # Mobile devices and file synchronization
 
+The unified folder editor, multiple sync configs, background recovery, activity
+and shared-content storage contract are described in
+[Device folders and sync configs](device-sync-configs.md).
+
 Status: implementation in progress. This document tracks the full requested
 outcome: add iOS and Android devices in Things like the Mac app, and provide
 Drive/Photos/Resilio-style file synchronization across Mac and mobile. The

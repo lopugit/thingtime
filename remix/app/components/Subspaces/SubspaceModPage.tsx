@@ -752,8 +752,8 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 	const [nsfw, setNsfw] = React.useState(subspace.nsfw);
 	const [icon, setIcon] = React.useState(subspace.branding.icon || '');
 	const user = useCurrentUser();
-	const [iconMedia, setIconMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.iconUrl));
-	const [bannerMedia, setBannerMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.bannerUrl));
+	const [iconMedia, setIconMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.iconUrl, subspace.branding.iconPresentation));
+	const [bannerMedia, setBannerMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.bannerUrl, subspace.branding.bannerPresentation));
 	const iconRef = React.useRef<ProfileMediaFieldHandle>(null);
 	const bannerRef = React.useRef<ProfileMediaFieldHandle>(null);
 	const iconUrl = iconMedia.previewUrl || '';
@@ -764,16 +764,27 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 		setSaving(true);
 		try {
 			await requireSubspaceMediaCapabilities();
+			const mediaPresentation = {
+				...(iconMedia.presentationUpdate !== undefined ? { icon: iconMedia.presentationUpdate } : {}),
+				...(bannerMedia.presentationUpdate !== undefined ? { banner: bannerMedia.presentationUpdate } : {})
+			};
+			const mediaPresentationSources = {
+				...(iconMedia.presentationSource ? { icon: iconMedia.presentationSource } : {}),
+				...(bannerMedia.presentationSource ? { banner: bannerMedia.presentationSource } : {})
+			};
 			const resp: any = await api.v1.subspaces.update({
 				id: subspace.id,
 				name,
 				description,
 				branding: { icon: icon || null, accent: accent || null },
 				media: { icon: iconMedia.mutation, banner: bannerMedia.mutation },
+				...(Object.keys(mediaPresentation).length ? { mediaPresentation } : {}),
+				...(Object.keys(mediaPresentationSources).length ? { mediaPresentationSources } : {}),
 				...(isOwner ? { access, nsfw, ...(newSlug !== subspace.slug ? { newSlug } : {}) } : {})
 			});
-			iconRef.current?.commit(resp.subspace.branding.iconUrl, resp.subspace.branding.iconUrl);
-			bannerRef.current?.commit(resp.subspace.branding.bannerUrl, resp.subspace.branding.bannerUrl);
+			const branding = resp.subspace.branding;
+			iconRef.current?.commit(branding.iconUrl, branding.iconUrl, branding.iconPresentation);
+			bannerRef.current?.commit(branding.bannerUrl, branding.bannerUrl, branding.bannerPresentation);
 			if (resp.subspace.slug !== subspace.slug) {
 				clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
 				clearLocalCachePrefix(`tt-subspace-${resp.subspace.slug}-`);
@@ -792,7 +803,11 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 	return (
 		<Card>
 			<Flex columnGap={3} alignItems="center">
-				<SubspaceIcon subspace={{ ...subspace, branding: { ...subspace.branding, icon, iconUrl, accent } }} size="56px" fontSize="2xl" />
+				<SubspaceIcon
+					subspace={{ ...subspace, branding: { ...subspace.branding, icon, iconUrl, iconPresentation: iconMedia.previewPresentation, accent } }}
+					size="56px"
+					fontSize="2xl"
+				/>
 				<Box>
 					<Label>Identity</Label>
 					<Text fontSize="xs" color={MUTED}>
@@ -825,10 +840,34 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 			</Flex>
       <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
         <Box flex="1" minWidth={0}>
-          <ProfileMediaField ref={iconRef} slot="avatar" label="Icon" purpose="subspace-icon" ownerId={user?.id || ''} savedUrl={subspace.branding.iconUrl} savedLinkedUrl={subspace.branding.iconUrl} privateUploadsEnabled={user?.publicUploadsEnabled} disabled={saving} onChange={setIconMedia} />
+          <ProfileMediaField
+            ref={iconRef}
+            slot="avatar"
+            label="Icon"
+            purpose="subspace-icon"
+            ownerId={user?.id || ''}
+            savedUrl={subspace.branding.iconUrl}
+            savedLinkedUrl={subspace.branding.iconUrl}
+            savedPresentation={subspace.branding.iconPresentation}
+            privateUploadsEnabled={user?.publicUploadsEnabled}
+            disabled={saving}
+            onChange={setIconMedia}
+          />
         </Box>
         <Box flex="1" minWidth={0}>
-          <ProfileMediaField ref={bannerRef} slot="banner" label="Banner" purpose="subspace-banner" ownerId={user?.id || ''} savedUrl={subspace.branding.bannerUrl} savedLinkedUrl={subspace.branding.bannerUrl} privateUploadsEnabled={user?.publicUploadsEnabled} disabled={saving} onChange={setBannerMedia} />
+          <ProfileMediaField
+            ref={bannerRef}
+            slot="banner"
+            label="Banner"
+            purpose="subspace-banner"
+            ownerId={user?.id || ''}
+            savedUrl={subspace.branding.bannerUrl}
+            savedLinkedUrl={subspace.branding.bannerUrl}
+            savedPresentation={subspace.branding.bannerPresentation}
+            privateUploadsEnabled={user?.publicUploadsEnabled}
+            disabled={saving}
+            onChange={setBannerMedia}
+          />
         </Box>
 			</Flex>
 			<Flex columnGap={3} rowGap={3} flexWrap="wrap" alignItems="flex-end">

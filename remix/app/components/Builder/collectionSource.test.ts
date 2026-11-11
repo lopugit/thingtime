@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendCollectionPage, collectionOffsetPage, collectionSource } from './collectionSource';
+import { appendCollectionPage, collectionOffsetPage, collectionSource, indexCollectionRows } from './collectionSource';
 
 const source = collectionSource({ action: 'read-page' })!;
 test('empty pages retain their cursor and older rows append with stable-key deduplication', () => {
@@ -40,4 +40,14 @@ test('offset pages must confirm their requested offset and size', () => {
  assert.equal(collectionOffsetPage(spec, { offset: 20, items: [{ id: 20 }] }, 20, 10).items.length, 1);
  assert.throws(() => collectionOffsetPage(spec, { offset: 0, items: [] }, 20, 10), /confirm/);
  assert.throws(() => collectionOffsetPage(spec, { offset: 20, items: [{ id: 1 }, { id: 2 }] }, 20, 1), /page size/);
+});
+
+test('keyed projection preserves all exact rows and ignores unsafe keys', () => {
+	const rows = [{ target: { id: 'a' }, label: 'first' }, { target: { id: 'b' }, label: 'other' },
+		{ target: { id: 'a' }, label: 'second' }, { target: { id: 'constructor' } }, { target: {} }];
+	const index = indexCollectionRows(rows, 'target.id');
+	assert.deepEqual(Object.keys(index), ['a', 'b']);
+	assert.deepEqual(index.a, [rows[0], rows[2]]);
+	assert.deepEqual(index.b, [rows[1]]);
+	assert.equal(index.constructor, undefined);
 });

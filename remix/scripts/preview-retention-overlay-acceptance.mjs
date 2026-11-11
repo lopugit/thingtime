@@ -28,7 +28,7 @@ try {
     await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
     const drawer = page.getByTestId('builder-drawer');
     await drawer.getByRole('combobox', { name: 'Select block', exact: true }).selectOption('preview-retention-orphan-grace-input');
-    await drawer.getByRole('textbox', { name: 'Element title', exact: true }).fill('Inspector hit target check');
+    await drawer.getByLabel('Element title', { exact: true }).fill('Inspector hit target check');
     // Reproduce the former launcher stacking without modifying app state or
     // preferences; compare actual intersections before removing this test style.
     const previous = await page.addStyleTag({ content: 'html:root:has(.ttBuilderDrawer) .lopuLauncher,html:root:has(.ttBuilderDrawer) [class~="tt.devKit"]{display:block!important;}' });
@@ -49,7 +49,7 @@ try {
     await previous.evaluate(node => node.remove());
     const inspected = [];
     for (const name of ['Element title', 'Element type', 'Element placeholder']) {
-      const field = drawer.getByRole('textbox', { name, exact: true });
+      const field = drawer.getByLabel(name, { exact: true });
       await field.scrollIntoViewIfNeeded();
       const points = await field.evaluate(node => {
         const r = node.getBoundingClientRect();

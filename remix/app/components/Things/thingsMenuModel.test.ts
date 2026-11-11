@@ -48,3 +48,18 @@ test('Builder navigation has registered icons in both icon themes', () => {
     assert.ok(action.icon && LUCIDE_FOR_EMOJI[action.icon]);
   }
 });
+
+test('owner library actions sit in Organise and never replace Delete or file ZIP actions', () => {
+  const args = { thing: { ...component, thingtime: ['folder'] }, actCount: 1, clipboardCount: 0, ownerId: 'owner' };
+  const archive = buildThingsItemMenu({ ...args, libraryAction: 'archive' });
+  const organise = archive.sections.find(section => section.id === 'organise')?.actions;
+  assert.deepEqual(organise?.map(item => item.command), ['move', 'archive']);
+  assert.ok(archive.sections.some(section => section.actions.some(item => item.command === 'delete')));
+  assert.ok(archive.sections.some(section => section.actions.some(item => item.command === 'download-archive')));
+  assert.ok(LUCIDE_ICONS[organise[1].lucide!]);
+  assert.ok(LUCIDE_FOR_EMOJI[organise[1].icon!]);
+  const restore = buildThingsItemMenu({ ...args, actCount: 2, libraryAction: 'restore' });
+  assert.equal(restore.sections.find(section => section.id === 'organise')?.actions[1].label, 'Restore 2 things');
+  assert.ok(!commands({ ...args, ownerId: 'other', libraryAction: 'archive' }).includes('archive'));
+  assert.ok(!commands(args).includes('archive'));
+});

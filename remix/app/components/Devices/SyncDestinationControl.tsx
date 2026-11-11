@@ -24,7 +24,7 @@ const blocks: WebpageBlock[] = [{ id: 'sync-destination', type: 'element', tag: 
   { id: 'sync-destination-more-device-state', type: 'condition', condition: { arg: 'destination.hasMoreDevices', equals: true }, children: [
    { id: 'sync-destination-more-devices', type: 'element', tag: 'button', text: 'More devices', props: { type: 'button', disabled: '{destination.disabled}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'more-devices' } }, css: { 'min-height': '44px' } }
   ] },
-  { id: 'sync-destination-options', type: 'collection', props: { itemsPath: 'destination.folders', label: 'Private cloud folders', hideSearch: false, hideSize: false, hideCount: false, size: 10, empty: 'No private folders available. New connections use their device folder by default.' }, children: [
+  { id: 'sync-destination-options', type: 'collection', props: { itemsPath: 'destination.folders', label: 'Private cloud folders', hideSearch: false, hideSize: false, hideCount: false, size: 10, empty: 'No private folders available. New sync configs use their device folder by default.' }, children: [
    { id: 'sync-destination-option', type: 'element', tag: 'button', text: '{item.path}', props: { type: 'button', disabled: '{destination.disabled}', 'aria-pressed': '{item.selected}', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'choose', id: '{item.id}' } }, css: { 'min-height': '44px', width: '100%', padding: '8px 12px', border: '1px solid var(--tt-border, #d4d4d8)', 'border-radius': '8px', 'text-align': 'left', 'white-space': 'normal', 'overflow-wrap': 'anywhere', background: 'var(--tt-card, #fff)' } }
   ] }
  ] },
@@ -52,7 +52,7 @@ function SyncDestinationControlContent({ draft, sourceName, folders, disabled, s
   return () => controller.abort();
  }, [scopeKey, owner?.id, plane, draft.configuration.deviceId, accountTransport?.origin]);
  const selected = folders.find(folder => folder.id === draft.configuration.remoteFolderId);
- const defaultPath = `${deviceName} / Files / ${sourceName || 'Connection'}`;
+ const defaultPath = `${deviceName} / Files / ${sourceName || 'Folder'}`;
  const automatic = draft.baseUpdatedAt === null && !draft.configuration.remoteFolderId;
  const path = selected?.path || (choice?.id === draft.configuration.remoteFolderId ? choice.path : undefined) || (automatic ? defaultPath : 'Saved destination · refresh folders to view its path');
  return <SettingsDocumentHost documentKey="file-sync-destination" defaultDocument={blocks} scopeKey={scopeKey || draft.id} title="Cloud destination" accountTransport={accountTransport}>

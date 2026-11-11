@@ -6,6 +6,11 @@ export const SUBSPACE_MEDIA_REQUIREMENTS = {
   'api.attachment-content': '1.7.0'
 } as const;
 
+export const SUBSPACE_IMAGE_PRESENTATION_MIN_VERSION = '1.6.0';
+
+export const requireSubspaceImagePresentation = () =>
+  requireThingtimeCapability('api.subspaces-update', SUBSPACE_IMAGE_PRESENTATION_MIN_VERSION);
+
 export const requireSubspaceMediaCapabilities = async () => {
   for (const [feature, version] of Object.entries(SUBSPACE_MEDIA_REQUIREMENTS)) await requireThingtimeCapability(feature, version);
 };

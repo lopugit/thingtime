@@ -10,7 +10,7 @@ import { useLocation } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { useCharacterScope } from '../Characters/CharacterScope';
-import { localQueryParams } from '../Actions/localUiAction';
+import { isSelectionKey, localQueryParams, reducePageSelection, type PageSelection } from '../Actions/localUiAction';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
@@ -53,7 +53,9 @@ export type WebpageRuntime = {
 	source: 'user' | 'system' | null;
 	viewer: WebpageRuntimeViewer;
 	query: Record<string, string>;
-	setPageQuery: (params: unknown, merge?: boolean) => void;
+	setPageQuery: (params: unknown, merge?: boolean, clearSelection?: unknown) => void;
+	selection: PageSelection;
+	updatePageSelection: (input: Record<string, unknown>) => void;
 	applyActivationQuery: (params: Record<string, string | number | boolean>) => void;
 	version: number;
 	// Explicit Refresh/Retry requests, separate from completed control reports.
@@ -88,6 +90,8 @@ const INERT_RUNTIME: WebpageRuntime = {
 	viewer: INERT_VIEWER,
 	query: {},
 	setPageQuery: () => {},
+	selection: {},
+	updatePageSelection: () => {},
 	applyActivationQuery: () => {},
 	version: 0,
 	refreshVersion: 0,
@@ -104,7 +108,6 @@ const WebpageRuntimeContext = React.createContext<WebpageRuntime>(INERT_RUNTIME)
 export const useWebpageRuntime = (): WebpageRuntime => React.useContext(WebpageRuntimeContext);
 
 const MAX_QUERY_KEYS = 32;
-const MAX_QUERY_VALUE_CHARS = 200;
 const QUERY_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/;
 
 // A shared-load entry only earns its keep for the SIBLING blocks that ask for
@@ -147,7 +150,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 		// oversized token into a valid first-page request by silently dropping it.
 		out[key] = isPaginationCursorKey(key)
 			? value.length <= MAX_PAGINATION_CURSOR_CHARS ? value : INVALID_PAGINATION_CURSOR
-			: value.slice(0, MAX_QUERY_VALUE_CHARS);
+			: value;
 		count += 1;
 	});
 	return out;
@@ -210,7 +213,18 @@ export const WebpageRuntimeProvider = ({
 		identity: object; values: Record<string, string>; manual: Set<string>;
 	} | null>(null);
 	const query = localQuery?.identity === queryIdentity ? localQuery.values : urlQuery;
-	const setPageQuery = React.useCallback((params: unknown, merge = false) => {
+	const [localSelection, setLocalSelection] = React.useState<{ identity: object; values: PageSelection } | null>(null);
+	const selection = localSelection?.identity === queryIdentity ? localSelection.values : INERT_RUNTIME.selection;
+	const updatePageSelection = React.useCallback((input: Record<string, unknown>) => {
+		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
+		setLocalSelection((current) => {
+			if (activeQueryIdentity.current !== queryIdentity) return current;
+			const previous = current?.identity === queryIdentity ? current.values : INERT_RUNTIME.selection;
+			const values = reducePageSelection(previous, input);
+			return values === previous ? current : { identity: queryIdentity, values };
+		});
+	}, [enabled, pageId, queryIdentity]);
+	const setPageQuery = React.useCallback((params: unknown, merge = false, clearSelection?: unknown) => {
 		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity) return;
 		const validated = localQueryParams(params);
 		if (!validated) return;
@@ -230,7 +244,8 @@ export const WebpageRuntimeProvider = ({
 			}
 			return { identity: queryIdentity, values: Object.fromEntries(next), manual };
 		});
-	}, [enabled, pageId, queryIdentity, urlQuery]);
+		if (isSelectionKey(clearSelection) && !merge) updatePageSelection({ op: 'clear-selection', key: clearSelection });
+	}, [enabled, pageId, queryIdentity, urlQuery, updatePageSelection]);
 	const applyActivationQuery = React.useCallback((params: Record<string, string | number | boolean>) => {
 		if (!enabled || !pageId || activeQueryIdentity.current !== queryIdentity || !Object.keys(params).length) return;
 		setLocalQuery((current) => {
@@ -314,6 +329,8 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			setPageQuery,
+			selection,
+			updatePageSelection,
 			applyActivationQuery,
 			version,
 			refreshVersion,
@@ -334,6 +351,8 @@ export const WebpageRuntimeProvider = ({
 			viewer,
 			query,
 			setPageQuery,
+			selection,
+			updatePageSelection,
 			applyActivationQuery,
 			version,
 			refreshVersion,
@@ -443,6 +462,12 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 				if (input.checked) out[name] = input.value;
 				return;
 			}
+		}
+		if (field.tagName === 'SELECT' && (field as HTMLSelectElement).multiple) {
+			out[name] = Array.from((field as HTMLSelectElement).selectedOptions)
+				.filter((option) => !option.matches(':disabled'))
+				.map((option) => option.value);
+			return;
 		}
 		if (typeof field.value === 'string') {
 			if (field.getAttribute('data-tt-input-type') === 'json') {

@@ -1200,7 +1200,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		now: () => now,
 		customMongoActive: () => false,
 		store: {
-			listUnboundOwned: async (...args: unknown[]) => {
+			listBrowserDrafts: async (...args: unknown[]) => {
 				listArgs = args;
 				return [pending, ready];
 			},
@@ -1230,7 +1230,7 @@ test('session replacement cleanup is owner-scoped, bounded, and preserves deferr
 		hasMore: false
 	});
 	assert.deepEqual(listArgs, ['user-1', 26]);
-	assert.deepEqual(scopes, [{ kind: 'draft' }, { kind: 'draft' }]);
+	assert.deepEqual(scopes, [{ kind: 'draft', browserOnly: true }, { kind: 'draft', browserOnly: true }]);
 	assert.deepEqual(deleted, ['objects/attachment-2']);
 });
 
@@ -1478,6 +1478,9 @@ test('explicit edit deletion requires and claims the exact bound target', async 
 
 test('delete claim fences distinguish unattached drafts, expired drafts, and one exact target', () => {
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft' }), { targetId: { $exists: false } });
+	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', browserOnly: true }), {
+		targetId: { $exists: false }, attachmentFileSyncOrigin: { $exists: false }
+	});
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', expiredAtOrBefore: now }), {
 		targetId: { $exists: false },
 		attachmentExpiresAt: { $lte: now }
@@ -2963,4 +2966,32 @@ test('local provider mints HTTPS native targets only after exact owner and versi
 		}
 	} finally { await rm(directory, { recursive: true, force: true }); }
 
+});
+
+test('a legacy file finalizer cannot delete a version that consolidation moved behind another logical reference', async () => {
+  for (const deletingOrigin of [false, true]) {
+    const original = attachmentDoc({ attachmentPurpose: 'file', attachmentState: 'finalizing' });
+    const retiringOrigin = { ...original, attachmentState: 'deleting' as const, objectVersionId: 'stored-version', uploadId: undefined,
+      attachmentBlob: { id: 'blob-' + 'a'.repeat(64), objectAttachmentId: original.shareId, objectVersionId: 'stored-version' } };
+    let reads = 0, renewals = 0, deletions = 0;
+    const service = createAttachmentService({
+      store: {
+        getOwned: async () => ++reads === 1 ? original : deletingOrigin ? retiringOrigin : null,
+        claimFinalizing: async () => ({ doc: original, acquired: true }),
+        renewFinalizing: async () => ++renewals === 1 ? original : null,
+        removeDeleting: async () => { throw Error('stale finalizer cannot remove a logical reference'); }
+      } as any,
+      getS3: () => noopS3({
+        listParts: async () => [
+          { partNumber: 1, etag: 'one', sizeBytes: 8 * 1024 * 1024, checksumSha256: checksum(1) },
+          { partNumber: 2, etag: 'two', sizeBytes: 2 * 1024 * 1024, checksumSha256: checksum(2) }
+        ],
+        completeMultipartUpload: async () => ({ versionId: 'stored-version' }),
+        deleteObject: async () => { deletions++; }
+      })
+    });
+    const result = await service.complete(original.ownerId, { uploadId: original.shareId });
+    assert.ok(result.ok === false && result.code === 'finalization_lease_lost');
+    assert.equal(deletions, 0);
+  }
 });

@@ -71,7 +71,7 @@ export type AttachmentS3 = {
 };
 
 const PART_URL_TTL_SECONDS = 10 * 60;
-const DOWNLOAD_URL_TTL_SECONDS = 10 * 60;
+export const DOWNLOAD_URL_TTL_SECONDS = 10 * 60;
 const PREFIX_BYTES = 8 * 1024;
 
 const errorName = (error: unknown) => String((error as any)?.name || (error as any)?.Code || '');

@@ -1,12 +1,11 @@
 # Device folder sync from a browser
 
-Open **Things → device → File sync & backup → Open device sync & backup →
-Manage sync connections**
+Open **Things → device → Folders & sync configs → Manage folders & sync configs**
 while signed into the account that owns the device. The management entry no
 longer depends on a local Electron bridge or pairing on the viewing computer.
 The installed app continues to use its direct local controls for its own device.
 
-Saved private connections use the existing `file-sync` Things, configuration
+Saved private sync configs use the existing `file-sync` Things, configuration
 editor, revision checks, cloud-folder authorization, exclusions and resource
 controls. Existing folder bindings can be edited while the device is offline.
 Adding or changing a device folder requires a current response from that device;
@@ -18,6 +17,20 @@ app claims requests for its verified local pairing and runs the existing native
 sync runtime. Transfers, grants, automatic jobs, inventories, priorities and
 conflict journals remain on the device. File contents do not pass through this
 control channel. Closing the browser does not stop a job started on the device.
+
+With `api.devices-sync-control` 1.5.0, timed **Save & sync** durably enrolls
+the config even while another config is running. The status projection includes
+the exact config's latest measured activity. Paged history uses the existing
+control channel and the device's receipt store; it verifies the owning account,
+source pairing and current private config on both sides. Missing or inaccessible
+configs do not expose activity, and offline devices do not imply zero usage.
+See [the unified editor and storage contract](device-sync-configs.md).
+
+Recovery of an exact saved folder revision can use timed Start with
+`queueOnly: true` to journal the job without a native consent prompt. The
+worker honors a prior Pause and returns the same config, revision and interval
+receipt after admission. Device grants and existing write consent are checked
+before any transfer.
 
 Folder pickers and operating-system permission dialogs appear on the target
 device. The device must be awake, connected, signed into the same account and

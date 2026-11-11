@@ -1,6 +1,7 @@
 import { nativePathObserver } from './nativePathObservation';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
+import { createSyncActivityObservation } from './syncActivityJournal';
 import { deviceResourceKey, nativeDeviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
@@ -12,7 +13,7 @@ import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, PHOTO_AUTOMATION_INTERVAL_MS }
 import { samePhotoBackupSource } from './photoSettingsPolicy';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { cloudSyncHttpError, SYNC_RETRY_MAX_MS, SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
-import { pauseSyncJobAdmission, retireStrictCapture, syncJobDue, type SyncJob } from './syncJobJournal';
+import { pauseSyncJobAdmission, retireStrictCapture, SYNC_INTERVALS, SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { holdDesktopSyncWindow, setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { armNativePhotoRun, cancelPendingNativePhotoArm } from './nativePhotoRun.client';
@@ -22,7 +23,7 @@ import { createSyncTaskRuntime, cancelSyncForActivity } from './syncTaskRuntime'
 import { createSyncStopCleanup } from './syncStopCleanup';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from './journal.client';
 import { runPagedForegroundCloudSync } from './pagedForegroundSync';
-import { readNativeInventory, parseNativePhotoQueueBatch, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, type LocalInventoryPage, type NativeBackupCapture, type NativePhotoQueueApproval, type NativePhotoQueueBatch } from './nativeInventory';
+import { readNativeInventory, parseNativePhotoQueueBatch, NATIVE_INVENTORY_BATCH_ENTRIES, NativeInventoryRetryWait, NativeStrictInventoryInterrupted, type LocalInventoryPage, type NativeBackupCapture, type NativePhotoQueueApproval, type NativePhotoQueueBatch } from './nativeInventory';
 import type { ForegroundSyncInput, ForegroundSyncProgress } from './foregroundSync';
 import type { InventoryIdentity } from './inventoryJournal';
 import { readCloudFolderInventoryPages } from './cloudInventoryPages.client';
@@ -32,7 +33,7 @@ import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import { createAutomaticStoragePlacement } from './automaticStoragePlacement';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
@@ -40,16 +41,187 @@ import { createConflictReviewController } from './conflictReviewController';
 import type { PagedConflictReviewResult } from './pagedForegroundReview';
 import type { SyncConflictReviewResult } from './conflictResolution';
 import { assertConfiguredSyncApproval, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from './configuredPlan';
-import type { SyncScope } from './reconcile';
+import { validateSyncScope, type SyncScope } from './reconcile';
 import { clearLocalCache, writeStampedCache, pruneCacheNamespace } from '../hooks/localCache';
 import { TIMELINE_CHANGED_EVENT } from '../timeline/clientEvents';
 
 export const nativeSyncTasks = createSyncTaskRuntime();
 export const supportsNativeSyncTasks = () => !!getNativeSyncAdapter();
 
-async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<ReturnType<typeof getNativeSyncAdapter>>, checkIdentity: () => void) {
+export const DEFAULT_NATIVE_FOLDER_SYNC_INTERVAL_MS = 300_000;
+const FOLDER_ENROLLMENT_TIMEOUT_MS = 90_000;
+let folderEnrollment: { key: string; controller: AbortController } | undefined;
+const queuedFolderEnrollments = new Map<string, AbortController>();
+
+
+async function readNativeConfiguration(host: Awaited<ReturnType<typeof createNativeSyncHost>>, scope: SyncScope, signal: AbortSignal) {
+ const url = new URL('/api/v1/things', scope.origin);
+ url.searchParams.set('id', scope.rootId);
+ const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
+  headers: { 'X-Thingtime-Expected-Actor': scope.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
+ if (!response.ok) throw cloudSyncHttpError(response.status, response.headers.get('retry-after'));
+ return (await response.json()).thing as unknown;
+}
+
+/** Only for an explicit Save & Sync on this device. When the native lane is
+ * busy, journal the exact saved config without performing any file operation.
+ * The runner will verify its grants and existing write consent before work. */
+export async function enrollNativeFolderSync(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number,
+ intervalMs: number = DEFAULT_NATIVE_FOLDER_SYNC_INTERVAL_MS, signal: AbortSignal = new AbortController().signal, options: { queue?: boolean; respectPause?: boolean } = {}) {
+ signal.throwIfAborted();
+ const key = syncScopeKey(scope), task = nativeSyncTasks.read();
+ if ((task?.active && syncScopeKey(task.scope) === key) || folderEnrollment?.key === key)
+  throw Error('This sync config already has a transfer or approval in progress. Check its current status.');
+ if (task?.active || folderEnrollment || options.queue)
+  return queueNativeFolderEnrollment(saved, scope, generation, intervalMs, signal, options.respectPause);
+ const pending = { key, controller: new AbortController() };
+ const timeout = AbortSignal.timeout(FOLDER_ENROLLMENT_TIMEOUT_MS);
+ const bounded = AbortSignal.any([signal, pending.controller.signal, timeout]);
+ folderEnrollment = pending;
+ try {
+  return await confirmNativeFolderEnrollment(saved, scope, generation, intervalMs, bounded);
+ } catch (cause) {
+  if (timeout.aborted && !signal.aborted && !pending.controller.signal.aborted)
+   throw Error('The device did not confirm automatic sync in time. Check its current status before enabling sync again.');
+  throw cause;
+ } finally {
+  folderEnrollment = undefined;
+  // A discovery pass that found the approval barrier should check again.
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
+ }
+}
+
+function folderEnrollmentContext(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, intervalMs: number, signal: AbortSignal) {
+ const reviewed = structuredClone(saved), binding = structuredClone(scope);
+ const config = reviewed.configuration;
+ validateSyncScope(binding);
+ if (binding.dataPlane !== 'home' || binding.rootId !== reviewed.id || binding.deviceId !== config.deviceId || config.paused || config.sourceKind === 'photos')
+  throw Error('Save and enable this device folder’s sync config before starting automatic sync.');
+ if (!SYNC_INTERVALS.some(interval => interval === intervalMs)) throw Error('Choose a supported sync interval.');
+ const adapter = getNativeSyncAdapter();
+ if (!adapter) throw Error('Update Thingtime before using automatic folder sync.');
+ const check = () => {
+  signal.throwIfAborted();
+  const identity = rootIdentity.read();
+  if (identity.pending || identity.generation !== generation || !isNativeSyncAdapterCurrent(adapter))
+   throw Error('The active account changed. Reopen folder access.');
+  if (!activityManager.enabled('sync.execution') || !activityManager.enabled('sync.automation'))
+   throw Error('Enable file sync and automatic discovery in Activity manager before starting automatic sync.');
+  return binding;
+ };
+ check();
+ return { reviewed, binding, config, adapter, check };
+}
+
+async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, intervalMs: number, lifetime: AbortSignal, respectPause = false) {
+ const key = syncScopeKey(scope);
+ if (queuedFolderEnrollments.has(key)) throw Error('This sync config is already being queued. Check its current status.');
+ const pending = new AbortController();
+ const signal = AbortSignal.any([lifetime, pending.signal, AbortSignal.timeout(10_000)]);
+ const { reviewed, binding, check: assertCurrent } = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
+ const check = () => {
+  assertCurrent();
+  if (respectPause && nativeSyncTasks.isPaused(binding)) throw Error('Automatic sync setup was paused.');
+  return binding;
+ };
+ check();
+ queuedFolderEnrollments.set(key, pending);
+ try {
+  return await withSyncRootLock(binding, async () => {
+   const journal = await openSyncJournal();
+   try {
+    const jobs = journal.jobs({ scope: binding, currentScope: check, signal });
+    const prior = await jobs.read();
+    if (prior && syncJobEnabled(prior) && prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) return prior;
+    // Replacing an unfinished old config can require verified native scanner
+    // cancellation. Queue only first-time configs while the lane is occupied.
+    if (prior && prior.state !== 'complete')
+     throw Error('This sync config has saved work. Wait for the device to finish its current transfer before enabling it again.');
+    const queued = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined, { previous: prior, pendingFolderValidation: true });
+    check();
+    if (!respectPause) nativeSyncTasks.resumeScope(binding);
+    return queued;
+   } finally { journal.close(); }
+  }, undefined, signal);
+ } finally { queuedFolderEnrollments.delete(key); }
+}
+
+async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, intervalMs: number, signal: AbortSignal) {
+ const { reviewed, binding, config, adapter, check } = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
+ const host = await createNativeSyncHost({ adapter, ownerId: binding.ownerId, deviceId: binding.deviceId, signal, assertCurrent: check });
+ if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
+ const assertExact = async () => {
+  const current = readOwnedFileSyncConfiguration(await readNativeConfiguration(host, binding, signal), binding.ownerId);
+  check();
+  assertConfiguredSyncApproval(current, { ...reviewed, scope: binding }, binding, config.localRootId, config.remoteFolderId);
+ };
+ await host.requireCapability('api.things', config.resourceLimits ? '1.39.0' : config.ignoreRules ? '1.38.0' : '1.36.0');
+ if (config.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
+ const downloadRequirements = fileSyncDownloadRequirements(config);
+ for (const [feature, minimum] of Object.entries(downloadRequirements)) await host.requireCapability(feature, minimum);
+ if (Object.keys(downloadRequirements).length && !supportsNativeCloudStaging(host.capabilities))
+  throw Error('Update Thingtime before using a CPU target for downloads. This connection requires scoped native signed-range downloads.');
+ if (config.ignoreRules && !supportsNativeIgnoreRules(host.capabilities))
+  throw Error('Update Thingtime Mac before using this connection’s Gitignore rules.');
+ await assertExact();
+ return await withSyncRootLock(binding, async () => {
+  check();
+  const journal = await openSyncJournal();
+  try {
+   const jobs = journal.jobs({ scope: binding, currentScope: check, signal });
+   let prior = await jobs.read();
+   if (prior && !prior.pendingFolderValidation && !nativeSyncTasks.isPaused(binding) && syncJobEnabled(prior) && prior.intervalMs === intervalMs &&
+    JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) return prior;
+   const roots = (await host.request(binding.ownerId, { action: 'list' }, signal)).roots;
+   assertPhotoSourcePolicy(config, roots);
+   if (roots.find(root => root.id === config.localRootId)?.sourceKind === 'photos') throw Error('Use the Photos backup controls for this source.');
+   assertNativeFolderInventoryCoverage(host.capabilities, config);
+   const { json, negotiate } = cloudRequests({ currentScope: check, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability }, binding, signal);
+   await negotiate(CLOUD_FOLDER_REQUIREMENTS);
+   if (parseCloudFolder((await json('/api/v1/files?' + new URLSearchParams({ folderId: config.remoteFolderId }))).folder).id !== config.remoteFolderId)
+    throw Error('The cloud folder changed.');
+   if (prior?.strictCaptureId) {
+    // Retire only the old admitted scanner and keep its execution receipts.
+    // Pause or another job revision may win while native cleanup is in flight.
+    prior = await retireStrictCapture(jobs, prior, job => cancelSavedStrictCapture(job, adapter, check, signal));
+    if (!prior) throw Error('The saved sync job changed while retiring its earlier scan. Check its current status.');
+   }
+   if (prior?.nativeCaptureId) {
+    const unfinished = prior.state !== 'complete' && prior.nextRunAt === undefined;
+    const samePolicy = JSON.stringify(prior.reviewed.configuration) === JSON.stringify(config);
+    const retainsCapture = unfinished && samePolicy && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed);
+    if (!retainsCapture && (!unfinished || samePolicy || prior.state === 'paused')) {
+     const old = prior.reviewed.configuration;
+     const retired = await host.request(binding.ownerId, {
+      action: 'scan-cancel', rootId: old.localRootId, inventoryDeviceId: binding.deviceId,
+      captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: old.excludedPaths,
+      ...(old.ignoreRules ? { ignoreRules: old.ignoreRules } : {})
+     }, signal);
+     check();
+     if (retired.cancelled !== true) throw Error('The previous folder scan could not be cancelled. Its saved work is still paused.');
+     prior = await jobs.capture(prior, null);
+     if (!prior) throw Error('The saved sync job changed while retiring its earlier scan. Check its current status.');
+    }
+   }
+   if (config.mode === 'download' || config.mode === 'two-way') {
+    if (!supportsNativeWriteApprovalCheck(host.capabilities))
+     throw Error('Update the app to resume with saved folder approval without a dialog.');
+    await approveMobileSyncTarget(reviewed, binding, signal, host.request, host.capabilities);
+   }
+   await assertExact();
+   const pending = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined, { previous: prior });
+   check();
+   nativeSyncTasks.resumeScope(binding);
+   if (adapter.platform === 'macos') void setDesktopSyncScheduled(true, adapter.bridge).catch(() => {});
+   return pending;
+  } finally { journal.close(); }
+ }, undefined, signal);
+}
+
+async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<ReturnType<typeof getNativeSyncAdapter>>, checkIdentity: () => void, lifetime?: AbortSignal) {
 	if (!job.strictCaptureId) return;
-	const signal = AbortSignal.timeout(10_000), { scope, reviewed } = job;
+	const timeout = AbortSignal.timeout(10_000), { scope, reviewed } = job;
+	const signal = lifetime ? AbortSignal.any([timeout, lifetime]) : timeout;
 	const assertCurrent = () => {
 		signal.throwIfAborted(); checkIdentity();
 		if (!isNativeSyncAdapterCurrent(adapter)) throw Error('The active sync host changed.');
@@ -63,7 +235,11 @@ async function cancelSavedStrictCapture(job: SyncJob, adapter: NonNullable<Retur
 
 /** Explicit runs persist admission separately from editable connection Things.
  * Relaunch resumes only that admitted job, using existing native consent. */
-export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean; signal?: AbortSignal }) {
+export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, resume?: SyncJob, intervalMs?: number, automaticPhoto?: { wakeConditions: boolean; signal?: AbortSignal }, wakeConditions = false) {
+	if (folderEnrollment) {
+		if (resume || automaticPhoto) return;
+		throw Error('Another sync config is waiting for device approval. Finish that approval before starting a transfer.');
+	}
 	if (!activityManager.enabled('sync.execution')) throw Error('File sync is disabled in Activity manager. Enable it before starting a transfer.');
 	const adapter = getNativeSyncAdapter();
 	if (!adapter) throw Error('Update Thingtime to continue sync outside this screen.');
@@ -115,6 +291,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 		let disposeProgressCache: (() => void) | undefined;
 		let history: ReturnType<typeof createDeviceSyncHistoryRecorder> | undefined;
 		let historyStatus: 'paused' | 'complete' | 'error' = 'paused';
+		let activity: ReturnType<typeof createSyncActivityObservation> | undefined, waiting = false, recoveryCandidate = resume;
 		let jobs: ReturnType<Awaited<ReturnType<typeof openSyncJournal>>['jobs']> | undefined;
 		try {
 			check();
@@ -183,13 +360,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			const currentScope = () => { check(); host.assertCurrent(); return binding; };
 			const transport = { ...(resources ? { resources } : {}), currentScope, origin: host.origin, fetch: host.fetch, requireCapability: host.requireCapability };
 			const runtime = { ...transport, automaticStoragePlacement: createAutomaticStoragePlacement(transport, binding, signal) };
-			const readConfiguration = async () => {
-				const url = new URL('/api/v1/things', binding.origin); url.searchParams.set('id', reviewed.id);
-				const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
-					headers: { 'X-Thingtime-Expected-Actor': binding.ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
-				if (!response.ok) throw cloudSyncHttpError(response.status, response.headers.get('retry-after'));
-				const value = await response.json(); check(); return value.thing;
-			};
+			const readConfiguration = async () => { const value = await readNativeConfiguration(host, binding, signal); check(); return value; };
 			let photoSource = false, backup = false, strictAsync = false, downloadCloudForPlan = false;
 			let photoAccess: ForegroundSyncProgress['photoAccess'];
 			const updatePhotoAccess = (roots: Awaited<ReturnType<typeof request>>['roots']) => {
@@ -305,6 +476,17 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const photoPages = photoSource && supportsNativePhotoInventoryPages(capabilities);
 				strictAsync = photoPages || (!photoSource && capabilities.platform === 'macos' && !backup && supportsNativeStrictCapture(capabilities));
 				const inspect = photoSource ? photoPages : supportsNativePathInspection(capabilities);
+				if (resume?.pendingFolderValidation) {
+					const current = readOwnedFileSyncConfiguration(await readConfiguration(), binding.ownerId);
+					const { localRootId, remoteFolderId } = reviewed.configuration;
+					if (current.id === reviewed.id && current.configuration.deviceId === binding.deviceId && current.configuration.paused)
+						throw new SyncConditionsWait('paused');
+					assertConfiguredSyncApproval(current, { ...reviewed, scope: binding }, binding, localRootId, remoteFolderId);
+					const { json, negotiate } = cloudRequests(runtime, binding, signal);
+					await negotiate(CLOUD_FOLDER_REQUIREMENTS);
+					if (parseCloudFolder((await json('/api/v1/files?' + new URLSearchParams({ folderId: remoteFolderId }))).folder).id !== remoteFolderId)
+						throw Error('The cloud folder changed.');
+				}
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
 				let resumeJob = resume;
@@ -328,7 +510,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (prior?.strictCaptureId) {
 					prior = await retireStrictCapture(jobs!, prior, saved => cancelSavedStrictCapture(saved, adapter, checkIdentity)); check();
 					if (!prior) return;
-					if (resumeJob) resumeJob = prior;
+					if (resumeJob) recoveryCandidate = resumeJob = prior;
 				}
 				const cancelPriorBackupCapture = async () => {
 					if (!prior?.nativeCaptureId) return;
@@ -359,10 +541,12 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 					(prior.state === 'paused' || JSON.stringify(prior.reviewed.configuration) === JSON.stringify(reviewed.configuration)) &&
 					JSON.stringify(prior.reviewed) !== JSON.stringify(reviewed)) await cancelPriorBackupCapture();
 				check();
-				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID(), automaticPhoto) :
+				admissionPending = resumeJob ? jobs!.begin(resumeJob, Date.now(), crypto.randomUUID(), automaticPhoto, wakeConditions) :
 					jobs!.admit(reviewed, crypto.randomUUID(), photoAutomation ? PHOTO_AUTOMATION_INTERVAL_MS : intervalMs, photoSettings, automaticPhoto ? { previous: prior } : undefined);
 				job = await admissionPending;
 				if (!job) return; // A stopped/completed/replaced discovery is never replayed.
+				activity = createSyncActivityObservation(crypto.randomUUID());
+				update({ activity: activity.snapshot() });
 				if (photoSettings) {
 					for (const prefix of ['tt:sync-progress:', 'tt:sync-inventory:', 'tt:sync-progress-tree:'])
 						clearLocalCache(prefix + syncScopeKey(binding));
@@ -432,7 +616,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 							const key = 'tt:sync-inventory:' + syncScopeKey(binding);
 							writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
 						},
-						transfer: value => { check(); update({ transfer: value }); history?.transfer(value); },
+						transfer: value => { check(); history?.transfer(value); activity?.transfer(value); update({ transfer: value, activity: activity?.snapshot() }); },
 						progressSession: descriptor => {
 							check(); update({ progressDescriptor: descriptor });
 							const key = 'tt:sync-progress-tree:' + syncScopeKey(binding);
@@ -531,10 +715,19 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			// connection's native scanner. The durable stream ID/cursors stay
 			// intact for retry, and a failed account check cannot cancel another run.
 			if (reviewed.configuration.mode === 'two-way' && !signal.aborted) await cancelCapture?.().catch(() => {});
-			const failed = job ?? (automaticPhoto || resume?.intervalMs !== undefined ? resume : null);
-			if (failed && jobs && !signal.aborted && error instanceof SyncConditionsWait)
-				await jobs.defer(failed, Date.now(), undefined, error, photoAutomation);
-			if (failed && jobs && !signal.aborted && (isSyncConnectionFailure(error) || (photoAutomation && error instanceof NativeInventoryRetryWait))) {
+			const failed = job ?? recoveryCandidate;
+   if (failed && jobs && !signal.aborted && !photoAutomation && error instanceof NativeStrictInventoryInterrupted &&
+    await jobs.retryStrictCapture(failed, Date.now())) {
+    waiting = true;
+    throw new SyncConnectionWait('Indexing was interrupted. Thingtime will check the folder again once; confirmed files are preserved.');
+   }
+			if (failed && jobs && !signal.aborted && error instanceof SyncConditionsWait) {
+				waiting = error.reason !== 'paused';
+				if (error.reason === 'paused') await jobs.pause(failed);
+				else await jobs.defer(failed, Date.now(), undefined, error, photoAutomation);
+			}
+			if (failed && jobs && !signal.aborted && (isSyncConnectionFailure(error) || error instanceof NativeInventoryRetryWait)) {
+				waiting = true;
 				const delay = error instanceof SyncConnectionWait ? error.retryAfterMs : undefined;
 				await jobs.defer(failed, Date.now(), delay, undefined, photoAutomation);
 				if (error instanceof NativeInventoryRetryWait) throw error;
@@ -552,10 +745,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			// until durable pause and independent capture cancellation settle.
 			const cleanup = stopCleanup.finish().then(() => historyStatus, () => 'error' as const);
 			const historyFinish = history?.finish(cleanup);
-			await cleanup;
+   const activityFinish = activity && cleanup.then(status => journal!.syncActivity({
+    scope: binding, currentScope: () => { checkIdentity(); return binding; }
+   }).append(activity!.finish(waiting && status === 'paused' ? 'waiting' : status)));
+   await cleanup;
 			// A slow optional sample write must not hold the run or host open.
 			// Only the journal handle outlives the runner, until its write settles.
-			if (historyFinish) void historyFinish.finally(() => journal?.close());
+			if (historyFinish || activityFinish) void Promise.allSettled([historyFinish, activityFinish]).then(() => journal?.close());
 			else journal?.close();
 			disposeActivity(); visibility?.dispose(); unsubscribe(); window.removeEventListener('pagehide', leave);
 			await releaseWindow?.();
@@ -573,13 +769,17 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 
 /** Stop works while the scheduler is idle as well as during a transfer. CAS
  * fences a concurrent discovery, and cancellation only targets this root. */
-export async function pauseNativeSyncJob(scope: SyncScope, generation: number, saved?: SavedFileSyncConfiguration) {
+export async function pauseNativeSyncJob(scope: SyncScope, generation: number, reviewed?: SavedFileSyncConfiguration | (() => Promise<SavedFileSyncConfiguration>)) {
 	const check = () => {
 		if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) throw Error('The active account changed.');
 		return scope;
 	};
 	// Fence discovery before the first asynchronous journal open.
 	check();
+	const key = syncScopeKey(scope);
+	const pause = new DOMException('Automatic sync setup was paused.', 'AbortError');
+	if (folderEnrollment?.key === key) folderEnrollment.controller.abort(pause);
+	queuedFolderEnrollments.get(key)?.abort(pause);
 	cancelPendingNativePhotoArm(scope);
 	const liveStop = nativeSyncTasks.cancel(scope);
 	void liveStop.catch(() => {}); // observed below; journal open can fail independently
@@ -588,6 +788,7 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number, s
 		journal = await openSyncJournal();
 		const jobs = journal.jobs({ scope, currentScope: check });
 		const currentAdapter = getNativeSyncAdapter();
+		let saved = typeof reviewed === 'function' ? undefined : reviewed;
 		const photo = saved?.configuration.sourceKind === 'photos' && currentAdapter?.platform === 'ios' &&
 			supportsNativePhotoAutomation(currentAdapter.bridge) && window.location.origin === scope.origin ? saved : undefined;
 		if (photo) await jobs.pausePhoto(photo, crypto.randomUUID());
@@ -595,8 +796,14 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number, s
 		for (let attempt = 0; attempt < 3; attempt++) {
 			await nativeSyncTasks.cancel(scope); check();
 			const job = await jobs.read();
-			const paused = job && (['paused', 'complete'].includes(job.state) ? job : await jobs.pause(job));
-			if (job && !paused) continue;
+			if (!saved && typeof reviewed === 'function' && (!job || job.state === 'complete')) {
+				saved = await reviewed();
+				check();
+			}
+			const beforeAdmission = saved && saved.configuration.sourceKind !== 'photos' && (!job || job.state === 'complete');
+			const paused = beforeAdmission ? await jobs.pauseFolderSetup(saved, crypto.randomUUID()) :
+				job && (['paused', 'complete'].includes(job.state) ? job : await jobs.pause(job));
+			if ((job || beforeAdmission) && !paused) continue;
 			await nativeSyncTasks.cancel(scope);
 			const adapter = getNativeSyncAdapter();
 			if (paused?.reviewed.configuration.sourceKind === 'photos' && adapter?.platform === 'ios' && supportsNativeDeferredUploads(adapter.bridge)) {
@@ -604,7 +811,7 @@ export async function pauseNativeSyncJob(scope: SyncScope, generation: number, s
 				check();
 				if (window.location.origin !== scope.origin || !isNativeSyncAdapterCurrent(adapter)) throw Error('The selected sync server changed.');
 				await requestMobileFolders(scope.ownerId, { action: 'cancel-deferred-upload', rootId: paused.reviewed.configuration.localRootId,
-					configurationId: paused.reviewed.id, deviceId: scope.deviceId }, signal);
+					configurationId: paused.reviewed.id, deviceId: scope.deviceId, ...(photo ? { explicitPause: true as const } : {}) }, signal);
 			}
 			if (paused?.strictCaptureId) {
 				const adapter = getNativeSyncAdapter();

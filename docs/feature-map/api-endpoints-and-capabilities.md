@@ -1,5 +1,26 @@
 # API endpoints and capabilities
 
+Device sync control 1.5.0 adds config-scoped activity and paged receipt history
+to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
+same native receipt journal used locally; `api/utils/devices/` enforces pairing,
+owning account and private-config authorization. Closed result validation and
+client requirement maps must stay aligned. Attachment upload deduplication and
+its activation/consolidation migrations use the canonical attachment lifecycle;
+see [device sync configs](../device-sync-configs.md) for rollout and deletion
+invariants, and the `TESTING.md` checklist for real API acceptance.
+
+`api.agent-overview` 2.1.0 adds optional multi-select task level, status and
+project filters to `GET /api/v1/agent-overview`. The read adapter applies them
+to the authorized hierarchy before pagination. The response includes effective
+selections and unfiltered authorized choices. Saved pages negotiate 2.1.0 to use
+the new filters. See [the overview adapter](../agent-overview.md) and run
+`test:agent-overview` and `test:api-capabilities`.
+
+Owner Things archive uses additive `api.things` 1.59.0,
+`api.things-search` 1.5.0 and `api.things-bulk` 1.8.0. Explicit home-owner
+filters apply before pagination; the bulk route updates only protected private
+library metadata. See [Things and folders](things-and-folders.md).
+
 Thing storage choices use `api.things-storage-policy` 1.0.0 and the registered
 `/api/v1/things/storage-policy` GET/POST route. The Things utility layer rechecks
 source ownership and per-device identity, atomically fences policy revisions,
@@ -91,6 +112,18 @@ Run `test:chatgpt`, `test:api-capabilities`, and
 `test:connector-mutations:acceptance`. See the hosted connector documentation
 for staged text parts and unavoidable upstream transport constraints.
 
+## MCP permission upgrades
+
+`api.chatgpt-mcp` 2.2.0 adds tool-level `insufficient_scope` and exact-account
+scope requests on the existing `login_thingtime` tool. `api.chatgpt-oauth-authorize`
+1.3.0 displays independent requested permissions and binds consent to an exact
+first-party browser session. `api.chatgpt-oauth-token` 1.1.0 issues and rotates
+the approved OAuth scopes, with PKCE, one-use and live backing PAT checks.
+`api.chatgpt-oauth-register` 1.1.0 validates optional scope metadata. The MCP's
+own manifest publishes `chatgpt.oauth` 1.12.0 and maps its existing discovery and
+token routes. Test both public manifests and run the built scoped reconnect
+check in [reporting](../agent-reporting.md).
+
 `api.devices` and `api.devices-node-state` 1.14.0 add optional host resource
 measurements to the existing device state mirror. `DeviceResources.swift`
 samples host counters, `ThingtimeAPIClient` sends the fields only to a
@@ -121,12 +154,13 @@ Run `test:mongodb-connections`,
 `test:api-capabilities` and `scripts/mongodb-connections-acceptance.mjs`; see
 [connection inventory](../mongodb-connections.md).
 
-Private task reporting publishes `api.agent-reporting` 1.0.0 on
+Private task reporting publishes `api.agent-reporting` 1.1.0 on
 `POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
-the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
-and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
-publishes `api.chatgpt-oauth-authorize` 1.2.0 and `chatgpt.oauth` 1.11.0 for
-the issuer-bound Codex CIMD and its exact ephemeral loopback callback.
+the Nitro route map. Version 1.1.0 can reconcile an already saved coordination
+post with the same receipt and payload after moderation release, without
+writing the post again. The ChatGPT MCP surface publishes `api.chatgpt-mcp`
+2.2.0 and its separate `chatgpt.agent-reporting` 1.0.0 contract. OAuth authorization
+publishes `api.chatgpt-oauth-authorize` 1.3.0 and `chatgpt.oauth` 1.12.0.
 The reporting tools
 negotiate reporting, Characters and overview at the connected account's exact
 origin, and require `agents.report` independently of `things`. Run

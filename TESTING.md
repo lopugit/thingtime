@@ -1,3 +1,17 @@
+## Unified folder sync configs and deduplication
+
+- [ ] Add a task-owned folder, save its automatically prepared config, and reload. Confirm one source and one config with a valid cloud destination. Add a second config with a different direction/destination; edit, pause and remove each independently. Existing Downloads grants and older config labels must group under the actual source without duplicate grants/configs.
+- [ ] Inspect local and remote editors at desktop/mobile widths, scroll to the bottom, and open nested config controls. Select/edit representative nested text, controls and activity fields through Builder, save and reload. Confirm keyboard focus, no clipping/overflow and one inline busy indicator per operation.
+- [ ] Save & sync while another config runs, restart the worker, and verify durable enrollment. Exercise offline recovery, bounded interrupted strict-scan recovery, denied native writes, revoked folder access, explicit pause and account/origin changes. Never turn a refused or incomplete scan into successful sync or propagated deletion.
+- [ ] Interrupt navigation or reload after the config save and before enrollment. Recover only the exact saved revision automatically, without duplicate configs or background permission prompts. Test a busy native Photos lane, cancellation of a prior backup scanner, and remote Pause while enrollment awaits write approval.
+- [ ] Compare config last activity and sent/received history with real transfer receipts before/after reload and remote reads. A reused content blob sends zero payload bytes; unavailable measurements remain unknown. Activity from another config/account/device must not appear.
+- [ ] Through the real API and disposable data, upload identical bytes from independent sync sources, including concurrent starts. Verify one physical object generation, separate logical files, one unique-byte charge, authorized download of both and no cross-account reuse. Test different bytes, zero bytes, interrupted upload and digest mismatch.
+- [ ] Block every readable reference to a shared object and retry its known digest through upload admission. Verify a fresh checksum-verified upload and its own quota charge. Remove the original in a separate case and verify a readable surviving reference still enables reuse.
+- [ ] Delete one shared reference, download the other, retain historical versions, then delete the final reference. Verify physical deletion and quota refund exactly once. Exercise retry and concurrent attach/delete, malformed reference counts, application scopes and revoked access.
+- [ ] Run historical consolidation only after checking every deployment sharing the data plane. Confirm exact logical version identity/content before and after migration, signed-URL drain, interrupted/resumed migration and deletion/refund receipts. Record untouched ineligible files separately.
+- [ ] Sign a download against the old version while its alias transaction is uncommitted. Confirm a postcommit pass starts the full drain window and both routine deletion and migration cleanup retain the old generation and charge until that deadline.
+- [ ] Verify the built capability manifest and both updated/new clients against missing, compatible and breaking versions. Install the final signed Mac app and exercise the actual folder/config path; keep simulated mobile transport distinct from physical iOS/Android acceptance.
+
 ## Sync and backup completion counters
 
 - [ ] Run a task-only Backup connection through native batch upload. Compare its final operation/file/byte counters with the exact cloud file receipt, then rerender and reload the saved progress tree. A zero-work strict reconciliation must retain the completed early transfer counts for that run.
@@ -206,6 +220,18 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 
 ## Agent overview and task reporting
 
+- [ ] On the saved overview, start without task-level parameters and confirm
+      only top-level tasks appear. Project-owned tasks are top-level; children
+      of tasks or agents are subtasks. Select both levels or All tasks, then
+      select multiple statuses and projects without modifier keys. Apply,
+      switch views, reload and use Back; preserve selections and reset the
+      cursor when filters change. Compare results/counts with exact source
+      Things, including grandchildren, detached records and more than one page.
+- [ ] Open each filter with keyboard and pointer at desktop and mobile widths.
+      Check focus, checked options, clear/All choices, long labels, seven or
+      more selected project IDs, and top-to-bottom overflow. In Builder, select
+      and edit the filter label, select and option blocks individually, save
+      and reload; selected values must survive the normal form/query path.
 - [ ] Through the actual connected MCP, verify a plain `things` token cannot
       delegate Characters; authorize `agents.report` explicitly and negotiate
       the exact origin's reporting/Characters/overview capabilities.
@@ -1718,6 +1744,26 @@ is fixed, and cite the checklist you ran in the PR description.
       tool asks for ChatGPT confirmation and the target API rejects a PAT that
       lacks its exact Things scope. Disconnecting an account removes its bridge
       access; removing the last account revokes the ChatGPT bridge session.
+- [ ] Start with a Things-only connection in the same host chat. On an exact
+      selected account, `login_thingtime` with `requiredScopes: ["agents.report"]`
+      and a reporting read each return a tool-level `insufficient_scope`
+      challenge. The host opens its OAuth callback. Verify visible requested
+      reporting access, the signed-in account, optional Things access and the
+      Cancel path at desktop and mobile. Neither checking the session nor
+      cancelling creates a reporting PAT. Approval, exact PKCE and one-use
+      exchange are required. Verify the new profile and account ID before an
+      actual reporting write and exact record readback. Refresh retains only
+      the granted scopes; an unchanged old grant and a revoked new PAT cannot
+      report. The isolated built check is
+      `node remix/scripts/agent-reporting-acceptance.mjs --scoped-reconnect`.
+- [ ] Coordinate as the upgraded task Character in a private subspace.
+      Verify the exact Post projection reports that private subspace and the
+      author and owner can read it. Anonymous and signed-in nonmembers cannot
+      read it. If text moderation holds the post, retain its pending receipt
+      and repeat the original request ID and payload after release. Verify
+      the same post ID, completed receipt and cleared task lock, then update
+      that post. `test:agent-reporting` covers pending and blocked moderation,
+      changed content or audience, and concurrent retries without a second write.
 - [ ] With a known Thing ID outside the first recent/list page,
       `get_thingtime_thing` calls the exact-ID API and returns that Thing or the
       stable `thing_not_found` error; it never falls back to list/search. With a
@@ -3027,6 +3073,10 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Remove a second browser session for the same disposable owner while
+      a paired Photos original has an unbound reservation. Verify the still-live
+      admission signs and publishes the exact original. Revoking the issuing
+      browser session, explicit abort, or expiry must still stop its admission.
 - [ ] Paired File Sync transfer admission: run `test:files:transfer-admissions`
       against a disposable replica and built Nitro per the
       [transfer admission runbook](docs/file-sync-transfer-admissions.md). Verify
@@ -3532,6 +3582,29 @@ email whose link points at the attacker.
       404s, and no orphan child things remain.
 
 ## Profile avatar and banner media (`remix/app/components/Profile/`)
+
+- [ ] With Edit profile open, edit image framing, CSS or HTML and resize across
+      the desktop/phone breakpoint in both directions without closing the
+      image editor. Check its active tab and draft, then Apply, resize again
+      and save the profile. Verify the image settings, source and profile text
+      after reload. Repeat with an uploaded image that is ready to save.
+- [ ] In Edit profile, Settings → Profile, and subspace moderation settings,
+      open **Edit image** on a saved image or completed draft. Verify contain,
+      crop, anchor, offsets, padding and zoom against the original at desktop
+      and phone widths; open CSS and HTML and use both suggestions and free
+      typing. Tab through the dialog, scroll to the last row, and verify Escape
+      closes only the image editor and returns focus to its trigger.
+- [ ] Apply custom CSS and an image alt attribute, save the outer form, and
+      compare anonymous profile/subspace rendering and authenticated avatar
+      placements against exact API readback after reload. Check Reset, Cancel,
+      image replacement, source removal and an attempt to set a source
+      attribute or a CSS external resource. Replace the source in a second session
+      before applying or resetting a stale edit: it must return 409 and preserve
+      the replacement. Original uploaded bytes must match.
+      Try a linked URL with escaped characters and query parameters. Verify
+      existing escapes are preserved and unsupported URL schemes cannot render.
+      The disposable real API/browser fixture is
+      `remix/scripts/image-presentation-acceptance.mjs`.
 
 - [ ] Open both Edit profile and Settings → Profile. With no saved image, each
       avatar/banner field shows a responsive `🏞️ Add Media` tile and a separate
@@ -4282,6 +4355,24 @@ email whose link points at the attacker.
       thing-context-menu) still lay out statically inside their canvases
       (`inline` mode).
 
+## Things library archive
+
+- [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
+  Its row leaves the active view, including search. The original link, sharing
+  and content still work. Check that keyboard focus remains usable when the row
+  disappears.
+- [ ] Open **Archived**, reload, then use a Thing’s action menu to **Restore**.
+  It returns to its original folder. Repeat with a folder and a multi-selection;
+  archiving a folder leaves its descendants unchanged.
+- [ ] At 375 px, use the row’s actions button and touch to archive and restore.
+  Check both views and the open menus from top to bottom for horizontal overflow.
+- [ ] Compare an exact API read before and after archiving. The owner alone sees
+  library archive status. A scoped token, another user, or a different origin
+  cannot change it. An archive filter applies before the page limit.
+  Run `node remix/scripts/things-library-archive-acceptance.mjs` with an isolated
+  node-server build, disposable MongoDB tooling and Playwright to verify the
+  real API and desktop/touch browser paths.
+
 ## /things Duplicate (`remix/app/components/Things/ThingsPage.tsx`, `thingsMenuModel.ts`)
 
 - [ ] Right-click a named thing (data/folder/schema) → Duplicate 🐑: a copy
@@ -4479,7 +4570,8 @@ email whose link points at the attacker.
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
       Custom drawer items, immediate reload once Save closes, and account
-      separation. Editing must prefill every field. Locally bound rows must render
+      separation. Use a long unbroken title at phone width and confirm it wraps
+      within the drawer on first paint. Editing must prefill every field. Locally bound rows must render
       their template without database Collection controls. Failed writes must
       retain the draft or restore the removed item; changing accounts or editing
       layouts during a save must not leave stuck controls or write another
@@ -10645,6 +10737,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   regression audit, lint, typecheck comparison and production build. Verify both
   1.33.0 manifests and exact deployed runtime in preview and production.
 
+
+### Shared Builder element inspector
+
+- Select an element with saved CSS and HTML values. Confirm those fields are
+  populated; the labelled initial/default values do not enter the saved record
+  until selected or typed. Pick a standard property and value with Arrow and
+  Enter, add a Unicode custom property, and reference it from a second value.
+- On an image block, check the `loading` dropdown, alternative text, and an
+  ARIA attribute. Attachment-backed source editing still goes through the
+  upload/URL control. A script handler, source-set URL and reserved data
+  marker cannot enter through the HTML attribute editor.
+- Repeat at desktop and narrow widths; scroll to the bottom and check the
+  keyboard and pointer dropdowns, focus, and absence of horizontal overflow.
+  Switch between two blocks and verify that unsaved CSS source does not bleed
+  across their selections. Save, read the exact private Webpage, reload, and
+  compare one CSS computed value and HTML attribute to the saved declarations.
+- On an authored multiple select, choose two values and run its Action.
+  Confirm the input contains both values in option order and clearing the
+  selection sends an empty array. Change only the second selection before
+  a source refresh. Edited selections stay intact and untouched fields
+  adopt the refreshed default array.
+- With compatible origin capabilities, save more than 40 declarations on one
+  block and more than 20,000 source characters. Check exact-ID readback;
+  the existing HTML sanitizing and render work limits still apply.
+
+
 ## Public schema copies, durable chat files and Lopu instructions (2026-09-27)
 
 - [ ] Run `test:schemas`, `test:migrations`, `test:components`,
@@ -12317,7 +12435,27 @@ transfer, whole-account snapshots or production deployment.
   verify exact prior receipts stay intact. Leave an original unavailable across
   terminal verification, then make the same version local and retry. Run the
   installed fixture with `THINGTIME_PHOTO_EXPECT_NEWEST=1` and verify the
-  first native admissions match independently read PhotoKit metadata.
+  newest synthetic video publishes first while the scoped PhotoKit status still
+  reports a partial index. Check the discovery hint before the first upload,
+  the sample capture timestamps and indexed counts,
+  the saved original hashes and bytes, and no duplicate revisions after reopen.
+- [ ] Keep the newest iCloud original slowly progressing while at least three
+  groups of local originals are backed up in date order. Compare the editable
+  iCloud indicator and current upload stage with the real native status.
+  Interrupt and reopen the exact run, verify the deferred original is still
+  pending, then confirm its bytes when available. Give a second cloud original
+  and an available Live Photo companion a turn even when the first original
+  keeps failing. Confirm a Wi-Fi-only retry reads a newly resident original
+  locally and completion waits for the remaining originals.
+- [ ] On the mounted iPhone card, verify the first photo or video discovery
+  appears while indexing, with the captured time when available. Verify the
+  subsequent indexed asset and file counts, and that unknown counts are absent.
+  On a physical device, end an iOS continued session using its system UI.
+  Verify ordinary execution retries the exact saved queue without a new
+  continued-task request or manual resume. Then use **Pause sync** and
+  confirm it persists across reopening and replacing a local grant. Upgrade
+  from an old system-only hold and verify the exact authorized queue resumes
+  without discarding its checkpoint.
 - [ ] With ordinary Photos consent and an isolated replica, run
   `THINGTIME_PHOTO_DEFERRED_TEST=1` through the installed acceptance harness.
   Hold the first WebView upload, expire native processing after a confirmed
@@ -13213,6 +13351,10 @@ separate from deterministic discovery/lease tests.
 
 ## Automatic iOS TestFlight and vault delivery
 
+- [ ] Inspect an exact pending or failed TestFlight delivery with the `status`
+  operation. If Builds has no matching record, verify the iOS upload state and
+  diagnostic codes against Build Uploads. Ensure provider descriptions and
+  unrelated builds stay out of the result, and no archive or upload starts.
 - [ ] Before merging an iOS change, require the exact TestFlight Xcode
   `native-pr-compile` job. It compiles the app and tests without signing;
   passing a newer local Swift compiler does not cover this gate.
@@ -14226,6 +14368,22 @@ separate from deterministic discovery/lease tests.
 - Keep synthetic cloud-byte fixture evidence separate from `test:files:mac-paged` real HTTP transfers and signed installed pairing/permission/window-close acceptance. Never add a shipped autoapproval switch or modify the user's pairing store to make this lane pass.
 
 ## Editable Mapbox maps and route planning
+
+- [ ] Zoom out until an unscaled marker anchor overlaps a neighbouring marker.
+  Click or tap the visible underlying button through the foreground marker's
+  empty area. Verify both markers' own controls and context menus still work,
+  and that empty overlap leaves the map surface available to pan.
+
+- [ ] On an authored marker with modifier selection enabled, exercise
+  Cmd-primary, Ctrl-primary, macOS Ctrl-primary context and click pairing,
+  ordinary pointer activation, secondary menu, and a keyboard/touch selection
+  button. Verify one toggle per gesture, changing groups, preserved selections
+  during source refresh, and reset after real navigation or a database switch.
+  Drain two cursor pages of keyed metadata, verify each marker gets only its
+  own rows, then fail the second page and confirm the projection is unavailable.
+  Run a selection larger than one Action chunk and check exact ordered inputs,
+  one pending indicator, a partial-failure receipt and preservation of any
+  selection made while the bulk Action was running.
 
 - [ ] Keep ten collapsed rich fields deferred with zero SDK roots; submit a late
   untouched default without opening, refuse a required empty value, and verify

@@ -4,7 +4,8 @@ import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { resolveBlockProps } from '../Builder/templateBlocks';
 import { photoDownloadPreparation, photoQueueDisplay, syncFolderCardBlocks, syncFolderActivityLabel, withSyncFolderQuickBlocks } from './syncFolderCardBlocks';
-import { remoteSyncBlocks, remoteSyncDisclosureBlocks } from './remoteSyncBlocks';
+import { remoteSyncBlocks, remoteSyncDisclosureBlocks, remoteSyncAuthoringBlocks } from './remoteSyncBlocks';
+import { assertRemoteFolderEnrollment } from '~/fileSync/remoteSyncProtocol';
 import { nativePhotoActivityDisplay, nativePhotoCanContinue, nativePhotoRunGlance, type NativePhotoRunView } from './nativePhotoRunView';
 
 test('generic folder summaries expose separate editable fields and a typed expansion control', () => {
@@ -30,6 +31,27 @@ test('saved legacy connection layouts gain a disclosure without dropping custom 
  assert.equal(findBlock(original, 'remote-sync-expand'), null);
 });
 
+
+test('folder grouping migrates editable remote cards without duplicating them or replacing custom text', () => {
+ const original = structuredClone(remoteSyncBlocks);
+ const path = findBlock(original, 'remote-sync-connection-path')!;
+ path.text = 'Original source: {item.path}';
+ const migrated = remoteSyncAuthoringBlocks(original);
+ assert.deepEqual(remoteSyncAuthoringBlocks(migrated), migrated);
+ const folder = findBlock(migrated, 'remote-sync-root')!;
+ assert.equal(findBlock([folder], 'remote-sync-connections')?.props?.itemsPath, 'item.configs');
+ assert.equal(findBlock([folder], 'remote-sync-source-drafts')?.props?.itemsPath, 'item.drafts');
+ assert.equal(findBlock([folder], 'remote-sync-connection-path')?.text, 'Original source: {item.path}');
+ assert.ok(findBlock([folder], 'remote-sync-bytes-sent'));
+});
+
+test('an old device start reply cannot confirm durable automatic enrollment', () => {
+ const reviewed = { connectionId: 'config-one', expectedUpdatedAt: '2026-11-10T12:00:00.000Z', intervalMs: 300000 };
+ const receipt = { accepted: true, folderEnrollmentVersion: '1.0.0', pendingFolderValidation: false, ...reviewed };
+ assert.deepEqual(assertRemoteFolderEnrollment(receipt, reviewed), { pendingFolderValidation: false });
+ for (const reply of [{ accepted: true }, { ...receipt, connectionId: 'other-config' }, { ...receipt, intervalMs: 60_000 }])
+  assert.throws(() => assertRemoteFolderEnrollment(reply, reviewed), /did not confirm durable automatic sync/);
+});
 
 test('historical progress never labels a missing grant as ready', () => {
  const state = { paused: false, rootsReady: true, hasRoot: false, taskPaused: false, running: false };
@@ -110,7 +132,7 @@ test('photo queue counts are distinct editable blocks and only render observed p
 test('Photos activity exposes individual editable fields and preserves custom card blocks', () => {
  const original = [{ id: 'custom-summary', type: 'element' as const, tag: 'p', text: 'Keep my custom summary' }];
  const blocks = withSyncFolderQuickBlocks(original);
- for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time'])
+ for (const id of ['title', 'phase', 'indexed-value', 'prepared-value', 'backlog-value', 'download-progress', 'event-label', 'event-time', 'indexing-count', 'live-indexed', 'latest-found'])
   assert.ok(findBlock(blocks, 'folder-card-activity-' + id));
  assert.equal(findBlock(blocks, 'custom-summary'), original[0]);
  assert.deepEqual(withSyncFolderQuickBlocks(blocks), blocks);

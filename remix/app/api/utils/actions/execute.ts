@@ -656,12 +656,13 @@ const executeProgram = async (
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
 				await budget.operationPolicy?.access(String(id), 'read');
+				if (step.ownedFolderId !== undefined && budget.shared) runError(`Step ${label} owned-folder reads require the owning session`);
 				const included = budget.shared?.data.get(String(id));
 				const got = included
 					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
 					: await getThing(viewer, String(id));
 				if (got.ok === false) runError(`Step ${label} get failed: ${got.error}`);
-				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown } }).thing;
+				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown; author?: { id?: string } | null; folderId?: string | null } }).thing;
 				if (!isDataThing(thing.thingtime)) {
 					runError(`Step ${label} read "${thing.id}" is not a data thing — actions read and write Data Things only`);
 				}
@@ -669,8 +670,14 @@ const executeProgram = async (
 				if (!schemaScopeAllows(readScope, schemaIdentityOf(thing.crystal))) {
 					runError(`Step ${label} read "${thing.id}" outside the declared things.read schema scope`);
 				}
+				if (step.ownedFolderId !== undefined) {
+					const folder = resolveValue(step.ownedFolderId, scope);
+					if (typeof folder !== 'string' || !folder.trim() || !viewer?.id || thing.author?.id !== viewer?.id || thing.folderId !== folder) {
+						runError(`Step ${label} requires an owned Data Thing in the selected folder`);
+					}
+				}
 				target = thing.id;
-				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
+				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal, ...(step.ownedFolderId !== undefined ? { ownedFolderVerified: true } : {}) };
 			} else if (step.op === 'things.search') {
 				await budget.operationPolicy?.search(step.schema, step.scope);
 				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all

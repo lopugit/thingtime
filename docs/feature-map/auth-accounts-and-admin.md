@@ -25,7 +25,9 @@ and show allowlisted request-feature use without per-user or command data. See
 Auth is an httpOnly cookie carrying a signed JWT (`jti`/`sub`/`exp`) plus a
 revocable Mongo `sessions` document; Bearer tokens (PATs, service accounts,
 app tokens) serve API clients (`FUNDAMENTALS.md` §5). Identity and control-plane
-data stay on the home data plane.
+data stay on the home data plane. Replacing or removing a browser account
+cleans its unbound browser drafts. Durable file-sync reservations remain
+subject to their own live browser, device and run checks and expiry.
 
 ## Where the code lives
 
@@ -76,6 +78,12 @@ scope regressions; see `TESTING.md` for activity-disabled logout/relogin checks.
 Preserve exact redirect/origin checks, PKCE, one-use challenges and session
 revocation in every OAuth/SSO change; a browser "success" text alone never
 proves the host connected.
+
+The same Thingtime MCP uses per-tool OAuth scope challenges for independent
+permissions. `chatgpt/plugin.ts` validates the exact same-origin browser
+principal, records a one-use scoped consent, and mints a reporting PAT only
+after matching code and PKCE exchange. Refresh preserves the consented scope
+and checks that the backing PAT is still live. See [reporting](../agent-reporting.md).
 
 `components/Account/AutoLoginPopup.tsx` starts browser-native FedCM on signed-out
 foreign origins. `ssoHub.ts` selects the explicit data authority before deployment

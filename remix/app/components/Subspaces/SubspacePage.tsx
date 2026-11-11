@@ -6,6 +6,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { PresentedImage } from '~/components/Media/PresentedImage';
 import { AuthorFlairChip } from '~/components/Feed/PostCard';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
@@ -546,9 +547,13 @@ const SubspacePageSession = ({ slug }: { slug: string }) => {
 				<Box background="var(--tt-card, #ffffff)" border={BORDER} borderRadius={RADIUS_LG} overflow="hidden" data-testid="subspace-header">
 					<Box
 						height={['96px', '140px']}
-						background={subspace?.branding.bannerUrl ? `center / cover no-repeat url(${JSON.stringify(subspace.branding.bannerUrl)})` : `linear-gradient(120deg, ${accent}, var(--tt-surface-alt, #f5f5f7))`}
-					/>
-					<Flex alignItems="flex-end" columnGap={3} rowGap={2} flexWrap="wrap" paddingX={[4, 5]} paddingBottom={4} marginTop="-28px">
+						background={`linear-gradient(120deg, ${accent}, var(--tt-surface-alt, #f5f5f7))`}
+					>
+						{subspace?.branding.bannerUrl ? (
+							<PresentedImage src={subspace.branding.bannerUrl} presentation={subspace.branding.bannerPresentation} />
+						) : null}
+					</Box>
+					<Flex position="relative" alignItems="flex-end" columnGap={3} rowGap={2} flexWrap="wrap" paddingX={[4, 5]} paddingBottom={4} marginTop="-28px">
 						{subspace ? <SubspaceIcon subspace={subspace} size="64px" fontSize="3xl" /> : <Box width="64px" height="64px" borderRadius="999px" background="var(--tt-surface-alt, #f5f5f7)" />}
 						<Box flex="1" minWidth="160px" paddingTop={7}>
 							<Flex alignItems="center" columnGap={2} flexWrap="wrap">

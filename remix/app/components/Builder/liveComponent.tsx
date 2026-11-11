@@ -4,8 +4,8 @@ import { ComponentInstanceIdentity } from './componentInstanceIdentity';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
-import { loadMapboxPointPages, loadMapboxSourcePages } from './Maps/mapboxSource';
-import type { CollectionSource } from './collectionSource';
+import { loadMapboxSourcePages } from './Maps/mapboxSource';
+import { loadCollectionPages, type CollectionSource } from './collectionSource';
 import { MAP_POINTS_SOURCE_REQUIREMENTS } from '~/schemas/authoredControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
@@ -24,9 +24,10 @@ import { useCharacterScope } from '~/components/Characters/CharacterScope';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { consumeLiveSourceStream, validateLiveSourceStream, type LiveSourceStreamBinding } from './liveSourceStream';
 import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN_WEBPAGE_SOURCE_INTERVAL_MS } from '~/schemas/registry';
+import { parseSourceInputArgument, type SourceInputValue } from '~/schemas/sourceInputs';
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
-import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { createTemplateResolver, defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
@@ -60,13 +61,21 @@ import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache 
 
 export type ThingSourceBinding = {
 	action: string;
-	inputs?: Record<string, string | number | boolean>;
+	inputs?: Record<string, SourceInputValue>;
 	refresh?: 'load' | 'manual' | 'interval' | 'live';
 	intervalMs?: number;
 	stream?: LiveSourceStreamBinding;
 };
 
 export type ThingSourceState = 'inert' | 'signed-out' | 'not-installed' | 'loading' | 'ok' | 'error';
+
+export function resolveThingSourceInputs(inputs: ThingSourceBinding['inputs'], scope: Record<string, unknown>) {
+	const resolve = createTemplateResolver();
+	return Object.fromEntries(Object.entries(inputs || {}).flatMap(([name, input]) => {
+		const value = resolve(typeof input === 'object' ? parseSourceInputArgument(input) : input, scope);
+		return typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? [[name, value]] : [];
+	}));
+}
 
 export type ThingSourceScope = {
 	result: unknown;
@@ -86,7 +95,8 @@ export const useThingSource = ({
 	argValues,
 	interactive,
 	loadAllPages = false,
-	pointPages,
+	cursorPages,
+	collectionMinimum,
 	resolvedInputs = false,
 	executionHeld = false
 }: {
@@ -98,7 +108,8 @@ export const useThingSource = ({
 	interactive: boolean;
 	// Map overlays consume every page, using the same delegated read/cache boundary.
 	loadAllPages?: boolean;
-	pointPages?: CollectionSource;
+	cursorPages?: CollectionSource;
+	collectionMinimum?: string;
 	resolvedInputs?: boolean;
 	executionHeld?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
@@ -110,7 +121,7 @@ export const useThingSource = ({
 	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const sourceKey = JSON.stringify(pointPages ? { source, pointPages: true } : loadAllPages ? { source: source || null, allPages: true } : source || null);
+	const sourceKey = JSON.stringify(cursorPages ? { source, cursorPages, collectionMinimum } : loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
@@ -118,7 +129,7 @@ export const useThingSource = ({
 	// Only the resolved inputs identify a read. Selecting an unrelated panel
 	// or marker leaves this source, its existing result, and its cache intact.
 	const resolved = source?.inputs && !resolvedInputs
-		? resolveTemplate(source.inputs, { ...argValues, query: runtime.query })
+		? resolveThingSourceInputs(source.inputs, { ...argValues, query: runtime.query })
 		: source?.inputs;
 	const inputsKey = JSON.stringify(resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? resolved : {});
 	const inputs = React.useMemo(() => JSON.parse(inputsKey) as Record<string, unknown>, [inputsKey]);
@@ -259,7 +270,7 @@ export const useThingSource = ({
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
-			const clear = failure.clear || !!pointPages;
+			const clear = failure.clear || !!cursorPages;
 			if (clear) clearSourceCache(viewerId, pageId, cacheId);
 			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(clear ? { result: undefined } : {}) }));
 		};
@@ -267,7 +278,7 @@ export const useThingSource = ({
 		(async () => {
 			try {
 				const run = (cursor?: string) => {
-					const pageInputs = cursor ? { ...inputs, [pointPages?.cursorInput || 'cursor']: cursor } : inputs;
+					const pageInputs = cursor ? { ...inputs, [cursorPages?.cursorInput || 'cursor']: cursor } : inputs;
 					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
 					return runtime.load(shareKey, () =>
 					runtime.sharedRun
@@ -275,12 +286,12 @@ export const useThingSource = ({
 						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
 					) as Promise<any>;
 				};
-				if (pointPages) {
-					await requireThingtimeCapability('api.webpages-resolve', MAP_POINTS_SOURCE_REQUIREMENTS['api.webpages-resolve']);
+				if (cursorPages) {
+					await requireThingtimeCapability('api.webpages-resolve', collectionMinimum || MAP_POINTS_SOURCE_REQUIREMENTS['api.webpages-resolve']);
 					await requireThingtimeCapability('api.actions-run', MAP_POINTS_SOURCE_REQUIREMENTS['api.actions-run']);
 					if (stale()) return;
 				}
-				const response: any = pointPages ? await loadMapboxPointPages(pointPages, run, stale) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
+				const response: any = cursorPages ? await loadCollectionPages(cursorPages, run, stale, inputs[cursorPages.cursorInput]) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
 					if (stale()) return;
 					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
 					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });
@@ -414,7 +425,11 @@ export const LiveTemplate = ({
 		// Native adapters may retain a callback across an async event.
 		if (heldRef.current) return;
 		if (input.op === 'query' && input.scope === 'page') {
-			runtime.setPageQuery(input.params);
+			runtime.setPageQuery(input.params, false, input.clearSelection);
+			return;
+		}
+		if (input.scope === 'page' && (input.op === 'toggle-member' || input.op === 'clear-selection')) {
+			runtime.updatePageSelection(input);
 			return;
 		}
 		if (input.op === 'query' || input.op === 'back') {
@@ -458,12 +473,20 @@ export const LiveTemplate = ({
 		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome }))
 	});
 	const pendingAction = pending.identity === identity ? pending.action : null;
-	const liveScope = { ...scope, ...active.values, page: { id: runtime.pageId }, pending: pendingAction !== null, pendingAction };
-	const scopeKey = JSON.stringify(liveScope);
+	const onComponentAction = interactive ? (event: React.MouseEvent) => {
+		if (!(event.target as Element).closest?.('[data-tt-native-upload], [data-tt-discussion]')) onTtAction(event);
+	} : undefined;
+	const { page: inheritedPage, ...inheritedScope } = scope;
+	const collections = (inheritedPage as { collections?: unknown } | undefined)?.collections;
+	const page = React.useMemo(() => ({ id: runtime.pageId, selection: runtime.selection, ...(collections ? { collections } : {}) }),
+		[runtime.pageId, runtime.selection, collections]);
+	const serialScope = { ...inheritedScope, ...active.values, pending: pendingAction !== null, pendingAction };
+	const liveScope = { ...serialScope, page };
+	const scopeKey = JSON.stringify(serialScope);
 	const resolved = React.useMemo(
 		() => (render ? (alreadyResolved ? render : resolveTemplate(render, liveScope)) : null),
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
-		[render, scopeKey, alreadyResolved]
+		[render, scopeKey, alreadyResolved, page]
 	);
 	if (!resolved) return null;
 	return (
@@ -474,13 +497,9 @@ export const LiveTemplate = ({
 				<ComponentDataScope.Provider value={liveScope}>
 					<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
 						<Box
-							onClickCapture={
-								interactive
-									? (event) => {
-											if (!(event.target as Element).closest?.('[data-tt-native-upload], [data-tt-discussion]')) onTtAction(event);
-									  }
-									: undefined
-							}
+							onClickCapture={onComponentAction}
+							onMouseDownCapture={onComponentAction}
+							onContextMenuCapture={onComponentAction}
 							onChangeCapture={
 								interactive
 									? (event) => {

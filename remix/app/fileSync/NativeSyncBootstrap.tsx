@@ -8,13 +8,17 @@ import { discoverAutomaticPhotos } from './photoAutomationScheduler';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import { nativeSyncTasks, startNativeSyncTask } from './nativeSyncTasks.client';
+import { isSyncConnectionFailure } from './syncConnectionWait';
 import { cancelSyncForActivity } from './syncTaskRuntime';
+import { recoverSavedSyncEnrollments } from './syncEnrollmentRecovery.client';
+import { SYNC_ENROLLMENT_WAKE_EVENT } from './configurationEditor';
 import { openSyncJournal } from './journal.client';
 import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import type { SyncScope } from './reconcile';
 
 let discoveryInFlight: Promise<void> | undefined;
+const verifiedDesktopOrigins = new WeakMap<object, { ownerId: string; generation: number; rendererOrigin: string; devices: Map<string, string> }>();
 /** The root shell owns discovery outside the Files view. Enabled Photos need
  * a current grant on this device. Other sources resume existing admissions. */
 export async function resumeNativeSyncJobs(ownerId: string, generation: number, signal: AbortSignal, wakeConditions = false) {
@@ -30,9 +34,15 @@ export async function resumeNativeSyncJobs(ownerId: string, generation: number, 
 
 async function discoverNativeSyncJobs(ownerId: string, generation: number, signal: AbortSignal, wakeConditions: boolean) {
 	const adapter = getNativeSyncAdapter();
-	if (!activityManager.enabled('sync.automation') || !activityManager.enabled('sync.execution') || nativeSyncTasks.read()?.active || !adapter || (adapter.platform === 'ios' && document.visibilityState === 'hidden')) return;
+	const bridge = adapter?.platform === 'macos' ? adapter.bridge : undefined;
+	if (!activityManager.enabled('sync.automation') || !activityManager.enabled('sync.execution')) {
+		if (bridge) await setDesktopSyncScheduled(false, bridge);
+		return;
+	}
+	const active = !!nativeSyncTasks.read()?.active;
+	await recoverSavedSyncEnrollments(ownerId, generation, signal, active ? undefined : adapter);
+	if (active || !adapter || (adapter.platform === 'ios' && document.visibilityState === 'hidden')) return;
 	let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
-	const bridge = adapter.platform === 'macos' ? adapter.bridge : undefined;
 	const scope: SyncScope = { origin: window.location.origin, ownerId, dataPlane: 'home', rootId: 'sync-job-discovery', deviceId: 'sync-job-discovery' };
 	const currentScope = () => {
 		signal.throwIfAborted();
@@ -63,21 +73,36 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		const explicitJobs = automaticPhotos ? discovered.filter(job => job.reviewed.configuration.sourceKind !== 'photos') : discovered;
 		// Old admissions from another selected server/device must neither run
 		// nor keep this window alive. Temporary context failure waits for retry.
-		const origins = new Map<string, string | null>();
-		for (const job of explicitJobs.filter(job => syncJobEnabled(job) || syncJobDue(job, Date.now()))) {
+		const origins = new Map<string, string | null>(), waitingOrigins = new Map<string, string>();
+		let prior = bridge ? verifiedDesktopOrigins.get(bridge) : undefined;
+		if (bridge && (!prior || prior.ownerId !== ownerId || prior.generation !== generation || prior.rendererOrigin !== scope.origin)) {
+			prior = { ownerId, generation, rendererOrigin: scope.origin, devices: new Map() };
+			verifiedDesktopOrigins.set(bridge, prior);
+		}
+		for (const job of explicitJobs.filter(job => !nativeSyncTasks.isPaused(job.scope) && (job.state === 'runnable' || syncJobEnabled(job)))) {
 			if (origins.has(job.scope.deviceId)) continue;
 			try {
 				const host = await createNativeSyncHost({ ownerId, deviceId: job.scope.deviceId, adapter, signal, assertCurrent: () => { currentScope(); } });
-				origins.set(job.scope.deviceId, host.origin());
-			} catch { currentScope(); origins.set(job.scope.deviceId, null); }
+				const origin = host.origin();
+				origins.set(job.scope.deviceId, origin);
+				prior?.devices.set(job.scope.deviceId, origin);
+			} catch (cause) {
+				currentScope(); origins.set(job.scope.deviceId, null);
+				// Only retain a previously verified window on a typed transient
+				// failure. It grants no authority and cannot select an origin to run.
+				const previousOrigin = prior?.devices.get(job.scope.deviceId);
+				if (previousOrigin && isSyncConnectionFailure(cause)) waitingOrigins.set(job.scope.deviceId, previousOrigin);
+				else prior?.devices.delete(job.scope.deviceId);
+			}
 		}
 		const selected = (job: SyncJob) => origins.get(job.scope.deviceId) === job.scope.origin;
-		const retained = (job: SyncJob) => !nativeSyncTasks.isPaused(job.scope) && syncJobEnabled(job) && selected(job);
+		const retained = (job: SyncJob) => !nativeSyncTasks.isPaused(job.scope) && (job.state === 'runnable' || syncJobEnabled(job)) &&
+			(selected(job) || waitingOrigins.get(job.scope.deviceId) === job.scope.origin);
 		if (bridge) await setDesktopSyncScheduled(discovered.some(retained), bridge); currentScope();
 		for (const job of explicitJobs) {
 			currentScope();
 			if (nativeSyncTasks.read()?.active) break;
-			if (!nativeSyncTasks.isPaused(job.scope) && selected(job) && syncJobDue(job, Date.now())) await startNativeSyncTask(job.reviewed, job.scope, generation, job);
+			if (!nativeSyncTasks.isPaused(job.scope) && selected(job) && syncJobDue(job, Date.now(), wakeConditions)) await startNativeSyncTask(job.reviewed, job.scope, generation, job, undefined, undefined, wakeConditions);
 		}
 		if (bridge) await setDesktopSyncScheduled((await readJobs()).some(retained), bridge); currentScope();
 	} finally { journal?.close(); }
@@ -120,7 +145,8 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 			const wakeConditions = pendingConditionWake; pendingConditionWake = false;
 			clearTimeout(timer);
 			void resumeNativeSyncJobs(ownerId, generation, controller.signal, wakeConditions).catch(() => {
-				if (desktop) void setDesktopSyncScheduled(false, desktop).catch(() => {});
+				// A failed read does not revoke an already verified background lease.
+				// Scope changes and disabling automation still release it below.
 			}).finally(() => {
 				running = false;
 				if (controller.signal.aborted) return;
@@ -130,7 +156,7 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 			});
 		};
 		const wake = () => {
-			if (document.visibilityState === 'hidden') return;
+			if (getNativeSyncAdapter()?.platform !== 'macos' && document.visibilityState === 'hidden') return;
 			pendingConditionWake = true;
 			kick();
 		};
@@ -139,14 +165,15 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 		};
 		// Defer one task so StrictMode's discarded mount cannot own discovery.
 		kick();
-		document.addEventListener('visibilitychange', wake); window.addEventListener('pageshow', wake);
-		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick);
+		const visible = () => { if (document.visibilityState === 'visible') wake(); };
+		document.addEventListener('visibilitychange', visible); window.addEventListener('pageshow', wake);
+		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.addEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
 		window.addEventListener(nativeBridgeReadyEvent, kick); window.addEventListener(nativeBridgeMessageEvent, nativeWake);
 		return () => {
 			controller.abort(); clearTimeout(queued); clearTimeout(timer);
 			activitySignal.removeEventListener('abort',disabled);
-			document.removeEventListener('visibilitychange', wake); window.removeEventListener('pageshow', wake);
-			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick);
+			document.removeEventListener('visibilitychange', visible); window.removeEventListener('pageshow', wake);
+			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.removeEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
 			window.removeEventListener(nativeBridgeReadyEvent, kick); window.removeEventListener(nativeBridgeMessageEvent, nativeWake);
 			if (desktop) void setDesktopSyncScheduled(false, desktop).catch(() => {});
 		};

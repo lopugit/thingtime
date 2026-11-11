@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { PresentedImage } from './PresentedImage';
 
 // @ts-ignore Node executes this TypeScript test through the repository tsx loader.
 import {
@@ -10,6 +13,19 @@ import {
 	linkedImageAddMessage,
 	linkedImageItemError
 } from './mediaGalleryCore.ts';
+
+test('image presentation encodes literal source metacharacters and preserves valid media URLs', () => {
+	const markup = (src: string) => renderToStaticMarkup(React.createElement(PresentedImage, { src, loading: 'lazy' }));
+	assert.match(markup('https://images.example/file%20name?q="<tag>"&signature=a%2Bb'), /src="https:\/\/images\.example\/file%20name\?q=%22%3Ctag%3E%22&amp;signature=a%2Bb"/);
+	assert.match(markup('/api/v1/attachments/content?id=att_1'), /src="\/api\/v1\/attachments\/content\?id=att_1"/);
+	assert.match(markup('blob:https://thingtime.com/fixture'), /src="blob:https:\/\/thingtime\.com\/fixture"/);
+	assert.match(markup('data:image/png;base64,iVBORw0KGgo='), /src="data:image\/png;base64,iVBORw0KGgo="/);
+	assert.match(markup('data:image/svg+xml,<svg/>'), /src="data:image\/svg\+xml,%3Csvg\/%3E"/);
+	// eslint-disable-next-line no-script-url -- Intentionally rejected URL fixtures.
+	for (const src of ['javascript:alert(1)', 'java\tscript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'file:///private/preview.png']) {
+		assert.doesNotMatch(markup(src), /\bsrc=/);
+	}
+});
 
 test('linked image URLs are trimmed, validated, and deduplicated in stable order', () => {
 	const items = [

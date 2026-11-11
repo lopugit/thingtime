@@ -552,3 +552,16 @@ test('only a valid running measurement activates the authored block clock', () =
  assert.equal(elapsedClockActive('2026-10-19T00:00:00Z', undefined), true);
  for (const end of [0, '2026-10-19T00:00:01Z', 'invalid', false]) assert.equal(elapsedClockActive(0, end), false);
 });
+
+test('a keyed repeat reads only the chosen own list and conditions can use bound operands', () => {
+	const repeat = { ttEach: { arg: 'page.collections.details', keyArg: 'item.id', node: '{item.label}', empty: 'Empty' } };
+	const details = { first: [{ label: 'One' }, { label: 'Two' }], second: [{ label: 'Three' }], constructor: [{ label: 'Hidden' }] };
+	const scope = { page: { collections: { details }, selection: { picked: { items: ['first'] } } }, item: { id: 'first' } };
+	assert.deepEqual(resolveTemplate(repeat, scope), ['One', 'Two']);
+	assert.deepEqual(resolveTemplate({ ttEach: { ...repeat.ttEach, max: 1, node: '{item.label}/{total}/{remaining}' } }, scope), ['One/2/1']);
+	assert.equal(resolveTemplate(repeat, { ...scope, item: { id: 'constructor' } }), 'Empty');
+	const condition = { ttIf: { arg: 'page.selection.picked.items', op: 'includes', valueArg: 'item.id', then: 'Selected', else: 'Unselected' } };
+	assert.equal(resolveTemplate(condition, scope), 'Selected');
+	assert.equal(resolveTemplate(condition, { ...scope, item: { id: 'second' } }), 'Unselected');
+	assert.equal(resolveTemplate(condition, { ...scope, item: {} }), 'Unselected');
+});

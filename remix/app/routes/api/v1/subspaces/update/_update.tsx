@@ -6,7 +6,7 @@ import { updateSubspace } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
 // POST /api/v1/subspaces/update — { id|slug, name?, description?, rules?,
-// flairs?, branding?, userFlairs?, userFlairSelfAssign?, allowCustomUserFlair?,
+// flairs?, branding?, media?, mediaPresentation?, mediaPresentationSources?, userFlairs?, userFlairSelfAssign?, allowCustomUserFlair?,
 // removalReasons?, access?, nsfw?, newSlug? } — moderators edit branding/rules/flairs/
 // user flairs/removal reasons; only the owner changes access (public/
 // restricted/private), slug and the 18+ flag. Every change lands in the mod log.

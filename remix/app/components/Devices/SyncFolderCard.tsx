@@ -16,12 +16,12 @@ const defaultQuickBlocks = withSyncFolderQuickBlocks(syncFolderCardBlocks);
 const defaultGlanceQuickBlocks = withGlanceAndQuick(syncFolderCardBlocks);
 
 type QuickAction = { label: string; disabled?: boolean; run(): void | Promise<void> };
-export function SyncFolderCard({ title, path, description, stats, glance, quickAction, pauseAction, continuationAction, continuationStatus, automation, destination, error, preparation, photoQueue, photoActivity, scopeKey, expanded: controlled, onToggle, disabled = false, accountTransport, editorSlotId, children }: {
+export function SyncFolderCard({ title, path, description, stats, glance, quickAction, pauseAction, continuationAction, continuationStatus, automation, destination, error, preparation, photoQueue, photoActivity, scopeKey, expanded: controlled, onToggle, disabled = false, accountTransport, editorSlotId, summaryContent, children }: {
  quickAction?: QuickAction; pauseAction?: QuickAction; continuationAction?: QuickAction; continuationStatus?: string;
  automation?: string; destination?: string; error?: string; preparation?: SyncFolderPreparation; photoQueue?: ReturnType<typeof photoQueueDisplay>;
  photoActivity?: ReturnType<typeof nativePhotoActivityDisplay>;
  glance?: Glance; title: string; path: string; description: string; stats: string; scopeKey: string; expanded?: boolean; editorSlotId?: string; onToggle?(open: boolean): void; disabled?: boolean;
- accountTransport?: SettingsDocumentHostProps['accountTransport']; children: React.ReactNode;
+ summaryContent?: React.ReactNode; accountTransport?: SettingsDocumentHostProps['accountTransport']; children: React.ReactNode;
 }) {
  const [localOpen, setLocalOpen] = React.useState(false);
  const expanded = controlled ?? localOpen;
@@ -37,6 +37,7 @@ export function SyncFolderCard({ title, path, description, stats, glance, quickA
     <WebpageBlocksRenderer blocks={findBlock(blocks, 'folder-card-expand') ? blocks : [...blocks, findBlock(syncFolderCardBlocks, 'folder-card-expand')!]} componentsByRef={{}} chrome={chrome} />
    </TransientBlockHost>}
   </SettingsDocumentHost>
+  {summaryContent}
   <Box hidden={!expanded} paddingTop={expanded ? 3 : 0}>{children}<div id={editorSlotId} /></Box>
  </Box>;
 }

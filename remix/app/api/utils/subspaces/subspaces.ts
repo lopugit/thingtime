@@ -11,7 +11,7 @@ import { deleteSubspaceMessaging, ensureSubspaceMessaging, ensureSubspaceMessagi
 // generic crystal sanitizer, so /api/v1/things refuses them outright, and
 // things.ts excludes them from own-things listings and generic DELETE the way
 // the messenger family is excluded.
-import { parseSubspaceMedia, subspaceMediaUrl } from './subspaceMediaCore';
+import { parseSubspaceMedia, parseSubspaceMediaPresentation, parseSubspaceMediaPresentationSources, subspaceMediaPresentation, subspaceMediaUrl } from './subspaceMediaCore';
 import { AttachmentBindingError } from '../attachments/attachmentStore';
 import { reconcileSubspaceMedia } from './subspaceMediaStore';
 import { prepareAttachmentCascadeForThing } from '../attachments/attachments';
@@ -273,12 +273,18 @@ const viewerStateOf = (subspace: any, membership: SubspaceMembership | null): Pu
 	};
 };
 
-const brandingOf = (doc: any): SubspaceBranding => ({
-	icon: doc?.crystal?.branding?.icon ?? null,
-	iconUrl: subspaceMediaUrl(doc, 'icon'),
-	bannerUrl: subspaceMediaUrl(doc, 'banner'),
-	accent: doc?.crystal?.branding?.accent ?? null
-});
+const brandingOf = (doc: any): SubspaceBranding => {
+	const iconPresentation = subspaceMediaPresentation(doc, 'icon');
+	const bannerPresentation = subspaceMediaPresentation(doc, 'banner');
+	return {
+		icon: doc?.crystal?.branding?.icon ?? null,
+		iconUrl: subspaceMediaUrl(doc, 'icon'),
+		bannerUrl: subspaceMediaUrl(doc, 'banner'),
+		accent: doc?.crystal?.branding?.accent ?? null,
+		...(iconPresentation ? { iconPresentation } : {}),
+		...(bannerPresentation ? { bannerPresentation } : {})
+	};
+};
 
 export const toPublicSubspace = (
 	doc: any,
@@ -825,6 +831,8 @@ export type UpdateSubspaceInput = SubspaceRef & {
 	flairs?: unknown;
 	branding?: unknown;
 	media?: unknown;
+	mediaPresentation?: unknown;
+	mediaPresentationSources?: unknown;
 	// user flairs (moderators): the templates + the two self-service switches
 	userFlairs?: unknown;
 	userFlairSelfAssign?: unknown;
@@ -881,10 +889,8 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		changed.push('flairs');
 	}
 	if (input.branding !== undefined) {
-		const branding = sanitizeBranding(input.branding, { ...brandingOf(subspace), iconUrl: subspace.crystal?.branding?.iconUrl ?? null, bannerUrl: subspace.crystal?.branding?.bannerUrl ?? null });
+		const branding = sanitizeBranding(input.branding);
 		if (isFail(branding)) return branding;
-		set['crystal.branding'] = branding;
-		changed.push('branding');
 	}
 	// user flairs — any moderator (the templates are the post-flair grammar;
 	// the switches gate MEMBERS' self-service only, never moderators)
@@ -926,8 +932,18 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		changed.push('nsfw');
 	}
 	let media: ReturnType<typeof parseSubspaceMedia>;
-	try { media = parseSubspaceMedia(input.media); } catch (error) { return fail(400, (error as Error).message); }
-	if (Object.values(media).some((item) => item.kind !== 'preserve')) changed.push('branding');
+	let presentation: ReturnType<typeof parseSubspaceMediaPresentation>;
+	let presentationSources: ReturnType<typeof parseSubspaceMediaPresentationSources>;
+	try {
+		media = parseSubspaceMedia(input.media);
+		presentation = parseSubspaceMediaPresentation(input.mediaPresentation);
+		presentationSources = parseSubspaceMediaPresentationSources(input.mediaPresentationSources);
+	} catch (error) {
+		return fail(400, (error as Error).message);
+	}
+	const brandingChanged = input.branding !== undefined || Object.values(media).some((item) => item.kind !== 'preserve') ||
+		Object.keys(presentation).length > 0 || Object.keys(presentationSources).length > 0;
+	if (brandingChanged) changed.push('branding');
 	if (!changed.length) return fail(400, 'Nothing to update');
 
 	const things = await getThingsCollection();
@@ -944,10 +960,22 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
       if ((input.access !== undefined || input.nsfw !== undefined) && current.ownerId !== auth.viewer.id) throw new AttachmentBindingError(403, 'Only the current owner can change access');
       if (input.newSlug !== undefined && (current.ownerId !== auth.viewer.id || membershipOfDoc(member)?.role !== 'owner')) throw new AttachmentBindingError(403, 'Only the current owner can change the slug');
       if (input.newSlug !== undefined && current.crystal?.slug !== subspace.crystal?.slug) throw new AttachmentBindingError(409, 'Subspace changed while saving — reload and try again');
-      const branding = { ...(set['crystal.branding'] as any || current.crystal?.branding) };
-      Object.assign(set, await reconcileSubspaceMedia({ things, session, actorId: auth.viewer.id, current, branding, legacyBranding: input.branding, media, now }));
-      set['crystal.branding'] = branding;
-      await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } }, { session });
+      const write = { ...set, updatedAt: now };
+      if (brandingChanged) {
+        // Merge against the row read in this transaction. Another moderator may
+        // have edited the other image while this request was being validated.
+        const branding = sanitizeBranding(input.branding, {
+          ...brandingOf(current),
+          iconUrl: current.crystal?.branding?.iconUrl ?? null,
+          bannerUrl: current.crystal?.branding?.bannerUrl ?? null
+        });
+        if (isFail(branding)) throw new AttachmentBindingError(branding.status, branding.error);
+        const mediaSet = await reconcileSubspaceMedia({
+          things, session, actorId: auth.viewer.id, current, branding, legacyBranding: input.branding, media, presentation, presentationSources, now
+        });
+        Object.assign(write, mediaSet, { 'crystal.branding': branding });
+      }
+      await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: write }, { session });
     });
   } catch (error) {
     if (isDuplicateKey(error)) return fail(409, 'That subspace slug is taken or held — pick another slug');

@@ -6,12 +6,25 @@
 import { createRequire } from 'node:module';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { parse } from '../node_modules/parse5/dist/index.js';
+import { parse } from 'parse5';
+import { readInspectorSources, writeInspectorCatalog } from './element-inspector-catalog.mjs';
+const out = new URL('../app/webPlatform/generated/', import.meta.url);
 const tools = process.argv.find(x => x.startsWith('--tools='))?.slice(8);
 if (!tools) throw new Error('Pass --tools=<directory containing the pinned @webref packages>.');
 const require = createRequire(`${tools}/package.json`);
 const expected = { css: '8.7.5', elements: '2.9.0', idl: '3.84.0' };
-for (const [p, version] of Object.entries(expected)) if (require(`@webref/${p}/package.json`).version !== version) throw new Error(`Use @webref/${p}@${version}`);
+const inspectorOnly = process.argv.includes('--inspector-only');
+for (const [p, version] of Object.entries(inspectorOnly ? { css: expected.css } : expected)) if (require(`@webref/${p}/package.json`).version !== version) throw new Error(`Use @webref/${p}@${version}`);
+const currentCss = require('@webref/css/css.json');
+if (inspectorOnly) {
+ const [{ features }, manifest, [html, aria, input]] = await Promise.all([
+  readFile(new URL('inventory.json', out), 'utf8').then(JSON.parse),
+  readFile(new URL('manifest.json', out), 'utf8').then(JSON.parse),
+  readInspectorSources()
+ ]);
+ if (manifest.packages.css !== expected.css) throw new Error('Update the standards inventory and pinned CSS package together.');
+ await writeInspectorCatalog(features, currentCss, parse, html, aria, input, { webrefCommit: manifest.webrefCommit, version: expected.css });
+} else {
 const idl = require('@webref/idl');
 const text = n => n.nodeName === '#text' ? n.value : (n.childNodes || []).map(text).join('');
 const attr = (n, k) => n.attrs?.find(a => a.name === k)?.value;
@@ -35,8 +48,11 @@ const urls = {
  ecma262: 'https://tc39.es/ecma262/2026/',
  ecma402: 'https://tc39.es/ecma402/2026/'
 };
-const documents = {};
-for (const [key, url] of Object.entries(urls)) documents[key] = parse(await source(key, url));
+const documents = {}, sourceBodies = {};
+for (const [key, url] of Object.entries(urls)) {
+ sourceBodies[key] = await source(key, url);
+ documents[key] = parse(sourceBodies[key]);
+}
 const refCommit = (await (await fetch('https://api.github.com/repos/w3c/webref/commits/main')).json()).sha;
 if (!/^[a-f0-9]{40}$/.test(refCommit)) throw new Error('Cannot pin Webref source');
 const webrefBase = `https://raw.githubusercontent.com/w3c/webref/${refCommit}`;
@@ -75,7 +91,6 @@ for (let offset=0;offset<cssSpecs.length;offset+=8) {
 }
 // Current grammar vocabulary supplies value types/functions not emitted by older
 // TR extracts. They are labelled editor draft rather than promoted to standards.
-const currentCss = require('@webref/css/css.json');
 for (const [key, kind] of Object.entries({properties:'property',atrules:'at-rule',selectors:'selector',functions:'function',types:'type'})) for (const v of currentCss[key] || []) add({language:'css',kind,name:v.name,group:new URL(v.href).pathname.split('/')[1],spec:v.href,status:'Editor draft / Webref current',syntax:v.syntax || '',initial:v.initial || '',description:(v.prose || '').slice(0,450)});
 // ECMAScript's normative clauses include every language feature, built-in and
 // abstract algorithm. Keep algorithms labelled: they are not public callable APIs.
@@ -113,7 +128,10 @@ for (const file of Object.values(await idl.listAll())) {
 }
 const features = [...entries.values()].sort((a,b)=>a.language.localeCompare(b.language)||a.kind.localeCompare(b.kind)||a.name.localeCompare(b.name));
 const counts=Object.create(null);for(const f of features){counts[f.language]??=Object.create(null);counts[f.language][f.kind]=(counts[f.language][f.kind]||0)+1;}
-const out=new URL('../app/webPlatform/generated/',import.meta.url);await mkdir(out,{recursive:true});
+await mkdir(out,{recursive:true});
+await writeInspectorCatalog(features, currentCss, parse, sourceBodies.html, await source('wai-aria', 'https://www.w3.org/TR/wai-aria-1.2/'),
+ await source('html-input', 'https://html.spec.whatwg.org/multipage/input.html'), { webrefCommit: refCommit, version: expected.css });
 await writeFile(new URL('inventory.json',out),JSON.stringify({features}));
 await writeFile(new URL('manifest.json',out),JSON.stringify({schemaVersion:1,generatedAt:new Date().toISOString(),webrefCommit:refCommit,packages:expected,total:features.length,counts,sources:sources.sort((a,b)=>a.name.localeCompare(b.name))},null,2)+'\n');
 console.log(JSON.stringify({total:features.length,counts},null,2));
+}

@@ -1,6 +1,6 @@
 # Vercel Deployments
 
-Last updated: 2026-09-01
+Last updated: 2026-11-10
 
 ## Project
 
@@ -56,7 +56,7 @@ Last updated: 2026-09-01
   changed when develop storage was provisioned. The production role gained the
   required `s3:PutObjectTagging` action used by tagged multipart initiation.
 - Add `CRON_SECRET` as a **Sensitive**, **Production-only** variable (never
-  record its value here). `remix/vercel.json` invokes
+  record its value here). Root `vercel.json` invokes
   `GET /api/v1/attachments/cleanup` at minute 17 every hour; Vercel sends the
   exact `Authorization: Bearer <CRON_SECRET>` header automatically. The route
   has no cookie, PAT, app-token, or service-account fallback, processes at most
@@ -72,6 +72,41 @@ Last updated: 2026-09-01
   `/api/v1/vercel/deployments?limit=50` response was verified with
   `source: "api"`, `hasError: false`, and more than 25 branch destinations after
   promotion.
+
+### Production attachment writer fence
+
+The project WAF rule `rule_require_stable_production_aliases_wFBCR0`
+(`Require stable production aliases`) is in Log mode. It matches requests
+when Vercel classifies the request as Production and its hostname is outside
+this list:
+
+- `thingtime.com`, `thingtime.vercel.app`
+- `thingtime.com.au`, `www.thingtime.com`, `www.thingtime.com.au`
+- `thingtime-git-main-lopugits-projects.vercel.app`
+- `thingtime-lopugits-projects.vercel.app`
+
+On 2026-11-10 the rule denied generated production URLs at the edge while
+preserving stable aliases and Preview traffic. Vercel Cron also used the
+generated production URL. The next `recordings/run` and `peers/sync` requests
+received HTTP 403. After restoring Log, both schedules reached the application
+again. Keep the attachment deduplication gate off until a writer fence also
+preserves live Cron traffic, including attachment cleanup.
+[Vercel WAF rule configuration](https://vercel.com/docs/vercel-firewall/vercel-waf/rule-configuration)
+[Vercel Cron request targeting](https://vercel.com/docs/schedules/cron-jobs#how-cron-jobs-work)
+
+After promoting a shared-blob-compatible build, verify the stable origins and
+the actual Cron target before blocking exact retired production hostnames.
+Inventory immutable deployment URLs and any extra aliases that still point to
+retired production builds. Keep the new Cron target outside that list. A
+method-and-path exception for cleanup would leave the old attachment reaper
+reachable with its deployed scheduler credential.
+
+Before activating attachment deduplication, let in-flight old writers drain
+and independently verify every production data-plane writer, including any
+local or private runtime. An unreachable local API leaves its writer scope
+unknown. Once aliases can share physical bytes, promote or roll back only to
+builds that honor the shared-blob lifecycle. Promoting an old build to a stable
+alias would bypass a hostname-only ingress fence.
 
 ## Develop Custom Environment
 

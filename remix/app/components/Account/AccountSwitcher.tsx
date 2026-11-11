@@ -1,5 +1,6 @@
+import { PresentedImage } from '../Media/PresentedImage';
 import React from 'react';
-import { Box, Button, Center, Flex, Image, Spinner, Text } from '@chakra-ui/react';
+import { Box, Button, Center, Flex, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 import { Check, X } from 'lucide-react';
 
@@ -22,16 +23,9 @@ const RowAvatar = (props: { user: SwitcherAccountUser }) => {
 
   if (user?.avatarUrl) {
     return (
-      <Image
-        src={user.avatarUrl}
-        alt={getUserDisplayName(user)}
-        width="32px"
-        height="32px"
-        borderRadius="999px"
-        objectFit="cover"
-        flexShrink={0}
-        border="1px solid var(--tt-border, #ececef)"
-      />
+      <Box width="32px" height="32px" borderRadius="999px" overflow="hidden" flexShrink={0} border="1px solid var(--tt-border, #ececef)">
+        <PresentedImage src={user.avatarUrl} presentation={user.avatarPresentation} alt={getUserDisplayName(user)} />
+      </Box>
     );
   }
 

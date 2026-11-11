@@ -6,6 +6,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
 import { createDesktopFolderHost, type FolderHost } from '~/fileSync/desktopFolders.client';
+import { SyncDetailsSection } from './SyncDetailsSection';
 import { MobileFolderAccess } from './MobileFolderAccess';
 
 /** Local status supplies candidates only. The signed host and paired node must
@@ -57,14 +58,10 @@ function DeviceFolders({ ownerId, candidates, generation, active, showResourceSu
 	const deviceId = candidates.length === 1 ? candidates[0] : candidates.includes(choice) ? choice : '';
 	return (
 		<Box border="1px solid var(--tt-border, #ececef)" borderRadius="12px" padding={4} minWidth={0}>
-   {showResourceSummary && deviceId ? <DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} /> : null}
-			<Text fontWeight={700} fontSize="14px">
-				Folders on this Mac
-			</Text>
 			{candidates.length > 1 ? (
 				<FormControl marginTop={2}>
-					<FormLabel fontSize="12px">Local device connection</FormLabel>
-					<Select value={choice} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a connection">
+					<FormLabel fontSize="12px">This Mac’s device profile</FormLabel>
+					<Select value={choice} onChange={(event) => setChoice(event.target.value)} placeholder="Choose a device profile">
 						{candidates.map((id) => (
 							<option key={id} value={id}>
 								{id}
@@ -74,6 +71,11 @@ function DeviceFolders({ ownerId, candidates, generation, active, showResourceSu
 				</FormControl>
 			) : null}
 			{deviceId ? <VerifiedFolders active={active} key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
+			{showResourceSummary && deviceId ? <Box mt={3}>
+				<SyncDetailsSection title="Device activity">
+					<DeviceSyncResources ownerId={ownerId} deviceId={deviceId} allowed={active} />
+				</SyncDetailsSection>
+			</Box> : null}
 		</Box>
 	);
 }
