@@ -71,7 +71,7 @@ try {
   await waitFor(async () => (await fetch(origin + manifestPath, { signal: AbortSignal.timeout(1000) })).ok, 'built Nitro', nitro);
   const manifest = (await api(manifestPath)).data;
   assert.equal(manifest.origin, origin);
-  for (const [key, version] of [['api.things', '1.59.0'], ['api.things-search', '1.5.0'], ['api.things-bulk', '1.8.0']]) assert.equal(manifest.features[key].version, version);
+  for (const [key, version] of [['api.things', '1.62.0'], ['api.things-search', '1.7.0'], ['api.things-bulk', '1.9.0'], ['api.things-actions', '1.1.0']]) assert.equal(manifest.features[key].version, version);
   const { cookie } = await register('archiveowner');
   const { cookie: other } = await register('archiveother');
   assert(cookie && other);
@@ -111,11 +111,41 @@ try {
   assert.equal((await read(nested.id, cookie)).crystal.archived, true);
   console.log('Built API: owner scope, token and origin refusal, pagination, search, reversible placement and unchanged public data passed.');
 
+  const app = await create({ thingtime: ['folder', 'builder-thing'], crystal: { name: 'Synthetic archive app', builderApp: true, description: 'Independent app-card archive fixture' } });
+  const appChild = await create({ thingtime: ['data', 'builder-thing'], folderId: app.id, crystal: { name: 'Synthetic app child', note: 'Keep this child in its app' } });
+  const appBaseline = await read(app.id, cookie), appChildBaseline = await read(appChild.id, cookie);
+
+  const published = (await api(paths.things, { cookie, body: { type: 'text', text: 'Synthetic globally archived post', visibility: 'public' } })).data.post;
+  const foreignPost = (await api(paths.things, { cookie: other, body: { type: 'text', text: 'Synthetic other-owner post', visibility: 'public' } })).data.post;
+  const comment = (await api('/api/v1/things/comment', { cookie, body: { id: published.id, text: 'Synthetic archived comment' } })).data.comment;
+  const chat = (await api('/api/v1/chats', { cookie, body: { chatType: 'group', name: 'Synthetic archive chat', memberIds: [] } })).data.chat;
+  const message = (await api('/api/v1/chats/messages', { cookie, body: { chatId: chat.id, text: 'Synthetic private archive message' } })).data.message;
+  const describe = async (id, options = {}) => (await api('/api/v1/things/actions?id=' + id, { cookie, ...options })).data;
+  const runAction = async (id, action, options = {}) => (await api('/api/v1/things/actions', { cookie, body: { id, action }, ...options })).data;
+  for (const id of [published.id, comment.id, message.id]) {
+    const available = await describe(id);
+    assert.deepEqual(available.availableActions, ['archive']);
+    assert(!Object.hasOwn(available, 'crystal'), 'Action discovery never returns protected content');
+    await describe(id, { cookie: other, status: 404 });
+    await runAction(id, 'archive', { cookie: other, status: 404 });
+    assert.equal((await runAction(id, 'archive')).libraryArchived, true);
+    const archived = (await api(paths.things + '?libraryArchive=archived', { cookie })).data.things;
+    assert(archived.some(row => row.id === id), 'Every archivable root is discoverable for restore');
+    assert.deepEqual((await describe(id)).availableActions, ['restore']);
+    assert.equal((await runAction(id, 'restore')).libraryArchived, false);
+  }
+  assert.equal((await read(published.id, other)).crystal.text, 'Synthetic globally archived post');
+  const ownMessages = (await api('/api/v1/chats/messages?chatId=' + chat.id, { cookie })).data.messages;
+  assert(ownMessages.some(row => row.id === message.id && row.text === 'Synthetic private archive message'));
+  console.log('Global action API: post/comment/chat-message availability, foreign refusal and archive/restore discovery passed.');
+
+  if (process.env.THINGTIME_ARCHIVE_SCOPE === 'api') process.exitCode = 0;
+  else {
   const vite = start(process.execPath, ['--input-type=module', '-e', `import {createServer} from 'vite';const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${web},strictPort:true}});await server.listen();`], source, { NODE_ENV: 'development' });
   await waitFor(async () => (await fetch(webOrigin + manifestPath, { signal: AbortSignal.timeout(1000) })).ok, 'isolated Vite', vite);
   const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
   browser = await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
-  for (const size of [{ width: 1440, height: 1000 }, { width: 375, height: 812 }]) {
+  for (const size of (process.env.THINGTIME_ARCHIVE_SCOPE === 'menus' ? [{ width: 375, height: 812 }] : [{ width: 1440, height: 1000 }, { width: 375, height: 812 }])) {
     const context = await browser.newContext({ viewport: size, isMobile: size.width < 500, hasTouch: size.width < 500 });
     await context.addCookies(cookie.split('; ').map(pair => {
       const index = pair.indexOf('=');
@@ -123,6 +153,7 @@ try {
     }));
     const page = await context.newPage();
     page.setDefaultTimeout(30000);
+    page.setDefaultNavigationTimeout(120000);
     const row = () => page.locator(`[data-thing-id="${nested.id}"]`).last();
     const action = label => page.getByRole('menuitem').filter({ has: page.getByText(label, { exact: true }) }).last();
     const activate = async (label, input) => {
@@ -139,6 +170,174 @@ try {
       else if (input === 'keyboard') { await command.focus(); await page.keyboard.press('Enter'); }
       else await command.click();
     };
+    const appCard = () => page.locator(`[data-thing-id="${app.id}"]`).last();
+    const openAppMenu = async rightClick => {
+      if (rightClick) await appCard().click({ button: 'right' });
+      else {
+        const trigger = appCard().getByRole('button', { name: 'Synthetic archive app actions' });
+        if (size.width < 500) await trigger.tap();
+        else await trigger.press('Enter');
+      }
+    };
+    const appCommand = async (label, rightClick = false) => {
+      await openAppMenu(rightClick);
+      const command = action(label);
+      await command.waitFor().catch(async error => {
+        if (evidence) await page.screenshot({ path: join(evidence, `${size.width}-app-missing-${label.toLowerCase()}.png`) });
+        throw error;
+      });
+      await command.scrollIntoViewIfNeeded();
+      const bounds = await command.boundingBox();
+      assert(bounds && bounds.x >= 0 && bounds.x + bounds.width <= size.width + 1, 'app menu stays within viewport');
+      if (evidence) await page.screenshot({ path: join(evidence, `${size.width}-app-${label.toLowerCase()}.png`) });
+      if (size.width < 500) await command.tap();
+      else await command.press('Enter');
+    };
+    await page.goto(webOrigin + '/builder?view=grid', { waitUntil: 'domcontentloaded' });
+    await appCard().waitFor({ timeout: 180000 });
+    await appCard().getByRole('link', { name: 'Browse', exact: true }).waitFor();
+    await appCard().getByRole('button', { name: 'Edit app', exact: true }).waitFor();
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'menus') {
+      await openAppMenu(false);
+      await action('Archive').waitFor();
+      for (const label of ['Delete', 'Archive', 'Edit app…']) {
+        const item = action(label);
+        await item.scrollIntoViewIfNeeded();
+        const box = await item.boundingBox();
+        assert(box && box.y >= 0 && box.y + box.height <= size.height + 1, label + ' reachable after menu scroll');
+      }
+      if (evidence) await page.screenshot({ path: join(evidence, '375-app-menu-scrolled.png') });
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      console.log('Chrome 375px: app menu top/bottom, Delete, Archive and Edit app reachable; no page overflow.');
+      await context.close();
+      continue;
+    }
+    await appCommand('Archive');
+    await appCard().waitFor({ state: 'hidden' });
+    assert.deepEqual(await read(app.id, cookie), { ...appBaseline, libraryArchived: true });
+    assert.deepEqual(await read(appChild.id, cookie), appChildBaseline);
+    await page.reload();
+    await page.getByRole('button', { name: 'Archived', exact: true }).waitFor();
+    assert.equal(await appCard().count(), 0);
+    await page.getByRole('button', { name: 'Archived', exact: true }).click();
+    await appCard().waitFor();
+    await page.reload();
+    await appCard().waitFor();
+    assert.equal(new URL(page.url()).pathname, '/builder');
+    await page.locator('#thingtime-things-search').fill('Synthetic archive app');
+    await appCard().waitFor();
+    await appCommand('Restore', size.width > 500);
+    await appCard().waitFor({ state: 'hidden' });
+    assert.deepEqual(await read(app.id, cookie), appBaseline);
+    await page.getByRole('button', { name: 'Active Things', exact: true }).click();
+    await appCard().waitFor();
+    await page.goto(webOrigin + `/builder?folder=${app.id}&kind=all&view=list`);
+    await page.locator(`[data-thing-id="${appChild.id}"]`).last().waitFor();
+    await page.getByRole('button', { name: 'Synthetic app child actions' }).press('Enter');
+    await action('Archive').waitFor();
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await read(appChild.id, cookie), appChildBaseline);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Builder app contents width at bottom');
+    console.log(`Chrome ${size.width}px: Builder app card Archive, reload, archived search, Restore and preserved app child passed.`);
+    await page.goto(webOrigin + '/post/' + published.id, { waitUntil: 'domcontentloaded' });
+    const postTrigger = page.getByRole('button', { name: 'Post options', exact: true }).first();
+    await postTrigger.waitFor({ timeout: 180000 });
+    const openPostMenu = async () => {
+      if (size.width < 500) await postTrigger.tap(); else await postTrigger.press('Enter');
+    };
+    const commentTrigger = page.getByRole('button', { name: 'Comment actions', exact: true }).first();
+    await commentTrigger.waitFor();
+    if (size.width < 500) await commentTrigger.tap(); else await commentTrigger.press('Enter');
+    await action('Archive').waitFor();
+    await action('Archive').press('Enter');
+    await waitFor(async () => (await describe(comment.id)).libraryArchived, 'comment archive receipt');
+    if (size.width < 500) await commentTrigger.tap(); else await commentTrigger.press('Enter');
+    await action('Restore').waitFor();
+    await action('Restore').press('Enter');
+    await waitFor(async () => !(await describe(comment.id)).libraryArchived, 'comment restore receipt');
+
+    await openPostMenu();
+    await action('Archive').waitFor();
+    if (evidence) await page.screenshot({ path: join(evidence, `${size.width}-post-archive.png`) });
+    await action('Archive').press('Enter');
+    await waitFor(async () => (await describe(published.id)).libraryArchived, 'post archive receipt');
+    assert.equal((await read(published.id, other)).crystal.text, 'Synthetic globally archived post');
+    await openPostMenu();
+    await action('Restore').waitFor();
+    await action('Restore').press('Enter');
+    await waitFor(async () => !(await describe(published.id)).libraryArchived, 'post restore receipt');
+    if (size.width > 500) {
+      let releaseResponse, observeCommitted;
+      const responseGate = new Promise(resolve => { releaseResponse = resolve; });
+      const committed = new Promise(resolve => { observeCommitted = resolve; });
+      const delayedWrite = async route => {
+        const request = route.request();
+        const body = request.method() === 'POST' ? request.postDataJSON() : null;
+        if (body?.id !== published.id || body.action !== 'archive') return route.continue();
+        const response = await route.fetch();
+        observeCommitted();
+        await responseGate;
+        await route.fulfill({ response });
+      };
+      await page.route('**/api/v1/things/actions', delayedWrite);
+      await openPostMenu();
+      await action('Archive').waitFor();
+      await action('Archive').press('Enter');
+      await committed;
+      await page.keyboard.press('Escape');
+      await openPostMenu();
+      releaseResponse();
+      await waitFor(async () => action('Restore').isEnabled(), 'same-Thing reopened menu is ready');
+      assert.equal(await page.getByRole('menu').count(), 1, 'Old completion never closes a reopened menu');
+      await page.unroute('**/api/v1/things/actions', delayedWrite);
+      await action('Restore').press('Enter');
+      await waitFor(async () => !(await describe(published.id)).libraryArchived, 'race fixture restored');
+
+      const failedDescribe = route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"ok":false,"error":"Synthetic unavailable action lookup"}' });
+      await page.route('**/api/v1/things/actions?id=*', failedDescribe);
+      await openPostMenu();
+      await action('Retry action availability').waitFor();
+      assert.equal(await action('Archive').count(), 0, 'Failed lookup never exposes stale Archive');
+      assert.equal(await action('Restore').count(), 0, 'Failed lookup never exposes stale Restore');
+      await page.unroute('**/api/v1/things/actions?id=*', failedDescribe);
+      await action('Retry action availability').press('Enter');
+      await action('Archive').waitFor();
+      await page.keyboard.press('Escape');
+    }
+    await page.goto(webOrigin + '/post/' + foreignPost.id, { waitUntil: 'domcontentloaded' });
+    await postTrigger.waitFor();
+    const denied = page.waitForResponse(response => response.url().includes('/api/v1/things/actions?id=' + foreignPost.id) && response.status() === 404);
+    await openPostMenu();
+    await denied;
+    assert.equal(await action('Archive').count(), 0, 'Other-owner menu has no Archive');
+    assert.equal(await action('Retry action availability').count(), 0, 'Permission refusal is not a retry failure');
+    await page.keyboard.press('Escape');
+    await page.goto(webOrigin + '/messages?chat=' + chat.id, { waitUntil: 'domcontentloaded' });
+    await page.getByText('Synthetic private archive message', { exact: true }).waitFor({ timeout: 180000 });
+    const messageTrigger = page.getByRole('button', { name: 'Message actions', exact: true }).last();
+    if (size.width < 500) await messageTrigger.tap(); else await messageTrigger.press('Enter');
+    await action('Archive').waitFor();
+    if (evidence) await page.screenshot({ path: join(evidence, `${size.width}-message-archive.png`) });
+    await action('Archive').press('Enter');
+    await waitFor(async () => (await describe(message.id)).libraryArchived, 'message archive receipt');
+    await page.goto(webOrigin + '/things?libraryArchive=1&view=list', { waitUntil: 'domcontentloaded' });
+    const archivedMessage = page.locator(`[data-thing-id="${message.id}"]`).last();
+    await archivedMessage.waitFor();
+    assert.equal(await archivedMessage.locator('a[href]').count(), 0, 'Protected metadata has no generic content anchor');
+    await archivedMessage.getByRole('button', { name: /actions$/ }).press('Enter');
+    await action('Restore').waitFor();
+    for (const label of ['Open', 'Inspect', 'Preview', 'Edit', 'Download…']) assert.equal(await action(label).count(), 0, 'Metadata card does not offer ' + label);
+    await action('Restore').press('Enter');
+    await archivedMessage.waitFor({ state: 'hidden' });
+    assert.equal((await describe(message.id)).libraryArchived, false);
+    console.log(`Chrome ${size.width}px: global post/message menus and restore discovery passed.`);
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'apps') {
+      await context.close();
+      continue;
+    }
     await page.goto(webOrigin + '/things?view=list&folder=' + folder.id);
     await row().waitFor({ timeout: 180000 });
     await page.getByRole('button', { name: 'Archived', exact: true }).waitFor();
@@ -162,6 +361,7 @@ try {
     await row().waitFor();
     await context.close();
     console.log(`Chrome ${size.width}px: Archive, reload Archived, Restore and original-folder readback passed.`);
+  }
   }
 } finally {
   await browser?.close().catch(() => {});

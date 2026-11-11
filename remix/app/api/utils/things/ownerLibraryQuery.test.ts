@@ -139,3 +139,34 @@ test('root excludes children, sync settings and storage blobs while recovery/sea
   assert.equal(matches({ ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', size: 494 } }, library), true);
   assert.equal(matches({ ...data, parentId: 'parent' }, library), true);
 });
+
+test('archive eligibility and database predicates agree for user content and protected plumbing', async () => {
+  const { eligibleLibraryArchive, libraryArchiveMatch } = await import('./libraryArchiveEligibility');
+  const kinds = ['data', 'post', 'comment', 'folder', 'webpage', 'component', 'schema', 'action', 'chat', 'chat-message',
+    'community', 'subspace', 'mail-message', 'notification', 'user', 'app', 'passkey', 'password-manager-entry',
+    'chat-member', 'community-member', 'subspace-member', 'agent-reporting-binding', 'action-run', 'timeline-event',
+    'theme', 'file', 'attachment'];
+  for (const kind of kinds) for (const patch of [{}, { appId: 'app' }, { sandboxSpace: 'test' }, { sandbox: true },
+    { creationCheckpoint: { phase: 'restoring' } }, { moderation: { status: 'blocked' } }]) {
+    const doc = { shareId: 'row', ownerId: 'owner', thingtime: [kind], crystal: { trashed: false }, attachmentState: 'ready', ...patch };
+    assert.equal(matches(doc, libraryArchiveMatch('owner')), eligibleLibraryArchive(doc), JSON.stringify({ kind, patch }));
+    assert.equal(matches(doc, libraryArchiveMatch('other')), false);
+  }
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['data', 'user'] }), false);
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['attachment'], attachmentState: 'uploading' }), false);
+  assert.equal(eligibleLibraryArchive({ shareId: 'row', thingtime: ['file'], crystal: { trashed: true } }), false);
+});
+
+test('protected archived cards allowlist only static presentation and identifiers', async () => {
+  const { minimalLibraryArchivePresentation } = await import('./libraryArchiveEligibility');
+  const input = { id: 'message-id', thingtime: ['chat-message'], author: null, createdAt: 'date', updatedAt: 'date',
+    crystal: { text: 'PRIVATE MESSAGE', name: 'PRIVATE CHAT', participantIds: ['private-person'] },
+    extended: { token: 'SECRET' }, acl: ['tt:hidden'], linkKey: 'SECRET', attachmentIds: ['private-file'], targetId: 'private-chat', geo: { lat: 12 }, tokenAcl: ['SECRET'] };
+  const card = minimalLibraryArchivePresentation(input);
+  assert.deepEqual(card.crystal, { name: 'Archived message' });
+  assert.equal(JSON.stringify(card).includes('PRIVATE'), false);
+  assert.equal(JSON.stringify(card).includes('SECRET'), false);
+  assert.equal(JSON.stringify(card).includes('private-chat'), false);
+  assert.equal(card.targetId, null); assert.equal(card.extended, null);
+  assert.deepEqual(Object.keys(card).sort(), ['acl','author','createdAt','crystal','extended','folderId','geo','id','libraryArchiveEligible','libraryArchivePresentation','libraryArchived','tags','targetId','thingtime','updatedAt','visibility'].sort());
+});

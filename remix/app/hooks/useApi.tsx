@@ -1215,7 +1215,7 @@ export function useApi() {
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const { conditions, mode, ...rest } = args || {};
           await requireSharedContentCapability('api.things-search', options);
-          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things-search', '1.5.0', options?.expectedApiOrigin);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things-search', '1.7.0', options?.expectedApiOrigin);
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`, { ...options, expectedDataPlane });
           }
@@ -1283,7 +1283,7 @@ export function useApi() {
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           await requireSharedContentCapability('api.things', options);
-          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things', '1.59.0', options?.expectedApiOrigin);
+          if (args?.libraryArchive !== undefined) await requireThingtimeCapability('api.things', '1.62.0', options?.expectedApiOrigin);
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1411,12 +1411,20 @@ export function useApi() {
         await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
+      describeActions: useCallback(async (args: { id: string }, options?: ThingRequestOptions) => {
+        await requireThingtimeCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return getJson(`/api/v1/things/actions${toQuery(args)}`, options);
+      }, [getJson]),
+      runAction: useCallback(async (args: { id: string; action: 'archive' | 'restore' }, options?: ThingRequestOptions) => {
+        await requireThingtimeCapability('api.things-actions', '1.1.0', options?.expectedApiOrigin);
+        return asyncFetcher.submit(args, { ...options, action: '/api/v1/things/actions' });
+      }, [asyncFetcher]),
       // Multi-select library operations — see /docs/api things-bulk.
       bulk: useCallback(
         async (args, options?: ThingRequestOptions) => {
           await requireSharedContentCapability('api.things-bulk', options);
           if (args?.op === 'archive' || args?.op === 'restore')
-            await requireThingtimeCapability('api.things-bulk', '1.8.0', options?.expectedApiOrigin);
+            await requireThingtimeCapability('api.things-bulk', '1.9.0', options?.expectedApiOrigin);
           return asyncFetcher.submit(
             {
               op: args?.op,

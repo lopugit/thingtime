@@ -4357,6 +4357,23 @@ email whose link points at the attacker.
 
 ## Things library archive
 
+- [ ] In **Builder → Apps**, use the actual app card (Browse/Edit app), not the
+  folder tree. Archive from ellipsis/touch and context menu; reload the active
+  app index, open Archived, search, Restore and check the original app children.
+  Repeat in a Builder library folder. Archived Apps stays root/app-only.
+- [ ] From a post permalink/feed and a message's actions, Archive then Restore.
+  The same canonical action is available for comments, linked Things, detail
+  menus and filesystem cloud roots. Posts keep their public audience and messages
+  stay in their conversation. In Archived Things, protected content has a static
+  label and Restore only, with no generic Open/Edit/Preview/content anchor.
+- [ ] A raw nested field says **Archive containing Thing** and acts only on its
+  explicitly saved root. Unsaved local data and remote inodes must not guess IDs.
+- [ ] Non-owner and protected subject refusal shows neither Archive nor Retry;
+  transient lookup failure shows one Retry and never stale Archive/Restore.
+  Delay an Archive response, close/reopen the same Thing menu, then release it:
+  the new visit stays open and resolves Restore. Retargeting another Thing or
+  changing owner/origin/data plane must not retain old content or busy state.
+
 - [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
   Its row leaves the active view, including search. The original link, sharing
   and content still work. Check that keyboard focus remains usable when the row

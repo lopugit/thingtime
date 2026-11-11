@@ -1,9 +1,15 @@
 # Things and folders
 
-Archive and Restore in the owner library use the canonical bulk endpoint to
-change protected library placement metadata only. Explicit list and search
-filters apply before pagination. The Archived view finds items across folders;
-restoring keeps the original folder, links and audience. See [the manual
+Archive and Restore use the shared Thing action registry, `PersistedThingContextMenu`
+and exact-subject `/things/actions` availability/mutation contract. The canonical
+server predicate owns authorization; a page, content kind or stale parent projection
+must not independently decide permission. Batch library operations reuse that predicate.
+This is private owner library placement, not unpublishing: original content, links,
+folder relationships and audiences remain unchanged. Explicit list filters apply before
+pagination. The Archived view can restore across folders, including static metadata
+cards for dedicated protected content whose body is unavailable to generic Things reads.
+Those cards expose Restore only. Builder Apps retains its root/app-only filter;
+Builder library folders share Archive/Restore. See [the manual
 checklist](../../TESTING.md#things-library-archive).
 
 ## Thing storage choices
