@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Drain retired gateway MongoDB pools after admitted requests and
+  background jobs finish, independently of static/follower traffic; expire
+  request admission scopes and fence rollback until close completes. Attach
+  idle-enabled MongoDB clients to Vercel's supported suspension helper and
+  publish gateway contract 1.1.1. **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 

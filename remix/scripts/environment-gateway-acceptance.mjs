@@ -38,11 +38,18 @@ const instrumentation = join(dir, 'mongo-command-trace.mjs');
 // Nitro bundles the driver, so instrument that exact generated module rather
 // than a separate node_modules copy. This changes no application source/output.
 const endpointBundle = join(cwd, '.output/server/_chunks/endpoint.mjs');
-const mongoImport = (await readFile(endpointBundle, 'utf8')).match(/modulePromise \?\?= import\("([^\"]+)"\)/);
+const endpointSource = await readFile(endpointBundle, 'utf8');
+const mongoImport = endpointSource.match(/modulePromise \?\?= import\("([^\"]+)"\)/);
 assert.ok(mongoImport, 'Locate the built driver factory before collecting command evidence.');
 const driverBundle = new URL(mongoImport[1], pathToFileURL(endpointBundle)).href;
+// Rolldown may share CommonJS code as a named require factory instead of a
+// default export. Follow the exact factory consumed by this built endpoint.
+const driverFactory = endpointSource.match(/modulePromise \?\?= import\([^\n]+__toESM\(n\.([\w$]+)\(\)\)/)?.[1];
 await writeFile(instrumentation, `import{appendFileSync}from'node:fs';
-const {default:{MongoClient}}=await import(${JSON.stringify(driverBundle)});
+const driver=await import(${JSON.stringify(driverBundle)});
+const factory=${JSON.stringify(driverFactory || null)};
+const MongoClient=factory?driver[factory]().MongoClient:driver.MongoClient??driver.default?.MongoClient;
+if(!MongoClient)throw new Error('Built MongoDB driver has no MongoClient export.');
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
 for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
@@ -73,7 +80,10 @@ async function indexTrace(key) {
 }
 async function ready(server, key) {
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.child.exitCode !== null) throw new Error('Built gateway exited before readiness.');
+    if (server.child.exitCode !== null) {
+      const diagnostic = server.log().replaceAll(jwt, '[redacted]').replaceAll(relaySecret, '[redacted]');
+      throw new Error(`Built ${key} gateway exited before readiness (${server.child.exitCode}): ${diagnostic}`);
+    }
     try { if ((await fetch(origin(key) + '/.well-known/thingtime-capabilities.json', { signal: AbortSignal.timeout(500) })).ok) return; } catch {}
     await delay(150);
   }
@@ -112,7 +122,7 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.1');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',
@@ -154,6 +164,7 @@ try {
   const branchPostId = branchPost.data.post?.id || branchPost.data.thing?.id;
   assert.ok(branchPostId);
   const dedicatedShell = await fetch(origin('dedicated') + '/post/' + branchPostId);
+  assert.equal(dedicatedShell.status, 200, 'Build the client and sync:nitro-template before the Node server so the real shell is embedded.');
   assert.equal(dedicatedShell.headers.get('x-tt-shell'), 'social-meta');
   assert.match(await dedicatedShell.text(), /Dedicated branch acceptance/, 'Dedicated shell must resolve its own public post metadata.');
   const followerShell = await fetch(origin('follower') + '/post/' + branchPostId);

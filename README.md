@@ -1595,7 +1595,11 @@ their existing custom develop credential scope; the publisher explicitly selects
 the logical preview gateway without exposing unrelated standard-preview settings
 to branch code. A recent configuration audit found previews and
 custom develop already share the development cluster, separate from production;
-the master preview alias and gateway activation are still pending.
+the stable production, develop and master-preview manifests were verified as
+configured gateways on 11 November 2026. See the runbook for the evidence and
+the limits of that observation. Retired owners drain only admitted database
+work; static traffic and relays do not delay pool closure. The Vercel pool
+helper lets configured idle application sockets expire before suspension.
 
 Configure a self-hosted API or the environment gateway owner with:
 

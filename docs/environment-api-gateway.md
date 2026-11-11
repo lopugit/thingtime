@@ -75,7 +75,7 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.1.0 and an optional `gateway` descriptor containing only environment, stable
+1.1.1 and an optional `gateway` descriptor containing only environment, stable
 origin and deployment identity. This metadata is private/no-store to prevent a
 CDN pinning the previous alias owner. Discovery itself neither authenticates an
 agent nor grants access to private Things.
@@ -119,6 +119,16 @@ before reopening a pool if a rollback promotes it again. Multiple warm gateway
 instances still have separate pools and monitoring sockets. This selects one
 deployment, **not one process or socket**, and does not change the Atlas tier.
 
+Drain accounting covers only admitted database work and its explicitly leased
+background jobs. Static responses and follower relays cannot keep a retired
+owner's pools open. An ended request's async context no longer grants database
+admission; a detached job must acquire its own lease before its parent ends.
+Demotion fences concurrent admission, and rollback waits for pool closure and
+cache eviction. Clients with a positive `maxIdleTimeMS` attach to Vercel's
+supported pool helper so Fluid can keep the invocation alive through the idle
+timeout. This retires idle application sockets; it does not claim to close all
+monitoring sockets or turn a frozen legacy deployment into a cooperative peer.
+
 ## Rollout and environment mapping
 
 The intended mapping separates the logical gateway environment from Vercel's
@@ -140,11 +150,13 @@ select the backend; the explicit gateway configuration does. Dedicated PRs
 retain that same credential target and run their own handlers against its
 configured development database.
 
-The latest configuration audit confirmed that custom develop and previews use
-the same development cluster, separate from production. The
-`master.previews.thingtime.com` alias has not yet been created or verified, and
-gateway activation across these origins is pending. Do not treat the intended
-mapping as proof of live gateway operation.
+The configuration audit confirmed that custom develop and previews use the
+same development cluster, separate from production. On 11 November 2026,
+credential-free manifests on all three stable origins returned their matching
+environment and gateway identity. Vercel metadata independently matched the
+production and preview-master deployments to source `1f5c09c08` on `main`.
+This confirms gateway configuration and deployment identity, not an exact Atlas
+connection total or proof that every historical deployment has drained.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -185,6 +197,8 @@ the lifecycle tests and admin migration recovery checks before changing the plan
 npm --prefix remix run test:environment-gateway
 npm --prefix remix run test:collections
 npm --prefix remix run test:api-capabilities
+npm --prefix remix run build:client
+npm --prefix remix run sync:nitro-template
 NITRO_PRESET=node-server npm --prefix remix run build:server
 node remix/scripts/environment-gateway-acceptance.mjs
 ```
@@ -199,7 +213,7 @@ or credentials and does not expose a public dev server.
 
 ## Promotion procedure
 
-Use the intended mapping and pending-activation status above. Do not select an
+Use the intended mapping and observed activation status above. Do not select an
 arbitrary PR deployment as the shared preview backend or treat staging/wildcard
 aliases as acceptance evidence. Build the gateway from the intended integration
 branch, run contract and real API acceptance, then promote that immutable
