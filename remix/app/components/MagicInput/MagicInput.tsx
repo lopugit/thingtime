@@ -20,9 +20,19 @@ export interface MagicInputProps {
 	path?: string;
 }
 
+const editableHtml = (rawValue: string | undefined): string => {
+	let value = typeof rawValue === 'string' ? rawValue.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') : '';
+	const newlines = value.split(/[^\n]/).filter(part => part !== '');
+	for (const newline of newlines) {
+		const replacement = newline.replace('\n\n\n', '<div><br /></div>').replace(/\n\n/g, '<div><br /></div>').replace(/\n/g, '<br />');
+		value = value.replace(newline, replacement);
+	}
+	return value;
+};
+
 export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Omit<BoxProps, keyof MagicInputProps>>((props, ref) => {
 	const { onValueChange: onValueChangeProp, onChange: onChangeProp, onFocus: onFocusProp, onEnter: onEnterProp } = props;
-	const [inputValue, setInputValue] = React.useState<string | undefined>(props.value ?? props.placeholder);
+	const [inputValue, setInputValue] = React.useState<string>(props.value ?? '');
 
 	const [isClientSide, setIsClientSide] = React.useState(false);
 
@@ -34,64 +44,48 @@ export const MagicInput = React.forwardRef<HTMLDivElement, MagicInputProps & Omi
 
 	const contentEditableRef = React.useRef<HTMLDivElement>(null);
 	const editValueRef = React.useRef<Record<string, string>>({});
+	const previousPropValueRef = React.useRef(props.value);
 
 	// values are plain text: escape them before the newline -> <br/> pass so
 	// dangerouslySetInnerHTML can never execute markup smuggled into a value
 	// (pasted, API-loaded, or shared)
-	const escapeHtml = React.useCallback((value: string) => {
-		return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-	}, []);
-
-	const [contentEditableValue, setContentEditableValue] = React.useState(props?.value || props?.placeholder || '');
+	const [contentEditableValue, setContentEditableValue] = React.useState(() => editableHtml(props.value));
 
 	const updateContentEditableValue = React.useCallback(
 		(rawValue: string | undefined) => {
-			// replace all new line occurences in value with <div><br></div>
-
-			const value = typeof rawValue === 'string' ? escapeHtml(rawValue) : '';
-
-			// extract all series of new lines
-			const newlines = value?.split?.(/[^\n]/)?.filter((v) => v !== '');
-
-			let newValue = value;
-
-			// replace all new lines groups with <div><br></div>
-			newlines?.forEach?.((newline) => {
-				const baseLength = '\n'?.length;
-
-				const newlineClone = newline;
-
-				const newlineClonePart1 = newlineClone?.replace('\n\n\n', '<div><br /></div>');
-				const newlineClonePart2 = newlineClonePart1?.replace(/\n\n/g, '<div><br /></div>');
-				const newlineClonePart3 = newlineClonePart2?.replace(/\n/g, '<br />');
-
-				newValue = newValue?.replace(newline, newlineClonePart3);
-			});
-
+			const newValue = editableHtml(rawValue);
+			// A genuine prop reset can equal the previous HTML state even though
+			// native editing changed the DOM (for example undefined -> empty).
+			const element = contentEditableRef.current;
+			if (element && element.innerHTML !== newValue) element.innerHTML = newValue;
 			setContentEditableValue(newValue);
+			setInputValue(rawValue ?? '');
 		},
-		[escapeHtml]
+		[]
 	);
 
 	React.useEffect(() => {
-		setInputValue(contentEditableValue);
-	}, [contentEditableValue]);
-
-	React.useEffect(() => {
+		// Initial state already represents the prop. A redundant mount reset can
+		// erase input delivered between the DOM commit and passive effects.
+		if (Object.is(previousPropValueRef.current, props.value)) return;
+		previousPropValueRef.current = props.value;
 		const entries = Object.entries(editValueRef.current);
 		const propsValueInEntries = entries?.find?.((entry) => entry[1] === props?.value);
 		if (!propsValueInEntries) {
+			// A genuine replacement retires pending echoes from the previous
+			// edit. They cannot suppress a later explicit reset to that old text.
+			editValueRef.current = {};
 			// const valueToUse = props?.value || props?.placeholder
 			const valueToUse = props?.value;
 			updateContentEditableValue(valueToUse);
 			// setContentEditableValue(props?.value)
 		} else {
-			const [time, value] = propsValueInEntries;
-			if (time && value) {
+			const [time] = propsValueInEntries;
+			if (time) {
 				delete editValueRef.current[time];
 			}
 		}
-	}, [props?.value, props?.placeholder, updateContentEditableValue]);
+	}, [props.value, updateContentEditableValue]);
 
 	const onValueChange = React.useCallback(
 		(args: { value: string }) => {

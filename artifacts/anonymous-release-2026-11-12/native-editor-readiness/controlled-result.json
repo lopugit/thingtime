@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "scope": "Actual component controlled mount-order reproduction; no native app claim",
+  "sourceSha256": "dae92cf90edc48014ee61dbb11c667b386aea3c73ba153ca37440d234e90bb2c",
+  "browserVersion": "149.0.7827.55",
+  "early": {
+    "early": true,
+    "changes": [
+      "Synthetic readiness witness"
+    ],
+    "atLayout": "Imagine..",
+    "afterEarlyInput": "Synthetic readiness witness",
+    "afterMountEffects": "",
+    "settled": true
+  },
+  "late": {
+    "early": false,
+    "changes": [
+      "S",
+      "Sy",
+      "Syn",
+      "Synt",
+      "Synth",
+      "Synthe",
+      "Synthet",
+      "Syntheti",
+      "Synthetic",
+      "Synthetic ",
+      "Synthetic r",
+      "Synthetic re",
+      "Synthetic rea",
+      "Synthetic read",
+      "Synthetic readi",
+      "Synthetic readin",
+      "Synthetic readine",
+      "Synthetic readines",
+      "Synthetic readiness",
+      "Synthetic readiness ",
+      "Synthetic readiness w",
+      "Synthetic readiness wi",
+      "Synthetic readiness wit",
+      "Synthetic readiness witn",
+      "Synthetic readiness witne",
+      "Synthetic readiness witnes",
+      "Synthetic readiness witness"
+    ],
+    "atLayout": "Imagine..",
+    "afterMountEffects": "",
+    "settled": true,
+    "finalText": "Synthetic readiness witness"
+  },
+  "failures": []
+}

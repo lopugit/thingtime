@@ -145,6 +145,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Preserve MagicInput text accepted before mount effects, escape initial
+  values and honor genuine controlled resets while retaining caret-preserving
+  echoes. Add actual-component browser coverage and explicit native update
+  readiness checks; automatic process replacement remains unverified. **Codex (AI)**
+
+
+- 2026-11-12: Verify bundled local MongoDB through Desktop’s actual middleware
+  socket owner, including offline private CRUD, account isolation and API/database
+  restart persistence. Retain MongoDB alongside the SQLite portability foundation.
+  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+
 - 2026-11-11: Retain stream producers, timed-out work and detached queues through
   actual cleanup; keep accepted backup receipts attached across cancellation.
   Connect desktop bundle activation 1.1 to the loaded runtime's admission contract.

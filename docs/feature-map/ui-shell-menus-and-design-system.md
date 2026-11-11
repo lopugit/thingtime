@@ -1,5 +1,16 @@
 # UI shell, menus and design system
 
+## Plain-text input lifecycle
+
+`components/MagicInput/MagicInput.tsx` derives escaped initial editable HTML and
+raw submitted value from its actual value prop. It must not overwrite input
+accepted before passive mount effects or on placeholder-only changes. Genuine
+external resets remain separate from controlled echoes; historical edits must
+not suppress a later reset. The actual-component Chromium regression is
+`MagicInput.browser.test.mjs`; run it explicitly with Node's test runner. Native
+update acceptance uses the actual editor lifecycle before single-entry typing.
+
+
 ## Custom drawer editor lifecycle
 
 `CustomDrawerItems` projects saved `customDrawerBlocks` without its known closed

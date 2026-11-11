@@ -2,6 +2,27 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Both local database providers — 12 November 2026
+
+Actual MagicInput rendering reproduced input loss when the mount passive effect
+ran after accepted input. Initialize escaped HTML/raw value from the real prop
+and preserve mount input/parent echoes while honoring genuine resets. Cover the
+reviewed historical A→B→A reset case separately. The fresh native run gets past
+initial entry, signed staging, dirty refusal and saved-value hard reload, but
+automatic replacement still times out. No Home draft blockers/prepare messages
+are observed; later native-info reads time out. Keep this failure separate from
+renderer success and diagnose host eligibility/responsiveness next. Evidence:
+`artifacts/anonymous-release-2026-11-12/native-auto-activation/editor-readiness/`.
+
+Retain shipped MongoDB alongside the SQLite portability foundation. Current
+macOS packaging embeds pinned MongoDB 8.0.34, source and notices at build time.
+An expanded real offline fixture passes normal API private CRUD, independent
+second-account/anonymous refusals, API+database restart retention, stale revision
+refusal and deletion. Repair its obsolete self-listening Nitro assumption by
+using Desktop's actual middleware socket owner. This does not establish signed
+Electron/safeStorage acceptance or SQLite API parity. See
+[verification and limits](../artifacts/anonymous-release-2026-11-12/mongo-provider/README.md).
+
 ## Latest main integration — 11 November 2026
 
 Integrate newly fetched main `a5054d78a18361d4c7457922c1d7a6badb712f5d`

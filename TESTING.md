@@ -1,3 +1,26 @@
+## MagicInput mount and controlled resets — 2026-11-12
+
+- Run `node --test remix/app/components/MagicInput/MagicInput.browser.test.mjs`.
+  Input delivered between mount and passive effects must remain visible and
+  submit as raw text. Check parent echoes/unrelated renders preserve caret,
+  focus and DOM identity; genuine external resets (including empty and an old
+  previously typed value) must apply. Placeholder changes must not erase drafts.
+  Initial and replacement markup stays inert. Synthetic composition checks do
+  not establish physical OS IME behavior; verify native IME when that path changes.
+
+## Bundled local MongoDB and portable storage — 2026-11-12
+
+- After building the desktop artifacts, run
+  `node electron/scripts/test-bundled-local-runtime.cjs`. It must exercise the
+  actual socket owner around `node_middleware`, not assume the imported bundle
+  listens. Verify normal API registration/private CRUD, independently signed-in
+  second-account and anonymous refusal, API+Mongo restart persistence, stale
+  revisions and deletion in the disposable offline fixture. Release both fixture
+  ports and remove only its temporary profile. Signed Electron/OS safeStorage
+  and content/ledger/history rollback acceptance remain independent checks.
+- Preserve both MongoDB and SQLite providers; never infer SQLite API readiness
+  from raw document-store tests or silently fallback between account stores.
+
 ## Main integration compatibility — 2026-11-11
 
 - When independent branches extend the same semantic API version differently,

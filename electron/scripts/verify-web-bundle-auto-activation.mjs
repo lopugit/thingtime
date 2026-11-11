@@ -221,12 +221,24 @@ try {
  });
  const baselinePid = await processId(), origin = initial.origin, fixturePath = 'nativeAutoActivationFixture', value = 'Synthetic draft survives automatic native bundle activation';
  await page.goto(`${origin}/edit/${fixturePath}`, { waitUntil: 'domcontentloaded' });
- await page.waitForFunction(() => [...document.querySelectorAll('[contenteditable="true"]')].some(element => !element.closest('.thingPathDom-raw')));
+ // MagicInput initially reconciles its placeholder in a passive mount effect.
+ // Existing DOM alone does not certify that its first render has settled.
+ await page.waitForFunction(() => [...document.querySelectorAll('[contenteditable="true"]')].some(element => !element.closest('.thingPathDom-raw') && element.textContent === ''));
  const candidates = await page.$$('[contenteditable="true"]'); let editable;
  for (const candidate of candidates) if (!await candidate.evaluate(element => Boolean(element.closest('.thingPathDom-raw')))) {
   assert.equal(editable, undefined, 'Choose the unique value editor, never its property label'); editable = candidate;
  }
  assert.ok(editable); await editable.focus();
+ // Focus activates Commander through queued canonical state. Wait for that
+ // render and the same live editor before sending the single typing action.
+ await page.waitForFunction(element => {
+  const owner = element.closest('[class*="commander-uuid-"]');
+  const token = [...(owner?.classList || [])].find(name => name.startsWith('commander-uuid-'));
+  const id = token?.slice('commander-uuid-'.length);
+  return element.isConnected && document.activeElement === element && element.textContent === '' && id &&
+   window.getThingtime?.(['settings','commander',id,'commanderActive']) === true;
+ }, {}, editable);
+ observations.push({ case: 'editor-input-ready', initialReconciliationSettled: true, commanderFocusCommitted: true, sameConnectedEditor: true, typedOnce: true });
  await editable.evaluate(element => { const range = document.createRange(); range.selectNodeContents(element); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
  await page.keyboard.type(value);
  await page.waitForFunction(expected => [...document.querySelectorAll('[contenteditable="true"]')].some(element => !element.closest('.thingPathDom-raw') && element.textContent === expected), {}, value);

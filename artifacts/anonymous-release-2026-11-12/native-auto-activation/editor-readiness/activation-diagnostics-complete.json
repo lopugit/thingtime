@@ -1,0 +1,321 @@
+[
+  {
+    "at": "2026-11-11T13:21:57.972Z",
+    "pathname": "/",
+    "focused": true,
+    "visibility": "visible",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:21:59.492Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:04.520Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:09.555Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:14.586Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:19.612Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:24.642Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:29.667Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:34.697Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:39.726Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:44.754Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:49.783Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:22:54.815Z",
+    "pathname": "/",
+    "focused": false,
+    "visibility": "hidden",
+    "featureVersions": {
+      "native.web-bundle-activation": "1.1.0"
+    },
+    "updateStatus": "pending",
+    "updateReleaseId": "e60cb7eb1f80b46385f4193b8b1ef24da15293451e78b85a30021ec385b747f7",
+    "activeReleaseId": null,
+    "buildIdentityPresent": true,
+    "localRuntimeActive": false,
+    "localRuntimeEnabled": false,
+    "rendererReady": true,
+    "closedDrawerEmojiFields": 0,
+    "blockers": [],
+    "receivedMessages": []
+  },
+  {
+    "at": "2026-11-11T13:23:03.849Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:08.854Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:13.861Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:18.866Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:23.872Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:28.878Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:33.886Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:38.891Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:43.898Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:48.929Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:53.941Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:23:58.946Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:03.951Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:09.011Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:14.029Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:19.035Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:24.041Z",
+    "observationUnavailable": "Task public state observation timed out"
+  },
+  {
+    "at": "2026-11-11T13:24:29.047Z",
+    "observationUnavailable": "Task public state observation timed out"
+  }
+]

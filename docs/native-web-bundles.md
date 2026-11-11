@@ -165,7 +165,23 @@ and response observation. Request completion alone cannot make this work idle.
 The existing HTTP/ChatGPT reservations and renderer persistence checkpoint remain
 independent requirements. No account, origin or credential boundary is relaxed.
 
-A new internal `documentStore` primitive uses file-backed SQLite transactions and
+Local MongoDB and SQLite are complementary provider paths, not a replacement
+of one by the other. The macOS app already embeds checksum-pinned MongoDB
+Community 8.0.34, its source and notices at build time. `LocalRuntime` starts an
+authenticated loopback single-node replica set with profile-scoped data and
+credentials; normal transactions run through the existing canonical API.
+An isolated compiled-runtime check now proves private CRUD, two-account ACLs,
+session/content retention across API and database restart, stale-revision refusal
+and deletion without cloud access. This is not signed app/OS-vault acceptance.
+See [MongoDB evidence](../artifacts/anonymous-release-2026-11-12/mongo-provider/README.md).
+
+Keep provider selection explicit per local workspace and preserve existing
+database choices. Do not silently migrate, dual-write, or select another store
+when the chosen provider is unavailable. The shipped Mongo binary currently
+targets macOS arm64/x64; it does not establish an iOS server port. SQLite remains
+the in-process portability path for the mobile runtime.
+
+The internal `documentStore` primitive uses file-backed SQLite transactions and
 lossless BSON bytes. Real temporary-file tests cover typed data, rollback,
 serialization, scoped sessions and independent-process recovery. It does not yet
 implement the canonical collection/query/index facade, authorize an account,
@@ -173,6 +189,17 @@ select a native storage path or advertise local API readiness. See
 [local development foundations](feature-map/local-development-and-worktrees.md).
 
 ## Remaining integration and acceptance
+
+The 12 November actual native run, following the reproduced input-mount fix,
+passes single typing, signed staging, 70-second dirty refusal, normal submission,
+canonical persistence and hard reload. Automatic replacement still times out.
+Home reports zero draft blockers and no new prepare messages; later native-info
+observations time out. This narrows the next investigation to host eligibility
+and responsiveness but does not identify a particular failed predicate. Keep
+every safety gate; retain the exact-source diagnostics under
+`artifacts/anonymous-release-2026-11-12/native-auto-activation/editor-readiness/`.
+The subsequent historical-value reset correction has its own component tests;
+do not retroactively call this run final-source native acceptance.
 
 1. **P0 — publication, trust and deployed acceptance.** Provision real public
    trust through the supported native release process, publish a compatible

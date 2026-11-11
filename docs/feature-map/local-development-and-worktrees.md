@@ -41,6 +41,17 @@ readiness assertion then stopped the run. Automatic replacement remains open. Se
 
 ## Embedded document storage foundation
 
+Keep both local providers. macOS packaging embeds pinned MongoDB through
+`electron/scripts/build-mongodb.mjs` and `lib/bundled-mongodb.cjs`, including
+source/license/notices. `lib/local-runtime.cjs` owns its authenticated replica,
+profile data and lifecycle. `scripts/test-bundled-local-runtime.cjs` uses the
+actual `startRendererServer` owner around compiled `node_middleware`; running
+that middleware file alone does not start an HTTP listener. The disposable
+offline check covers normal API registration, private CRUD, two-account ACLs,
+session/content retention after API+database restart and stale-revision refusal.
+Build the desktop web/database artifacts first. This does not substitute for
+signed app acceptance. [Evidence](../../artifacts/anonymous-release-2026-11-12/mongo-provider/README.md).
+
 `remix/app/api/utils/documentStore/{contract,sqliteStore}.ts` provides a
 transaction-scoped file store for exact BSON bytes, with ordered paged scans,
 rollback and serialized async callbacks. The caller supplies an absolute path;
