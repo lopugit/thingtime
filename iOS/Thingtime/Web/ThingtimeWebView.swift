@@ -26,6 +26,10 @@ struct ThingtimeWebView: View {
     @State private var lidarRequest: UUID?
     @State private var invalidScanLink = false
     @State private var pendingShare: UUID?
+    @State private var sharedDrafts: [UUID] = []
+    @State private var sharedDraftsOpen = false
+    @State private var sharedDraftsLoadFailed = false
+    @State private var shareReminderError: String?
     @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
@@ -61,15 +65,31 @@ struct ThingtimeWebView: View {
             ZStack(alignment: .leading) {
                 VStack(spacing: 0) {
                     if let pendingShare {
-                        Button {
-                            widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: pendingShare)?.absoluteString
-                            self.pendingShare = nil
-                        } label: {
-                            Label("Continue shared draft", systemImage: "square.and.pencil")
-                                .font(.body).frame(maxWidth: .infinity, minHeight: 44)
+                        HStack(spacing: 8) {
+                            Button {
+                                openSharedDraft(pendingShare)
+                            } label: {
+                                Label("Continue shared draft", systemImage: "square.and.pencil")
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .accessibilityIdentifier("continue-shared-draft")
+                            .accessibilityHint("Opens your unfinished share in the post composer")
+
+                            Button {
+                                dismissSharedDraftReminder(pendingShare)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.body.weight(.semibold))
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel("Dismiss shared draft reminder")
+                            .accessibilityHint("Keeps the draft in Shared drafts in the native drawer")
+                            .accessibilityIdentifier("dismiss-shared-draft-reminder")
                         }
+                        .padding(.horizontal, 8)
                         .background(.regularMaterial)
-                        .accessibilityHint("Opens your unfinished share in the post composer")
                     }
                     WebView(url: selectedDestination.url, widgetPath: $widgetPath, lidarRequest: $lidarRequest)
                         .ignoresSafeArea(.container, edges: [.bottom])
@@ -94,7 +114,8 @@ struct ThingtimeWebView: View {
                     onClose: closeDestinationPicker,
                     onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
                     onMail: { closeDestinationPicker(); widgetPath = "/mail" },
-                    onScan: { closeDestinationPicker(); lidarRequest = UUID() }
+                    onScan: { closeDestinationPicker(); lidarRequest = UUID() },
+                    onSharedDrafts: { closeDestinationPicker(); refreshPendingShare(); sharedDraftsOpen = true }
                 )
                 .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
@@ -112,6 +133,49 @@ struct ThingtimeWebView: View {
                         ToolbarItem(placement: .confirmationAction) { Button("Done") { widgetSettingsOpen = false } }
                     }
                 }
+            }
+            .sheet(isPresented: $sharedDraftsOpen) {
+                NavigationStack {
+                    List {
+                        if sharedDraftsLoadFailed {
+                            Section {
+                                Text("Could not load shared drafts. Your saved shares have not been removed.")
+                                    .foregroundStyle(.secondary)
+                                Button("Try again", action: refreshPendingShare)
+                            }
+                        }
+                        Section {
+                            ForEach(Array(sharedDrafts.enumerated()), id: \.element) { index, id in
+                                Button {
+                                    sharedDraftsOpen = false
+                                    openSharedDraft(id)
+                                } label: {
+                                    Label("Shared draft \(index + 1)", systemImage: "square.and.pencil")
+                                        .frame(minHeight: 44)
+                                }
+                                .accessibilityIdentifier("shared-draft-\(id.uuidString)")
+                            }
+                        } footer: {
+                            Text(sharedDraftsLoadFailed ? "" : sharedDrafts.isEmpty
+                                 ? "No unfinished shared drafts for this destination."
+                                 : "Your unfinished shares, oldest first. Dismissing a reminder keeps its draft here.")
+                        }
+                    }
+                    .navigationTitle("Shared drafts")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { sharedDraftsOpen = false }
+                        }
+                    }
+                }
+            }
+            .alert("Could not dismiss reminder", isPresented: Binding(
+                get: { shareReminderError != nil },
+                set: { if !$0 { shareReminderError = nil } }
+            )) {
+                Button("OK", role: .cancel) { shareReminderError = nil }
+            } message: {
+                Text(shareReminderError ?? "Please try again. Your draft is still saved.")
             }
             .onOpenURL { url in
                 if url.scheme == "thingtime", url.host == "scan" {
@@ -142,7 +206,32 @@ struct ThingtimeWebView: View {
     }
 
     private func refreshPendingShare() {
-        pendingShare = (try? ShareInbox.shared().pendingComposers(origin: selectedDestination.url))?.first
+        do {
+            let inbox = try ShareInbox.shared()
+            let drafts = try inbox.pendingComposers(origin: selectedDestination.url)
+            let reminder = try inbox.pendingComposers(origin: selectedDestination.url, includeDismissed: false).first
+            sharedDrafts = drafts
+            pendingShare = reminder
+            sharedDraftsLoadFailed = false
+        } catch {
+            sharedDrafts = []
+            pendingShare = nil
+            sharedDraftsLoadFailed = true
+        }
+    }
+
+    private func openSharedDraft(_ id: UUID) {
+        widgetPath = ShareComposerSession.composerURL(origin: selectedDestination.url, requestId: id)?.absoluteString
+        pendingShare = nil
+    }
+
+    private func dismissSharedDraftReminder(_ id: UUID) {
+        do {
+            try ShareInbox.shared().dismissComposerReminder(id: id, origin: selectedDestination.url)
+            refreshPendingShare()
+        } catch {
+            shareReminderError = "Your draft is still saved. Please try again."
+        }
     }
 
     private func receiveWidgetAction() {
