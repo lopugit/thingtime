@@ -3,9 +3,22 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { uploadBatchDigest } from './uploadBatch';
 import { createDesktopFolderHost } from './desktopFolders.client';
+import { NativePathObservationUnavailable } from './nativePathObservation';
 import { mobileFolderSource } from './mobileFolders.client';
 const origin = 'https://sync.test';
 const rootId = '00000000-0000-4000-8000-000000000001';
+test('desktop stamp inspection requires compatible Mac 1.22 and a bound metadata reply', async () => {
+	for (const version of ['1.21.0', '2.0.0', '1.22.0']) {
+		const f = fixture(), stamp = { path: 'large.bin', id: 'inode', version: 'current', kind: 'file', size: 8_000_000_000 };
+		f.patch({ capabilities: { fileAccessVersion: version }, conditions: { network: 'wifi', charging: true }, rootId, path: stamp.path, stamp, complete: true });
+		if (version === '2.0.0') { await assert.rejects(f.create(), /account, device or sync server changed/); continue; }
+		const host = await f.create();
+		const request = { action: 'inspect-stamp' as const, rootId, path: stamp.path };
+		if (version === '1.22.0') assert.deepEqual((await host.request('owner', request, f.lifetime.signal)).inspectedStamp, stamp);
+		else await assert.rejects(host.request('owner', request, f.lifetime.signal), /inspect current file stamps/);
+		assert.equal(f.calls.filter(call => call.action === 'inspect-stamp').length, version === '1.22.0' ? 1 : 0);
+	}
+});
 test('desktop folder failures show fixed compatibility guidance and hide arbitrary native details', async () => {
 	const unsupported = 'The selected server does not support this version of folder sync.';
 	for (const message of [unsupported,
@@ -267,6 +280,29 @@ test('fixed native verification and shutdown waits survive IPC redaction; arbitr
    });
   }
  }
+ }
+});
+
+test('only exact bounded observation deadline becomes deferred path evidence', async () => {
+ const marker = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+ for (const message of [marker, `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${marker}`,
+  `private-prefix ${marker}`, `${marker} private-suffix`]) {
+  const bridge = { folderSyncRequest: async (input: any) => {
+   if (input.action === 'observe-path' || input.action === 'list') throw Error(message);
+   return { ...input, origin, roots: [], conditions: { network: 'wifi', charging: true }, capabilities: { fileAccessVersion: '1.21.0' },
+    apiCapabilities: { schemaVersion: 1, origin, features: {} } };
+  } };
+  const host = await createDesktopFolderHost({ ownerId: 'owner', deviceId: 'device', bridge,
+   signal: new AbortController().signal, rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {} });
+  await assert.rejects(host.request('owner', { action: 'observe-path', rootId, path: 'large.bin',
+   observation: { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' },
+   remainingMs: 30_000 }, new AbortController().signal), error => {
+    assert.equal(error instanceof NativePathObservationUnavailable, message === marker || message.startsWith('Error invoking remote method'));
+    return true;
+   });
+  await assert.rejects(host.request('owner', { action: 'list' }, new AbortController().signal), error => {
+   assert.equal(error instanceof NativePathObservationUnavailable, false); return true;
+  });
  }
 });
 

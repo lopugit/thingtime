@@ -15,6 +15,17 @@ test('single-path inspection uses the same host account and origin fences', asyn
     assert.equal(f.calls.length, 1);
 });
 
+test('metadata-only stamp inspection retains the same host identity and exact path', async () => {
+    const f = fixture(), input = f.input({ action: 'inspect-stamp', rootId: randomUUID(), path: 'large.bin' });
+    const stamp = { path: input.path, id: 'inode', version: 'current', kind: 'file', size: 8_000_000_000 };
+    f.run(async (_method, request) => ({ ...request, roots: [], complete: true, stamp }));
+    assert.deepEqual((await f.host.request(f.event, input)).stamp, stamp);
+    assert.deepEqual(f.calls, [input]);
+    f.account('other');
+    await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+    assert.equal(f.calls.length, 1);
+});
+
 test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
     const operations = [
         ...['scan-stream', 'scan-changes'].map(action => [action, 'one-way-supported']),
@@ -709,6 +720,43 @@ test('compound observations retain fresh host checks', async () => {
  assert.equal(result.complete, true); assert.equal(f.calls.length, 1); assert.ok(f.calls[0].remainingMs > 0 && f.calls[0].remainingMs <= 30_000);
  f.run(async (_method, request) => { f.account('other'); return { ...request, roots: [], complete: true }; });
  await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID() })));
+});
+
+test('only the host-owned observation deadline defers a point hash', async () => {
+ const marker = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+ const observation = { version: 1, network: 'wifi', chargingOnly: false, configurationId: 'connection', configurationRevision: 'r1' };
+ for (const changedAccount of [false, true]) {
+  const f = fixture(), seen = []; let entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  f.host.requestNative = async (_method, request, options = {}) => {
+   seen.push(request.action);
+   if (request.action === 'suspend') return {};
+   entered();
+   return await new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+   });
+  };
+  const pending = f.host.request(f.event, f.input({ action: 'observe-path', rootId: randomUUID(), path: 'large.bin',
+   observation, remainingMs: 80 }));
+  await started;
+  if (changedAccount) f.account('other');
+  await assert.rejects(pending, error => {
+   assert.equal(error.message, changedAccount ? 'Account mismatch' : marker); return true;
+  });
+  assert.deepEqual(seen, ['observe-path', 'suspend']);
+ }
+ const f = fixture(); let entered;
+ const started = new Promise(resolve => { entered = resolve; });
+ f.host.requestNative = async (_method, request, options = {}) => {
+  if (request.action === 'suspend') return {};
+  entered();
+  return await new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+ };
+ const pending = f.host.request(f.event, f.input({ action: 'observe-path', rootId: randomUUID(), path: 'large.bin',
+  observation, remainingMs: 1000 }));
+ await started;
+ f.host.cancel(f.host.active, Error('User stopped this request.'));
+ await assert.rejects(pending, error => { assert.equal(error.message, 'User stopped this request.'); return true; });
 });
 
 

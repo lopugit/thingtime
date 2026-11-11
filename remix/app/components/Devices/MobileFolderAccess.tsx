@@ -99,9 +99,11 @@ function FolderAccess({ ownerId, deviceId, host, active = true, scopeKey: key, g
 	);
 	useEffect(() => {
 		setBusy(false);
-		if (!transferBusy.current) void run({ action: 'list' });
+		// A read-only grant list may run beside a transfer. A cold renderer has
+		// no cached roots to show until this read completes.
+		void run({ action: 'list' });
 		const wake = () => {
-			if (document.visibilityState !== 'visible' || transferBusy.current) return;
+			if (document.visibilityState !== 'visible') return;
 			if (pending.current) foregroundDuringRequest.current = true;
 			else if (needsForegroundRead.current) void run({ action: 'list' });
 		};

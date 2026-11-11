@@ -145,11 +145,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-11: Add narrow browser assertion AppID compatibility with truthful
-  appid:false results, unchanged RP/allowlist verification, same-origin capability
-  negotiation and native fallback for unsupported authorization. Adapter 0.5.0,
-  passwords API 1.9.0; no AppID fetching or legacy key retargeting. **Codex (AI)**
-
+- 2026-11-11: Recover saved folder-sync work after a legacy uncertain file
+  publication or cancelled native scan. Fence the original upload identity
+  through the accounted Files Timeline transaction (`api.files` 1.13.0), then
+  require fresh sealed reconciliation before advancing. Release the native
+  scanner lane on one-way failures, retain exact job enrollment, and remove
+  the 256-sync-config account ceiling while paging remains bounded. Load the
+  read-only root list during an active native task, defer expired early path
+  observations to sealed indexing, and use Mac 1.22 exact source stamps to
+  avoid hashing a captured upload twice while retaining byte-digest proof.
+  [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
 - 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
   unsupported-parameter responses into fixed safe chat diagnostics. Unknown
   responses retain status-only messages; upstream text and credential/request
@@ -7305,6 +7310,11 @@ Detailed PR notes:
 <!--
 
 - 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
+
+- 2026-11-11: Add narrow browser assertion AppID compatibility with truthful
+  appid:false results, unchanged RP/allowlist verification, same-origin capability
+  negotiation and native fallback for unsupported authorization. Adapter 0.5.0,
+  passwords API 1.9.0; no AppID fetching or legacy key retargeting. **Codex (AI)**
 
 ## [1.0.0] - YYYY-MM-DD
 Move entries up from [Unreleased] when cutting a tagged release.

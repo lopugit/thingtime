@@ -61,6 +61,40 @@ final class MobileFolderTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: chunk.data), bytes.suffix(17)); XCTAssertEqual(chunk.version, entry.version)
         XCTAssertThrowsError(try MobileFolderReader.read(bookmark: grant.bookmark, path: entry.path, version: entry.version, offset: 0, length: 65_537))
     }
+    func testStampInspectionAvoidsWholeFileHashAndRejectsChangedOrUnsafePaths() throws {
+        let (root, owner, store) = try fixture()
+        let nested = root.appendingPathComponent("nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let file = nested.appendingPathComponent("large.bin")
+        XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: 8 * 1024 * 1024 * 1024)
+        try handle.close()
+        let grant = try store.add(owner, selected: root)
+        let started = Date()
+        let stamp = try XCTUnwrap(MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/large.bin"))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5, "A sparse 8 GiB file must not be read to make a metadata observation")
+        XCTAssertEqual(stamp.path, "nested/large.bin")
+        XCTAssertEqual(stamp.kind, "file")
+        XCTAssertEqual(stamp.size, 8 * 1024 * 1024 * 1024)
+        XCTAssertEqual(stamp.id, stamp.version.split(separator: ":").prefix(2).joined(separator: ":"))
+        let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(stamp)) as? [String: Any])
+        XCTAssertEqual(Set(fields.keys), ["path", "id", "version", "kind", "size"])
+        XCTAssertNil(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/missing"))
+        try handleReplacement(file)
+        let changed = try XCTUnwrap(MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "nested/large.bin"))
+        XCTAssertNotEqual(changed.version, stamp.version)
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "link"))
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "link/child"))
+        XCTAssertThrowsError(try MobileFolderReader.inspectStamp(bookmark: grant.bookmark, path: "../escape"))
+    }
+
+    private func handleReplacement(_ file: URL) throws {
+        try FileManager.default.removeItem(at: file)
+        try Data("changed".utf8).write(to: file)
+    }
     func testDirectoriesAndEmptyFilesStayInCompleteInventory() throws {
         let (root, scope, store) = try fixture()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("nested"), withIntermediateDirectories: true)

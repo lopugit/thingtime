@@ -13,7 +13,7 @@ import { cancelSyncForActivity } from './syncTaskRuntime';
 import { recoverSavedSyncEnrollments } from './syncEnrollmentRecovery.client';
 import { SYNC_ENROLLMENT_WAKE_EVENT } from './configurationEditor';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
+import { SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import type { SyncScope } from './reconcile';
 
@@ -55,12 +55,12 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		const jobs = journal.jobs({ scope, currentScope, signal });
 		const readJobs = async () => {
 			const all: SyncJob[] = []; let after: string | undefined;
-			for (let page = 0; page <= MAX_SYNC_JOBS_PER_ACCOUNT / SYNC_JOB_PAGE_SIZE; page++) {
+			for (;;) {
 				const result = await jobs.list(after); currentScope(); all.push(...result.jobs);
 				if (!result.next) return all;
+				if (result.jobs.length === 0 || (after !== undefined && result.next <= after)) throw Error('Saved sync job discovery cursor did not advance.');
 				after = result.next;
 			}
-			throw Error('Saved sync job discovery exceeded its bound.');
 		};
 		const discovered = await readJobs();
 		const automaticPhotos = adapter.platform === 'ios' && supportsNativePhotoAutomation(adapter.bridge);

@@ -3,12 +3,13 @@ import { SyncUploadPriorities, useUploadPriorities, type UploadPriorityOptions }
 import { TransferSpeedTrackers, type TransferSpeedTrackersProps } from './TransferSpeedTrackers';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { parseSyncProgressDescriptor, projectSyncProgress, type SyncProgressDescriptor, type SyncProgressSource, type SyncProgressState, type SyncProgressRequest, type SyncProgressPage } from '~/fileSync/progressProjection';
-import { createJournalSyncProgressSource } from '~/fileSync/progressProjection.client';
+import { createJournalSyncProgressSource, readReservedSyncPublication } from '~/fileSync/progressProjection.client';
 import type { SyncScope } from '~/fileSync/reconcile';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
-import { syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
+import { SyncDetailsSection } from './SyncDetailsSection';
+import { syncRecoveryBlocks, syncResourceStatusBlocks, syncResourceStatusDisplay, priorityReadinessBlocks, priorityReadinessDisplay, syncProgressBlocks, syncProgressDisplay, type SyncProgressBranch } from './syncProgressBlocks';
 
 export type SyncProgressViewerProps = {
 	speedDraftState?: TransferSpeedTrackersProps['draftState'];
@@ -126,7 +127,34 @@ function SyncProgressSession({ scopeKey, series, descriptor, progress, currentSc
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={syncProgressDisplay(displayBranches, progress, status, readable, message, focusedFolder, priorities.enabled, priorities.disabled, descriptor?.run.plan.policy.mode)} actions={actions} enabled={!editing}>
 			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 		</TransientBlockHost>}
-	</SettingsDocumentHost><SyncResourceStatusViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers draftState={speedDraftState} scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+	</SettingsDocumentHost>{status === 'error' && descriptor && !readPage && !suppliedSource ? <SyncDetailsSection title="Recovery details">
+		<SyncRecoveryDetails key={`${JSON.stringify(descriptor.scope)}:${descriptor.run.id}`} descriptor={descriptor} currentScope={() => scopeRef.current()} scopeKey={scopeKey} accountTransport={accountTransport} />
+	</SyncDetailsSection> : null}<SyncResourceStatusViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><PriorityReadinessViewer scopeKey={scopeKey} progress={progress} state={status} accountTransport={accountTransport} /><TransferSpeedTrackers draftState={speedDraftState} scopeKey={scopeKey} stage={progress?.stage} state={status === 'running' && progress?.stage === 'complete' ? 'complete' : status} series={series} accountTransport={accountTransport} /></>;
+}
+
+function SyncRecoveryDetails({ descriptor, currentScope, scopeKey, accountTransport }: {
+	descriptor: SyncProgressDescriptor; currentScope(): SyncScope; scopeKey: string; accountTransport?: SettingsDocumentHostProps['accountTransport'];
+}) {
+	const [result, setResult] = React.useState<Awaited<ReturnType<typeof readReservedSyncPublication>> | null>(null);
+	const [error, setError] = React.useState(false);
+	const [loaded, setLoaded] = React.useState(false);
+	const scopeRef = React.useRef(currentScope); scopeRef.current = currentScope;
+	React.useEffect(() => {
+		const controller = new AbortController();
+		setResult(null); setError(false); setLoaded(false);
+		void readReservedSyncPublication(descriptor, () => scopeRef.current(), undefined, controller.signal).then(value => {
+			if (!controller.signal.aborted) { setResult(value); setLoaded(true); }
+		}).catch(() => { if (!controller.signal.aborted) { setError(true); setLoaded(true); } });
+		return () => controller.abort();
+	}, [descriptor]);
+	const sync = { recoveryStatus: error ? 'Saved recovery details are unavailable.' : result ? `${result.direction} ${result.kind} · Saved operation retained for recovery.` : loaded ? 'No operation is currently reserved.' : 'Reading saved recovery details…',
+		hasReservation: !!result, operationId: result?.operationId ?? '', hasFileId: !!result?.fileId, fileId: result?.fileId ?? '',
+		effect: result ? `Canonical dispatch: ${result.canonicalDispatched === true ? 'possible or published' : result.canonicalDispatched === false ? 'not marked' : 'unknown on this saved operation'} · Saved receipt: ${result.receiptPresent ? 'present' : 'not recorded'} · Confirmed: ${result.confirmed ? 'yes' : 'no'}` : '' };
+	return <SettingsDocumentHost documentKey="file-sync-recovery-details" defaultDocument={syncRecoveryBlocks} scopeKey={scopeKey} title="Sync recovery details" accountTransport={accountTransport}>
+		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ sync }} actions={{}} enabled={!editing}>
+			<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
+		</TransientBlockHost>}
+	</SettingsDocumentHost>;
 }
 
 function PriorityReadinessViewer({ scopeKey, progress, state, accountTransport }: {
