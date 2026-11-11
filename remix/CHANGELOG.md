@@ -146,6 +146,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-11-11: Correct private S3 setup examples to permit exact-origin signed GET/HEAD downloads alongside PUT uploads, and add a browser regression for encrypted attachment CORS failure and successful byte-verified download. — Codex (AI)
+- 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
+  unsupported-parameter responses into fixed safe chat diagnostics. Unknown
+  responses retain status-only messages; upstream text and credential/request
+  echoes remain private. Reply capability 1.23.2; live rejection cause remains
+  unverified until the authorized real-account retry. **Codex (AI)**
+- 2026-11-11: Explain Facebook's exact New Pages Experience endpoint/account
+  restriction with fixed safe copy while preserving confirmed grants and
+  permission-denied diagnostics. Feed 2.0.2 / diagnostics 1.0.1. **Codex (AI)**
 
 - 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
   grant diagnostics and Claude effort corrections into one release; negotiate

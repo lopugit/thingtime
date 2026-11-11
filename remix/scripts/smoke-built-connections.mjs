@@ -17,8 +17,8 @@ if (process.argv[2] !== '--worker') {
   const { default: app } = await import(pathToFileURL(bundle).href);
   assert.equal(typeof app.fetch, 'function');
   const features = { 'connections-providers': '2.0.0', connections: '2.3.0', 'connections-unlink': '2.1.0',
-    'connections-feed': '2.0.1', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.2.0',
-    'connections-oauth-callback': '2.2.0', 'connections-diagnostics': '1.0.0', 'connections-named': '1.1.0', 'connections-provider-icon': '1.0.0' };
+    'connections-feed': '2.0.2', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.2.0',
+    'connections-oauth-callback': '2.2.0', 'connections-diagnostics': '1.0.1', 'connections-named': '1.1.0', 'connections-provider-icon': '1.0.0' };
   for (const path of ['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']) {
     const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
     assert.equal(response.status, 200, path);
