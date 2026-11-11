@@ -138,6 +138,67 @@ test('desktop context binds capabilities, origin and every native reply to the h
 	f.patch({ apiCapabilities: { schemaVersion: 1, origin: 'https://other.test', features: {} } });
 	await assert.rejects(host.authorizeDevice('owner', 'device', f.lifetime.signal));
 });
+
+test('a failed minor capability check refreshes its bound context once before accepting a deployment', async () => {
+	const f = fixture();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	await Promise.all([
+		host.requireCapability('api.files', '1.13.0'),
+		host.requireCapability('api.files', '1.13.0')
+	]);
+	assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+	await host.requireCapability('api.files', '1.13.0');
+	assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+});
+
+test('authorization queued behind a refresh succeeds without restoring an older manifest', async () => {
+	const f = fixture();
+	const oldManifest = { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } };
+	f.patch({ apiCapabilities: oldManifest });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	f.hold();
+	const refreshed = host.requireCapability('api.files', '1.13.0');
+	const authorized = host.authorizeDevice('owner', 'device', f.lifetime.signal);
+	for (let attempts = 0; attempts < 20 && f.calls.length < 2; attempts++) await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls[1]?.refreshApiCapabilities, true);
+	f.release();
+	// Model a verified ordinary context reply that still carries the older
+	// public snapshot. Its authorization is usable, but cannot roll back 1.13.
+	f.patch({ apiCapabilities: oldManifest });
+	for (let attempts = 0; attempts < 20 && f.calls.length < 3; attempts++) await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls[2]?.action, 'context');
+	assert.equal(f.calls[2]?.refreshApiCapabilities, undefined);
+	f.release();
+	await Promise.all([refreshed, authorized]);
+	await host.requireCapability('api.files', '1.13.0');
+	assert.equal(f.calls.filter(call => call.refreshApiCapabilities === true).length, 1);
+});
+
+test('capability refresh preserves old, breaking and changed-authority refusals', async () => {
+	for (const returnedVersion of ['1.12.2', '2.0.0']) {
+		const f = fixture();
+		f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+		const host = await f.create();
+		f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: returnedVersion } } } });
+		await assert.rejects(host.requireCapability('api.files', '1.13.0'), /Thingtime capability api.files is incompatible/);
+		assert.equal(f.calls.filter(call => call.action === 'context' && call.refreshApiCapabilities === true).length, 1);
+	}
+	const f = fixture();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.12.2' } } } });
+	const host = await f.create();
+	f.patch({ apiCapabilities: { schemaVersion: 1, origin, features: { 'api.files': { version: '1.13.0' } } } });
+	f.hold();
+	const pending = host.requireCapability('api.files', '1.13.0');
+	for (let attempts = 0; attempts < 20 && !f.calls.some(call => call.action === 'context' && call.refreshApiCapabilities === true); attempts++)
+		await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(f.calls.some(call => call.action === 'context' && call.refreshApiCapabilities === true), true);
+	f.current(false);
+	f.release();
+	await assert.rejects(pending, /Identity changed/);
+});
 test('desktop remaps only pinned authenticated API requests and never lends cookies to signed upload URLs', async () => {
 	const f = fixture(),
 		host = await f.create();

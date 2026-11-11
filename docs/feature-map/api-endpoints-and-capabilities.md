@@ -13,7 +13,14 @@ Diagnostics 1.0.1 retains `permission-denied` for that restriction independently
 of confirmed grants. Existing client shapes and minimum ranges remain compatible.
 Run `test:connections` and the compiled Connections smoke after building.
 
-Device sync control 1.5.0 adds config-scoped activity and paged receipt history
+Device sync control 1.6.0 adds an optional exact saved-intent recovery command
+for an idle worker with a retained strict scanner. The browser requires both the
+selected origin's compatible feature, the executing worker's independent
+recovery advertisement and an owner-private strictCapturePending job hint;
+earlier workers and first-time intents keep queue-only enrollment. The worker
+rechecks pause, config revision, original job and scanner under the root lock
+before native cleanup and preserves the original receipts and job ID. Version
+1.5.0 added config-scoped activity and paged receipt history
 to the existing command/status protocol. `fileSync/remoteSyncWorker.client.ts` reads the
 same native receipt journal used locally; `api/utils/devices/` enforces pairing,
 owning account and private-config authorization. Closed result validation and

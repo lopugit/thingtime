@@ -26,6 +26,35 @@ test('metadata-only stamp inspection retains the same host identity and exact pa
     assert.equal(f.calls.length, 1);
 });
 
+test('same-page capability refresh reads the selected origin once and keeps the hint out of native requests', async () => {
+    const f = fixture(); let version = '1.12.2', reads = 0;
+    f.host.capabilities = async context => {
+        reads++;
+        return { schemaVersion: 1, origin: context.apiOrigin, features: {
+            'api.devices-node-identity': { version: '1.0.0' }, 'api.files': { version }
+        } };
+    };
+    f.run(async (_method, request) => {
+        assert.equal(Object.hasOwn(request, 'refreshApiCapabilities'), false);
+        return { ...request, roots: [], capabilities: { fileAccessVersion: '1.22.0' } };
+    });
+    const context = refreshApiCapabilities => f.host.request(f.event, f.input({ action: 'context', origin: undefined,
+        ...(refreshApiCapabilities ? { refreshApiCapabilities: true } : {}) }));
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.12.2');
+    version = '1.13.0';
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.12.2');
+    assert.equal(reads, 1);
+    assert.equal((await context(true)).apiCapabilities.features['api.files'].version, '1.13.0');
+    assert.equal((await context()).apiCapabilities.features['api.files'].version, '1.13.0');
+    assert.equal(reads, 2);
+    await assert.rejects(f.host.request(f.event, f.input({ action: 'list', refreshApiCapabilities: true })));
+    await assert.rejects(f.host.request(f.event, f.input({ action: 'context', origin: undefined, refreshApiCapabilities: false })));
+    assert.equal(reads, 2);
+    f.account('other');
+    await assert.rejects(context(true));
+    assert.equal(reads, 2);
+});
+
 test('all inventory capture lifecycle operations retain policy and host identity fences', async () => {
     const operations = [
         ...['scan-stream', 'scan-changes'].map(action => [action, 'one-way-supported']),

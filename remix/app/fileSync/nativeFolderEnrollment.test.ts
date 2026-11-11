@@ -17,6 +17,7 @@ test('explicit native enrollment proves exact saved settings, private destinatio
  const queuedConfig = { ...saved, id: queuedScope.rootId };
  const calls: string[] = [];
  let changed = false, refuse = false, refuseCancellation = false, rejectWriteCheck = false;
+ let onScanCancel: (() => Promise<void>) | undefined;
  let waitForApproval: (() => Promise<void>) | undefined;
  const strictCapture = '00000000-0000-4000-8000-000000000002';
  const legacyCapture = '00000000-0000-4000-8000-000000000003';
@@ -39,6 +40,7 @@ test('explicit native enrollment proves exact saved settings, private destinatio
     } else {
      assert.equal(request.captureId, strictCapture);
      if (refuseCancellation) throw Error('Native scanner cancellation was not confirmed');
+     await onScanCancel?.();
     }
    }
    if (request.action === 'write-check' && rejectWriteCheck) throw Error('No current native write approval');
@@ -50,7 +52,7 @@ test('explicit native enrollment proves exact saved settings, private destinatio
    return { ...request, ...(request.action === 'scan-cancel' ? { cancelled: true, complete: false, excludedPaths: request.excludedPaths ?? [] } : {}), origin: scope.origin, roots: [{ id: rootId, name: 'Fixture', publicationVersion: '1.2.0' }],
     conditions: { network: 'wifi', charging: true }, writeApproval: request.approval,
     capabilities: { fileAccessVersion: '1.18.0', fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0', fileResourceLimitsVersion: '1.1.0' },
-    apiCapabilities: { schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.36.0' }, 'api.files': { version: '1.2.0' } } }
+    apiCapabilities: { schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.36.0' }, 'api.files': { version: '1.2.0' }, 'api.devices-sync-control': { version: '1.6.0' } } }
    };
   }
  };
@@ -101,14 +103,19 @@ test('explicit native enrollment proves exact saved settings, private destinatio
   const captured = (await jobs.strictCapture(enrolled, strictCapture))!;
   const needsReview = (await jobs.attention(captured))!;
   refuseCancellation = true;
-  await assert.rejects(enrollNativeFolderSync(saved, scope, 0), /could not be verified/i);
+  await assert.rejects(enrollNativeFolderSync(saved, scope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true }), /could not be verified/i);
   assert.deepEqual(await jobs.read(), needsReview, 'a lost scanner confirmation leaves the saved capture intact');
   refuseCancellation = false;
-  const recovered = await enrollNativeFolderSync(saved, scope, 0);
+  const recovered = await enrollNativeFolderSync(saved, scope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true });
   assert.equal(recovered.id, enrolled.id, 'resume retains the existing work identity');
   assert.equal(recovered.strictCaptureId, undefined);
   assert.equal(recovered.state, 'runnable');
   assert.equal(calls.filter(call => call === 'scan-cancel').length, 2);
+  assert.deepEqual(await enrollNativeFolderSync(saved, scope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true }), recovered, 'already enabled exact work is idempotent');
+  assert.equal((await jobs.read())?.id, recovered.id);
 
   const otherScope = { ...scope, rootId: 'other-config' };
   let finishTransfer!: () => void;
@@ -150,6 +157,8 @@ test('explicit native enrollment proves exact saved settings, private destinatio
   const scheduledQueue = (await queuedJobs.finish(admittedQueue, Date.now()))!;
   const scheduledAttention = (await queuedJobs.attention(scheduledQueue))!;
   await assert.rejects(enrollNativeFolderSync(queuedConfig, queuedScope, 0, undefined, undefined, { queue: true, respectPause: true }), /saved work/);
+  await assert.rejects(enrollNativeFolderSync(queuedConfig, queuedScope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true }), /saved work/);
   assert.equal((await queuedJobs.read())?.id, scheduledAttention.id,
    'a later scheduled attempt cannot be silently given a new operation ID by queued recovery');
 
@@ -197,7 +206,27 @@ test('explicit native enrollment proves exact saved settings, private destinatio
   assert.equal(persistedPause?.state, 'paused');
   nativeSyncTasks.resumeScope(fencedScope); // Simulate process loss of the live pause barrier.
   await assert.rejects(enrollNativeFolderSync(fencedConfig, fencedScope, 0, undefined, undefined, { queue: true, respectPause: true }), /saved work/);
+  await assert.rejects(enrollNativeFolderSync(fencedConfig, fencedScope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true }), /changed|saved work/);
   assert.deepEqual(await journal.jobs({ scope: fencedScope, currentScope: () => fencedScope }).read(), persistedPause);
+
+  const retained = (await jobs.attention((await jobs.strictCapture(edited, strictCapture))!))!;
+  const stale = { ...current, updatedAt: '2026-10-20T00:03:00.000Z' };
+  const beforeStale = calls.length;
+  await assert.rejects(enrollNativeFolderSync(stale, scope, 0, undefined, undefined,
+   { recoverSavedIntent: true, respectPause: true }), /changed/);
+  assert.deepEqual(await jobs.read(), retained);
+  assert.equal(calls.filter(action => action === 'scan-cancel').length, 4, 'changed saved revision cannot cancel a retained scanner');
+  assert.ok(calls.length > beforeStale, 'the exact private config was re-read');
+  onScanCancel = async () => { assert.deepEqual(await jobs.pause(retained), { ...retained, state: 'paused', revision: retained.revision + 1 }); };
+  try {
+   await assert.rejects(enrollNativeFolderSync(current, scope, 0, undefined, undefined,
+    { recoverSavedIntent: true, respectPause: true }), /changed while retiring|setup was paused/);
+   const raced = (await jobs.read())!;
+   assert.equal(raced.id, retained.id);
+   assert.equal(raced.state, 'paused');
+   assert.equal(raced.strictCaptureId, strictCapture, 'a Pause racing native cleanup keeps the original capture marker and receipts');
+  } finally { onScanCancel = undefined; }
  } finally {
   nativeSyncTasks.invalidate();
   await setDesktopSyncScheduled(false, bridge as never);
