@@ -210,7 +210,7 @@ try {
 	const manifest = (await expect('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, base);
 	assert.ok(capabilitySatisfies(manifest.features['api.auth-accounts-remove']?.version, '1.0.1'));
-	assert.ok(capabilitySatisfies(manifest.features['api.file-sync-transfer-admissions']?.version, '1.3.0'));
+	assert.ok(capabilitySatisfies(manifest.features['api.file-sync-transfer-admissions']?.version, '1.5.0'));
 	assert.deepEqual(manifest.operations.find((operation: any) => operation.path === admissions).methods, ['POST']);
 	assert.ok(capabilitySatisfies(manifest.features['api.things']?.version, '1.53.0'));
 	assert.ok(capabilitySatisfies(manifest.features['api.things-update']?.version, '1.21.0'));
@@ -322,6 +322,7 @@ try {
 	await expect(admissions, first, { ...owner, origin: alternateOrigin }, 409);
 	await expect(admissions, complete(a.admissionId), { ...node, headers: { Origin: alternateOrigin } }, 403);
 	await expect(uploads + '/parts', { uploadId: first.uploadId, parts: signParts(a.admissionId, single).parts }, node, 401);
+	await expect(admissions, { ...signParts(a.admissionId, single), transport: 'background-file-v1' }, node, 400);
 	await expect(uploads + '/complete', { uploadId: first.uploadId }, node, 401);
 	await expect('/api/v1/files', { id: first.requestId }, node, 401);
 	await expect('/api/v1/files', { id: first.requestId }, { bearer: a.admissionId }, 401);
@@ -459,6 +460,13 @@ try {
 		}
 		assert.deepEqual((await expect(admissions, request, node)).data, reserved);
 		const signed = (await expect(admissions, signParts(reserved.admissionId, parts), node)).data.parts;
+		if (i === 0) {
+			await expect(admissions, { ...signParts(reserved.admissionId, parts), transport: 'caller-selected' }, node, 400);
+			await expect(admissions, { ...complete(reserved.admissionId), transport: 'background-file-v1' }, node, 400);
+			const local = (await expect(admissions, { ...signParts(reserved.admissionId, parts), transport: 'background-file-v1' }, node)).data.parts;
+			assert.ok(local.every((part: any) => !Object.hasOwn(part, 'transport')), 'local storage never asserts canonical provider redirect trust');
+			assert.ok(local.every((part: any) => Date.parse(part.expiresAt) <= Date.parse(reserved.expiresAt)));
+		}
 		await Promise.all(signed.map((part: any, index: number) => put(part, parts[index])));
 		await expect(admissions, complete(reserved.admissionId), node);
 		const ready = (await expect(admissions, request, node)).data;

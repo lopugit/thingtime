@@ -6,6 +6,7 @@ import Photos
 private class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     var permission = "full", exports = 0, inventoryCalls = 0
     var records: [PhotoResource] = [], bytes: [String: Data] = [:], iCloud: [String: Data] = [:]
+    var failures: [String: PhotoLibraryReader.Failure] = [:]
     var downloads = 0
     var membershipRevision: UInt64?
     var attempts: [String] = []
@@ -23,6 +24,7 @@ private class PhotoFixtures: PhotoResourceProvider, @unchecked Sendable {
     }
     func write(_ resource: PhotoResource, to url: URL) throws {
         try validate(resource); exports += 1; attempts.append(resource.path)
+        if let failure = failures[resource.path] { throw failure }
         guard let bytes = bytes[resource.path] else { throw PhotoLibraryReader.Failure.cloudOriginal }
         try bytes.write(to: url); onWrite?()
     }
@@ -282,19 +284,19 @@ final class PhotoLibraryTests: XCTestCase {
                 allowCloudGaps: true, download: allow, queueRequest: queue))
         }
         let first = try capture(), firstBatch = try XCTUnwrap(first.photoQueue)
-        XCTAssertEqual(firstBatch.assetKeys.count, 4)
-        XCTAssertEqual(firstBatch.pending, 34)
-        XCTAssertEqual(provider.attempts, [newest.path, companion.path, older[36].path, older[35].path, older[34].path])
+        XCTAssertEqual(firstBatch.assetKeys.count, 10)
+        XCTAssertEqual(firstBatch.pending, 28)
+        XCTAssertEqual(provider.attempts, [newest.path, companion.path] + older.suffix(9).reversed().map(\.path))
         XCTAssertEqual(provider.downloads, 2)
         XCTAssertEqual(provider.inventoryCalls, 1)
-        XCTAssertEqual(try reader.page(scope: scope, capture: first, offset: 0).entries.count, 5)
+        XCTAssertEqual(try reader.page(scope: scope, capture: first, offset: 0).entries.count, 11)
         XCTAssertEqual(try reader.status(scope: scope, id: first.id, allowCloudGaps: true, queueRequest: queue), first)
         XCTAssertEqual(provider.inventoryCalls, 1, "Sealing, status and paging use the same PhotoKit membership stamp")
         let arriving = provider.add("arrival", bytes: Data([90]), captured: 110)
         try reader.finishQueueBatch(scope: scope, request: queue, batchId: firstBatch.id)
         try reader.finishQueueBatch(scope: scope, request: queue, batchId: firstBatch.id)
         let second = try capture()
-        XCTAssertEqual(provider.attempts[5], arriving.path, "A newer arrival precedes the previous backlog")
+        XCTAssertEqual(provider.attempts[11], arriving.path, "A newer arrival precedes the previous backlog")
         var next = second
         var number = 2
         while true {
@@ -303,9 +305,9 @@ final class PhotoLibraryTests: XCTestCase {
             if batch.pending == 0 { break }
             next = try capture(); number += 1
         }
-        XCTAssertEqual(number, 10)
+        XCTAssertEqual(number, 4)
         XCTAssertEqual(Set(provider.attempts).count, 40)
-        XCTAssertEqual(provider.inventoryCalls, 2, "Ten batches and one membership change require only two whole-library reads")
+        XCTAssertEqual(provider.inventoryCalls, 2, "Four batches and one membership change require only two whole-library reads")
     }
 
     func testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt() throws {
@@ -324,7 +326,7 @@ final class PhotoLibraryTests: XCTestCase {
         let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "fixture", rootId: UUID().uuidString)
         let queue = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
         let oldSelection = PhotoBackupQueue(directory: alias.appendingPathComponent("legacy"), request: queue)
-        XCTAssertEqual(try oldSelection.select(revision: "library", resources: provider.records).assets.count, 4)
+        XCTAssertEqual(try oldSelection.select(revision: "library", resources: provider.records).assets.count, 6)
         let refined = try oldSelection.select(revision: "library", resources: provider.records, replaceStale: true, startWithSingleAsset: true)
         XCTAssertEqual(refined.assets.flatMap(\.resources), [newest, companion])
         var indexed: PhotoLibraryReader.IndexedLibrary?
@@ -353,9 +355,9 @@ final class PhotoLibraryTests: XCTestCase {
 
         let reopened = try makeReader(provider, queueDirectory: alias)
         let next = try capture(reopened)
-        XCTAssertEqual(next.assetKeys.count, 4)
-        XCTAssertEqual(next.pending, 1)
-        XCTAssertEqual(Array(provider.attempts.dropFirst(2)), older.suffix(4).reversed().map(\.path))
+        XCTAssertEqual(next.assetKeys.count, 5)
+        XCTAssertEqual(next.pending, 0)
+        XCTAssertEqual(Array(provider.attempts.dropFirst(2)), older.suffix(5).reversed().map(\.path))
 
         let outcomes = try XCTUnwrap(files.enumerator(at: real, includingPropertiesForKeys: nil))
         let record = try XCTUnwrap(outcomes.compactMap { $0 as? URL }.first { $0.deletingLastPathComponent().lastPathComponent == "attempts" })
@@ -368,7 +370,7 @@ final class PhotoLibraryTests: XCTestCase {
         provider.membershipRevision = 0
         let companion = provider.add("newest", index: 1, bytes: Data([8]), captured: 90, kind: "video")
         let newest = provider.add("newest", bytes: Data([9]), captured: 90, kind: "video")
-        let older = (0..<8).map { provider.add("older-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
+        let older = (0..<18).map { provider.add("older-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
         let owner = try FileSyncOwnerScope(ownerId: "ordered", url: URL(string: "https://fixture.invalid")!)
         let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
         let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
@@ -388,7 +390,7 @@ final class PhotoLibraryTests: XCTestCase {
         var firstDiscovery: PhotoLibraryReader.InventoryProgress?
         let first = try capture(initial) { if $0.latest != nil { firstDiscovery = $0 } }
         XCTAssertEqual(firstDiscovery?.inspected, 1)
-        XCTAssertEqual(firstDiscovery?.total, 9)
+        XCTAssertEqual(firstDiscovery?.total, 19)
         XCTAssertEqual(firstDiscovery?.indexed.files, 2)
         XCTAssertEqual(firstDiscovery?.latest?.kind, .video)
         XCTAssertEqual(first.remainingKnown, false)
@@ -402,9 +404,9 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertEqual(provider.discovered, ["newest"], "Exact retained resources reopen without scanning")
         try restarted.finishQueueBatch(scope: scope, request: request, batchId: first.id)
         let next = try capture(restarted)
-        XCTAssertEqual(next.assetKeys.count, 4)
+        XCTAssertEqual(next.assetKeys.count, 10)
         XCTAssertEqual(next.remainingKnown, false)
-        XCTAssertEqual(provider.discovered, ["newest"] + older.suffix(4).reversed().map(\.asset))
+        XCTAssertEqual(provider.discovered, ["newest"] + older.suffix(10).reversed().map(\.asset))
         try restarted.finishQueueBatch(scope: scope, request: request, batchId: next.id)
 
         let later = provider.add("added", bytes: Data([99]), modified: 100, kind: "photo")
@@ -414,13 +416,74 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertEqual(provider.inventoryCalls, 0)
     }
 
+    func testBoundedLookaheadDoesNotAdvanceOrReplaceUnacknowledgedSelection() throws {
+        let provider = OrderedPhotoFixtures()
+        provider.membershipRevision = 0
+        for i in 0..<30 { _ = provider.add("asset-\(i)", bytes: Data([UInt8(i)]), captured: Double(i), kind: "photo") }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        let queue = PhotoBackupQueue(directory: directory, request: request)
+        let first = try queue.selectOrdered(provider: provider, replaceStale: false, progress: { _ in })
+        XCTAssertEqual(first.assets.count, 1)
+        let before = try Data(contentsOf: directory.appendingPathComponent("current.json"))
+        let resources = try queue.lookahead(provider: provider, batchId: first.selection.id)
+        XCTAssertEqual(resources.count, 10)
+        XCTAssertFalse(resources.contains { $0.asset == "asset-29" })
+        XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent("current.json")), before)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("ordered-cursor.json").path))
+        let reopened = PhotoBackupQueue(directory: directory, request: request)
+        let retained = try reopened.selectOrdered(provider: provider, replaceStale: false, progress: { _ in })
+        XCTAssertEqual(retained.selection.id, first.selection.id)
+        XCTAssertEqual(retained.assets.map(\.key), first.assets.map(\.key))
+        XCTAssertEqual(provider.inventoryCalls, 0)
+    }
+
+    func testUnreadableNewestOriginalPersistsTypedRetryWithoutBlockingOlderBatch() throws {
+        let provider = OrderedPhotoFixtures(); provider.membershipRevision = 0
+        let newest = provider.add("unreadable-newest", bytes: Data([9]), captured: 100, kind: "photo")
+        provider.failures[newest.path] = .readFailed
+        let local = provider.add("ready-older", bytes: Data([8]), captured: 90, kind: "photo")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = try FileSyncOwnerScope(ownerId: "unreadable", url: URL(string: "https://fixture.invalid")!)
+        let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
+        let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
+        func capture(_ reader: PhotoLibraryReader, prepared: PhotoLibraryReader.PreparedCloudOriginal? = nil) throws -> PhotoBackupQueueBatch {
+            let id = UUID().uuidString.lowercased()
+            let c = try reader.prepareCapture(scope: scope, id: id, generation: id, allowCloudGaps: true,
+                queueRequest: request, startWithSingleAsset: true, preparedDeferred: prepared)
+            return try XCTUnwrap(reader.sealCapture(scope: scope, capture: c).photoQueue)
+        }
+        let reader = try makeReader(provider, queueDirectory: directory)
+        let first = try capture(reader)
+        XCTAssertEqual(first.unavailableReasons, ["photo-read": 1, "cloud-download": 0])
+        XCTAssertTrue(try reader.queueBatchEntries(scope: scope, request: request, batchId: first.id).isEmpty)
+        try reader.finishQueueBatch(scope: scope, request: request, batchId: first.id)
+        let reopened = try makeReader(provider, queueDirectory: directory)
+        let older = try capture(reopened)
+        XCTAssertEqual(try reopened.queueBatchEntries(scope: scope, request: request, batchId: older.id).map(\.path), [local.path])
+        XCTAssertEqual(older.unavailableReasons, ["photo-read": 1, "cloud-download": 0])
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: older.id)
+        provider.failures.removeValue(forKey: newest.path)
+        let pending = try XCTUnwrap(reopened.nextDeferredCloudOriginal(scope: scope, request: request))
+        XCTAssertEqual(pending, newest)
+        let ready = try reopened.prepareDeferredCloudOriginal(scope: scope, resource: pending, control: nil)
+        defer { reopened.releaseDeferredCloudOriginal(ready) }
+        let recovered = try capture(reopened, prepared: ready)
+        XCTAssertEqual(try reopened.queueBatchEntries(scope: scope, request: request, batchId: recovered.id).map(\.path), [newest.path])
+        XCTAssertEqual(recovered.unavailableReasons, ["photo-read": 0, "cloud-download": 0])
+        try reopened.finishQueueBatch(scope: scope, request: request, batchId: recovered.id)
+        XCTAssertFalse(try reopened.hasDeferredCloudOriginals(scope: scope, request: request))
+    }
+
     func testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches() async throws {
         let provider = OrderedPhotoFixtures()
         provider.membershipRevision = 0
         let cloudBytes = Data([9, 6, 3])
         let cloud = provider.add("cloud-newest", bytes: cloudBytes, captured: 90, kind: "photo")
         provider.iCloud[cloud.path] = provider.bytes.removeValue(forKey: cloud.path)
-        let local = (0..<9).map { provider.add("local-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
+        let local = (0..<19).map { provider.add("local-\($0)", bytes: Data([UInt8($0 + 1)]), captured: Double($0), kind: "photo") }
         let owner = try FileSyncOwnerScope(ownerId: "ordered-cloud", url: URL(string: "https://fixture.invalid")!)
         let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
         let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
@@ -466,7 +529,7 @@ final class PhotoLibraryTests: XCTestCase {
         let fetching = await Task.detached { started.wait(timeout: .now() + 5) == .success }.value
         XCTAssertTrue(fetching)
         var readyPaths: [String] = []
-        for count in [4, 4, 1] {
+        for count in [10, 9] {
             let ready = try capture(reopened)
             let entries = try reopened.queueBatchEntries(scope: scope, request: request, batchId: ready.id)
             XCTAssertEqual(entries.count, count)
@@ -592,7 +655,7 @@ final class PhotoLibraryTests: XCTestCase {
         provider.membershipRevision = 0
         let newest = provider.add("newest", bytes: Data([7]), captured: 90)
         provider.iCloud[newest.path] = provider.bytes.removeValue(forKey: newest.path)
-        for n in 0..<6 { provider.add("older-\(n)", bytes: Data([UInt8(n + 1)]), captured: Double(n)) }
+        for n in 0..<12 { provider.add("older-\(n)", bytes: Data([UInt8(n + 1)]), captured: Double(n)) }
         let owner = try FileSyncOwnerScope(ownerId: "ordered-wifi", url: URL(string: "https://fixture.invalid")!)
         let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
         let request = PhotoBackupQueueRequest(epoch: UUID(), configurationId: "photos", configurationRevision: "r1")
@@ -636,7 +699,7 @@ final class PhotoLibraryTests: XCTestCase {
     func testChangedSelectedAssetStartsNewUnacknowledgedBatchWithoutDroppingKnownReceipt() throws {
         let provider = PhotoFixtures()
         provider.membershipRevision = 0
-        for n in 0..<8 { provider.add("asset-\(n)", bytes: Data([UInt8(n)]), captured: Double(n)) }
+        for n in 0..<18 { provider.add("asset-\(n)", bytes: Data([UInt8(n)]), captured: Double(n)) }
         let reader = try makeReader(provider)
         let owner = try FileSyncOwnerScope(ownerId: "ordered-change", url: URL(string: "https://fixture.invalid")!)
         let scope = PhotoLibraryReader.Scope(owner: owner, deviceId: "device", rootId: UUID().uuidString)
@@ -655,10 +718,10 @@ final class PhotoLibraryTests: XCTestCase {
         XCTAssertThrowsError(try reader.page(scope: scope, capture: interrupted, offset: 0))
         let refreshed = try capture(), latest = try XCTUnwrap(refreshed.photoQueue)
         XCTAssertNotEqual(latest.id, stale.id)
-        XCTAssertEqual(latest.assetKeys.count, 3)
+        XCTAssertEqual(latest.assetKeys.count, 7)
         XCTAssertTrue(Set(latest.assetKeys).isDisjoint(with: prior.assetKeys))
         XCTAssertThrowsError(try reader.finishQueueBatch(scope: scope, request: queue, batchId: stale.id))
-        XCTAssertEqual(try reader.queueBatchEntries(scope: scope, request: queue, batchId: latest.id).count, 3)
+        XCTAssertEqual(try reader.queueBatchEntries(scope: scope, request: queue, batchId: latest.id).count, 7)
         try reader.finishQueueBatch(scope: scope, request: queue, batchId: latest.id)
     }
 
