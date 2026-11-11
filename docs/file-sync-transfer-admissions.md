@@ -2,7 +2,7 @@
 
 An installed device can finish a positive-size private multipart upload without
 retaining the owner's web session. Negotiate `api.file-sync-transfer-admissions`
-1.0.0 for staging, 1.1.0 for exact Photos publication, 1.2.0 for a creation-only Photos run, or 1.3.0 for the current native Photos runner on the selected account origin. The exact request envelopes are in
+1.0.0 for staging, 1.1.0 for exact Photos publication, 1.2.0 for a creation-only Photos run, 1.3.0 for guarded native Photos updates, or 1.5.0 for canonical background file transport on the selected account origin. The exact request envelopes are in
 `/api/v1/files/sync-transfer-admissions-docs`.
 
 The owner first uses the ordinary attachment API to reserve the original request
@@ -40,7 +40,9 @@ measurement alone.
 An exact retry returns the same live admission and expiry. Explicit revoke, a
 changed configuration revision, loss of private destination access, or original
 owner or pairing revocation stops new URLs and receipts. Already issued URLs are
-valid for up to two minutes; a provider operation already started may leave the
+valid for up to two minutes (up to ten minutes for an explicitly requested
+1.5 background-file grant, always bounded by admission and reservation expiry);
+a provider operation already started may leave the
 same private attachment staged for the owner to reconcile. While the same
 reservation is pending, the owner can explicitly replace a revoked or expired
 admission by its exact ID under the current configuration revision. Replacement
@@ -82,9 +84,48 @@ On supported iPhones, the explicit Run in Background button can request an
 iOS continued-processing window for the same queue. It works on real queued
 originals and finishes when eligible work is exhausted. Automatic checks use
 the ordinary iOS background scheduler. iOS can decline or expire a continued
-request. A held run resumes only after an explicit user action.
+request. System interruption retains the automatic retry; explicit Pause remains
+paused until the user resumes it. A clean pass that durably defers unavailable
+originals is distinct from a failed task and from a fully backed-up library.
 
-The default managed-upload rate is 5 Mbps (625,000 bytes per second). An
+## Persistent background file transport
+
+After negotiating 1.5.0, the paired device can include
+`transport: "background-file-v1"` on an admitted Photos `parts` request. Only
+the canonical direct regional S3 signer can return `parts[].transport` with
+`kind`, exact HTTPS `origin` and `path`, `method: "PUT"`,
+`redirects: "provider-managed"`, and the signed URL's `expiresAt`. The signer
+checks the configured bucket/region, object path, multipart identity, checksum,
+signed Content-Length, bucket owner and expiry. The client compares the
+descriptor to that exact signed request before choosing its background lane.
+Local storage, custom adapters and legacy requests omit this descriptor and
+retain the foreground sender. Callers cannot add it to generic attachment
+requests or non-Photos admissions.
+
+iOS background URLSession transfers files in a system process and always follows
+redirects. The descriptor deliberately trusts the canonical S3 provider for
+that behavior; it does not turn arbitrary upload URLs into trusted destinations.
+No account credential or cookie is attached to the object PUT. The app's private
+durable journal retains reservation, source and policy identity, not signed URLs
+or account credentials. System-managed requests hold only their bounded signed
+byte grants. Publication still requires current authorization and the canonical
+verified receipt. An expired scheduled URL is retryable under the original
+admission and part identity; scheduling never guarantees that iOS starts before
+expiry. Force-quitting the app cancels its system transfers until a normal reopen.
+
+BGTaskScheduler and background URLSession are separate APIs. Apple's simulator
+does not support background-processing task grants. Controlled lifecycle tests
+can verify cancellation, duplicate callbacks and recovery logic; they cannot
+prove continued-task delivery on a phone. A background transfer test must
+independently observe bytes/receipts while the app is inactive and after recovery.
+See Apple's [background sessions](https://developer.apple.com/documentation/foundation/downloading-files-in-the-background)
+and [scheduler unavailable](https://developer.apple.com/documentation/backgroundtasks/bgtaskscheduler/error/unavailable)
+contracts.
+
+The default managed-upload average is 5 Mbps (625,000 bytes per second).
+Background file transfers use aggregate admission scheduling; individual
+transfers can be faster because iOS does not expose a stream-rate controller
+for its daemon. The foreground fallback retains byte-paced delivery. An
 optional hourly allowance applies to measured app-managed upload payload; it
 does not count Photos/iCloud download traffic. Governed connections on a device
 share the persisted usage ledger and their own configured allowance is checked
