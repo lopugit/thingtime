@@ -124,6 +124,8 @@ export function syncProgressDisplay(branches: Record<string, SyncProgressBranch>
 	const indexed = stoppedIndex ? `Indexing ${state === 'error' ? 'stopped' : state} before completion.${progress?.indexed !== undefined ? ` ${progress.indexed.toLocaleString()} entries observed.` : ''}`
 		: liveIndex ? `${progress?.indexState === 'watching' ? 'Initial scan finished. Watching for new and changed files.' : 'Indexing while files transfer. Total still being discovered.'}${progress?.indexed === undefined ? '' : ` ${progress.indexed.toLocaleString()} index observations saved.`}`
 		: progress?.indexState === 'complete' && progress.totalFinal === false ? 'Initial scan finished. Preparing remaining indexed entries while files transfer.'
+		: hasIndex && state === 'running' && progress?.stage === 'scanning' && progress.indexed !== undefined
+			? `Current scan: ${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal !== undefined && progress.coverage !== 'partial' ? ` of ${progress.indexTotal.toLocaleString()}.` : '. Total still being discovered.'} Saved hierarchy remains visible below.`
 		: hasIndex ? summary ? `${summary.files.toLocaleString()} files and ${summary.folders.toLocaleString()} folders indexed.` : 'Structure indexed. Reading saved totals…'
 		: progress?.indexed !== undefined ? `${progress.indexed.toLocaleString()} entries indexed${progress.indexTotal === undefined ? ' · Total still being discovered.' : ` of ${progress.indexTotal.toLocaleString()}.${preparation ? '' : ' Validating structure…'}`}`
 		: preparation ? 'Preparing saved index.'
