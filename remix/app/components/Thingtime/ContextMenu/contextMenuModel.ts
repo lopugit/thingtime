@@ -51,6 +51,9 @@ export type ThingContextSubmenu = {
 };
 
 export type ThingContextMenuModel = {
+  // Explicit persisted root identity supplied by its owning adapter.
+  subjectId?: string;
+  subjectScope?: 'containing-thing';
 	sections: ThingContextSection[];
 };
 

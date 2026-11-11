@@ -60,6 +60,12 @@ test('owner library actions sit in Organise and never replace Delete or file ZIP
   assert.ok(LUCIDE_FOR_EMOJI[organise[1].icon!]);
   const restore = buildThingsItemMenu({ ...args, actCount: 2, libraryAction: 'restore' });
   assert.equal(restore.sections.find(section => section.id === 'organise')?.actions[1].label, 'Restore 2 things');
-  assert.ok(!commands({ ...args, ownerId: 'other', libraryAction: 'archive' }).includes('archive'));
+  assert.ok(commands({ ...args, ownerId: 'other', libraryAction: 'archive' }).includes('archive'), 'server-provided permission is authoritative');
   assert.ok(!commands(args).includes('archive'));
+});
+
+
+test('protected archived metadata exposes restoration without unsupported content actions', () => {
+  const thing: ThingsThing = { ...component, thingtime: ['chat-message'], libraryArchived: true, libraryArchiveEligible: true, libraryArchivePresentation: 'metadata', crystal: { name: 'Archived message' } };
+  assert.deepEqual(commands({ thing, actCount: 1, clipboardCount: 0, ownerId: 'owner', libraryAction: 'restore' }), ['restore']);
 });

@@ -1,3 +1,4 @@
+import { eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
 import { contentExecutionHeld, contentExecutionHold, contentExecutionStates, type ContentExecutionHold } from './contentExecutionGate';
 import { isCivilTime } from '../../../schemas/civilDates';
 import { isPrivateActivationPage, parseWebpageActivation, type WebpageActivation } from '../../../schemas/webpageActivation';
@@ -233,6 +234,7 @@ export type ThingDoc = {
   folderId?: string | null;
   // Private library placement. Never accepted from content CRUD.
   libraryArchived?: true;
+  executionHold?: ContentExecutionHold;
   tags?: string[];
   // Token grants: tt:token/<id> entries naming the personal-access-token
   // sessions (auth/patTokens.ts) whose sandboxed mutations may touch this
@@ -509,6 +511,7 @@ export type PublicThing = {
   folderId: string | null;
   libraryArchived?: true;
   libraryArchiveEligible?: true;
+  libraryArchivePresentation?: 'metadata';
   crystal: Record<string, any>;
   extended: unknown | null;
   geo?: GeoLocation | null;
@@ -4025,13 +4028,13 @@ const prepareThingsList = async (
     match = withMatch(
       // Legacy post compatibility can also match kind:'post' on a differently
       // stamped row, so only prune when the filter really requires a kind.
-      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive(), thingtime.includes('post') ? undefined : thingtime),
+      query.libraryArchive === 'archived' ? libraryArchiveMatch(viewer.id) : ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive(), thingtime.includes('post') ? undefined : thingtime),
       await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
     );
-    if (folder === 'root') {
+    if (folder === 'root' && query.libraryArchive !== 'archived') {
       // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
       match = withMatch(match, ownerLibraryRootMatch());
-    } else if (folder) {
+    } else if (folder && query.libraryArchive !== 'archived') {
       const assignment = await resolveFolderAssignment(viewer.id, folder, []);
       if (isFail(assignment)) return assignment;
       match.folderId = assignment.folderId;
@@ -4066,10 +4069,14 @@ const prepareThingsList = async (
   return { ok: true as const, viewer, match, discussionTarget, discussionCursor, cursorScope, limit };
 };
 
-const visibleThingsPage = async (page: ThingDoc[], viewer: Viewer, app: AppLens): Promise<ThingDoc[]> => {
+const visibleThingsPage = async (page: ThingDoc[], viewer: Viewer, app: AppLens, archiveOnly = false): Promise<ThingDoc[]> => {
   if (app) return appVisiblePage(app, page);
   const lookup = batchedThingLookup();
-  const verdicts = await Promise.all(page.map(doc => canViewInherited(doc, viewer, lookup)));
+  const verdicts = await Promise.all(page.map(async doc => {
+    if (archiveOnly && (doc.ownerId !== viewer?.id || !eligibleLibraryArchive(doc) || await contentExecutionHeld(doc))) return false;
+    if (archiveOnly && libraryArchiveNeedsMinimalPresentation(doc)) return true;
+    return canViewInherited(doc, viewer, lookup);
+  }));
   return page.filter((_, index) => verdicts[index]);
 };
 
@@ -4079,7 +4086,8 @@ const visibleThingsPage = async (page: ThingDoc[], viewer: Viewer, app: AppLens)
 const thingCountProjection = {
   shareId: 1, ownerId: 1, thingtime: 1, kind: 1, acl: 1, visibility: 1,
   targetId: 1, linkKey: 1, moderation: 1, appId: 1, sandboxSpace: 1, createdAt: 1,
-  sandboxExpiresAt: 1, subspacePrivate: 1, 'crystal.subspaceId': 1,
+  sandboxExpiresAt: 1, sandbox: 1, executionHold: 1, creationCheckpoint: 1, archiveVersion: 1, archiveDeleting: 1, archiveRootId: 1,
+  attachmentState: 1, attachmentExpiresAt: 1, attachmentImportDraft: 1, 'crystal.trashed': 1, subspacePrivate: 1, 'crystal.subspaceId': 1,
   'crystal.workspaceId': 1, 'extended.serviceWorkspaceId': 1
 } as const;
 
@@ -4099,7 +4107,7 @@ export const countThings = async (
     // Exact fast subset: canViewInherited reduces to the owner short-circuit
     // for an ordinary owned data row that neither inherits nor is blocked.
     // Other kinds and visibility-scoped tokens keep the exact ACL fallback.
-    const fast = !app && !query.targetId && !patVisibilityOf(viewer) && query.thingtime?.length === 1 && query.thingtime[0] === 'data'
+    const fast = query.libraryArchive !== 'archived' && !app && !query.targetId && !patVisibilityOf(viewer) && query.thingtime?.length === 1 && query.thingtime[0] === 'data'
       ? { thingtime: ['data'], acl: { $ne: ACL_INHERIT }, 'moderation.status': { $ne: 'blocked' } } : null;
     let count = fast ? await things.countDocuments(withMatch(match, fast) as any, options) : 0;
     context.signal?.throwIfAborted();
@@ -4107,7 +4115,7 @@ export const countThings = async (
     let batch: ThingDoc[] = [];
     const flush = async () => {
       context.signal?.throwIfAborted();
-      count += (await visibleThingsPage(batch, viewer, app)).length;
+      count += (await visibleThingsPage(batch, viewer, app, query.libraryArchive === 'archived')).length;
       if (!Number.isSafeInteger(count)) throw new Error('Count cannot be represented exactly');
       batch = [];
     };
@@ -4132,7 +4140,7 @@ export const countThings = async (
 // return wrong page positions and leak hidden rows through missing slots.
 const visibleThingsWindow = async (
   match: Record<string, any>, viewer: Viewer, app: AppLens,
-  offset: number, limit: number, signal?: AbortSignal
+  offset: number, limit: number, signal?: AbortSignal, archiveOnly = false
 ): Promise<ThingDoc[]> => {
   const things = await getThingsCollection();
   const cursor = things.find(match as any, signal ? { signal } : undefined)
@@ -4141,7 +4149,7 @@ const visibleThingsWindow = async (
   let skipped = 0, batch: ThingDoc[] = [];
   const flush = async () => {
     signal?.throwIfAborted();
-    for (const doc of await visibleThingsPage(batch, viewer, app)) {
+    for (const doc of await visibleThingsPage(batch, viewer, app, archiveOnly)) {
       if (skipped < offset) skipped++;
       else if (ids.length < limit + 1) ids.push(doc.shareId);
     }
@@ -4179,7 +4187,7 @@ export const listThings = async (
 
   context.signal?.throwIfAborted();
   const things = await getThingsCollection();
-  let docs = query.offset !== undefined ? await visibleThingsWindow(match, viewer, app, query.offset, limit, context.signal) : (await things
+  let docs = query.libraryArchive === 'archived' ? await visibleThingsWindow(pageMatch, viewer, app, query.offset || 0, limit, context.signal, true) : query.offset !== undefined ? await visibleThingsWindow(match, viewer, app, query.offset, limit, context.signal) : (await things
     .find(pageMatch as any, context.signal ? { signal: context.signal } : undefined)
     .sort({ createdAt: -1, shareId: 1 })
     .limit(limit + 1)
@@ -4221,8 +4229,16 @@ export const listThings = async (
   // thing attached to a target can carry its OWN acl (e.g. a private share:
   // thingtime ['post','share'], targetId=original) — those must be judged on
   // their own acl, never disclosed just because their target is viewable.
-  const visible = await visibleThingsPage(page, viewer, app);
-  const projected = await toPublicThings(visible, viewer, query.commentProjection === true, !app && !query.targetId);
+  const visible = await visibleThingsPage(page, viewer, app, query.libraryArchive === 'archived');
+  const minimalIds = new Set(query.libraryArchive === 'archived'
+    ? visible.filter(libraryArchiveNeedsMinimalPresentation).map(doc => doc.shareId) : []);
+  const content = await toPublicThings(visible.filter(doc => !minimalIds.has(doc.shareId)), viewer, query.commentProjection === true, !app && !query.targetId);
+  const byId = new Map(content.map(thing => [thing.id, thing]));
+  const projected = visible.map(doc => minimalIds.has(doc.shareId)
+    ? minimalLibraryArchivePresentation({ id: doc.shareId, thingtime: thingtimeOf(doc), author: null,
+      createdAt: new Date(doc.createdAt).toISOString(), updatedAt: new Date(doc.updatedAt).toISOString() })
+    : byId.get(doc.shareId)!);
+
   if (query.commentProjection) {
     const comments = (await toPublicDiscussionPage(visible, viewer, projected)).map(post => ({ ...post, targetId: targetIdOf(visible.find(doc => doc.shareId === post.id)!) }));
     return { ok: true, things: projected, nextCursor, comments };
@@ -5994,25 +6010,31 @@ export const upsertThing = async (
 // shares walk the subtree through those same per-item paths, bounded by
 // MAX_FOLDER_TREE_THINGS so a runaway tree fails loudly instead of half-applying.
 
-const ARCHIVE_EXCLUDED_KINDS = [
-  ...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE, ...DEVICE_CONTROL_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME
-];
-const eligibleLibraryArchive = (doc: ThingDoc): boolean => {
-  if (!doc.thingtime || doc.appId || doc.sandboxSpace || (doc as any).sandbox ||
-      ['planning', 'restoring'].includes((doc as any).creationCheckpoint?.phase)) return false;
-  if (!doc.thingtime.some(kind => ARCHIVE_EXCLUDED_KINDS.includes(kind))) return true;
-  if (doc.thingtime.length !== 1) return false;
-  switch (doc.thingtime[0]) {
-    case 'theme': case 'feed-algorithm': return true;
-    case 'file': return doc.crystal?.trashed === false;
-    case 'custom-emoji': return doc.targetId == null;
-    case 'chat-archive': return (doc as any).archiveVersion === 1 && !(doc as any).archiveDeleting &&
-      doc.targetId == null && (doc as any).archiveRootId === doc.shareId;
-    case 'attachment': return ((doc as any).attachmentPurpose === 'recording' || (doc as any).attachmentPurpose === 'file') &&
-      (doc as any).attachmentState === 'ready' && (doc as any).attachmentExpiresAt == null &&
-      (doc as any).attachmentImportDraft !== true && !Object.prototype.hasOwnProperty.call(doc, 'targetId');
-    default: return false;
-  }
+// Availability, single actions, bulk placement and archive listing share the
+// same eligibility predicate. The result never contains source content.
+const findLibraryArchiveSubject = async (ownerId: string, id: string, things: Awaited<ReturnType<typeof getThingsCollection>>) => {
+  const doc = await things.findOne(withMatch(libraryArchiveMatch(ownerId), { shareId: id }) as any) as unknown as ThingDoc | null;
+  if (!doc || !eligibleLibraryArchive(doc) || await contentExecutionHeld(doc, things)) return null;
+  return libraryArchiveNeedsMinimalPresentation(doc) || await canViewInherited(doc, { id: ownerId }) ? doc : null;
+};
+export const getLibraryArchiveAction = async (ownerId: string, id: string, collection = getThingsCollection) => {
+  if (isCustomMongoEndpointActive()) return fail(409, 'Select your home Thingtime data source.');
+  const doc = await findLibraryArchiveSubject(ownerId, id, await collection());
+  if (!doc) return fail(404, 'Thing is not available in your library');
+  return { ok: true as const, id, ownerId, libraryArchived: doc.libraryArchived === true,
+    availableActions: [doc.libraryArchived === true ? 'restore' as const : 'archive' as const] };
+};
+
+export const setLibraryArchive = async (ownerId: string, id: string, action: 'archive' | 'restore', collection = getThingsCollection) => {
+  if (isCustomMongoEndpointActive()) return fail(409, 'Select your home Thingtime data source.');
+  const things = await collection();
+  const doc = await findLibraryArchiveSubject(ownerId, id, things);
+  if (!doc) return fail(404, 'Thing is not available in your library');
+  const result = await things.updateOne(withMatch(libraryArchiveMatch(ownerId), { shareId: id,
+    executionHold: doc.executionHold === undefined ? { $exists: false } : doc.executionHold }) as any,
+    action === 'archive' ? { $set: { libraryArchived: true } } : { $unset: { libraryArchived: '' } });
+  if (!result.matchedCount) return fail(404, 'Thing is not available in your library');
+  return { ok: true as const, id, ownerId, libraryArchived: action === 'archive' };
 };
 
 export const MAX_BULK_IDS = 100;
@@ -6157,15 +6179,8 @@ export const bulkThings = async (
   const results: BulkItemResult[] = [];
   for (const id of ids) {
     if (archivePlacement) {
-      // Same canonical membership rules as owner-library reads, with no
-      // namespace, service, or control document writes. Archive is placement
-      // metadata: do not rewrite content, audiences, folder ancestry, or dates.
-      const result = await things.updateOne(withMatch(
-        ownerLibraryMatch(viewer.id, ARCHIVE_EXCLUDED_KINDS, true),
-        { shareId: id, appId: null, thingtime: { $exists: true }, sandbox: null, sandboxSpace: null,
-          'creationCheckpoint.phase': { $nin: ['planning', 'restoring'] } }
-      ) as any, op === 'archive' ? { $set: { libraryArchived: true } } : { $unset: { libraryArchived: '' } });
-      results.push(result.matchedCount ? { id, ok: true } : { id, ok: false, error: 'Thing is not available in your library' });
+      const result = await setLibraryArchive(viewer.id, id, op as 'archive' | 'restore', placementDependencies.collection || getThingsCollection);
+      results.push(isFail(result) ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;
     }
     if (op === 'delete') {
