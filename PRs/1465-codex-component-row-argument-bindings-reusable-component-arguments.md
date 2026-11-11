@@ -26,3 +26,16 @@ The required semantic contracts are `api.things` 1.62.0,
 A successful preview or source check does not prove production acceptance.
 Confirm the actual merged commit, production alias source and exact-origin
 capability manifest before reporting release completion.
+
+## Subsequent main integration
+
+All required checks passed at `fc87706fd0`. A single normal failed-job retry
+resolved a GitHub installation-quota failure during CodeQL publication; no
+source change or security-check bypass was used for that recovery.
+
+Main then merged PR 1464. Application files merged cleanly. The changelog keeps
+main's newest entry first and this feature immediately afterward. A per-command
+`merge.renames=false` preserves content-addressed Graphify directories
+additively rather than treating generated artifacts as competing renames; the
+combined structural outputs are regenerated normally. No permanent Git or
+branch-protection configuration changes are made.

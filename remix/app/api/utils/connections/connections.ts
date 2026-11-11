@@ -1,3 +1,5 @@
+import { googleServiceOperation } from '../../../connections/googleServiceActions';
+import { googleServiceRequest, redactServiceResult } from './googleServiceRequests';
 import { oauthGrantMatches } from './oauthConfig';
 import { NAMED_CONNECTION_KIND, prepareNamedIntent, saveNamedConnection } from './namedConnections';
 import { namedAccess, namedOperationsFor, verifiedNamedScope, type NamedOperation } from '../../../connections/namedAccess';
@@ -16,6 +18,7 @@ import {
   type PublicPost
 } from '../things/things';
 import {
+  authedJson,
   connectionProviderById,
   oauthCredsFor,
   publicProviders,
@@ -116,6 +119,7 @@ export type PublicConnection = {
   accountOnly: boolean;
   credentialStatus: 'connected' | 'reconnect' | 'public';
   scopes: string[];
+  authorization?: { requestedScopes: string[] | null; grantedScopes: string[] | null };
   named?: { name: string; requestedScopes: string[]; grantedScopes: string[] | null; allowedOperations: NamedOperation[] };
   expiresAt: string | null;
   account: {
@@ -144,7 +148,13 @@ export const toPublicConnection = (linkDoc: any, accountDoc: any, provider: Conn
   auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
   accountOnly: provider?.accountOnly === true,
   credentialStatus: !provider || provider.auth === 'none' ? 'public' : grant?.ownerId === linkDoc?.ownerId && hasConnectionTokenEnvelope(grant) ? 'connected' : 'reconnect',
-  scopes: Array.isArray(grant?.crystal?.scopes) ? grant.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
+  scopes: ['facebook', 'facebook-account'].includes(provider?.id || '')
+    ? (Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : [])
+    : Array.isArray(grant?.crystal?.scopes) ? grant.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
+  ...(['facebook', 'facebook-account'].includes(provider?.id || '') ? { authorization: {
+    requestedScopes: Array.isArray(grant?.crystal?.requestedScopes) ? grant.crystal.requestedScopes : null,
+    grantedScopes: Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : null
+  } } : {}),
   ...(named ? { named: {
     name: String(linkDoc.crystal?.name || ''),
     requestedScopes: Array.isArray(linkDoc.crystal?.requestedScopes) ? linkDoc.crystal.requestedScopes : [],
@@ -250,6 +260,8 @@ export const upsertAccountAndLink = async (
               ? {
                   secure: await packConnectionTokens(user.id, accountShareId, savedTokens),
                   'crystal.scopes': savedTokens.scopes || [],
+                  'crystal.requestedScopes': savedTokens.requestedScopes ?? null,
+                  'crystal.grantedScopes': savedTokens.confirmedScopes ?? null,
                   'crystal.expiresAt': savedTokens.expiresAt || null,
                   'crystal.lastSyncError': null
                 }
@@ -368,16 +380,21 @@ const linksWithAccounts = async (userId: string, linkId?: string | null, include
   return links.map((link: any) => ({ link, account: accountsById.get(String(link?.crystal?.accountId || '')) || null }));
 };
 
-export const listConnections = async (user: SessionUser, origin?: string): Promise<{ ok: true; connections: PublicConnection[] }> => {
+export const listConnections = async (user: SessionUser, origin?: string, includeServiceOperations = false): Promise<{ ok: true; connections: PublicConnection[] }> => {
   const environment = origin ? getDeploymentDataEnvironment() : null;
   const pairs = await linksWithAccounts(user.id, null, !!environment);
   return {
     ok: true,
     connections: pairs.filter(({ link }) => !link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
       (link.crystal?.origin === origin && link.crystal?.environment === environment?.id))
-      .map(({ link, account }) =>
-      toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider))
-    )
+      .map(({ link, account }) => {
+        const result = toPublicConnection(link, account, connectionProviderById(link?.crystal?.provider));
+        // Original named clients index operation labels exhaustively. They
+        // must never receive new enum members unless explicitly negotiated.
+        if (result.named && !includeServiceOperations) result.named.allowedOperations = result.named.allowedOperations.filter(operation =>
+          ['account.identity', 'google.profile', 'google.email'].includes(operation));
+        return result;
+      })
   };
 };
 
@@ -714,10 +731,44 @@ export const resolveConnectionCredential = async (user: SessionUser, connectionI
   return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
 };
 
-export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown }, origin: string) {
+// Inspection never refreshes, rewrites credentials, syncs content or changes grants.
+export async function diagnoseConnection(user: SessionUser, id: string, origin: string) {
+  if (!id) return fail(400, 'Choose a connection.');
+  const [pair] = await linksWithAccounts(user.id, id, true);
+  if (!pair?.account || pair.account.ownerId !== user.id || pair.link.parentId !== pair.account.shareId)
+    return fail(404, 'Connection not found.');
+  const named = pair.link.thingtime?.includes(NAMED_CONNECTION_KIND);
+  const grant = named ? pair.link : pair.account;
+  const provider = connectionProviderById(pair.link.crystal?.provider);
+  if (!provider?.diagnose || !provider.oauth) return fail(400, 'This provider does not support connection diagnostics.');
+  const tokens = await unpackConnectionTokens(grant);
+  const client = await oauthCredsFor(provider, origin);
+  if (!tokens?.accessToken || !client || !oauthGrantMatches(tokens, client) || tokens.oauthOrigin !== origin ||
+      (named && (grant.crystal?.origin !== origin || grant.crystal?.environment !== client.environment)))
+    return fail(409, 'This authorization does not match the selected origin and environment.');
+  if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now()) return fail(401, 'This account authorization expired. Reconnect it.');
+  const home = await getHomeThingsCollection();
+  const stillCurrent = async () => Boolean(await home.findOne({ shareId: pair.link.shareId, ownerId: user.id,
+    thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_LINK_KIND, parentId: pair.account.shareId }) &&
+    await home.findOne({ shareId: grant.shareId, ownerId: user.id, secure: grant.secure,
+      thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_ACCOUNT_KIND }));
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  // No named content operation is registered today. An identity-only grant
+  // must not borrow broader provider consent or a sibling account's access.
+  const result = await provider.diagnose(tokens, { allowContentProbe: !named && provider.accountOnly !== true });
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  return { ok: true as const, connectionId: id, provider: provider.id, observedAt: new Date().toISOString(), ...result };
+}
+
+export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown; resourceId?: unknown; pageToken?: unknown }, origin: string, signal?: AbortSignal) {
   const id = typeof input.id === 'string' ? input.id : '';
   const operation = typeof input.operation === 'string' ? input.operation as NamedOperation : null;
   if (!id || !operation || !Object.prototype.hasOwnProperty.call(namedAccess, operation)) return fail(400, 'Choose a connection and a supported operation.');
+  const service = googleServiceOperation(operation);
+  const request = service ? googleServiceRequest(service, input) : null;
+  if (request?.ok === false) return request;
+  if (!service && (input.resourceId !== undefined || input.pageToken !== undefined)) return fail(400, 'This operation does not accept service inputs.');
+  signal?.throwIfAborted();
   const [pair] = await linksWithAccounts(user.id, id, true);
   const environment = getDeploymentDataEnvironment();
   if (!pair?.account || pair.account.ownerId !== user.id || !pair.link.thingtime?.includes(NAMED_CONNECTION_KIND) ||
@@ -739,6 +790,14 @@ export async function useNamedConnection(user: SessionUser, input: { id?: unknow
     'crystal.grantRevision': pair.link.crystal.grantRevision,
     ...(scope ? { 'crystal.grantedScopes': { $in: [scope, `https://www.googleapis.com/auth/userinfo.${scope}`] } } : {}) });
   if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+  signal?.throwIfAborted();
+  if (request?.ok) {
+    const response = await authedJson(request.url, { token: tokens.accessToken, completeResponse: true, signal });
+    if (response.ok === false) return response;
+    signal?.throwIfAborted();
+    if (!await stillAuthorized()) return fail(403, 'This connection changed or was removed.');
+    return { ok: true as const, result: redactServiceResult(response.data, [tokens.accessToken, tokens.refreshToken, tokens.idToken]) };
+  }
   if (operation === 'account.identity') return { ok: true as const, result: { provider: provider.id, accountId: pair.account.shareId } };
   const profile = await readConnectionGoogleUserInfo(tokens);
   if (profile.ok === false || profile.data?.sub !== pair.account.crystal.providerAccountId)

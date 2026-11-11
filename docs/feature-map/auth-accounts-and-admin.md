@@ -506,3 +506,33 @@ and mode changes without a new key. No platform/admin credential is migrated.
 Run `anthropicApiKey.test.ts`, `userVaultCore.test.ts`, `vaultProviders.test.ts`,
 `voice.test.ts`, `chat.streaming.test.mts`, `completion.test.ts` and capability
 coverage. Live Console inference and installed-native acceptance remain separate.
+
+
+## Named Google service reads
+
+`connections/googleServiceActions.ts` extends the shared named-operation catalog;
+`api/utils/connections/googleServiceRequests.ts` validates fixed service/resource
+requests and redacts exact credentials from complete results. The existing
+`useNamedConnection` path retains owner/origin/environment, exact-grant refresh,
+scope and post-read revocation fences. `NamedConnectionPanel` and its editable
+block template expose resource IDs and opaque next-page actions. Existing grants
+do not acquire operations automatically. See [service actions](../google-service-actions.md),
+`namedServiceActions.test.mts`, `googleServiceRequests.test.ts`, and the existing
+isolated OAuth-tab UI fixture. Provider consent/data acceptance is separate.
+Connections access inspection: `GET /api/v1/connections/diagnostics` negotiates
+`api.connections-diagnostics` 1.0.0, requires an exact connection and expected
+owner, and uses registered provider `diagnose` adapters only. The service checks
+owner, saved OAuth binding, selected origin/environment and unchanged encrypted
+grant before and after probes. It never refreshes or persists. Facebook returns
+actual grant names or unknown and separates minimal posts from engagement fields.
+Connections 2.2 exposes requested/confirmed grant evidence; callbacks 2.1.1 verify
+both default and named Facebook grants. Run `test:connections`, capability tests
+and compiled Connections smoke; live provider acceptance is separate.
+Personal-provider Lopu chat normalizes effort against the resolved saved model's
+`providerModelFor` catalog in `userVaultCore.ts`, before metadata and SDK request
+construction in `chat.ts`. Reply contract 1.23.1 preserves the selected credential
+and BYO billing; Haiku 4.5's empty effort list omits `output_config.effort` rather
+than mapping it to an invented thinking mode. Console SDK streaming regression:
+`api/utils/lopu/chat.streaming.test.mts`; both manifest generators and personal
+provider client requirements advertise the compatible reply PATCH. Voice retains
+its existing strict tuning guard.

@@ -12,26 +12,36 @@ mock.module(new URL('../admin/integrations.ts', import.meta.url).href, { namedEx
   } } } })
 } });
 const spent = new Set<string>();
+let namedIntentDoc: any = null, savedFacebookTokens: any = null;
 let writes = 0,
   exchanges = 0;
 mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
   namedExports: {
     getAuthOtpsCollection: async () => ({
+      findOne: async () => namedIntentDoc,
       insertOne: async (doc: any) => {
         if (spent.has(doc.challenge)) throw Object.assign(new Error('duplicate'), { code: 11000 });
         spent.add(doc.challenge);
+        if (doc.purpose === 'connections-named-intent') namedIntentDoc = doc;
       }
     })
   }
 });
 mock.module(new URL('./connections.ts', import.meta.url).href, {
   namedExports: {
-    upsertAccountAndLink: async () => {
+    upsertAccountAndLink: async (_user: unknown, _provider: unknown, _account: unknown, tokens: unknown) => {
+      savedFacebookTokens = tokens;
       writes++;
       return { ok: true, connection: { id: 'test' } };
     }
   }
 });
+mock.module(new URL('./namedConnections.ts', import.meta.url).href, { namedExports: {
+  prepareNamedIntent: async (_user: unknown, _provider: unknown, intent: unknown) => ({ ok: true, intent }),
+  saveNamedConnection: async (_user: unknown, _provider: unknown, _account: unknown, tokens: unknown) => {
+    savedFacebookTokens = tokens; writes++; return { ok: true, connection: { id: 'named-test' } };
+  }
+} });
 const { beginOAuth, completeOAuth } = await import('./oauth.ts');
 const { connectionProviderById } = await import('./providers.ts');
 const { oauthRedirectUri } = await import('./oauthConfig.ts');
@@ -173,4 +183,34 @@ test('Twitch actual code-exchange adapter sends the bound client ID to identity 
   const state = new URL(result.authorizeUrl).searchParams.get('state');
   assert.ok((await completeOAuth(user, { state, code: 'synthetic-code' }, 'https://thingtime.test')).ok);
   assert.deepEqual(requests, ['https://id.twitch.tv/oauth2/token', 'https://api.twitch.tv/helix/users']);
+});
+
+
+test('default and named Facebook callbacks save requested scopes separately from actual or unknown grants', async t => {
+  const facebook = connectionProviderById('facebook')!;
+  t.mock.method(facebook.oauth!, 'exchangeCode', async () => ({ ok: true, tokens: {
+    accessToken: 'synthetic', requestedScopes: ['public_profile', 'user_posts']
+  } }));
+  t.mock.method(facebook.oauth!, 'resolveAccountFromTokens', async () => ({ ok: true, account: {
+    providerAccountId: 'facebook-one', displayName: 'Synthetic', handle: 'synthetic', avatarUrl: null, profileUrl: null, config: {}
+  } }));
+  let permissionBody: any = { data: [{ permission: 'public_profile', status: 'granted' }, { permission: 'user_posts', status: 'declined' }] };
+  t.mock.method(globalThis, 'fetch', async () => Response.json(permissionBody));
+  for (const named of [false, true]) {
+    for (const unknown of [false, true]) {
+      permissionBody = unknown ? {} : { data: [{ permission: 'public_profile', status: 'granted' }, { permission: 'user_posts', status: 'declined' }] };
+      const started = await beginOAuth(user, { provider: 'facebook', ...(named ? { named: {
+        requestId: '12345678-1234-4234-8234-123456789abc', name: 'Synthetic', allowedOperations: ['account.identity'], requestedScopes: ['user_posts']
+      } } : {}) }, 'https://thingtime.test');
+      assert.ok(started.ok);
+      if (!started.ok) continue;
+      const state = new URL(started.authorizeUrl).searchParams.get('state');
+      const completed = await completeOAuth(user, { state, code: 'synthetic-code' }, 'https://thingtime.test');
+      assert.ok(completed.ok);
+      assert.deepEqual(savedFacebookTokens.requestedScopes, ['public_profile', 'user_posts']);
+      assert.deepEqual(savedFacebookTokens.confirmedScopes, unknown ? undefined : ['public_profile']);
+      assert.deepEqual(savedFacebookTokens.scopes, unknown ? [] : ['public_profile']);
+      spent.clear();
+    }
+  }
 });

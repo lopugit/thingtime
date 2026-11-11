@@ -19,7 +19,8 @@ export const loader = async ({ request }: { request: Request }) => withVaultRequ
   if (!limit.allowed) {
     return json({ ok: false, error: 'Listing connections very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
-  const result = await listConnections(user, new URL(request.url).searchParams.get('includeNamed') === '1' ? requestOrigin(request) : undefined);
+  const query = new URL(request.url).searchParams;
+  const result = await listConnections(user, query.get('includeNamed') === '1' ? requestOrigin(request) : undefined, query.get('includeServiceOperations') === '1');
   return json({ ok: true, ownerId: user.id, connections: result.connections }, { headers: { 'Cache-Control': 'private, no-store' } });
 });
 

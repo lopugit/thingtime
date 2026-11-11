@@ -165,7 +165,12 @@ export const completeOAuth = async (
 
   const tokens = { ...exchanged.tokens, clientId: creds.clientId, oauthBinding: creds.binding,
     oauthOrigin: creds.origin, oauthEnvironment: creds.environment };
-  if (namedIntent && namedFacebookProvider(provider.id)) tokens.confirmedScopes = await readConnectionFacebookPermissions(tokens);
+  if (namedFacebookProvider(provider.id)) {
+    tokens.requestedScopes = namedIntent ? storedIntent!.requestedScopes as string[] : exchanged.tokens.requestedScopes;
+    tokens.confirmedScopes = await readConnectionFacebookPermissions(tokens);
+    // A requested permission is never evidence of a grant, including legacy links.
+    tokens.scopes = tokens.confirmedScopes ?? [];
+  }
   const resolved = await provider.oauth.resolveAccountFromTokens(tokens);
   if (resolved.ok === false) return { ...resolved, oauthCode: 'exchange' };
   const linked = namedIntent
