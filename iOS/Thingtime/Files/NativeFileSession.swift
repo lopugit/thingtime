@@ -122,7 +122,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
                              photoAuthorization: nil, conditions: nil)
     }
     func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int, allowsCellular: Bool,
-                    photoAuthorization: NativeUploadAuthorization?, conditions: NativePhotoDownloadConditions?) async throws {
+                    photoAuthorization: NativeUploadAuthorization?, conditions: NativePhotoDownloadConditions?, legacyDeviceId: String? = nil, legacyRootId: String? = nil) async throws {
         try await verifyOwner(); try checkActive()
         let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
             "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])
@@ -137,6 +137,10 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
             if let photoAuthorization, let conditions {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
                     scope: scope, authorization: photoAuthorization, conditions: conditions, signedExpiry: try Self.signedUploadExpiry(signed, partNumber: partNumber), sender: sender)
+            } else if let legacyDeviceId, let legacyRootId, let conditions {
+                try await NativeManagedPhotoPartTransfer.shared.sendLegacy(request, file: part.url, length: part.length, configuration: configuration,
+                    scope: scope, deviceId: legacyDeviceId, rootId: legacyRootId,
+                    signedExpiry: try Self.signedUploadExpiry(signed, partNumber: partNumber), sender: sender, conditions: conditions)
             } else {
                 try await sender.send(request, file: part.url, configuration: configuration)
             }

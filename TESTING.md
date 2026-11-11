@@ -16151,3 +16151,27 @@ match the source at desktop and mobile widths. This does not prove production
 bucket configuration. For deployed acceptance, upload a synthetic attachment,
 reload, download and compare its bytes. Inspect HTTP status/CORS errors only;
 never print the file-download JSON, encryption metadata or signed URL.
+
+### iOS ordinary folder backup upload limits
+
+- Negotiate independent native upload-policy support and selected-origin v5
+  Things/update/transfer-admission contracts before saving or dispatching. An
+  older host must retain the draft and refuse before any upload mutation.
+- On device, folder and saved Backup config cards, independently edit upload
+  speed, units and hourly allowance. Save/reload and select nested text, numeric
+  input and unit blocks separately in Builder at desktop and phone widths.
+- Compare actual native bytes/timing for concurrent configs against strictest
+  device/folder/config caps. Include Photos plus folder workers, retries, partial
+  failure, cancellation and relaunch. Editing limits must preserve consumed and
+  uncertain usage. Historical unattributed part bytes count conservatively.
+- Exhaust a rolling-hour allowance, verify its exact persisted deadline and
+  automatic resume; an allowance below one provider part remains an actionable
+  wait and retains the pending original. Explicit Pause must prevent resume.
+- Change only upload policy on an existing interrupted Backup job, reload, and
+  verify old plan receipts and completed cloud copies survive without duplicate
+  publication. Direction, destination, network and security edits stay guarded.
+- Run `uploadPolicy.test.ts`, `photoSettingsRecovery.test.ts`,
+  `mobileFolders.client.test.ts`, `syncJobJournal.test.ts`, the native
+  `NativePhotoTransferPolicyTests`/`NativeFolderUploadPolicyTests`, and
+  `node remix/scripts/test-folder-upload-limits-ui.mjs`. Real native byte and
+  installed-device acceptance are separate from mocks and test-bundle builds.

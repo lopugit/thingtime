@@ -12,6 +12,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-12: Add negotiated iOS folder Backup upload speed and hourly policy
+  controls with shared persisted device/folder budgets, exact scoped native
+  enforcement, legacy-part accounting and policy-only interrupted-job recovery.
+  See [the contract and remaining native acceptance](../docs/ios-folder-upload-policy.md).
+
 - 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
   keeping live 25-second change reads during uploads instead of repeated
   two-second polling. Retain fresh admission, cancellation and native revision

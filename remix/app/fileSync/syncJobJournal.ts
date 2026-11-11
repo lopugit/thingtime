@@ -2,7 +2,7 @@ import { SYNC_RETRY_DELAY_MS, SYNC_RETRY_MAX_MS } from './syncConnectionWait';
 import { isSyncJobFailure, syncJobFailure, SyncJobConfigurationChanged, type SyncJobFailure } from './syncJobFailure';
 import { PHOTO_AUTOMATION_INTERVAL_MS, parseFileSyncConfiguration } from './configuration';
 import { PHOTO_SETTINGS_STORES, parkPhotoSettings, type PreviousPhotoSettings } from './photoSettingsJournal';
-import { photoSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
+import { backupSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
 import { isSyncWaitReason, type SyncWaitReason } from './foregroundSyncContext';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
@@ -241,7 +241,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 							throw Error('The sync job changed while stopping. Please retry.');
 						const unfinished = previous && previous.state !== 'complete' && !previous.folderSetupPaused && previous.nextRunAt === undefined;
 						const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
-						const replacingPhotos = !!photoSettings && !!previous && photoSettingsChanged(previous.reviewed, reviewed);
+						const replacingPhotos = !!photoSettings && !!previous && backupSettingsChanged(previous.reviewed, reviewed);
 						if (photoSettings && !replacingPhotos && !Object.values(photoSettings.transfers).some(transfer => transfer.park))
 							throw new SyncJobConfigurationChanged();
 						if (policyChanged && previous.state !== 'paused' && !replacingPhotos) throw new SyncJobConfigurationChanged();

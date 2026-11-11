@@ -1,4 +1,4 @@
-import { parsePhotoTransferPolicy, supportsNativePhotoTransferPolicy, type PhotoTransferPolicy } from './photoTransferPolicy';
+import { parsePhotoTransferPolicy, supportsNativePhotoTransferPolicy, supportsNativeUploadPolicy, type PhotoTransferPolicy } from './photoTransferPolicy';
 import { parseNativePhotoRunStatus, type NativePhotoContinuation, type NativePhotoRunStatus } from './nativePhotoRunProgress';
 import type { FileSyncApproval } from './configuredPlan';
 import { isSyncWaitReason, LEGACY_NATIVE_INACTIVE_MESSAGE, SyncConditionsWait } from './foregroundSyncContext';
@@ -64,6 +64,8 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'upload-single'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'defer-upload'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
 	| { action: 'arm-photo-run'; rootId: string; authorization: FileSyncApproval; execution?: 'native'; resume?: true; continueInBackground?: true }
+	| { action: 'read-upload-policy'; deviceId: string; rootId?: string }
+	| { action: 'set-upload-policy'; deviceId: string; rootId?: string; uploadPolicy: PhotoTransferPolicy }
 	| { action: 'read-photo-transfer-policy'; deviceId: string; rootId?: string }
 	| { action: 'set-photo-transfer-policy'; deviceId: string; rootId?: string; photoTransferPolicy: PhotoTransferPolicy }
 	| { action: 'photo-run-status'; rootId: string; configurationId: string; deviceId: string }
@@ -110,6 +112,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	  }
 );
 export type FolderResult = {
+	uploadPolicy?: PhotoTransferPolicy;
 	photoTransferPolicy?: PhotoTransferPolicy;
 	photoRunStatus?: NativePhotoRunStatus;
 	photoContinuation?: NativePhotoContinuation;
@@ -153,6 +156,7 @@ export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
 	| 'platform'
 	| 'fileResourceLimitsVersion'
+	| 'fileUploadPolicyVersion'
 	| 'filePhotoAutomationVersion'
 	| 'filePhotoContinuationVersion'
 	| 'fileDownloadVersion'
@@ -420,9 +424,9 @@ export function parseMobileFolderResult(
 	const expectedRoot = 'rootId' in request ? request.rootId : undefined;
 	if (payload.syncWait !== undefined) {
 		const { syncWait, retryAt, minimumPartBytes } = payload;
-		const transfer = ['upload-file', 'defer-upload'].includes(request.action);
-		const allowed = syncWait === 'inactive' ? ['list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-run-status', 'pause-photo-runs', 'run-photo-in-background', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
-			syncWait === 'data-budget' ? transfer : ['upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
+		const transfer = ['upload-part', 'upload-file', 'defer-upload'].includes(request.action);
+		const allowed = syncWait === 'inactive' ? ['upload-part', 'list', 'conditions', 'inspect', 'upload-file', 'defer-upload', 'scan', 'scan-capture', 'scan-status', 'scan-page', 'scan-cancel', 'scan-discard', 'cancel-deferred-upload', 'arm-photo-run', 'photo-run-status', 'pause-photo-runs', 'run-photo-in-background', 'photo-queue-finish', 'read', 'read-range'].includes(request.action) :
+			syncWait === 'data-budget' ? transfer : ['upload-part', 'upload-file', 'defer-upload', 'scan-capture', 'scan-status', 'read', 'photo-queue-finish'].includes(request.action);
 		const deadline = typeof retryAt === 'string' ? Date.parse(retryAt) : NaN;
 		if (!allowed || !isSyncWaitReason(syncWait) || syncWait === 'paused' || payload.rootId !== expectedRoot || payload.error !== undefined ||
 			(retryAt !== undefined && (syncWait !== 'data-budget' || !Number.isSafeInteger(deadline) || deadline < 0)) ||
@@ -463,6 +467,11 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'read-upload-policy' || request.action === 'set-upload-policy') {
+  if (payload.deviceId !== request.deviceId || payload.rootId !== request.rootId) throw Error('Invalid upload policy scope.');
+  result.uploadPolicy = parsePhotoTransferPolicy(payload.uploadPolicy);
+  if (request.action === 'set-upload-policy' && JSON.stringify(result.uploadPolicy) !== JSON.stringify(parsePhotoTransferPolicy(request.uploadPolicy))) throw Error('The device did not acknowledge the saved upload policy.');
+ }
 	if (request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') {
         if (payload.deviceId !== request.deviceId || payload.rootId !== request.rootId || payload.roots.length)
             throw Error('Photos transfer policy scope changed.');
@@ -955,7 +964,7 @@ export function requestMobileFolders(
 	const send = () => requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
 	// iOS has one folder request slot. Pause commands are local denials
 	// that the native bridge can process immediately even with an active slot.
-	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
+	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
 	const origin = window.location.origin;
 	const generation = rootIdentity.read().generation;
 	const check = () => {
@@ -1007,6 +1016,12 @@ function requestMobileFoldersNow(
 	if (request.action === 'inspect-stamp' && (!supportsNativePathStamp(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path stamp inspection requires a supported Mac app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
+	if ((request.action === 'read-upload-policy' || request.action === 'set-upload-policy') && !supportsNativeUploadPolicy(bridge)) throw Error('Update Thingtime before changing folder upload limits.');
+ if (['upload-file', 'defer-upload', 'upload-part'].includes(request.action)) {
+  const upload = (request as { upload: NativePartUpload & Partial<NativeFileUpload> }).upload;
+  if (request.action === 'upload-part' && supportsNativeUploadPolicy(bridge) && !upload.authorization) throw Error('Folder parts require the exact saved sync authorization. Refresh this sync connection before retrying.');
+  if (upload.authorization?.configuration.uploadPolicy && !supportsNativeUploadPolicy(bridge)) throw Error('Update Thingtime before using this folder upload policy.');
+ }
 	if ((request.action === 'read-photo-transfer-policy' || request.action === 'set-photo-transfer-policy') && !supportsNativePhotoTransferPolicy(bridge))
 		throw Error('Update Thingtime to manage device and folder Photos upload settings.');
 	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
@@ -1176,7 +1191,7 @@ function requestMobileFoldersNow(
 			stop();
 			reject(Error('Folder access timed out. Your saved selections are preserved.'));
 		};
-		const pacedPayload = syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		const pacedPayload = (['upload-file', 'upload-part'].includes(input.action) && supportsNativeUploadPolicy(bridge)) || syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
 		let timer = pacedPayload ? undefined : setTimeout(
 			expire,
 			input.action === 'upload-part' || input.action === 'upload-file'
@@ -1237,7 +1252,7 @@ function requestMobileFoldersNow(
 							offset: input.offset,
 							length: input.bytes.byteLength
 					  }
-					: { ...expected, ...input };
+					: { ...expected, ...input, ...(input.action === 'upload-part' && supportsNativeUploadPolicy(bridge) ? { action: 'upload-part-authorized' } : {}) };
 			bridge!.postMessage({ type: 'mobile-files', payload });
 		} catch (error) {
 			cleanup();

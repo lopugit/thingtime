@@ -30,6 +30,7 @@ struct NativeUploadAuthorization: Codable, Equatable, Sendable {
         let network: String
         let chargingOnly: Bool
         let excludedPaths: [String]
+        var uploadPolicy: NativePhotoTransferPolicy? = nil
         let photoAutomation: PhotoAutomation?
         let resourceLimits: [String: Double]?
         let ignoreRules: String?
@@ -47,8 +48,11 @@ struct NativeUploadAuthorization: Codable, Equatable, Sendable {
         guard id.range(of: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$", options: .regularExpression) != nil,
               scope.rootId == id, scope.ownerId == owner.ownerId, (scope.origin == owner.origin.absoluteString || scope.origin + "/" == owner.origin.absoluteString),
               scope.dataPlane == "home", scope.deviceId == c.deviceId, c.localRootId == rootId,
-              (c.configurationVersion == 1 && c.photoAutomation == nil ||
-               c.configurationVersion == 4 && photos && c.photoAutomation?.valid == true),
+              (c.configurationVersion == 1 && c.photoAutomation == nil && c.uploadPolicy == nil ||
+               c.configurationVersion == 4 && photos && c.photoAutomation?.valid == true ||
+               c.configurationVersion == 5 && !photos && c.uploadPolicy?.valid == true),
+              photos ? c.uploadPolicy == nil : c.photoAutomation == nil,
+              c.uploadPolicy == nil || (!photos && c.mode == "backup" && !c.propagateDeletes),
               c.resourceLimits == nil, c.ignoreRules == nil,
               !c.paused, ["upload", "two-way", "backup"].contains(c.mode),
               ["wifi", "any"].contains(c.network), (c.sourceKind == "photos") == photos,

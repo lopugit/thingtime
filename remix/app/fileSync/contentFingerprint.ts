@@ -33,7 +33,7 @@ export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFinger
 
 export type PhotoUploadPublication = { expectedRevision: string | null };
 export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval; publication?: PhotoUploadPublication };
-export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
+export type NativePartUpload = { authorization?: FileSyncApproval; uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
 export type NativeDeferredFileResult = { queued: boolean; scheduled: boolean };
 export type FingerprintSource = {
 	/** Queue immutable multipart admission with optional exact Photos publication. */

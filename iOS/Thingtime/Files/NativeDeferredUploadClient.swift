@@ -55,7 +55,7 @@ final class NativeDeferredUploadClient {
     init(record: NativeDeferredUploadRecord) {
         self.record = record
         scope = record.scope; deviceId = record.configuration.deviceId
-        minimum = record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
+        minimum = record.configuration.uploadPolicy != nil ? [1, 6, 0] : record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
         let configuration = Self.configuration(allowsCellular: record.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
@@ -134,15 +134,13 @@ final class NativeDeferredUploadClient {
         try check()
         let configuration = Self.configuration(allowsCellular: allowsCellular)
         do {
-            if record.configuration.managedPhotos != nil {
+            do {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
                     scope: record.scope, authorization: record.request.authorization, conditions: conditions,
                     signedExpiry: try NativeFileSession.signedUploadExpiry(signed, partNumber: partNumber),
-                    background: backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
+                    background: record.configuration.managedPhotos != nil && backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
                     record: record, partNumber: partNumber, checksum: part.checksumSha256,
                     accountOnce: { try account($0, $1) }, account: { try account($0, nil) })
-            } else {
-                try await NativeFileUpload().send(request, file: part.url, configuration: configuration)
             }
         }
         catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {

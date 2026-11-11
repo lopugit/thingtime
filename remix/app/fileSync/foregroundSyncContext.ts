@@ -1,5 +1,5 @@
 import { deviceResourceKey, deviceSyncGovernor } from './deviceResourcePolicy';
-import { parseFileSyncConfiguration, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
+import { parseFileSyncConfiguration, FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, FILE_SYNC_IGNORE_REQUIREMENTS, FILE_SYNC_RESOURCE_REQUIREMENTS } from './configuration';
 import { assertConfiguredSyncApproval, planConfiguredFileSync, readOwnedFileSyncConfiguration, type SyncConditions, type SavedFileSyncConfiguration } from './configuredPlan';
 import { inventorySyncEntry, parseCloudInventory } from './cloudInventory';
 import { sameSyncScope, validSyncEntry, validSyncPath, type SyncScope, type SyncEntry } from './reconcile';
@@ -39,6 +39,7 @@ export function foregroundSyncContext(reviewed: SavedFileSyncConfiguration, scop
 	};
 	const authorize = async (observe?: () => Promise<SyncConditions>) => {
 		check();
+		if (configuration.uploadPolicy) for (const [feature, minimum] of Object.entries(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.photoAutomation) for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.resourceLimits) for (const [feature, minimum] of Object.entries(FILE_SYNC_RESOURCE_REQUIREMENTS)) await input.runtime.requireCapability(feature, minimum);
 		if (configuration.ignoreRules) await input.runtime.requireCapability('api.things', FILE_SYNC_IGNORE_REQUIREMENTS['api.things']);

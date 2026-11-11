@@ -9,6 +9,7 @@ import { runPagedForegroundCloudSync } from './pagedForegroundSync';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
 import { syncScopeKey } from './reconcile';
 import { previousPhotoRunKey } from './photoSettingsJournal';
+import type { SavedFileSyncConfiguration } from './configuredPlan';
 import type { SyncRun } from './execute';
 import { PAGED_RUN_HEADS, PAGED_RUN_STORES, type PagedRunSpec } from './pagedRunJournal';
 
@@ -22,14 +23,20 @@ const photoCases = [
 	{ format: 'legacy', start: runForegroundCloudSync, variant: 'same folder' },
 	{ format: 'legacy', start: runForegroundCloudSync, variant: 'new folder' },
 	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'revision only' },
-	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'v4 policy migration' }
+	{ format: 'paged', start: runPagedForegroundCloudSync, variant: 'v4 policy migration' },
+ { format: 'paged', start: runPagedForegroundCloudSync, variant: 'folder v5 policy migration' },
+ { format: 'legacy', start: runForegroundCloudSync, variant: 'folder v5 policy migration' }
 ] as const;
 
+const oldPhotos = old, currentPhotos = current;
 for (const { format, start, variant } of photoCases)
 	test(`Photos Retry reconciles an interrupted ${format} backup after a ${variant} change`, async t => {
+        const folderMigration = variant === 'folder v5 policy migration';
+        const old = folderMigration ? { ...oldPhotos, configuration: { ...oldPhotos.configuration, sourceKind: 'folder' as const } } : oldPhotos;
+        const current = folderMigration ? { ...old, updatedAt: currentPhotos.updatedAt, configuration: { ...old.configuration, configurationVersion: 5 as const, uploadPolicy: { uploadBytesPerSecond: 1_000_000, uploadBytesPerHour: 1_000_000_000 } } } : currentPhotos;
 		const sameFolder = variant !== 'new folder', revisionOnly = variant === 'revision only';
 		const newFolder = sameFolder ? oldFolder : current.configuration.remoteFolderId;
-		const updated: typeof old = { ...current, configuration: revisionOnly ? old.configuration : { ...current.configuration,
+		const updated: SavedFileSyncConfiguration = { ...current, configuration: revisionOnly ? old.configuration : { ...current.configuration,
 			remoteFolderId: newFolder, ...(variant === 'v4 policy migration' ? { configurationVersion: 4 as const,
 				photoAutomation: { notificationIntervalMs: 1_800_000, uploadBytesPerSecond: 625_000, uploadBytesPerHour: 1_000_000_000 } } : {}) } };
 		const f = await foregroundFixture();
@@ -45,7 +52,7 @@ for (const { format, start, variant } of photoCases)
 		}));
 		const cloud = new Map<string, CloudFile>(sameFolder ? [] : [[entries[0].file.id, entries[0].file]]);
 		const receipts = new Map<string, CloudFile>(), attachments = new Map<string, CloudFile['content']>();
-		let selected: typeof updated = old, lose = true, scans = 0, charging = true, visible = entries;
+		let selected: SavedFileSyncConfiguration = old, lose = true, scans = 0, charging = true, visible = entries;
 		let photoEpoch: string | undefined;
 		const oldPhotoBatch = crypto.randomUUID(), newPhotoBatch = crypto.randomUUID();
 		let photoBatch = oldPhotoBatch;
@@ -148,7 +155,8 @@ for (const { format, start, variant } of photoCases)
 			visible = entries;
 		}
 		const before = await f.journal().pagedCheckpoints(access).current();
-		const first = (await jobs().photoQueue(await jobs().admit(old, 'old-job'), crypto.randomUUID()))!;
+		const admitted = await jobs().admit(old, 'old-job');
+        const first = folderMigration ? admitted : (await jobs().photoQueue(admitted, crypto.randomUUID()))!;
 		photoEpoch = first.photoQueueEpoch;
 		await assert.rejects(start(old, scope, input(), signal), /Photo publication reply lost/);
 		const pending = format === 'paged' ? (await f.journal().pagedRuns(access).active())!.spec : (await f.journal().read(scope))!;
@@ -228,8 +236,8 @@ for (const { format, start, variant } of photoCases)
 		} else assert.deepEqual(await read('runs', previousPhotoRunKey(key, pending.id)), pending);
 		await f.reload();
 		assert.deepEqual(await jobs().read(), replacement);
-		const armed = (await jobs().photoQueue(replacement, crypto.randomUUID()))!;
-		assert.notEqual(armed.photoQueueEpoch, first.photoQueueEpoch);
+		const armed = folderMigration ? replacement : (await jobs().photoQueue(replacement, crypto.randomUUID()))!;
+		if (!folderMigration) assert.notEqual(armed.photoQueueEpoch, first.photoQueueEpoch);
 		photoEpoch = armed.photoQueueEpoch; photoBatch = newPhotoBatch;
 		const paused = (await jobs().pause(armed))!;
 		assert.equal(await jobs().begin(paused, Date.now(), 'automatic'), null);
@@ -240,10 +248,10 @@ for (const { format, start, variant } of photoCases)
 		assert.equal(retry.photoQueueEpoch, armed.photoQueueEpoch);
 
 		f.condition('cellular'); charging = false; const beforeWait = scans;
-		await assert.rejects(runPagedForegroundCloudSync(updated, scope, input(), signal), revisionOnly ? /Waiting for Wi-Fi/ : /waiting for this device to charge/i);
+		await assert.rejects(runPagedForegroundCloudSync(updated, scope, input(), signal), (revisionOnly || folderMigration) ? /Waiting for Wi-Fi/ : /waiting for this device to charge/i);
 		assert.equal(scans, beforeWait); assert.deepEqual(reserveFolders, [oldFolder, oldFolder]);
 		charging = true;
-		if (revisionOnly) f.condition('wifi');
+		if (revisionOnly || folderMigration) f.condition('wifi');
 		const result = await runPagedForegroundCloudSync(updated, scope, input(), signal);
 		assert.ok('progress' in result); assert.equal(result.progress.phase, 'complete');
 		if (revisionOnly) {

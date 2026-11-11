@@ -1,5 +1,12 @@
 # Attachments and media
 
+Ordinary iOS folder Backup uploads use independent `fileUploadPolicyVersion`
+1.0.0 and saved v5 `uploadPolicy`; they share Photos device/folder budgets without
+advertising CPU, scan or download enforcement. See
+[iOS folder upload policy](../ios-folder-upload-policy.md), `uploadPolicy.test.ts`,
+the folder cases in `photoSettingsRecovery.test.ts`, native scoped-policy tests
+and `scripts/test-folder-upload-limits-ui.mjs`.
+
 Photos transfer settings are visible on the saved device/folder/config cards.
 `PhotoTransferScopeControls` uses the iOS automation 1.6 native policy bridge;
 `NativePhotoTransferPolicyStore`, `NativePhotoUploadBudget` and the background

@@ -802,3 +802,27 @@ test('continued Photos work is separately negotiated and bound to one exact conf
 	for (const patch of [{ configurationRevision: 'other' }, { deviceId: 'other' }, { photoContinuationRequested: false },
 		{ photoContinuationStatus: 'unknown' }]) assert.throws(() => parse(patch));
 });
+
+test('new folder policy client refuses old host before dispatch and negotiates authorized parts on capable host', async t => {
+ const { requests, reply } = iosFolderBridge(t);
+ const configuration = { ...saved.configuration, sourceKind: 'folder' as const, configurationVersion: 5 as const,
+  mode: 'backup' as const, paused: false, propagateDeletes: false, localRootId: rootId, uploadPolicy: { uploadBytesPerHour: 100_000_000 } };
+ const authorization = { ...saved, configuration, scope: { ...scope, rootId: saved.id } };
+ const source = { ...entry, sha256: null, fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8 * 1024 * 1024, partCount: 1, sha256: 'a'.repeat(64) } };
+ const upload = { source, authorization, uploadId: 'upload', requestId: 'operation', partNumber: 1, offset: 0, length: 3 };
+ await assert.rejects(requestMobileFolders('owner', { action: 'upload-part', rootId, upload }, new AbortController().signal), /Update Thingtime/);
+ assert.equal(requests.length, 0, 'an unsupported host sees no upload mutation');
+ const bridge = (window as any).thingtimeNativeBridge;
+ bridge.fileUploadPolicyVersion = '1.0.0'; bridge.fileUploadVersion = '1.6.0';
+ const pending = requestMobileFolders('owner', { action: 'upload-part', rootId, upload }, new AbortController().signal);
+ await new Promise(resolve => setTimeout(resolve, 0));
+ assert.equal((requests[0] as any).action, 'upload-part-authorized');
+ assert.deepEqual((requests[0] as any).upload.authorization, authorization);
+ reply(requests[0], { roots: [root], rootId, uploadedPart: { uploadId: upload.uploadId, requestId: upload.requestId, partNumber: 1, offset: 0, length: 3, version: source.version, size: 3, sha256: 'b'.repeat(64) } });
+ assert.equal((await pending).uploadedPart?.sha256, 'b'.repeat(64));
+});
+
+test('authorized folder part interruption remains a retryable inactive wait', () => {
+ assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...expected, rootId, syncWait: 'inactive' } }, expected,
+  { action: 'upload-part', rootId, upload: {} as any }), (error: any) => error.reason === 'inactive');
+});

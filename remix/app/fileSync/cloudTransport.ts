@@ -418,7 +418,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						let uploaded: Awaited<ReturnType<NonNullable<FingerprintSource['uploadPart']>>>;
 						try {
 							uploaded = await source.uploadPart(
-								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
+								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length, ...(nativeApproval ? { authorization: structuredClone(nativeApproval) } : {}) },
 								signal
 							);
 						} catch (error) {
