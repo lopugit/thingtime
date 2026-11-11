@@ -12,6 +12,8 @@ import {
 import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
 import { bindRootIdentityChannel, rootIdentity } from './utils/rootIdentity';
+import { getElectronBridge } from './utils/electronBridge';
+import { createDesktopRendererBootHealth, watchDesktopRendererReady } from './utils/desktopRendererReady';
 import {
   clearStaleChunkReloadGuard,
   reloadForStaleChunk,
@@ -70,10 +72,17 @@ if (!root) {
   throw new Error('Thingtime root element was not found.');
 }
 
+const desktopBootHealth = createDesktopRendererBootHealth();
+function DesktopRendererReady() {
+  React.useEffect(() => watchDesktopRendererReady({ router, root: root!, bridge: getElectronBridge(), isHealthy: desktopBootHealth.isHealthy }), []);
+  return null;
+}
+
 createRoot(root).render(
   <React.StrictMode>
     <ClientCacheProvider>
-      <RouterProvider router={router} />
+      <RouterProvider router={router} onError={error => { desktopBootHealth.onError(); console.error(error); }} />
+      <DesktopRendererReady />
     </ClientCacheProvider>
   </React.StrictMode>
 );

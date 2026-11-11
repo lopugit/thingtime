@@ -16,10 +16,23 @@
   the next launch must retain the known-good or shipped bundle and refuse to
   repeat the failed sequence. Test a changed candidate, changed active payload,
   concurrent stage calls, caller mutation, cancellation and malformed state.
-- When host startup/API integration is implemented, repeat these through the
-  separate development app and physical iOS target with real Nitro/renderer
-  startup and unchanged local data. The current unit tests do not establish
-  installed update, filesystem power-loss or iOS acceptance.
+- Run the opt-in `electron/scripts/verify-web-bundle-startup.mjs` against a
+  dedicated `native-bundle-qa-*` retained app with an explicit test Chromium
+  executable; commands are in `docs/native-web-bundles.md`. Confirm the actual
+  loopback Nitro/React startup, reject a React Router recovery screen even when
+  router state has no errors, then fail a signed server import and verify a
+  fresh process returns to the retained release with the same origin and sequence
+  floor. Early failure must not depend on a Password AutoFill/page-origin session.
+  Preserve ordinary account-change disconnect and before-quit cleanup behavior.
+- Electron does not implement the browser-context creation needed by the React
+  fixture: use its own isolated Chromium process while keeping startup/rollback
+  in the actual development app. A missing browser or cleanup error must produce
+  an explicit failed receipt; a screenshot alone is not acceptance.
+- Supervised-child fixtures must atomically publish complete proof files and
+  compare both to an independent expected digest. File existence does not prove
+  a completed write; report the failing phase without secret environment values.
+- Real API downloads, unsaved work, filesystem power-loss, external frozen-process
+  recovery and physical iOS behavior retain separate acceptance gates.
 
 ## Unified folder sync configs and deduplication
 

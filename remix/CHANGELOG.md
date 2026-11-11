@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Wire native bundle selection to real Nitro/React startup and
+  fresh-process rollback. Preserve ordinary account-change password retirement;
+  early failed-bundle recovery no longer needs an initialized page/provider.
+  Verify the isolated installed app and retain failure receipts; release API
+  delivery and iOS offline runtime remain open. [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-11: Add signed, content-addressed native web-release inventories,
   actual Electron runtime compatibility metadata and profile-owned launch-trial
   recovery primitives. Keep API delivery, startup activation and iOS runtime

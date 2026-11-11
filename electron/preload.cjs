@@ -48,6 +48,7 @@ if (process.argv?.includes('--thingtime-native-password-approval')) {
 	removeCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:remove-cached-release', request),
 	revealUpdateCache: () => ipcRenderer.invoke('thingtime-desktop:reveal-update-cache'),
 	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	rendererReady: () => ipcRenderer.invoke('thingtime-desktop:renderer-ready'),
 	getNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:get-node-panel-preference', request),
 	setNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-panel-preference', request),
 	configureLocalRuntime: (request) => ipcRenderer.invoke('thingtime-desktop:configure-local-runtime', request),

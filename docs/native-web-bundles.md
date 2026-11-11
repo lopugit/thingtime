@@ -1,7 +1,7 @@
 # Native web bundles and offline runtime
 
 Status: implementation in progress, 11 November 2026. This extends the anonymous
-and local-first work in PR #1000; it is not installed updater acceptance.
+and local-first work in PR #1000; release API delivery and production updater acceptance remain incomplete.
 
 ## Required result
 
@@ -48,6 +48,62 @@ not replaced with a new empty profile. Signature, compatibility and byte integri
 are rechecked before loading retained executable code. User content, accounts,
 credentials and application data are outside the release cache.
 
+## Native startup integration and executable verification
+
+The Electron host now selects a verified bundle before importing Nitro. A trial
+is confirmed only after the real loopback capability manifest and a committed,
+error-free React application are ready. React Router's component error callback
+is an independent veto because its recovery UI can render while router state
+contains no error. An unconfirmed failure requests a fresh application process;
+confirmed/shipped startup failures retain the ordinary diagnostic path. An
+in-process deadline cannot detect a synchronously frozen main process; external
+watchdog acceptance remains open.
+
+The retained development preparation includes the shared host validators,
+shipped trust policy and complete web inventory. The shipped policy intentionally
+contains no production download trust keys until the release signing process is
+provisioned. It still starts the shipped app offline.
+
+Run the real startup fixture only against its dedicated development workspace:
+
+```sh
+corepack pnpm --dir electron run build:web
+corepack pnpm --dir electron run dev:parallel --workspace=native-bundle-qa-pr1000 --prepare-only --use-staged
+THINGTIME_NATIVE_BUNDLE_QA=1 node electron/scripts/verify-web-bundle-startup.mjs \
+  --workspace=native-bundle-qa-pr1000 --output=<new-evidence-directory> \
+  --chromium=<absolute-Chromium-or-Chrome-for-Testing-executable>
+```
+
+The React Router fixture runs in a separate clean Chromium process: Electron's
+CDP target rejects `Target.createBrowserContext`. Actual update selection,
+Nitro/renderer confirmation and fresh-process rollback run in the installed
+isolated development app, with its own profile and managed database. Synthetic
+signing authority stays in memory and never authorizes production releases.
+The final receipt is successful only after cleanup succeeds; failures retain a
+phase, diagnostic and explicit failed result. The [11 November real startup and
+rollback run](../artifacts/anonymous-release-2026-11-11/native-startup-recovery/README.md)
+passes in the installed isolated development app. Reuse neither a screenshot alone
+nor a missing receipt as successful acceptance.
+
+## Planned API delivery using existing publication primitives
+
+Keep the canonical GitHub Release catalogue and add a signed release envelope
+plus a deterministic stored ZIP of the declared payload. Reuse the existing
+`thingTransfer/storedZip.ts` ZIP64 layout planner/writer rather than introducing
+a second archive format or extracting arbitrary archive paths. A release API
+can derive each declared file's byte range from that signed layout, resolve
+only approved canonical repository assets and stream bounded exact ranges.
+Native clients negotiate the catalogue/content capabilities at the selected
+origin, verify the envelope against shipped trust, then stage verified file
+bytes. This API and transport are not implemented by the startup integration.
+
+Before implementation, prove upstream range support and the exact public/private
+repository credential boundary. Private upstream grants use the supported
+server-vault workflow; the anonymous caller cannot supply URLs, credentials or
+publication identity. Extend the protected existing release publisher, both
+capability manifests and compiled route coverage. Production trust provisioning,
+actual API download and unsaved-work-aware activation remain required.
+
 ## Remaining integration and acceptance
 
 1. **P0 — release API and trust provisioning.** Register an origin-scoped semantic
@@ -56,8 +112,8 @@ credentials and application data are outside the release cache.
    keys through the supported release process. Synthetic test keys do not grant
    production authority. No release HTTP endpoint has been added in this batch.
 2. **P0 — transport and Electron startup.** Stream permitted release bytes into
-   private staging, enforce cancellation and transport resource budgets, call the
-   store before Nitro starts, and acknowledge real server plus renderer startup.
+   private staging, enforce cancellation and transport resource budgets, complete actual download acceptance. Startup selection and real server/renderer
+   acknowledgment are implemented separately above.
    Retain the stable renderer origin and profile. Defer reload while work is
    unsaved; preserve the existing whole-native-app updater for shell/ABI changes.
 3. **P1 — iOS runtime.** Establish a maintained compatible embedded Node build,
@@ -93,6 +149,24 @@ requires native modules to be linked into the application; the
 also exclude child-process/cluster support. Electron's process-managed database
 and desktop native bindings therefore cannot simply become the iOS runtime.
 These are unresolved compatibility requirements, not an authorization problem.
+
+A further primary-source audit found a third-party Node 24 candidate: the
+[fogtape Node.js Mobile fork](https://github.com/fogtape/nodejs-mobile/blob/recipe/README.md)
+advertises a full arm64 device/simulator XCFramework in
+[prerelease 24.22.1-0](https://github.com/fogtape/nodejs-mobile/releases/tag/v24.22.1-0).
+Its [runtime constraints](https://github.com/fogtape/nodejs-mobile/blob/recipe/docs/FAQ.md)
+describe jitless V8, a JavaScript WebAssembly implementation for fetch/Undici,
+no child processes and sandboxed writable paths. The artifact has not yet been
+downloaded, provenance-verified or built into Thingtime; this is a candidate,
+not runtime acceptance. A separate simulator target should first import the
+actual canonical Nitro payload and render its real web application.
+
+The largest independent gap is persistence: desktop starts `mongod`, while the
+API relies on Mongo collections and transactions. iOS needs an in-process device
+storage boundary preserving identities, authorization, uniqueness, atomic
+mutations/accounting and recovery. Native bcrypt and sharp also need compatible
+linked builds or equivalent reusable adapters. A static shell or a mock database
+would not establish the requested offline API capabilities.
 
 Apple's [current review guidelines](https://developer.apple.com/app-store/review/guidelines/#software-requirements)
 restrict downloaded code that changes application functionality and constrain

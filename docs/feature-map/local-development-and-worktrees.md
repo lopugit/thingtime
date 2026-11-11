@@ -2,14 +2,20 @@
 
 ## Native web bundle releases
 
-`native-bundles/{release,inventory}.cjs` owns signed executable inventories and
+`native-bundles/{release,inventory,host}.cjs` owns signed executable inventories and
 runtime compatibility; `package-release.mjs` packages verified immutable releases
 from the actual Electron web build. `electron/lib/web-bundle-store.cjs` retains
 confirmed versions separately from launch trials. Run
 `node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
 The real `build:web`/`verify:web` paths prove build metadata and complete inventory;
 unit tests alone do not prove installed updates. See [native web bundles](../native-web-bundles.md)
-for the remaining API, startup and iOS work. No new HTTP route is registered yet.
+for the remaining API and iOS work. `electron/lib/web-bundle-launch.cjs`,
+`main.cjs` and `desktopRendererReady.ts` gate trial promotion on real server and
+renderer startup. `verify-web-bundle-startup.mjs` exercises the installed isolated
+development app, including early-import failure and fresh-process rollback;
+its React-boundary fixture uses a separate Chromium process. Run launch/host,
+renderer-readiness and desktop-shutdown tests with the store checks. No new HTTP
+route is registered yet.
 
 ## Agent browser runtime
 

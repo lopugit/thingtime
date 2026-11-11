@@ -1,0 +1,43 @@
+{
+  "observedAt": "2026-11-11T07:43:39.705Z",
+  "implementation": {
+    "main.cjs": "855f1fb662a402038d01ecde86234e4f6096bb4c785fdf29f7f5e65e41e8a100",
+    "preload.cjs": "73d781609d4e29c7ae6e15a74f9f6a2daadba9dd6f0ec08b0902b1d23dd33468",
+    "lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "lib/web-bundle-launch.cjs": "b4547e68e29213051133c7e8a8897e7b2df19003d5652b772265336f41c7180b",
+    "../native-bundles/host.cjs": "5e12b298aa2cac9c8082a947b7547bd6a65cc3d0ab2de69552e3135a4b2808aa",
+    "../native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "../native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e"
+  },
+  "syntheticSigner": true,
+  "realNitroAndRendererAcknowledgment": true,
+  "actualReactRouterErrorBoundaryRefusal": true,
+  "automaticFreshProcessRollback": true,
+  "goodReleaseId": "578f5b5ecf4ed032b02b6b5d070bec7022785c568d83442ca5a16bd416ca364e",
+  "failedReleaseId": "ece8cb25e5fd702787662651143a7a0a63eccc0715492dd1dea3683bf1c7ebff",
+  "stableOrigin": "http://127.0.0.1:29511",
+  "productionActivation": false,
+  "installedDevelopmentApp": "/Users/lopu/Applications/Thingtime Dev native-bundle-qa-pr1000.app",
+  "profile": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-pr1000/profile",
+  "passed": true,
+  "startedAt": "2026-11-11T07:42:55.849Z",
+  "finishedAt": "2026-11-11T07:43:40.878Z",
+  "phase": "complete",
+  "cleanupVerified": true,
+  "rendererBoundaryHost": "isolated Chromium; native startup and rollback use the installed development app",
+  "rendererBoundaryVersion": "Chrome/140.0.7339.16",
+  "rendererBoundaryCases": [
+    {
+      "broken": false,
+      "acknowledged": 1,
+      "renderErrors": 0,
+      "routerErrors": null
+    },
+    {
+      "broken": true,
+      "acknowledged": 0,
+      "renderErrors": 1,
+      "routerErrors": null
+    }
+  ]
+}

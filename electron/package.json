@@ -50,13 +50,14 @@
 			"lib/**/*.cjs",
 			"main.cjs",
 			"preload.cjs",
+      "native-web-policy.json",
 			"scripts/install-cached-release.mjs",
 			"scripts/install-local-app.mjs",
 			"scripts/verify-signed-app.mjs",
 			"package.json"
 		],
 		"extraResources": [
-			{ "from": "../native-bundles", "to": "native-bundles", "filter": ["release.cjs", "inventory.cjs"] },
+      { "from": "../native-bundles", "to": "native-bundles", "filter": ["release.cjs", "inventory.cjs", "host.cjs"] },
 			{ "from": "scripts/password-agent.mjs", "to": "password-agent.mjs" },
 			{ "from": "scripts/password-agent-acl.cjs", "to": "password-agent-acl.cjs" },
 			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },

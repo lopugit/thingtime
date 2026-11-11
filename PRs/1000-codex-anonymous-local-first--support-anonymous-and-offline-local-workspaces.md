@@ -2,6 +2,43 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Real native startup and failed-update recovery — 2026-11-11
+
+The preserved startup batch is now integrated. Electron selects a verified bundle
+before Nitro import and confirms a trial only after the loopback manifest and
+committed, error-free React application are ready. React Router render errors
+veto confirmation independently of router state. Host trust is shipped, scoped
+and validated; no production signing authority is invented.
+
+Actual acceptance in the installed isolated development app confirms the real
+Nitro/React startup, then a signed but deliberately broken server update causes
+a fresh process to recover the retained release at the same local origin and
+sequence floor. The test exposed and fixed early rollback depending on a page
+origin/password session. Ordinary account-change restart still awaits password
+disconnect; same-authority bundle recovery uses process relaunch directly.
+[Actual screenshots, receipt and limits](../artifacts/anonymous-release-2026-11-11/native-startup-recovery/README.md).
+
+The verifier now uses a separate Chromium process for React error-boundary
+fixtures because Electron rejects CDP browser-context creation. It writes success
+only after cleanup; missing-browser and failed-update runs retain explicit
+failed receipts. A supervised-process test also now atomically publishes its
+synthetic proof and checks both copies against an independent digest, closing a
+real fixture race without changing the runtime or hiding failures.
+
+A fresh main fetch still resolves to `981036caaf`; `git merge origin/main`
+reports “Already up to date.” Final Electron coverage is **505 passed, zero
+failed, five explicit skips** (510 total). Raw TypeScript, the zero-error ratchet,
+full lint (zero errors / 370 warnings) and the canonical web build pass.
+[Verification summary](../artifacts/anonymous-release-2026-11-11/native-startup-recovery/checks.json)
+retains the tested source hashes and log fingerprints. Resulting-head CI and
+preview remain separate from these local checks. The older incomplete-startup
+entry below is historical and superseded by this receipt.
+The release API, trusted download transport, unsaved-work-aware updates, external
+frozen-process recovery and complete offline/device acceptance remain open.
+A third-party Node 24 mobile XCFramework candidate was found, but iOS runtime
+provenance, native addons and in-process transactional storage are still unverified.
+The [architecture](../docs/native-web-bundles.md) records exact next steps.
+
 ## Requested main refresh and capability status — 2026-11-11
 
 Fetched main `981036caaf58f2766d07588bf1ce635a1f843e09` and merged it into

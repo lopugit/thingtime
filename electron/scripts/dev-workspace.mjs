@@ -114,8 +114,12 @@ export async function prepareWorkspace(workspace, electronDir, electronExecutabl
 	let sourceActivated = false, runtimeActivated = false, appActivated = false;
 	try {
 		await mkdir(stagedSource, { recursive: true });
-		for (const item of ['main.cjs', 'preload.cjs', 'package.json', 'pnpm-lock.yaml', 'lib', 'scripts']) {
+		for (const item of ['main.cjs', 'preload.cjs', 'native-web-policy.json', 'package.json', 'pnpm-lock.yaml', 'lib', 'scripts']) {
 			await cp(path.join(electronDir, item), path.join(stagedSource, item), { recursive: true });
+		}
+		await mkdir(path.join(stage, 'source/native-bundles'), { recursive: true });
+		for (const item of ['release.cjs', 'inventory.cjs', 'host.cjs']) {
+			await cp(path.join(electronDir, '../native-bundles', item), path.join(stage, 'source/native-bundles', item));
 		}
 		// A separate production-only dependency install survives source-worktree
 		// archival. Internal pnpm links are allowed; external links are refused.
@@ -124,6 +128,7 @@ export async function prepareWorkspace(workspace, electronDir, electronExecutabl
 		for (const item of ['web', 'ai', 'mail', 'database']) {
 			await cp(path.join(electronDir, 'dist', item), path.join(stagedSource, 'dist', item), { recursive: true, dereference: true });
 		}
+		await cp(path.join(electronDir, 'dist/web-integrity.json'), path.join(stagedSource, 'dist/web-integrity.json'));
 		run(process.execPath, [path.join(stagedSource, 'scripts/verify-web-build.mjs')], developmentEnvironment());
 		const originalBundle = path.resolve(electronExecutable, '../../..');
 		const readPlist = (bundle, key) => {

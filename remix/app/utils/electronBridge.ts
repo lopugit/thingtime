@@ -45,6 +45,7 @@ export type ThingtimeLocalRuntime = {
 };
 
 export type ThingtimeDesktopInfo = {
+	webBundle?: { source: 'bundled' | 'retained' | 'trial'; releaseId: string | null };
  sessionStorage?: {
   mode: 'partitioned' | 'legacy';
   legacyApiOrigin: string | null;
@@ -336,6 +337,7 @@ export type ThingtimeDesktopBridge = {
 	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
 	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
+	rendererReady?: () => Promise<boolean>;
 	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
 	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;
 	configureLocalRuntime?: (request: {

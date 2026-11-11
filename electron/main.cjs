@@ -27,6 +27,9 @@ if (process.argv.includes('--password-agent-info')) {
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { startRendererServer } = require('./lib/renderer-server.cjs');
+const { createWebBundleStore } = require('./lib/web-bundle-store.cjs');
+const { createWebBundleLaunch } = require('./lib/web-bundle-launch.cjs');
+const { validateTrustPolicy, createElectronBundleHost, assertElectronBundleMetadata } = require('../native-bundles/host.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
@@ -93,6 +96,8 @@ const macTitlebar = {
 let appOrigin = null;
 let activeContentOrigin = null;
 let webBuildMetadata = null;
+let selectedWebBundle = null;
+let webBundleLaunch = null;
 let mainWindow = null;
 let sessionHash = null;
 let aiConnectorsPromise = null;
@@ -119,6 +124,7 @@ async function closeDesktopServices() {
 }
 attachQuitSignals(app);
 app.on('before-quit', (event) => {
+ webBundleLaunch?.close();
  if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && process.platform === 'darwin')) return;
  event.preventDefault();
  if (desktopServicesClosing) return;
@@ -244,12 +250,40 @@ function loadLocalEnv() {
   loadEnvFile(path.join(remixDir, '.env.auto'));
 }
 
-function getWebOutputDir() {
+function getShippedWebRoot() {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'web', '.output');
+    return path.join(process.resourcesPath, 'web');
   }
+  return path.dirname(localWebOutput);
+}
 
-  return localWebOutput;
+function getWebOutputDir() {
+  return path.join(selectedWebBundle?.directory || getShippedWebRoot(), '.output');
+}
+
+async function initializeWebBundleLaunch() {
+  if (parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN) return;
+  // Trust is shipped with the native shell; a downloaded bundle or API cannot
+  // supply its own keys. An empty key list keeps shipped offline startup usable.
+  const policy = validateTrustPolicy(JSON.parse(fs.readFileSync(path.join(__dirname, 'native-web-policy.json'), 'utf8')));
+  const host = createElectronBundleHost({ platform: process.platform, arch: process.arch,
+    versions: process.versions, shellVersion: app.getVersion(), policy });
+  const bundledDirectory = getShippedWebRoot();
+  assertElectronBundleMetadata(JSON.parse(fs.readFileSync(path.join(bundledDirectory, 'metadata.json'), 'utf8')), host);
+  const store = await createWebBundleStore({ bundledDirectory, trustedKeys: policy.trustedKeys, host,
+    cacheDirectory: path.join(app.getPath('userData'), 'native-web-bundles', host.nativeAbi, host.channel) });
+  webBundleLaunch = createWebBundleLaunch({ store, onFailure: async () => {
+    if (desktopServicesClosing || desktopServicesClosed) return;
+    // Nitro is imported into this process. Never import a second server over a
+    // failed one: the next process rolls the attempted trial back before import.
+    desktopSettingsLastError = 'The new web bundle did not start. Restoring the previous bundle.';
+    // Recovery retains the same account, origin and profile. It must also work
+    // before a renderer origin or password-provider session exists.
+    await relaunchDesktopProcess();
+  } });
+  selectedWebBundle = await webBundleLaunch.prepare();
+  webBuildMetadata = null;
+  assertElectronBundleMetadata(readWebBuildMetadata(), host);
 }
 
 function readWebBuildMetadata() {
@@ -270,7 +304,9 @@ function readWebBuildMetadata() {
 }
 
 function getCurrentAppVersion() {
-  const releaseVersion = readWebBuildMetadata()?.desktopRelease?.version;
+  // A web update cannot change the native shell's updater/version identity.
+  let releaseVersion;
+  try { releaseVersion = JSON.parse(fs.readFileSync(path.join(getShippedWebRoot(), 'metadata.json'), 'utf8'))?.desktopRelease?.version; } catch {}
   return normalizeVersionString(releaseVersion) || app.getVersion();
 }
 
@@ -395,6 +431,16 @@ async function startNitroServer() {
   });
   app.on('before-quit', () => { void renderer.close(); });
   appOrigin = renderer.origin;
+  if (webBundleLaunch?.selection?.source === 'trial') {
+    const response = await fetch(new URL('/.well-known/thingtime-capabilities.json', appOrigin), {
+      redirect: 'error', signal: AbortSignal.timeout(10000)
+    });
+    const manifest = await response.json();
+    if (!response.ok || manifest.origin !== appOrigin || !manifest.features?.['api.things']?.version) {
+      throw new Error('The new bundled API did not serve its local capability manifest.');
+    }
+    await webBundleLaunch.serverReady();
+  }
   return appOrigin;
 }
 
@@ -1674,14 +1720,22 @@ async function desktopUploadMenuBarIcon(event) {
 	return { cancelled: false, settings: await selectMenuBarIcon('custom', targetPath) };
 }
 
-async function restartDesktopRuntime() {
- mainWindow?.webContents.stop();
- await passwordProvider.disconnect();
+async function relaunchDesktopProcess() {
  authorityTransition.retainUntilRestart();
  if (parallelDevMode) {
   if (!process.connected || typeof process.send !== 'function') throw new Error('Restart this development app through the parallel development launcher.');
-  process.send({ type: 'thingtime-dev-restart' }, () => app.quit());
+  await new Promise((resolve, reject) => {
+   process.send({ type: 'thingtime-dev-restart' }, (error) => {
+    if (error) { reject(new Error('The development launcher did not accept the restart request.')); return; }
+    app.quit(); resolve();
+   });
+  });
  } else { app.relaunch(); app.quit(); }
+}
+async function restartDesktopRuntime() {
+ mainWindow?.webContents.stop();
+ await passwordProvider.disconnect();
+ await relaunchDesktopProcess();
 }
 function effectiveDesktopSettings() {
  const settings = desktopSettings?.snapshot();
@@ -1740,6 +1794,7 @@ function getDesktopInfo() {
   const buildMetadata = readWebBuildMetadata();
   return {
     appVersion: getCurrentAppVersion(),
+    webBundle: { source: selectedWebBundle?.source || 'bundled', releaseId: selectedWebBundle?.releaseId || null },
     buildIdentity: {
       gitBranch: typeof buildMetadata.gitBranch === 'string' ? buildMetadata.gitBranch : null,
       gitCommit: typeof buildMetadata.gitCommit === 'string' && /^[0-9a-f]{7,40}$/u.test(buildMetadata.gitCommit)
@@ -1929,6 +1984,12 @@ function createWindow() {
 		isClosing: () => desktopServicesClosing || desktopServicesClosed,
 		onError(error) {
 			desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+			if (webBundleLaunch?.selection?.source === 'trial') {
+				void webBundleLaunch.fail(error).then(recovering => {
+					if (!recovering && !webBundleLaunch.failure && !desktopServicesClosing && !desktopServicesClosed) showLoadUrlError(error);
+				}).catch(showLoadUrlError);
+				return;
+			}
 			showLoadUrlError(error);
 		}
 	});
@@ -2045,6 +2106,11 @@ ipcMain.handle('thingtime-desktop:activity', (event, request) => {
  return desktopActivities.request(request);
 });
 ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
+ipcMain.handle('thingtime-desktop:renderer-ready', async (event) => {
+  requireLocalRuntimeSender(event);
+  if (desktopServicesClosing || desktopServicesClosed) return false;
+  return await webBundleLaunch?.rendererReady() || false;
+});
 ipcMain.handle('thingtime-desktop:node-location', (event, request) => nodeLocationRequest(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
 ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
@@ -2081,6 +2147,7 @@ if (!singleInstanceLock) {
 		.whenReady()
 		.then(async () => {
    await initializeDesktopSettings();
+   await initializeWebBundleLaunch();
    await startNitroServer();
    // Each API/database has its own persisted cookie/storage partition. Clear
    // only HTTP cache so new bundles cannot revive stale root-data responses.
@@ -2094,7 +2161,8 @@ if (!singleInstanceLock) {
         console.warn('Unable to check Thingtime API endpoint compatibility', error);
       });
     })
-    .catch((error) => {
+    .catch(async (error) => {
+      if (await webBundleLaunch?.fail(error).catch(() => false)) return;
       dialog.showErrorBox('Thingtime failed to start', error instanceof Error ? error.message : String(error));
       app.quit();
     });
