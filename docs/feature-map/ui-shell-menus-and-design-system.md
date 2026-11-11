@@ -514,3 +514,30 @@ editable property and attribute rows, typed value choices and CSS source. Its
 lazy catalog is a projection of the existing standards pipeline. See
 [the inspector contract](../web-standards-builder.md#html-and-css-inspector)
 and the Builder element inspector checklist in `TESTING.md`.
+
+## Password workspace editing
+
+`PasswordWorkspaceControls` uses private settings documents for the toolbar,
+filters, loading/results controls, entry heading/actions and authenticator input.
+`PasswordPreviewList` retains its existing separately editable card template,
+metadata identity, icon lifecycle and focus return. `PasswordEntryEditor` exposes
+ordinary editable nested field and property templates; values and imported property
+names hydrate only into opted-in live controls through `TransientPrivateControls`.
+Generic Actions and Builder history never receive the decrypted draft.
+`PasswordPanelDocument` applies the same boundary to source history/raw originals
+and attachment upload, download, retry, and removal templates.
+`settingsDocumentBlocks` refuses saved values on marked private controls.
+
+`passwords/structuredFields.ts` changes only existing, typed own leaves. Unknown
+properties, arrays, source paths and attachment/archive links survive; unsafe
+numbers, duplicate object keys and unsupported structures retain raw JSON without
+lossy conversion. Explicit field ordering/labels/sections/types remain entry data.
+The current password API, verification policy, generator, passkey setup and file
+transport remain authoritative. Import/export content uses editable transfer blocks
+inside the existing accessible modal.
+
+Run `pnpm --dir remix test:passwords` and
+`pnpm --dir remix test:passwords:editor-ui`. The browser fixture owns its Chromium
+process and synthetic identity; it tests actual components and Builder persistence,
+not a real vault, device authenticator or provider. Keep live encrypted API/file
+and native-provider acceptance separate.
