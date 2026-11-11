@@ -10941,6 +10941,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] With a signed newer standalone `Thingtime Passwords.app` running, install
+  a verified Thingtime bundle whose nested companion is older. Confirm the
+  standalone path, inode, version, signature, Keychain group and running PID
+  stay intact while the main app and Node update; verify runtime `native.passwords`
+  negotiation and a normal provider status/action separately. Equal or older
+  standalone companions must still require a clean quit before replacement.
+  Malformed or reversed versions, different signing/team/group/entitlement or
+  changed destination during staging must refuse safely. Also test an idle
+  newer companion with mismatched signing and an unreadable version/profile:
+  neither may be staged or replaced, and the diagnostic must not print the
+  verifier's raw error. A failed main install
+  must restore the old main app without touching a preserved companion. Run
+  `node --test electron/test/install-local-app.test.cjs` for the synthetic guards.
+
 - [ ] macOS companion editing shortcuts: in the signed installed companion,
   focus a synthetic password input and verify Command-V inserts masked text.
   Compare the field's normal context-menu Paste without reading the clipboard
