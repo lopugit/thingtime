@@ -145,6 +145,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Merge main AppID compatibility into PR #1000 with a distinct
+  passwords 1.10 contract for the combined cancellation-receipt behavior. Verify
+  actual hosted native-renderer artifacts and correct the iOS Fetch probe's
+  sanitized runtime defaults. Retain partial automatic-update staging evidence;
+  connected-host delivery and full native/iOS acceptance remain open.
+  [Current foundations and remaining work](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-11: Add guarded desktop bundle activation with durable renderer checkpoints,
   native request/runtime shutdown reservations and close-veto recovery. Full local
   API background-work admission and installed automatic-restart acceptance remain
@@ -8381,6 +8389,11 @@ Detailed PR notes:
 <!--
 
 - 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
+
+- 2026-11-11: Add narrow browser assertion AppID compatibility with truthful
+  appid:false results, unchanged RP/allowlist verification, same-origin capability
+  negotiation and native fallback for unsupported authorization. Adapter 0.5.0,
+  passwords API 1.9.0; no AppID fetching or legacy key retargeting. **Codex (AI)**
 
 ## [1.0.0] - YYYY-MM-DD
 Move entries up from [Unreleased] when cutting a tagged release.

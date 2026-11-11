@@ -78,14 +78,20 @@ type WorkerReply = { protocol: string; result: RenderOutput | { ok: false; code:
 type Vm = Pick<Sandbox, 'name' | 'persistent' | 'routes' | 'currentSession' | 'stop' | 'delete'>;
 type VmSession = ReturnType<Vm['currentSession']>;
 type WorkerDependencies = { create: (name: string, config: HostedRenderConfig, signal: AbortSignal) => Promise<Vm>; recover: (name: string, signal: AbortSignal) => Promise<Vm>; workTimeoutMs?: number };
-const workerDependencies: WorkerDependencies = {
+export function createHostedRenderWorkerDependencies(credentials?: { token: string; teamId: string; projectId: string }): WorkerDependencies {
+  return {
   create: (name, config, signal) => Sandbox.create({
+    ...credentials,
     name, source: { type: 'snapshot', snapshotId: config.snapshotId }, resources: { vcpus: 1 },
     networkPolicy: 'deny-all', persistent: false, ports: [], timeout: VM_MAX_MS,
     env: {}, tags: { purpose: 'thingtime-hosted-render' }, signal
   }),
-  recover: (name, signal) => Sandbox.get({ name, resume: false, signal })
-};
+  recover: (name, signal) => Sandbox.get({ ...credentials, name, resume: false, signal })
+  };
+}
+// Deployed requests retain the provider's origin/project-scoped OIDC identity.
+// Explicit SDK credentials are only supplied by the operator preflight.
+const workerDependencies = createHostedRenderWorkerDependencies();
 
 export function parseHostedRenderConfig(text: string | null, origin: string): HostedRenderConfig | null {
   if (!text || Buffer.byteLength(text) > 2048) return null;

@@ -112,7 +112,8 @@ durable partial bytes for resume and rechecks complete files before reuse.
 independent verified copy and removes the temporary download copy after staging.
 Cancellation preserves resumable bytes; a subsequent check can retry. A staged
 release activates on the next normal process start. It never reloads a live
-editor; explicit unsaved-work-aware reload remains future work.
+editor. Guarded automatic activation is implemented below; its complete installed
+acceptance remains open.
 
 These source implementations and local fixtures do not establish a signed
 production publication, configured trust, reachable deployed release routes or
@@ -129,6 +130,11 @@ The renderer now supports a nonce-bound durable persistence checkpoint through
 controls it. An unfocused window must be idle for 30 seconds; dirty or unknown
 editors, active media, failed persistence and identity changes keep the candidate
 pending. This source checkpoint still requires final installed-app acceptance.
+The isolated remote-mode fixture used the canonical release API and real native
+downloader to stage 1,823 signed payload files after baseline startup. Native
+window control stopped that attempt before the background/automatic-restart
+checks; no positive automatic replacement is claimed. See the
+[partial acceptance receipt](../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
 
 The main process reserves both the embedded HTTP server and ChatGPT runtime
 before starting close. Existing requests, streamed responses, websocket sessions,
@@ -185,18 +191,22 @@ Node 24.18.0 and native module ABI 148, then removed its temporary resources.
 
 ## iOS evidence and constraints
 
-The [latest isolated HTTP probe](../artifacts/anonymous-release-2026-11-11/ios-native-api-startup/README.md)
+The [Fetch fidelity follow-up](../artifacts/anonymous-release-2026-11-11/ios-native-fetch-fidelity/README.md)
 starts the genuine compiled Nitro middleware and serves its exact-origin manifest
-with HTTP 200 (367 features / 729 operations) through `node:http`. It uses the
-previous pinned source snapshot (`39be8cf1…`), whose Things/search versions are
-1.63/1.7, not the current merged 1.64/1.8 contract. Global `fetch` fails on an
-unsupported WebAssembly instruction (`0xFD`); direct HTTP succeeds against the
-same route. This runtime compatibility defect must be resolved before full API
-acceptance. `node:sqlite` exposes `DatabaseSync`, but no database was opened or
-transaction contract tested. A reserved non-listening loopback destination fences
-Mongo; no data writes or credentials are used. The server and owned simulator
-were cleaned up. This is API startup/discovery evidence, not full offline storage.
+with HTTP 200 through global Fetch (367 features / 729 operations). Repeated
+manifest reads, binary/UTF-8 streaming, gzip, redirect modes and cancellation also
+pass. The initial `0xFD` failure came from the probe deleting Node Mobile's
+runtime-provided `UNDICI_NO_WASM_SIMD=1` default while sanitizing the environment.
+Preserving that exact documented non-secret setting fixes the harness; no runtime
+patch, parser replacement or weakened security policy is used.
 
+The experiment uses the previous pinned source snapshot (`39be8cf1…`), whose
+Things/search versions are 1.63/1.7, not the current merged 1.64/1.8 contract.
+`node:sqlite` exposes `DatabaseSync`, but no database was opened or transaction
+contract tested. A reserved non-listening loopback destination fences Mongo;
+no data writes or credentials are used. The server and owned simulator were
+cleaned up. This proves API startup/discovery and Fetch behavior, not full
+offline storage or production WebView/device integration.
 
 On 11 November, the official [Node.js Mobile release catalogue](https://github.com/nodejs-mobile/nodejs-mobile/releases)
 reported `v18.20.4` as latest, while this checkout's Remix engine is `24.x`.

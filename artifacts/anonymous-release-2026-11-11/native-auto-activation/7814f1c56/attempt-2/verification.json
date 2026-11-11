@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T11:15:27.801Z",
+  "finishedAt": "2026-11-11T11:16:10.976Z",
+  "phase": "baseline-startup",
+  "cleanupVerified": true,
+  "failure": {
+    "name": "TimeoutError",
+    "message": "Waiting failed: 30000ms exceeded"
+  },
+  "retainedDiagnostics": "/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/thingtime-native-auto-8zomTo"
+}

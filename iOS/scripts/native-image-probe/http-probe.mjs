@@ -4,7 +4,12 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
+import { gzipSync } from 'node:zlib';
 const reportPath=process.env.PROBE_REPORT;
+// This non-secret parser selection is installed by the pinned mobile runtime.
+const runtime={mobile:process.versions.mobile,undici:process.versions.undici,
+  parserSetting:process.env.UNDICI_NO_WASM_SIMD,
+  wasmImplementation:/\[native code\]/.test(Function.prototype.toString.call(WebAssembly.Module))?'engine':'polyfill'};
 const work=fs.mkdtempSync(path.join(os.tmpdir(),'thingtime-ios-api-'));
 const dbPort=Number('__DB_PORT__');
 assert(Number.isInteger(dbPort)&&dbPort>1024&&dbPort<65536&&dbPort!==27017);
@@ -12,13 +17,17 @@ assert(Number.isInteger(dbPort)&&dbPort>1024&&dbPort<65536&&dbPort!==27017);
 for(const key of Object.keys(process.env))delete process.env[key];
 Object.assign(process.env,{NODE_ENV:'production',HOST:'127.0.0.1',HOME:work,TMPDIR:work,PATH:'/usr/bin:/bin',
   MONGODB_CONNECTION_STRING:`mongodb://127.0.0.1:${dbPort}/thingtime_ios_api_probe?directConnection=true&serverSelectionTimeoutMS=250&connectTimeoutMS=250`});
+// Preserve exactly the runtime-provided setting; do not invent or override it.
+if(runtime.parserSetting==='1')process.env.UNDICI_NO_WASM_SIMD=runtime.parserSetting;
 process.chdir(work);
 const report={node:process.version,platform:process.platform,arch:process.arch,
   sourceSha256:'__ENTRY_SHA256__',apiStarted:false,storageTested:false,dataWritesAttempted:false,
   databaseFence:{host:'127.0.0.1',port:dbPort,defaultPort:false,unreachable:false},
-  sqlite:{databaseOpened:false},requests:[]};
-let server;
+  sqlite:{databaseOpened:false},runtime,requests:[],fetchPassed:false};
+let server,diagnostics;
 try{
+  assert.equal(runtime.parserSetting,'1','Pinned mobile runtime must supply its documented scalar parser selection');
+  assert.equal(process.env.UNDICI_NO_WASM_SIMD,runtime.parserSetting);
   await new Promise((resolve,reject)=>{
     const socket=net.createConnection({host:'127.0.0.1',port:dbPort});
     socket.setTimeout(500,()=>{report.databaseFence.connectionOutcome='timeout';socket.destroy();resolve();});
@@ -47,7 +56,7 @@ try{
     fetchAttempt.status=response.status;
   }catch(error){
     fetchAttempt.error={name:error.name,message:error.message,code:error.code||null,
-      cause:error.cause?{name:error.cause.name,code:error.cause.code||null,message:error.cause.message}:null};
+      cause:error.cause?{name:error.cause.name,code:error.cause.code||null,message:error.cause.message,stack:error.cause.stack}:null};
     const httpAttempt={transport:'node:http',method:'GET',path:pathname};
     report.requests.push(httpAttempt);
     response=await new Promise((resolve,reject)=>{
@@ -75,8 +84,48 @@ try{
     things:manifest.features['api.things'].version,search:manifest.features['api.things-search']?.version,
     originMatched:true,operationRegistered:true};
   report.manifestPassed=true;
+  assert.equal(fetchAttempt.status,200,'Global Fetch must pass; direct HTTP fallback is diagnostic only');
+  assert.equal(fetchAttempt.error,undefined);
+  const streamed=Buffer.from('native-fetch-💙-chunked');
+  diagnostics=http.createServer((request,response)=>{
+    if(request.url==='/stream'){
+      response.writeHead(200,{'Content-Type':'application/octet-stream'});
+      response.write(streamed.subarray(0,14));
+      response.end(streamed.subarray(14));
+    }else if(request.url==='/gzip'){
+      response.writeHead(200,{'Content-Encoding':'gzip','Content-Type':'text/plain'});
+      response.end(gzipSync('native-fetch-gzip'));
+    }else if(request.url==='/redirect'){
+      response.writeHead(302,{Location:'/stream'});response.end();
+    }else if(request.url==='/slow'){
+      const timer=setTimeout(()=>response.end('too late'),500);
+      response.once('close',()=>clearTimeout(timer));
+    }else{response.writeHead(404);response.end();}
+  });
+  await new Promise((resolve,reject)=>{diagnostics.once('error',reject);diagnostics.listen(0,'127.0.0.1',resolve);});
+  const fixtureOrigin=`http://127.0.0.1:${diagnostics.address().port}`;
+  report.httpBehavior={fixture:'separate synthetic read-only HTTP server'};
+  const repeated=await fetch(origin+pathname,{signal:AbortSignal.timeout(10000)});
+  assert.equal(repeated.status,200);assert.equal((await repeated.json()).origin,origin);
+  report.httpBehavior.repeatedRealManifest=true;
+  const streamedResponse=await fetch(fixtureOrigin+'/stream',{signal:AbortSignal.timeout(10000)});
+  assert.deepEqual(Buffer.from(await streamedResponse.arrayBuffer()),streamed);
+  report.httpBehavior.chunkedBinaryUtf8=true;
+  const zipped=await fetch(fixtureOrigin+'/gzip',{signal:AbortSignal.timeout(10000)});
+  assert.equal(await zipped.text(),'native-fetch-gzip');report.httpBehavior.gzipDecoded=true;
+  const followed=await fetch(fixtureOrigin+'/redirect',{signal:AbortSignal.timeout(10000)});
+  assert(followed.redirected);assert.equal(followed.url,fixtureOrigin+'/stream');
+  assert.deepEqual(Buffer.from(await followed.arrayBuffer()),streamed);report.httpBehavior.redirectFollow=true;
+  const manual=await fetch(fixtureOrigin+'/redirect',{redirect:'manual',signal:AbortSignal.timeout(10000)});
+  assert.equal(manual.status,302);await manual.arrayBuffer();report.httpBehavior.redirectManual=true;
+  await assert.rejects(fetch(fixtureOrigin+'/redirect',{redirect:'error',signal:AbortSignal.timeout(10000)}),{name:'TypeError'});
+  report.httpBehavior.redirectRefused=true;
+  await assert.rejects(fetch(fixtureOrigin+'/slow',{signal:AbortSignal.timeout(20)}),{name:'TimeoutError'});
+  report.httpBehavior.abortSignal=true;
+  report.fetchPassed=true;
 }catch(error){report.error={name:error.name,code:error.code||null,message:error.message,stack:error.stack};}
 finally{
+  if(diagnostics){diagnostics.closeAllConnections();await new Promise(resolve=>diagnostics.close(resolve));report.diagnosticServerClosed=!diagnostics.listening;}
   if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));report.serverClosed=!server.listening;}
   fs.writeFileSync(reportPath,JSON.stringify(report,null,2));
 }

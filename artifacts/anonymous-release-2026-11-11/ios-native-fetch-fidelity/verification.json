@@ -1,0 +1,74 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": true,
+  "storageTested": false,
+  "databaseFence": {
+    "host": "127.0.0.1",
+    "port": 50373,
+    "reservedNonListening": true,
+    "nonListeningAtCleanup": true
+  },
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "apiStarted": true,
+    "storageTested": false,
+    "dataWritesAttempted": false,
+    "databaseFence": {
+      "host": "127.0.0.1",
+      "port": 50373,
+      "defaultPort": false,
+      "unreachable": true,
+      "connectionOutcome": "timeout"
+    },
+    "sqlite": {
+      "databaseOpened": false,
+      "available": true
+    },
+    "runtime": {
+      "mobile": "24.22.1-0",
+      "undici": "7.30.1",
+      "parserSetting": "1",
+      "wasmImplementation": "polyfill"
+    },
+    "requests": [
+      {
+        "transport": "fetch",
+        "method": "GET",
+        "path": "/.well-known/thingtime-capabilities.json",
+        "status": 200
+      }
+    ],
+    "fetchPassed": true,
+    "nitroImported": true,
+    "origin": "http://127.0.0.1:50611",
+    "manifest": {
+      "origin": "http://127.0.0.1:50611",
+      "schemaVersion": 1,
+      "featureCount": 367,
+      "operationCount": 729,
+      "things": "1.63.0",
+      "search": "1.7.0",
+      "originMatched": true,
+      "operationRegistered": true
+    },
+    "manifestPassed": true,
+    "httpBehavior": {
+      "fixture": "separate synthetic read-only HTTP server",
+      "repeatedRealManifest": true,
+      "chunkedBinaryUtf8": true,
+      "gzipDecoded": true,
+      "redirectFollow": true,
+      "redirectManual": true,
+      "redirectRefused": true,
+      "abortSignal": true
+    },
+    "diagnosticServerClosed": true,
+    "serverClosed": true
+  }
+}

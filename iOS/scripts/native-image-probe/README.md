@@ -210,6 +210,15 @@ and shared by that actual image execution; its standalone lane was not rerun.
 
 ## Actual HTTP manifest probe
 
+**Current fidelity verdict:** global Fetch passes. The earlier0xFD failure was
+caused by this probe deleting the runtime-provided `UNDICI_NO_WASM_SIMD=1`, not
+an unresolved runtime Fetch defect. The pinned mobile bootstrap supplies that
+non-secret setting for polywasm; the corrected probe preserves it exactly and
+requires its initial value to match. No runtime, parser or security protection
+is changed. See the source pins and actual native receipt in
+[`ios-native-fetch-fidelity`](../../../artifacts/anonymous-release-2026-11-11/ios-native-fetch-fidelity/).
+
+
 `run-simulator.py --http` selects `http-probe.mjs` instead of the image-operation
 probe. Use a fresh cache with the same checked recovered addon/verification
 inputs as above. The canonical Nitro entry and native addon are unchanged.
@@ -243,3 +252,12 @@ The HTTP server closed and the task simulator was deleted. `node:sqlite`
 exposed `DatabaseSync`, without opening a database. No data route/write or real
 backend was used. Actual receipts:
 [`ios-native-api-startup`](../../../artifacts/anonymous-release-2026-11-11/ios-native-api-startup/).
+
+The corrected global Fetch check passed against the genuine Nitro manifest
+without falling back to Node HTTP. Its separate synthetic read-only transport
+fixture also passed repeated real manifest reads, chunked binary/UTF8 bytes,
+gzip decoding, redirect follow/manual/refusal and AbortSignal cancellation.
+The native receipt records Mobile24.22.1-0, Undici7.30.1, polyfill WebAssembly,
+and the pre-sanitization parser setting. Both HTTP servers and the owned
+simulator were cleaned up; the database remained fenced with no data writes.
+Earlier failed receipts remain unchanged as historical harness evidence.

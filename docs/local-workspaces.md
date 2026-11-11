@@ -5,7 +5,27 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
-## Current integration checkpoint — 2026-11-11
+## Current foundations checkpoint — 2026-11-11
+
+Main is integrated through `991a3d9d62ec06a050c078499e12ae4ca5cb7261`.
+The combined passwords 1.10 contract includes main's AppID support and the
+local file client's required accounted cancellation receipts. See the
+[current PR checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
+and [progress plan](progress/anonymous-local-first.html) for current priorities.
+
+No-login native rendering and canonical artifacts have browser and real hosted
+worker evidence. Exact-origin production activation and actual downloadable
+artifacts through the canonical connected host remain unverified. Electron's
+signed web-release protocol, API/download/staging and startup/rollback are
+implemented. Automatic activation is guarded in source but positive installed
+acceptance and full local API background-work admission remain open. iOS has
+real Node/bcrypt/Sharp/Nitro/Fetch simulator evidence on a pinned earlier bundle;
+transactional storage, app integration and physical-device acceptance remain.
+Local vault icon mapping, global verification preferences and complete offline
+parity are separate remaining work. Historical evidence below retains its tested
+source scope; it must not override this current summary.
+
+## Historical integration checkpoint — 2026-11-11
 
 Freshly fetched main through `9ebe2be328f6cf76b502f1c6c047c353ccc14f80` is
 reconciled into PR #1000, including explicit Console connections alongside newer

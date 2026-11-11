@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T11:18:25.398Z",
+  "finishedAt": "2026-11-11T11:19:14.792Z",
+  "phase": "publish-after-baseline-and-real-download",
+  "cleanupVerified": true,
+  "failure": {
+    "name": "Error",
+    "message": "agent-desktop failed: "
+  },
+  "retainedDiagnostics": "/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/thingtime-native-auto-Fk5yBN"
+}

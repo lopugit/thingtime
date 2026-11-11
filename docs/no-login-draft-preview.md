@@ -433,6 +433,15 @@ provider resource, or install a connector. To activate an authorized origin:
    `snap_…` ID and the staged `runner.js` SHA-256 for preflight.
 2. With the authorized Vercel project identity and quota, from `remix/` run
    `node --import tsx scripts/hosted-render-preflight.ts <https-origin> <snap-id> <renderer-sha256>`.
+   For an already authorized operator token, pass it only through protected
+   process environment (`VERCEL_TOKEN`) together with the verified
+   `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`. The helper supplies these directly
+   to the SDK control plane, never to the VM environment, input or descriptor.
+   Without an explicit token it retains the SDK's supported OIDC flow. Do not
+   paste a token into command arguments, logs or this document.
+   Set `TT_HOSTED_RENDER_PREFLIGHT_OUTPUT` to a new local directory to retain
+   the validated JSON, PNGs and per-file hashes after both jobs and their cleanup
+   pass. Existing directories are refused. This does not activate the gateway.
    This operator-only check starts two bounded, nonpersistent VMs. It verifies
    native render, exact artifact bytes and a refused crop, and requires
    provider stop/delete before printing the activation JSON. It performs no

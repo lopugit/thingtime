@@ -1,0 +1,102 @@
+{
+  "observedAt": "2026-11-11T11:28:31.287031+00:00",
+  "featureParent": "7814f1c565d93a812fecc71bd1cddf282bd17e5b",
+  "mergedMain": "991a3d9d62ec06a050c078499e12ae4ca5cb7261",
+  "scope": "Local main integration and committed prior-work evidence; CI and deployment separate",
+  "checks": {
+    "typecheck": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa"
+    },
+    "typecheckRatchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9"
+    },
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "c5ef6371108dbfa3268fe3e2b610ed89539b2e6004d14e6e7f9197b9b22c63d4",
+      "errors": 0,
+      "warnings": 370
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "fccaf1d643acc39ec64aa31c94861269f947d16a6e39e67325139e4c79b73546"
+    },
+    "compiledManifest": {
+      "exitCode": 0,
+      "logSha256": "b16f9a317b5c99cfa8de0e974bef5fc4081786ec0e1a8e46a2b8a4757d3d20bf",
+      "passed": 27,
+      "scope": "Compiled handler and manifest/docs only; synthetic database unavailable, no persistence acceptance"
+    },
+    "hostedRender": {
+      "exitCode": 0,
+      "logSha256": "4d90728fc56ffaa4294c27825dc26ec2bba2b413a66902274bb126e5894f7cf2",
+      "passed": 8
+    },
+    "appId": {
+      "exitCode": 0,
+      "logSha256": "defab3c64cee8c4c873cb4a7c1d6be525db7818c118bc6d640a15c960dda2df3",
+      "passed": 10
+    },
+    "extensionHook": {
+      "exitCode": 0,
+      "logSha256": "3fc02562b26a41aeab0c2bddc61309bb6bd9654f3e4f0ac010da017a3f5ac03d",
+      "passed": 12
+    },
+    "passwordFileTransport": {
+      "exitCode": 0,
+      "logSha256": "49220ff8125e43c76b55b3043ef05be8bf47f9e6b58e8bff328ad5c34cac064b",
+      "passed": 7
+    },
+    "capabilities": {
+      "exitCode": 0,
+      "logSha256": "92d0c98b9d7439273382c32c7dd349bb09ba34df68514d9e2ba7450a4629d8c7",
+      "passed": 206
+    },
+    "progressPlan": {
+      "exitCode": 0,
+      "logSha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73"
+    }
+  },
+  "sourceSha256": {
+    "PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md": "cf02d6d69a69663f47893b2c257ca71222936ebaff7afc6554bc904279bc687d",
+    "README.md": "9d7cbe772a731a18a90becff32b0e575598b66b58919adc002c1d5755344c872",
+    "TESTING.md": "57972b54969bcccbca1e970498a2fba7ea406fdb25e6cf9ec1e1bbcf784f404d",
+    "browser-extension/README.md": "80454cfa95808acce2b5c957c21ec7878284152d5685e3cd5ee9ec6a1343d26e",
+    "browser-extension/manifest.json": "9dbe45139761d9a6d6b2a9e83c3a39449a4ed45f244e611fb18f772cde8c64e6",
+    "browser-extension/page-hook.js": "c885881f96dd6165fa41184a4fcbcdd67d6be48a702b1f1111071ce189082eb0",
+    "browser-extension/test/appid-browser.mjs": "6c6088bb88631a32d711add2f38eefe45dc43c48666964ff5af6c41edeefae42",
+    "browser-extension/test/page-hook.test.mjs": "d18b064e2f97935188a95a0ef1222fd996f0df5abe4e6f7a799b872f4554758c",
+    "docs/feature-map/auth-accounts-and-admin.md": "554ccbcdcb925c5bbe6ff2769ef5483e395016da8a33818171258e4330f50737",
+    "docs/feature-map/local-development-and-worktrees.md": "dc3a6b00c55953de540246154e92e5919660513d77eb6f0defbb62d4dee737ef",
+    "docs/local-workspaces.md": "8427a82c9313107db18e2b5404fa9e4dfcd26d538a2025843ae6fc26483e84bc",
+    "docs/native-web-bundles.md": "b1eae0ea36bae0fcac98e772275a10b3e72471fb51c2a8db38c8e8dccfd618f4",
+    "docs/no-login-draft-preview.md": "c5994dba709a19fd06634ea050eaae4a77b51a690660e99417b442e299488c0f",
+    "docs/password-manager.md": "21b0a718e1ad83b9d3eabf290d15766f524d307ad884d7c83a168d4d3d787843",
+    "docs/progress/anonymous-local-first.html": "f6f14ea68ca1b90ab1330167cf5e96bdbfcdef768dd4203b49f0299a1695bb3e",
+    "iOS/scripts/native-image-probe/README.md": "a67df084a691013b1f2ed2f6a595528c1d51d371a41fd0307b65f0d853274be2",
+    "iOS/scripts/native-image-probe/http-probe.mjs": "931192bbae546b17d66cc0cda83112718264b92d8e3b49e96588f5c0347d7f1b",
+    "remix/CHANGELOG.md": "7aecf22d4671ffd2e96c9155f5d6549a81cb47d1e3ae9d4ce0e30f1404afa177",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "10493d5cc7e39d117058307794ba4aa7fdc8e2ac716a4c0b4daf971adde1f79e",
+    "remix/app/api/utils/chatgpt/hostedRender.server.ts": "b670ece06c08ed9282493f818952e72d7a4d0c3e8c30a5de6588af4bc02c32a5",
+    "remix/app/api/utils/chatgpt/hostedRender.test.ts": "aa50a16265734a10bf3b8e3036338b6e393c332609cfcd075ed0bf5529337e8f",
+    "remix/app/components/Passwords/BrowserPasswordProvider.tsx": "dee3e938da9ac344dfe2269b6533a1b7d7ebb87d6f0d857427aa5d8a064e20a4",
+    "remix/app/docs/apiCapabilities.test.ts": "fcd7e4be202b1110510364e839580a73471db552e9657460197b279f5e72b480",
+    "remix/app/docs/apiDocs.ts": "2e1401e503347f7af2a56e76a5b0676bdbfe6d19eeb315dfc82026363b2bc295",
+    "remix/app/local-workspace/passwordFileLifecycle.api.test.ts": "168cc4d07c29523260c1fc770801b067669f2bb2784c61b7df63aada2aa3d129",
+    "remix/app/local-workspace/passwordFileTransport.client.ts": "f2a61b71ebc8f8ad82bab5ac3f34ac9d1bdbc4b13e0c3c8a4a81c1e393c5a634",
+    "remix/app/local-workspace/passwordFileTransport.test.ts": "25b286403f18de775ff9f18d68572fa926e619088114a86221aa7aa09cb1a083",
+    "remix/app/passwords/browserPasskey.test.ts": "66a0b4bf9ab0c56d9ec75514d6bb28fed2608fadf46937e248575923d1986b82",
+    "remix/app/passwords/browserPasskey.ts": "21fa89a916d0d9fc52c656c6a4fa3110d609423e03a16dd5f5ede5fa3b97f751",
+    "remix/app/passwords/browserProviderAppId.client.test.ts": "f547c3fb67855a9a36e0c71935668f621eaf608f3e83eaeb9023af5e000c4ac3",
+    "remix/app/passwords/browserProviderCeremony.ts": "4eabd75d25602f71192d3815c916df75876f22333efeab17a66c2b474fc65112",
+    "remix/scripts/hosted-render-preflight.ts": "7177551bdcf610880025e4bc19f0388928fa751fa2cf0c3d9e200e5f7bca1a68",
+    "remix/scripts/smoke-built-content-execution.mjs": "893c213e52c79f65535defe5d816f9de1a1d2a1910dc9904853edac77fdf0d94"
+  },
+  "limitations": [
+    "Automatic native replacement not verified",
+    "iOS persistence and production integration not verified",
+    "Production renderer not activated; connected host has no export tool",
+    "Semantic graph extraction unavailable; structural refresh only"
+  ]
+}

@@ -21,6 +21,7 @@ if (process.argv[2] !== '--worker') {
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = [
+		['passwords', 'passwords', '1.10.0', ['GET', 'POST']],
 		['things', 'things', '1.64.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
 		['things-search', 'things/search', '1.8.0', ['GET', 'POST']],
 		['things-actions', 'things/actions', '1.1.0', ['GET', 'POST']],

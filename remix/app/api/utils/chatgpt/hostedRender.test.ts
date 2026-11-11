@@ -4,13 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { setTimeout } from 'node:timers/promises';
+import { Sandbox } from '@vercel/sandbox';
 
 import {
   HOSTED_RENDER_RESPONSE_MAX_BYTES, RENDER_WORKER_PROTOCOL, formatHostedRenderResponse,
   parseRenderInput, type RenderOutput
 } from '../../../../../MCP/src/renderContract';
 import { decodeRenderResult } from '../../../../../MCP/scripts/save-render-artifacts.mjs';
-import { createHostedRenderGateway, createHostedRenderReadiness, executeHostedRender, parseHostedRenderConfig, type HostedRenderConfig } from './hostedRender.server';
+import { createHostedRenderGateway, createHostedRenderReadiness, createHostedRenderWorkerDependencies, executeHostedRender, parseHostedRenderConfig, type HostedRenderConfig } from './hostedRender.server';
 
 const origin = 'https://thingtime.example';
 const config: HostedRenderConfig = { origin, snapshotId: 'snap_abcd1234', rendererHash: 'a'.repeat(64), protocol: RENDER_WORKER_PROTOCOL };
@@ -20,6 +21,27 @@ const active = new AbortController().signal;
 const outcome = (reply: string) => JSON.parse(reply).result;
 const code = (reply: string) => outcome(reply).structuredContent.code;
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
+
+test('operator credentials stay in provider control-plane calls and never enter the worker environment', async t => {
+  const calls: any[] = [];
+  t.mock.method(Sandbox, 'create', async (options: unknown) => { calls.push(options); return {}; });
+  t.mock.method(Sandbox, 'get', async (options: unknown) => { calls.push(options); return {}; });
+  const credentials = { token: 'synthetic-operator-token', teamId: 'team_test', projectId: 'prj_test' };
+  const dependencies = createHostedRenderWorkerDependencies(credentials);
+  await dependencies.create('owned-fixture', config, active);
+  await dependencies.recover('owned-fixture', active);
+  assert.deepEqual(calls[0].env, {});
+  assert.equal(calls[0].token, credentials.token);
+  assert.equal(calls[1].token, credentials.token);
+  assert.equal(calls[1].resume, false);
+  assert.equal(calls[0].persistent, false);
+  assert.equal(calls[0].networkPolicy, 'deny-all');
+  assert.deepEqual(calls[0].ports, []);
+  assert.equal(calls[0].source.snapshotId, config.snapshotId);
+  calls.length = 0;
+  await createHostedRenderWorkerDependencies().create('deployed-fixture', config, active);
+  assert.equal(Object.prototype.hasOwnProperty.call(calls[0], 'token'), false, 'deployed requests must use supported project OIDC');
+});
 
 const artifacts = async () => {
   const path = (name: string) => new URL('../../../../../artifacts/anonymous-release-2026-11-09/render/' + name, import.meta.url);

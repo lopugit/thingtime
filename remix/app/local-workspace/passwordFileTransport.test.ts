@@ -8,7 +8,7 @@ import { requireThingtimeCapability } from '../api/utils/capabilities/requireCap
 const fileId = 'att_' + 'a'.repeat(64), entryId = '31793278-3c8a-4ec5-aee6-730e33484c98';
 const signal = () => new AbortController().signal;
 type Reply = (url: string, init: RequestInit, body?: any) => Promise<Response>;
-async function fixture(run: (f: { ownerId: string; bind: (confirmed?: boolean) => ReturnType<typeof accountPasswordFileTransport>; calls: { url: string; init: RequestInit; body?: any }[]; respond: (fn: Reply) => void }) => Promise<void>, version = '1.3.0') {
+async function fixture(run: (f: { ownerId: string; bind: (confirmed?: boolean) => ReturnType<typeof accountPasswordFileTransport>; calls: { url: string; init: RequestInit; body?: any }[]; respond: (fn: Reply) => void }) => Promise<void>, version = '1.10.0') {
   const previous = { window: globalThis.window, fetch: globalThis.fetch };
   const scope = { kind: 'account' as const, ownerId: 'owner', origin: `https://files-${crypto.randomUUID()}.example`, dataPlane: 'home' };
   const calls: { url: string; init: RequestInit; body?: any }[] = [];
@@ -89,4 +89,26 @@ test('authority spans a blocked download stream and releases on callback failure
     await assert.rejects(transport.download(entryId, fileId, async () => { throw new Error('Local storage refused'); }, signal()), /Local storage refused/);
     assert.equal(f.calls.at(-1)!.init.signal!.aborted, true);
   });
+});
+
+
+test('receipt-dependent file deletion refuses AppID-only 1.9 before dispatch', async () => {
+  await fixture(async f => {
+    await assert.rejects(f.bind().remove(entryId, fileId, signal()));
+    assert.equal(f.calls.length, 0);
+  }, '1.9.0');
+});
+
+test('combined 1.10 permits matching deletion and retry receipts', async () => {
+  await fixture(async f => {
+    f.respond(async (_url, _init, body) => {
+      assert.equal(body.operation, 'file-delete');
+      assert.equal(body.entryId, entryId); assert.equal(body.fileId, fileId);
+      return Response.json({ ok: true, ownerId: f.ownerId, deferred: false });
+    });
+    const transport = f.bind();
+    assert.deepEqual(await transport.remove(entryId, fileId, signal()), { deferred: false });
+    assert.deepEqual(await transport.remove(entryId, fileId, signal()), { deferred: false });
+    assert.equal(f.calls.length, 2);
+  }, '1.10.0');
 });

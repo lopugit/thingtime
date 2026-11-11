@@ -926,12 +926,21 @@ test('range programs require the additive owned-boundary contract', () => {
  for (const version of [undefined, '1.30.0', '1.30.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.31.0'), false);
 });
 
- test('password manager registers its live route and version on both discovery manifests', () => {
+ test('browser AppID assertions require the additive password-provider contract on both manifests', () => {
+  for (const version of [createApiCapabilitiesManifest().features['api.passwords'], thingtimeCapabilityManifest('https://appid.test').features['api.passwords'].version]) assert.equal(capabilitySatisfies(version, '1.9.0'), true);
+  for (const version of [undefined, '1.8.0', '1.8.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), false);
+});
+
+test('password manager registers its live route and version on both discovery manifests', () => {
   const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
-  assert.equal(doc?.featureVersion, '1.8.0');
+  assert.equal(doc?.featureVersion, '1.10.0');
   assert.deepEqual(doc?.methods, ['GET', 'POST']);
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.8.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.8.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.10.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.10.0');
+  for (const version of ['1.8.0', '1.8.1', '1.9.0']) assert.equal(capabilitySatisfies(version, '1.8.0'), true);
+  for (const version of [undefined, '1.7.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.8.0'), false);
+  for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
+  for (const version of [undefined, '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
   assert.equal(typeof routeModules['v1/passwords'], 'function');
   for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
   for (const version of [undefined, '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
@@ -1402,4 +1411,14 @@ test('combined search contract rejects either incomplete 1.7 contract', () => {
   assert.equal(thingtimeCapabilityManifest('https://combined-search.test').features['api.things-search'].version, minimum);
   for (const version of [undefined, '1.7.0', '1.7.99', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
   for (const version of ['1.8.0', '1.8.1', '1.9.0']) assert.equal(capabilitySatisfies(version, minimum), true);
+});
+
+
+test('combined password receipts and AppID contract rejects older incomplete origins', () => {
+  for (const version of [createApiCapabilitiesManifest().features['api.passwords'], thingtimeCapabilityManifest('https://password-receipts.test').features['api.passwords'].version]) {
+    assert.equal(version, '1.10.0');
+    assert.equal(capabilitySatisfies(version, '1.9.0'), true);
+  }
+  for (const version of [undefined, '1.8.0', '1.9.0', '1.9.99', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.10.0'), false);
+  for (const version of ['1.10.0', '1.10.1', '1.11.0']) assert.equal(capabilitySatisfies(version, '1.10.0'), true);
 });

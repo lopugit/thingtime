@@ -24,10 +24,19 @@ with cancellation/retry/cleanup and keep real selected-origin downloads distinct
 from synthetic transport fixtures. Empty shipped trust disables production
 background download until supported provisioning.
 
-`iOS/scripts/native-runtime-probe/` preserves the isolated actual Node 24/Nitro
-experiment: genuine simulator bcrypt passes, then sharp fails to load; no API or
-storage acceptance follows. The checked-in reusable runner was exercised end to end against source
-`bab94d1d9`, reproducing that compatibility boundary with verified simulator cleanup. See the [probe runbook](../../iOS/scripts/native-runtime-probe/README.md).
+`iOS/scripts/native-runtime-probe/` and `iOS/scripts/native-image-probe/`
+preserve isolated actual Node 24/bcrypt and Sharp/libvips experiments. Genuine
+image operations, canonical Nitro and its manifest through native Fetch now pass
+on the recorded prior bundle. The probe preserves the runtime's required
+`UNDICI_NO_WASM_SIMD=1` default. No transactional storage or production iOS app
+integration follows from this evidence; see the [current image probe](../../iOS/scripts/native-image-probe/README.md).
+
+`electron/scripts/verify-web-bundle-auto-activation.mjs` uses a separate
+remote-mode development workspace and synthetic signed catalogue/content fixture.
+It verifies real download/staging after baseline startup before dirty/background
+checks. The latest run stopped at native window control; its retained receipt
+must not be called successful automatic activation. Final fixture corrections
+remain unrerun. See [partial acceptance](../../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
 
 ## Agent browser runtime
 

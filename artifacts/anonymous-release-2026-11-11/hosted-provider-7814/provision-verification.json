@@ -1,0 +1,18 @@
+{
+  "sourceCommit": "7814f1c565d93a812fecc71bd1cddf282bd17e5b",
+  "rendererHash": "6eeb428b545c553b4aea0f0158faee8855b68ae99a1a697ec8ba0c52b33df448",
+  "image": "vcr.vercel.com/lopugits-projects/thingtime/thingtime-renderer@sha256:d0166106aca721008fdbe56d46a465e9a1c711ac4ebe0f3ddca0d124b1baa7f5",
+  "name": "thingtime-pr1000-render-8f6ecb90",
+  "startedAt": "2026-11-11T11:08:11.900Z",
+  "identityVerified": true,
+  "vmDeleted": true,
+  "actualImage": "lopugits-projects/thingtime/thingtime-renderer@sha256:d0166106aca721008fdbe56d46a465e9a1c711ac4ebe0f3ddca0d124b1baa7f5",
+  "sessionId": "sbx_T5sFguG02cPD1F2qSwgu9gNenReD",
+  "networkPolicy": "deny-all",
+  "persistent": false,
+  "routeCount": 0,
+  "snapshotId": "snap_T9xKkUTOrlPF84ghVdxQiAwVloOM",
+  "snapshotStatus": "created",
+  "expiresAt": "2026-12-11T11:08:15.616Z",
+  "finishedAt": "2026-11-11T11:08:16.031Z"
+}

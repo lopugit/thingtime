@@ -1,0 +1,44 @@
+{
+  "releaseTag": "v24.22.1-0",
+  "annotatedTagObject": "421dd797441369a6911989a3d9c3d94a718a4678",
+  "releaseSourceCommit": "b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5",
+  "sourceToBinaryReproducibility": "unproven",
+  "files": {
+    "lib/internal/process/pre_execution.js": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/lib/internal/process/pre_execution.js",
+      "sha256": "6cfafc1492a29bff98b6d9acf9a363b63cc18a125485c31e1e9c92188959ae28"
+    },
+    "deps/undici/src/lib/dispatcher/client-h1.js": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/deps/undici/src/lib/dispatcher/client-h1.js",
+      "sha256": "fa69241601d9e1444898b9e2923e7a2064294f8b13a90ab058d886c11c6d256e"
+    },
+    "deps/undici/src/package.json": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/deps/undici/src/package.json",
+      "sha256": "0e62f63508558cd8bc44dbf61baee562907ff4bbd147bf837ded998c2bf62a28"
+    },
+    "deps/polywasm/README.md": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/deps/polywasm/README.md",
+      "sha256": "98ac020786932a7fa36bf86dbc1ae19290a2de6d4af9cc932a45cc79ff4f603a"
+    },
+    "deps/polywasm/polywasm.js": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/deps/polywasm/polywasm.js",
+      "sha256": "32dc2c61507f417dc83e9208a7bbc43797fb4076b24b35343044a92d9772237c"
+    },
+    "test/parallel/test-mobile-fetch.js": {
+      "url": "https://github.com/fogtape/nodejs-mobile/blob/b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5/test/parallel/test-mobile-fetch.js",
+      "sha256": "ede5448ac7b6953be7192acbe11f2e54a60fbe1176241907865414cd31570922"
+    }
+  },
+  "undici": "7.30.1",
+  "polywasm": {
+    "version": "0.2.0",
+    "publishedTarballSha256": "810a536198bf07671fb9ff95f26efbed7dd4e07907e8434c1048275ec0abf7b3",
+    "publishedIndexSha256": "b52d3e02376f2da1317e7652c584ea6c7cb6dc09cc8238bf7f216bc9ff5021c0",
+    "npmTarballAndIndexHashesVerified": true,
+    "vendoredFileMatchesSingleDocumentedExportRewrite": true
+  },
+  "requiredRuntimeSetting": {
+    "UNDICI_NO_WASM_SIMD": "1"
+  },
+  "harnessFault": "Environment sanitation deleted the runtime-provided documented setting"
+}

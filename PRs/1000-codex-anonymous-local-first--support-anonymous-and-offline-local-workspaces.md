@@ -2,6 +2,47 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main and capability checkpoint — 11 November 2026
+
+Merge freshly fetched `main` at `991a3d9d62ec06a050c078499e12ae4ca5cb7261`
+(PR #1475 AppID compatibility) into the existing feature branch. Preserve both
+main's AppID support and this branch's accounted password-file cancellation
+receipts. The combined `api.passwords` 1.10 contract distinguishes this behavior
+from main's 1.9; receipt-dependent clients must negotiate it. This is a feature
+branch update, not a merge into main or a production activation.
+
+- **No-login rendering/export:** local native-renderer and canonical round-trip
+  evidence remains valid. A fresh actual hosted worker produced JSON plus desktop,
+  mobile, narrow and card PNGs and refused an invalid crop without partial files.
+  [Provider evidence](../artifacts/anonymous-release-2026-11-11/hosted-provider-7814/README.md).
+  The protected operator helper now supplies explicit SDK control-plane identity
+  and can save validated artifacts; production requests retain project OIDC.
+- **Connected host:** production and this chat still lack the render/export tool.
+  Source release, supported exact-origin vault activation and a real canonical
+  connected-host artifact call remain the original P0. No second MCP is added.
+- **Electron:** bundled real web/Nitro, stable profile origin, signed release
+  inventory, download/staging and startup/rollback are implemented. The isolated
+  automatic-update fixture downloaded and staged 1,823 files after baseline boot.
+  It stopped at native window control before the dirty/background/automatic-restart
+  acceptance steps. Its diagnostic correction is retained but unrerun; full local
+  API background-work admission, interruption/retry and frozen-process recovery
+  remain open. [Partial acceptance](../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
+- **iOS:** the earlier Fetch failure came from sanitizing away the runtime's
+  required `UNDICI_NO_WASM_SIMD=1`, not a proven runtime incompatibility. Preserving
+  that non-secret default allows real Fetch/Nitro manifest, streaming, gzip,
+  redirects and cancellation checks to pass on the pinned prior bundle. No
+  database was opened. Transactional storage, current-source WebView integration,
+  update lifecycle and physical-device acceptance remain open.
+  [Corrected probe evidence](../artifacts/anonymous-release-2026-11-11/ios-native-fetch-fidelity/README.md).
+- **Other remaining local surfaces:** device-icon file mapping and fully local
+  global verification preferences. Independent post/draft completion and existing
+  account-scoped offline work retain their earlier evidence.
+
+The current status is summarized in the [progress plan](../docs/progress/anonymous-local-first.html).
+Historical sections below retain their tested revisions and are superseded where
+this checkpoint explicitly records later evidence. Main synchronization checks
+are recorded in `artifacts/anonymous-release-2026-11-11/main991/`.
+
 ## Native activation and iOS API checkpoint — 11 November 2026
 
 Build on pushed `830da4a56` (main through `4650f5af2`). The automatic desktop
