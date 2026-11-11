@@ -1,3 +1,27 @@
+## Native deletion accounting and iOS profile bootstrap — 12 November 2026
+
+- Run `nativeUserStorage.test.ts`: deletion-only refunds may fund retained history
+  while over quota; fresh content growth is refused. A normal 100-byte ledger
+  refunding 50, growing 50, then retaining 50 must roll back, even if the caller
+  catches the refusal. Ordinary shrink/growth remains supported. Verify unknown,
+  malformed, foreign-owner and legacy ledgers never become fabricated authority.
+- The iOS development lane must pass `test-native-home.mjs`,
+  `test-environment.mjs` and `test-account-profile.swift`, then compile the actual
+  target with the frozen canonical web payload. Those checks do not substitute
+  for real Keychain retention, app launch, actual account HTTP, moved-container
+  recovery or shutdown acceptance; record these separately.
+
+<!-- Native root-data regression: 12 November 2026 -->
+- Protected SQLite app-shell bootstrap: anonymous root data returns the selected
+  public plane and null hosted dataEnvironment; after registration/login it
+  projects the same local user as auth/me. Reopen the native app/API process and
+  retain user/plane; logout clears user. Verify private/no-store, normal session
+  cookie handling, no keys/profile paths/IDs, and refusal of wrong origins,
+  actor/data-plane mismatches, Mongo selectors and unimplemented background work.
+  Both manifest formats must negotiate api.root-data 1.2.0 only when ready.
+  Run test:root-data, test:api-capabilities, nativeHomeDispatch.test.ts and the
+  opt-in compiled SQLite account fixture with the independently recorded hash.
+
 ## MagicInput mount and controlled resets — 2026-11-12
 
 - Run `node --test remix/app/components/MagicInput/MagicInput.browser.test.mjs`.

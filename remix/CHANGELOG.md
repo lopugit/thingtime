@@ -145,6 +145,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add deletion-only SQLite retention accounting with rollback on
+  reused refund credits, plus an opt-in iOS Keychain/private-pipe bootstrap.
+  Desktop root-data acceptance is verified; iOS compiles but live protected
+  retention remains unverified. Generic Things/Timeline and release acceptance
+  remain open. See [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+- 2026-11-12: Bootstrap the native app shell through canonical root data inside
+  the protected SQLite account composition. Preserve public configuration,
+  session and identity fences; advertise `api.root-data` 1.2.0 only when ready.
+  The selected local data plane never falls back to hosted/Mongo authority.
+  **Codex (AI)**
+
 - 2026-11-12: Compose protected SQLite account APIs with canonical sessions,
   entitlements, rosters, notification history, durable rate limits and encrypted
   pending email. Fence all Mongo fallback and advertise actual runtime operation

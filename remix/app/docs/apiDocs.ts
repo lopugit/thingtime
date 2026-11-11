@@ -3616,13 +3616,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'root-data',
-    featureVersion: '1.1.0', contractVersion: '1.1.0',
+    featureVersion: '1.2.0', contractVersion: '1.2.0',
     group: 'root',
     title: 'Root data',
     endpoint: '/api/root-data',
     summary: 'Returns the app shell configuration used by the React Router root loader.',
     detail:
-      'Use this endpoint when a client needs the public Thingtime runtime flags, title prefix, deployment labels, and current user shape in one request.',
+      'Use this endpoint when a client needs the public Thingtime runtime flags, title prefix, deployment labels, and current user shape in one request. A ready protected native home returns its selected public data-plane identity, local session user and null hosted dataEnvironment. It preserves origin, expected actor and data-plane checks and never selects or proxies a database from caller input.',
     auth: {
       mode: 'optional',
       description: 'Reads the httpOnly auth cookie or Bearer token when present; anonymous callers receive user: null.'

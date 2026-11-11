@@ -1,0 +1,23 @@
+{
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/tmp/thingtime-ios-native-account-home-01/ThingtimeLocalDevelopment.xcodeproj",
+    "-scheme",
+    "ThingtimeLocalDevelopment",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "iphonesimulator",
+    "-destination",
+    "generic/platform=iOS Simulator",
+    "-derivedDataPath",
+    "/tmp/thingtime-ios-native-account-home-01/DerivedData",
+    "ARCHS=arm64",
+    "ONLY_ACTIVE_ARCH=YES",
+    "CODE_SIGNING_ALLOWED=NO",
+    "build"
+  ],
+  "returncode": 0,
+  "scope": "compile only; no application installation or launch"
+}

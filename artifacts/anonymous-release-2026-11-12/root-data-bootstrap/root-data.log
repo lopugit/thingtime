@@ -1,0 +1,68 @@
+
+> @1.0.0 test:root-data /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --import tsx --test app/root-data.server.test.ts server/utils/apiFallback.test.ts app/utils/rootDataRecovery.test.ts app/utils/rootDataLoader.test.ts
+
+✔ root data exposes only explicit browser-safe deployment values (18.253959ms)
+✔ root data exposes controller-provided source identity for prebuilt previews (0.589708ms)
+✔ root data is private and non-cacheable (1.92725ms)
+✔ root data identifies the request database without disclosing its URL or credentials (1.341916ms)
+✔ React Router background failure retains loader data without entering the root error boundary; later refresh recovers (71.2535ms)
+✔ cold start has no fallback (0.406791ms)
+✔ navigation cannot borrow the previous route: https://thingtime.test/other (0.907209ms)
+✔ navigation cannot borrow the previous route: https://thingtime.test/builder?page=two (0.619042ms)
+✔ navigation cannot borrow the previous route: https://other.test/builder?page=one (1.643875ms)
+✔ account invalidation discards fallback and old requests cannot repopulate it (3.637542ms)
+✔ authoritative failure clears fallback, including for subsequent transient errors (0.418417ms)
+✔ abort never returns fallback; successful logout replaces the remembered user (0.240792ms)
+✔ same-origin identity messages invalidate once, do not echo, and refresh the receiver (0.283333ms)
+✔ only the latest accepted root request may bind persistent offline identity (0.219458ms)
+✔ one network retry recovers using only an uncached credentialed read (11.458792ms)
+✔ persistent network failure stops after two attempts and sanitizes errors (35.892208ms)
+✔ HTTP 408 has a bounded retry policy (16.505416ms)
+✔ HTTP 502 has a bounded retry policy (12.688334ms)
+✔ HTTP 503 has a bounded retry policy (15.591708ms)
+✔ HTTP 504 has a bounded retry policy (20.199375ms)
+✔ HTTP 401 has a bounded retry policy (0.378583ms)
+✔ HTTP 403 has a bounded retry policy (0.127041ms)
+✔ HTTP 404 has a bounded retry policy (0.080792ms)
+✔ HTTP 429 has a bounded retry policy (0.096875ms)
+✔ HTTP 500 has a bounded retry policy (0.067375ms)
+✔ malformed JSON is not retried (0.169125ms)
+✔ aborted requests never start or retry (0.109167ms)
+✔ abort during backoff prevents the second attempt (6.612584ms)
+✔ hung reads time out with only one retry (14.8445ms)
+✔ identity generations reject stale confirmation without retaining account data (0.2135ms)
+✔ OTP challenges and failed or unrelated mutations do not reset the account (0.075ms)
+✔ successful database selections and removals invalidate the mounted data identity (0.03525ms)
+✔ only temporary read failures permit keeping the mounted session (13.576792ms)
+[h3] "toNodeHandler" export from h3 is deprecated. Please import "toNodeHandler" from "h3/node".
+✔ device authority uses the active Electron session and the same HTTPS account API for every remote check (6.60575ms)
+✔ fallback has no default and rejects malformed, credential-bearing and insecure targets (0.550333ms)
+✔ incomplete local servers refuse every method, including registration, without network or body reads (12.954417ms)
+✔ vault verification refuses fallback without reading or forwarding credentials (0.401625ms)
+✔ fallback forwards the database identity, selection and cookie for upstream read/write enforcement (2.324917ms)
+✔ private account services refuse implicit fallback without reading secrets (0.256208ms)
+✔ desktop vault proxy requires the bundled origin and pinned HTTPS endpoint (0.665667ms)
+✔ iOS release identities and migration bodies never follow an origin fallback (0.20875ms)
+✔ explicit local mode never falls through to a remote account backend (0.162917ms)
+✔ explicit remote mode cannot activate inherited local database credentials (0.129458ms)
+✔ explicit selected runtime supports loopback and refuses cleartext remote targets (0.09475ms)
+✔ plan management only forwards to an explicitly selected runtime with same-origin mutation checks (11.5575ms)
+✔ selected ChatGPT runtime negotiation rejects wrong origins and missing/breaking contracts (0.587458ms)
+✔ a delayed plan manifest cannot authorize a newly selected endpoint or consume the handoff (0.391583ms)
+✔ desktop proxy streams uploads and replies without waiting for completion, and downstream cancel reaches upstream (0.641583ms)
+✔ desktop proxy propagates request cancellation without logging or echoing fetch errors (0.500083ms)
+✔ desktop proxy discards a response and its cookies if the selected endpoint changed while awaiting headers (0.25325ms)
+✔ incomplete isolated backends refuse signup and root data without reading a body or contacting a fallback (0.356167ms)
+✔ desktop browser Actions preserve actor preconditions and reject cross-origin or vault requests before forwarding (0.656125ms)
+✔ desktop browser Actions forward real Nitro request bodies without native Request cloning (21.37175ms)
+✔ a destination switch after admission is rejected before proxy body consumption (0.427916ms)
+✔ desktop proxy accepts framework request wrappers without cloning foreign private state (0.72375ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 55
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 845.306833

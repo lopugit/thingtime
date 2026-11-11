@@ -39,15 +39,16 @@ def run(args):
   check=socket.socket()
   try:check.bind(('127.0.0.1',args.port))
   finally:check.close()
-  command(['python3',HERE/'prepare.py','--cache',args.cache,'--web-output',args.web_output,'--entry-sha256',args.entry_sha256,'--runtime-cache',args.runtime_cache,'--native-app',args.native_app,'--port',args.port,'--allow-public-prerelease']+(['--resume-preparation'] if args.resume_preparation else []))
+  command(['python3',HERE/'prepare.py','--cache',args.cache,'--web-output',args.web_output,'--entry-sha256',args.entry_sha256,'--runtime-cache',args.runtime_cache,'--native-app',args.native_app,'--port',args.port,'--allow-public-prerelease']+(['--resume-preparation'] if args.resume_preparation else [])+(['--native-accounts'] if args.native_accounts else []))
   report['preparation']=json.loads((args.cache/'preparation.json').read_text())
   shared_core=ROOT/'apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift'
   report['sharedPasswordCoreSha256']=sha(shared_core)
-  report['executedToolSha256']={str(p.relative_to(ROOT)):sha(p) for p in [HERE/'run.py',HERE/'prepare.py',HERE/'entry.mjs',HERE/'acceptance.js',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm',ROOT/'iOS/Thingtime/App/ThingtimeApp.swift',ROOT/'iOS/Thingtime/Web/WebView.swift',ROOT/'iOS/Thingtime/Web/ThingtimeWebDestination.swift']}
+  report['executedToolSha256']={str(p.relative_to(ROOT)):sha(p) for p in [HERE/'run.py',HERE/'prepare.py',HERE/'entry.mjs',HERE/'native-home.mjs',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift',HERE/'acceptance.js',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h',ROOT/'iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm',ROOT/'iOS/Thingtime/App/ThingtimeApp.swift',ROOT/'iOS/Thingtime/Web/WebView.swift',ROOT/'iOS/Thingtime/Web/ThingtimeWebDestination.swift']}
   app=args.cache/'DerivedData/Build/Products/Debug-iphonesimulator/ThingtimeLocalDevelopment.app'
   if args.reuse_verified_cache:
    previous=json.loads((args.reuse_verified_cache/'verification.json').read_text())
    source=args.reuse_verified_cache/'DerivedData/Build/Products/Debug-iphonesimulator/ThingtimeLocalDevelopment.app'
+   if previous['preparation'].get('nativeAccountsRequested',False)!=args.native_accounts:raise RuntimeError('Verified account mode changed')
    if previous['preparation']['entrySha256']!=args.entry_sha256 or previous['sharedPasswordCoreSha256']!=sha(shared_core):raise RuntimeError('Verified native artifact inputs changed')
    if previous['signedAppInventory']!=previous['installedAppInventory'] or inventory(source)!=previous['signedAppInventory']:raise RuntimeError('Verified native artifact bytes changed')
    exceptions={'iOS/scripts/local-development/run.py','iOS/scripts/local-development/acceptance.js'}
@@ -83,7 +84,14 @@ def run(args):
   if sha(app/'LocalRuntime/.output/server/index.mjs')!=args.entry_sha256:raise RuntimeError('Built app changed canonical Nitro entry')
   for name in ['bcrypt/prebuilds/ios-arm64/bcrypt.node','sharp/src/build/Release/sharp-ios-arm64-0.35.5.node']:
    command(['/usr/bin/codesign','--force','--sign','-',app/'LocalRuntime/.output/server/node_modules'/name])
-  for p in [app/'Frameworks/NodeMobile.framework',app]:command(['/usr/bin/codesign','--force','--sign','-',p])
+  command(['/usr/bin/codesign','--force','--sign','-',app/'Frameworks/NodeMobile.framework'])
+  signing=[]
+  if args.native_accounts:
+   entitlements=args.cache/'simulator-account.entitlements'
+   entitlements.write_bytes(plistlib.dumps({'application-identifier':BUNDLE,'keychain-access-groups':[BUNDLE]}))
+   signing=['--entitlements',entitlements]
+   report['simulatorOnlyAccountEntitlements']={'application-identifier':BUNDLE,'keychain-access-groups':[BUNDLE]}
+  command(['/usr/bin/codesign','--force','--sign','-',*signing,app])
   command(['/usr/bin/codesign','--verify','--deep','--strict',app])
   report['signedPayload']=verify_payload(args.web_output,app/'LocalRuntime/.output',signed=True)
   report['signedLocalRuntimeInventory']=inventory(app/'LocalRuntime')
@@ -117,6 +125,8 @@ def run(args):
   command(['xcrun','simctl','io',device,'screenshot',args.cache/'rendered.png'])
   web=report.get('webview.json',{});native=report.get('runtime.json',{})
   edit=report.get('ui-edit.json',{})
+  report['localAccountApiSupported']=native.get('localAccountApiSupported',False)
+  report['accountAcceptanceScope']='Anonymous auth/me readiness only; no registration/login/provider-delivery claim' if args.native_accounts else 'Account APIs unavailable'
   report['independentReloadReadback']=bool(edit.get('beforeReloadReadback') and web.get('afterReloadReadback') and edit['beforeReloadReadback']['thingId']==web['afterReloadReadback']['thingId'] and edit['beforeReloadReadback']['selectLabel']==web['afterReloadReadback']['selectLabel'] and edit.get('documentTimeOrigin')!=web.get('documentTimeOrigin'))
   report['passed']=report['independentReloadReadback'] and 'explicit-work-on-this-device' in edit.get('operations',[]) and native.get('ready') is True and web.get('passed') is True and web.get('manifestStatus')==200 and web.get('rootChildren',0)>0 and web.get('externalRequestRejected') is True and web.get('origin')==report['preparation']['origin']
  except Exception as error:report['error']=str(error).replace(str(args.cache),'<CACHE>')
@@ -145,6 +155,7 @@ if __name__=='__main__':
  p.add_argument('--reuse-verified-cache',type=lambda x:Path(x).resolve())
  p.add_argument('--verified-native-source-inventory',type=lambda x:Path(x).resolve())
  p.add_argument('--native-source-inventory-sha256')
+ p.add_argument('--native-accounts',action='store_true')
  p.add_argument('--resume-preparation',action='store_true')
  p.add_argument('--entry-sha256',required=True);p.add_argument('--runtime',required=True);p.add_argument('--port',default=29741,type=int)
  run(p.parse_args())

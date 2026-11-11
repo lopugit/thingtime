@@ -1,0 +1,42 @@
+✔ canonical delta consumer charges exact logical content/history bytes in the same real file transaction and survives reopen (26.74475ms)
+✔ a caught quota refusal rolls back content, synthetic history and earlier ledger debit together (11.6815ms)
+✔ owner, plane, counterfeit, foreign-context and expired native sessions are refused without Mongo fallback (5.270833ms)
+✔ competing allowance claims on separate handles have exactly one winner (8.059041ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["noUser"] (4.672917ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["meta"] (4.403875ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (9.320542ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (12.811833ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (11.62775ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (9.599166ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (11.302792ms)
+✔ unsupported/corrupt account or ledger state fails before content mutation: ["mutateLedger"] (6.225709ms)
+✔ unlimited allowance, exact finite boundary, underflow, overflow and Int32 promotion preserve safe accounting (11.793625ms)
+✔ canonical-valid ready ledger can omit optional storageUpdatedAt without inventing a CAS requirement (7.965625ms)
+✔ normal hosted import and existing zero/sandbox delta ordering require no SQLite module or store (429.165ms)
+✔ canonical ordinary-account metadata with a null Character field remains supported (5.633667ms)
+✔ shared native Things definition composes identity and canonical accounting on the same provider after reopen (12.809125ms)
+✔ exact refund becomes retained history at overage atomically and survives reopen (8.143416ms)
+✔ retention requires matching refunds and rejects double consumption, invalid bytes and cleanup growth even when caught (8.851708ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: missing (7.167708ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: underflow (7.578208ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: corrupt-count (7.007333ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: needs-reconcile (9.070208ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: invalid-envelope (7.592917ms)
+✔ cleanup keeps unavailable accounting unknown and refuses subsequent growth: old-version (6.474458ms)
+✔ reconciliation fence is atomic and preserves the count (6.558916ms)
+✔ retention/fence reject counterfeit, owner, expired and foreign-provider handles and poison caught failures (8.938417ms)
+✔ competing retention transactions on separate SQLite handles serialize without losing bytes (9.094666ms)
+✔ later history failure rolls back deletion, refund and retention as one transaction (5.603ms)
+✔ deletion-only lane never relaxes owner identity: {"noUser":true} (3.122125ms)
+✔ deletion-only lane never relaxes owner identity: {"meta":{"character":{"ownerId":"another","loginMode":"inherit","disabled":false}}} (3.452542ms)
+✔ refund authority cannot escape its transaction or mutate a foreign ledger identity (6.220458ms)
+✔ normal shrink then fresh growth cannot reuse a refund for quota-exempt retention (4.933833ms)
+✔ caught mixed-operation retention refusal poisons commit while ordinary shrink/growth stays supported (6.359791ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1400.751959

@@ -59,7 +59,14 @@ import UIKit
             ]
             let encoded = String(data: try JSONSerialization.data(withJSONObject: rules), encoding: .utf8)!
             offlineRules = try await WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "thingtime-local-development-offline", encodedContentRuleList: encoded)
-            ThingtimeLocalNode.startScript(script.path, work: work.path, origin: origin.absoluteString)
+            let nativeAccounts = Bundle.main.object(forInfoDictionaryKey: "ThingtimeLocalAccountsEnabled") as? Bool == true
+            var profile = nativeAccounts ? try ThingtimeLocalAccountProfile.prepare(
+                root: work.appendingPathComponent("NativeAccountHome", isDirectory: true),
+                origin: origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+                store: .keychain(service: (Bundle.main.bundleIdentifier ?? "invalid") + ".native-account-home")) : nil
+            guard ThingtimeLocalNode.startScript(script.path, work: work.path, origin: origin.absoluteString, protectedProfile: profile) else { throw LocalError.startupFailed }
+            if let count = profile?.count { profile?.resetBytes(in: 0..<count) }; profile = nil
+            NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in ThingtimeLocalNode.stop() }
             let deadline = ContinuousClock.now.advanced(by: .seconds(90))
             while ContinuousClock.now < deadline {
                 if let bytes = try? Data(contentsOf: work.appendingPathComponent("runtime.json")),

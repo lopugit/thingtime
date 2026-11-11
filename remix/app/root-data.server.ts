@@ -42,7 +42,11 @@ const getDeploymentCommitSha = () => {
   return process.env.VERCEL_GIT_COMMIT_SHA || process.env.THINGTIME_GIT_COMMIT_SHA;
 };
 
-export async function loadRootData(request: Request) {
+/** Supplied only by the server's selected, authenticated provider composition.
+ * Request headers/query values never select this authority. */
+export type RootDataAuthority = Pick<RootLoaderData, 'dataPlane' | 'dataEnvironment'>;
+
+export async function loadRootData(request: Request, authority?: RootDataAuthority) {
   const cookieHeader = request.headers.get('Cookie');
   const cookie = ((await Session.parse(cookieHeader)) || {}) as Record<string, unknown>;
   const cookiePingCounter = Number(cookie.pingCounter || 0);
@@ -75,9 +79,9 @@ export async function loadRootData(request: Request) {
 
   return {
 		data: {
-			dataPlane: mongoDataPlane(await getRequestMongoEndpoint(request)),
+			dataPlane: authority ? authority.dataPlane : mongoDataPlane(await getRequestMongoEndpoint(request)),
 			envFromCookie: { ...processEnv },
-			dataEnvironment: getDeploymentDataEnvironment(),
+			dataEnvironment: authority ? authority.dataEnvironment : getDeploymentDataEnvironment(),
 			devKitEnv,
       titlePrefix,
       user: await getCurrentUser(request)
@@ -91,7 +95,7 @@ export async function loadRootData(request: Request) {
   };
 }
 
-export async function rootDataResponse(request: Request) {
-  const { data, headers } = await loadRootData(request);
+export async function rootDataResponse(request: Request, authority?: RootDataAuthority) {
+  const { data, headers } = await loadRootData(request, authority);
   return json(data, { headers });
 }

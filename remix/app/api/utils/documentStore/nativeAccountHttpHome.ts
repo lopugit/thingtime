@@ -15,6 +15,7 @@ import { withHomeNotificationRepository } from '../notifications/repository';
 import { withHomeRateLimitRepository } from '../rateLimit/repository';
 
 const supportedOperations = Object.freeze([
+ ['GET', 'root-data'],
  ['POST', 'v1/auth/register'], ['POST', 'v1/login'], ['POST', 'v1/auth/logout'],
  ['GET', 'v1/auth/me'], ['GET', 'v1/auth/accounts'], ['GET', 'v1/auth/verify-email'],
  ['GET', 'v1/notifications'], ['POST', 'v1/notifications/read']
@@ -22,7 +23,7 @@ const supportedOperations = Object.freeze([
 
 /** Called only by the protected native host bootstrap. Opens no store and
  * selects no provider from HTTP, environment fallbacks, or remote responses.
- * Availability is explicit per operation: generic Things/root data/OTP and
+ * Availability is explicit per operation: generic Things/OTP and
  * external message delivery remain unsupported until their real adapters exist. */
 export async function createNativeAccountHttpHome(input: {
  provider: CollectionProvider; homePlaneId: string; keyId: string;

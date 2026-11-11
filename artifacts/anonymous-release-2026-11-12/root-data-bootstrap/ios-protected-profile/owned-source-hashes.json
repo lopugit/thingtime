@@ -1,0 +1,16 @@
+{
+  "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4fbe3f737a545d42569dfc087290d765fca8f3aac320061b20dc9d4c08ddb21b",
+  "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "bc04680a0242e7d9c1b02cb5a08c541ac50a46ceac5da509ca6bfb4ff95b2a5c",
+  "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "2531caf2398b5acb9086f6efe28ad6e3e5db0bb7aa06f5c5ca3b54552559b2f0",
+  "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h": "dd854d5626c7f2704d17e0f7d486d20ffed26ef07dfed4cc4532bd03cad7bbca",
+  "iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift": "7e14368d719663bb7a0a41317a29b068a09a260431529b18277cfa2a7153a388",
+  "iOS/scripts/local-development/entry.mjs": "a2aa98316542a70c9f3cf63ff9531c1e60ce162ef15b0160321c5d8048b9999a",
+  "iOS/scripts/local-development/native-home.mjs": "6f8fee95ed503575ef51e975c7b86d4a9c56957c7387bacd20e4068a40fce8ba",
+  "iOS/scripts/local-development/prepare.py": "b904a411036e8515cde19182e88e819d3ea2628ee4e156c3389117cf45fa6f71",
+  "iOS/scripts/local-development/run.py": "9da11e81c8cea33815762032204d5b9e2b06b5ec4a4aebb12d3e947c009139c0",
+  "iOS/scripts/local-development/README.md": "4481447a25d1ebebe87506b59ad39648d909753e480e2e62763b6dde5535aa3e",
+  "iOS/scripts/local-development/test-native-home.mjs": "6639be6fb28bffc35ba3b9291e5b50c2a741d6920d7c7ffaddbe9d39ac6a09c9",
+  "iOS/scripts/local-development/test-account-profile.swift": "aae4c20413ebf29f17a4860fbb9328b7e44e20b03930fb1cf5e45e4b8a5d52e7",
+  "iOS/scripts/local-development/account-profile-control/run.py": "81511569f68f466b0e797f3e0b218fe42cf831e57d3b57987a0f4ed48e3fab71",
+  "iOS/scripts/local-development/account-profile-control/main.swift": "997bc2be672520b3ca8e73a2620afc7bebb05da7da1bf2bf2680874f7ee94549"
+}

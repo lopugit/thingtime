@@ -2,9 +2,9 @@ import { BSON, Double, Int32, Long } from 'mongodb';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { characterIdentity } from '../auth/characterCore';
 import { fromBin } from '../auth/binary';
-import { subscriptionShareId } from '../subscriptions/subscriptionIdentity';
+import { subscriptionShareId, userSubscriptionLedgerEnvelopeIsTrusted } from '../subscriptions/subscriptionIdentity';
 import { readyUserStorageAdmission, assertUserStorageQuota } from '../storage/userStorageAdmission';
-import { StorageMutationError } from '../storage/storageCore';
+import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS } from '../storage/storageCore';
 import { USER_STORAGE_PENDING_FIELDS } from '../storage/storagePending';
 import type { CollectionFilter, CollectionProvider, CollectionTransaction } from './collectionContract';
 
@@ -12,7 +12,7 @@ import type { CollectionFilter, CollectionProvider, CollectionTransaction } from
  * recognizable after expiry so an escaped handle cannot fall through to Mongo.
  * No runtime/user selection is provided by this adapter. */
 export type NativeUserStorageSession = Readonly<{ kind: 'native-user-storage' }>;
-type Context = { active: boolean; ownerId: string; planeId: string; collections: CollectionTransaction; failed: boolean; failure: unknown };
+type Context = { active: boolean; ownerId: string; planeId: string; collections: CollectionTransaction; failed: boolean; failure: unknown; deletionOnly: boolean; refundBytes: number; uncertainRefund: boolean };
 const contexts = new WeakMap<object, Context>();
 const invariant = (message: string): never => { throw new StorageMutationError(500, 'storage_invariant', message); };
 const unsupported = (): never => { throw new StorageMutationError(503, 'accounting_unavailable', 'This native account storage state requires an accounting adapter that is not available yet'); };
@@ -31,14 +31,19 @@ const exact = (path: string[], value: any): CollectionFilter => ({ op: 'eq', pat
 export function withNativeHomeStorageTransaction<T>(provider: CollectionProvider,
  binding: { ownerId: string; homePlaneId: string; contentPlaneId: string },
  work: (session: NativeUserStorageSession, collections: CollectionTransaction) => T | Promise<T>): Promise<T> {
+ return withStorageTransaction(provider, binding, false, work);
+}
+function withStorageTransaction<T>(provider: CollectionProvider,
+ binding: { ownerId: string; homePlaneId: string; contentPlaneId: string }, deletionOnly: boolean,
+ work: (session: NativeUserStorageSession, collections: CollectionTransaction) => T | Promise<T>): Promise<T> {
  const { ownerId, homePlaneId, contentPlaneId } = binding;
  if (typeof ownerId !== 'string' || !ownerId || ownerId.startsWith('sandbox:') || typeof homePlaneId !== 'string' || !homePlaneId || homePlaneId !== contentPlaneId) return Promise.reject(new StorageMutationError(500, 'storage_invariant', 'Native account storage requires the same home/content plane and a real owner'));
  return provider.transaction(async collections => {
   const session: NativeUserStorageSession = Object.freeze({ kind: 'native-user-storage' });
-  const context: Context = { active: true, ownerId, planeId: homePlaneId, collections, failed: false, failure: undefined };
+  const context: Context = { active: true, ownerId, planeId: homePlaneId, collections, failed: false, failure: undefined, deletionOnly, refundBytes: 0, uncertainRefund: false };
   contexts.set(session, context);
   try {
-   readNativeReadyLedger(context);
+   if (deletionOnly) readNativeOwner(context); else readNativeReadyLedger(context);
    const result = await work(session, collections);
    if (context.failed) throw context.failure;
    return result;
@@ -48,7 +53,7 @@ export function withNativeHomeStorageTransaction<T>(provider: CollectionProvider
 
 // Validate unsupported identities/states before exposing a writable callback,
 // and again for each debit in case that callback changed a protected row.
-const readNativeReadyLedger = (context: Context) => {
+const readNativeOwner = (context: Context) => {
  const ownerId = context.ownerId;
  const things = context.collections.collection(physicalCollectionName('things'));
  const users = things.find({ filter: { op: 'and', filters: [exact(['shareId'], ownerId), { op: 'contains', path: ['thingtime'], value: 'user' }] }, limit: 2 }).documents;
@@ -58,6 +63,10 @@ const readNativeReadyLedger = (context: Context) => {
  try { privateState = JSON.parse(fromBin(user.secure)); } catch { return unsupported(); }
  if (user.ownerId !== ownerId || !Array.isArray(user.thingtime) || user.thingtime.length !== 1 ||
      privateState?.accountKind !== 'user' || privateState?.meta?.temporary === true || characterIdentity({ meta: privateState.meta })) return unsupported();
+ return things;
+};
+const readNativeReadyLedger = (context: Context) => {
+ const things = readNativeOwner(context), ownerId = context.ownerId;
  const records = things.find({ filter: exact(['shareId'], subscriptionShareId('user', ownerId)), limit: 2 }).documents;
  if (records.length !== 1) return unsupported();
  // Validators consume the same ordinary JS numeric view as the Mongo driver;
@@ -68,35 +77,118 @@ const readNativeReadyLedger = (context: Context) => {
  return { things, typed, usedBytes, allowanceBytes };
 };
 
-/** Ready ordinary-account consumer of the canonical applyUserStorageDelta
- * entry point. Character inheritance, pending/reconciliation and corrupt
- * deletion recovery are explicit unsupported states, never a hidden fallback.
- * Canonical API activation is prohibited until those paths and initialization
- * have their own supported adapters/acceptance. */
+/** Canonical delta consumer for ordinary native accounts. Normal writes
+ * require ready accounting. The explicit deletion lane preserves unavailable
+ * counters and fences reconciliation instead of inventing a refund balance.
+ * Character inheritance and native recovery execution remain unsupported;
+ * this accounting adapter alone does not activate canonical Things APIs. */
 export function applyNativeUserStorageDelta(ownerId: string, deltaBytes: number, session: NativeUserStorageSession): void {
+ guarded(ownerId, session, context => {
+  if (!Number.isSafeInteger(deltaBytes)) return invariant('Storage accounting received an invalid byte delta');
+  if (context.deletionOnly && deltaBytes > 0) return invariant('Deletion-only transactions cannot admit new content');
+  let ledger: ReturnType<typeof readNativeReadyLedger>;
+  try { ledger = readNativeReadyLedger(context); }
+  catch (error) {
+   if (!context.deletionOnly || !(error instanceof StorageMutationError) || error.code !== 'accounting_unavailable') throw error;
+   if (deltaBytes < 0) {
+    const refund = context.refundBytes - deltaBytes;
+    if (!Number.isSafeInteger(refund)) return invariant('Native refund bytes exceed exact integer range');
+    context.refundBytes = refund; context.uncertainRefund = true;
+    fenceNativeLedger(context, new Date());
+   }
+   return;
+  }
+  const next = ledger.usedBytes + deltaBytes;
+  if (!Number.isSafeInteger(next)) return invariant('Native storage accounting would exceed exact integer range');
+  if (next < 0) {
+   if (!context.deletionOnly) return unsupported();
+   const refund = context.refundBytes - deltaBytes;
+   if (!Number.isSafeInteger(refund)) return invariant('Native refund bytes exceed exact integer range');
+   context.refundBytes = refund; context.uncertainRefund = true;
+   fenceNativeLedger(context, new Date()); return;
+  }
+  if (deltaBytes > 0) assertUserStorageQuota(ledger.usedBytes, ledger.allowanceBytes, deltaBytes);
+  if (!deltaBytes) return;
+  if (deltaBytes < 0 && context.deletionOnly) {
+   const refund = context.refundBytes - deltaBytes;
+   if (!Number.isSafeInteger(refund)) return invariant('Native refund bytes exceed exact integer range');
+   context.refundBytes = refund;
+  }
+  writeNativeUsedBytes(ledger, ownerId, next);
+ });
+}
+
+/** Separate cleanup lane: unavailable accounting stays unavailable. It permits
+ * only refunds and their matching retained history, never new content growth. */
+export function withNativeHomeDeletionStorageTransaction<T>(provider: CollectionProvider,
+ binding: { ownerId: string; homePlaneId: string; contentPlaneId: string },
+ work: (session: NativeUserStorageSession, collections: CollectionTransaction) => T | Promise<T>): Promise<T> {
+ return withStorageTransaction(provider, binding, true, work);
+}
+
+const checkedContext = (ownerId: string, session: NativeUserStorageSession): Context => {
  const context = contexts.get(session);
  if (!context) return invariant('Unrecognized native account storage session');
- try {
-  if (!context.active || context.failed || context.ownerId !== ownerId) return invariant('Native account storage session owner/lifetime mismatch');
-  if (!Number.isSafeInteger(deltaBytes)) return invariant('Storage accounting received an invalid byte delta');
-  // collection() checks the actual async transaction ownership even for a
-  // zero delta, preventing a live capability being used by a foreign context.
-  const { things, typed, usedBytes, allowanceBytes } = readNativeReadyLedger(context);
-  const next = usedBytes + deltaBytes;
-  if (!Number.isSafeInteger(next)) return invariant('Native storage accounting would exceed exact integer range');
-  if (next < 0) return unsupported();
-  if (deltaBytes > 0) assertUserStorageQuota(usedBytes, allowanceBytes, deltaBytes);
-  if (deltaBytes === 0) return;
-  const current = typed.crystal.storageUsedBytes;
-  // Preserve typed counters; Int32 growth is explicitly promoted to signed
-  // Long rather than overflowing or imposing an artificial 2-GiB ceiling.
-  const value = current instanceof Long ? Long.fromNumber(next) : current instanceof Double ? new Double(next) :
-   current instanceof Int32 && next <= 2147483647 ? new Int32(next) : Long.fromNumber(next);
-  const changed = things.updateOne({ op: 'and', filters: [exact(['_id'], typed._id), exact(['ownerId'], ownerId),
-   exact(['crystal', 'storageUsedBytes'], current)] }, [
-   { op: 'set', path: ['crystal', 'storageUsedBytes'], value },
-   { op: 'set', path: ['crystal', 'storageUpdatedAt'], value: new Date() }
-  ]);
-  if (!changed.matched) throw new StorageMutationError(409, 'storage_conflict', 'The account storage ledger changed during this transaction');
- } catch (error) { context.failed = true; context.failure = error; throw error; }
-}
+ if (!context.active || context.failed || context.ownerId !== ownerId) {
+  const error = new StorageMutationError(500, 'storage_invariant', 'Native account storage session owner/lifetime mismatch');
+  context.failed = true; context.failure = error; throw error;
+ }
+ return context;
+};
+const guarded = <T>(ownerId: string, session: NativeUserStorageSession, work: (context: Context) => T): T => {
+ const context = checkedContext(ownerId, session);
+ try { readNativeOwner(context); return work(context); }
+ catch (error) { context.failed = true; context.failure = error; throw error; }
+};
+const writeNativeUsedBytes = (ledger: ReturnType<typeof readNativeReadyLedger>, ownerId: string, next: number) => {
+ const { things, typed } = ledger;
+ const current = typed.crystal.storageUsedBytes;
+ const value = current instanceof Long ? Long.fromNumber(next) : current instanceof Double ? new Double(next) :
+  current instanceof Int32 && next <= 2147483647 ? new Int32(next) : Long.fromNumber(next);
+ const changed = things.updateOne({ op: 'and', filters: [exact(['_id'], typed._id), exact(['ownerId'], ownerId),
+  exact(['crystal', 'storageUsedBytes'], current)] }, [
+  { op: 'set', path: ['crystal', 'storageUsedBytes'], value },
+  { op: 'set', path: ['crystal', 'storageUpdatedAt'], value: new Date() }
+ ]);
+ if (!changed.matched) throw new StorageMutationError(409, 'storage_conflict', 'The account storage ledger changed during this transaction');
+};
+const fenceNativeLedger = (context: Context, now: Date) => {
+ if (!(now instanceof Date) || !Number.isFinite(now.getTime())) return invariant('Invalid native reconciliation timestamp');
+ const things = context.collections.collection(physicalCollectionName('things'));
+ const bytes = things.find({ filter: exact(['shareId'], subscriptionShareId('user', context.ownerId)), limit: 2 }).documents;
+ if (bytes.length !== 1) return;
+ const ledger = BSON.deserialize(bytes[0]);
+ // Missing/malformed identities are never repaired into trusted entitlements.
+ // They already fail admission; preserve their unknown count and envelope.
+ if (!userSubscriptionLedgerEnvelopeIsTrusted(ledger, context.ownerId) || ledger.crystal.storageAccountingVersion !== USER_STORAGE_ACCOUNTING_VERSION) return;
+ const changed = things.updateOne({ op: 'and', filters: [exact(['_id'], ledger._id), exact(['ownerId'], context.ownerId)] }, [
+  { op: 'set', path: ['crystal', 'storageLedgerStatus'], value: USER_STORAGE_STATUS.needsReconcile },
+  { op: 'set', path: ['crystal', 'storageUpdatedAt'], value: now }
+ ]);
+ if (!changed.matched) throw new StorageMutationError(409, 'storage_conflict', 'The account storage ledger changed during reconciliation fencing');
+};
+
+/** No native recovery runner is implied. The canonical status fence persists
+ * atomically and admission remains unavailable until exact reconciliation. */
+export const markNativeUserStorageNeedsReconcile = (ownerId: string, session: NativeUserStorageSession, now = new Date()): void =>
+ guarded(ownerId, session, context => { context.uncertainRefund = true; fenceNativeLedger(context, now); });
+
+/** Only bytes refunded by this deletion-only transaction can move into retained history.
+ * Matching retention is not fresh growth and must work at/above quota. */
+export const retainNativeDeletedThingStorage = (ownerId: string, bytes: number, session: NativeUserStorageSession): void =>
+ guarded(ownerId, session, context => {
+  if (!context.deletionOnly) return invariant('Retained history requires the deletion-only transaction lane');
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > context.refundBytes) return invariant('Retained deletion bytes require a matching transaction refund');
+  if (!bytes) return;
+  context.refundBytes -= bytes;
+  let ledger: ReturnType<typeof readNativeReadyLedger>;
+  try { ledger = readNativeReadyLedger(context); }
+  catch (error) {
+   if (!context.deletionOnly || !(error instanceof StorageMutationError) || error.code !== 'accounting_unavailable') throw error;
+   context.uncertainRefund = true; fenceNativeLedger(context, new Date()); return;
+  }
+  if (context.uncertainRefund) { fenceNativeLedger(context, new Date()); return; }
+  const next = ledger.usedBytes + bytes;
+  if (!Number.isSafeInteger(next)) return invariant('Retained deletion storage would exceed exact integer range');
+  writeNativeUsedBytes(ledger, ownerId, next);
+ });

@@ -1,5 +1,12 @@
 # API endpoints and capabilities
 
+`api.root-data` 1.2.0 adds the protected native app-shell bootstrap. Runtime
+availability comes from `nativeAccountHttpHome` and is projected by both manifest
+generators. The hosted contract remains compatible; unready native homes expose
+no root-data authority. Tests: root-data, runtimeAvailability/native dispatcher,
+and the opt-in compiled SQLite HTTP fixture.
+
+
 The merged Things contract is `api.things` 1.64.0: it combines retained attachment
 receipts/atomic generic PATCH with parent Component argument bindings. Both
 historical 1.62 variants are insufficient; sync and authoring clients negotiate

@@ -8,6 +8,7 @@ import { nativeHomeCapabilitySnapshot } from '../../../../server/utils/nativeHom
 import { NATIVE_HOME_HOST_KEY } from '../documentStore/nativeHomeSelection';
 const origin = 'http://127.0.0.1:17873';
 const runtime: NativeCapabilitySnapshot = { provider: 'sqlite', ready: true, supportedOperations: [
+ ['GET', 'root-data'],
  ['POST', 'v1/auth/register'], ['POST', 'v1/login'], ['POST', 'v1/auth/logout'],
  ['GET', 'v1/auth/me'], ['GET', 'v1/auth/accounts'], ['GET', 'v1/auth/verify-email'],
  ['GET', 'v1/notifications'], ['POST', 'v1/notifications/read']
@@ -21,9 +22,10 @@ test('both native manifests retain full registry while supported contracts and m
  assert.deepEqual(native.registeredFeatures, hosted.features); assert.deepEqual(flat.registeredFeatures, flatHosted.features);
  assert.deepEqual(native.operations.map(({ feature, methods, path }) => ({ feature, methods, path })), hosted.operations);
  assert.equal(flat.operations!.some(op => op.feature === apiRouteCapabilityId('v1/private-diagnostic')), true);
- for (const id of ['api.auth-register', 'api.login', 'api.auth-logout', 'api.auth-me', 'api.auth-accounts', 'api.auth-verify-email', 'api.notifications-read']) {
+ for (const id of ['api.root-data', 'api.auth-register', 'api.login', 'api.auth-logout', 'api.auth-me', 'api.auth-accounts', 'api.auth-verify-email', 'api.notifications-read']) {
   assert.equal(native.features[id]?.version, hosted.features[id].version); assert.equal(flat.features[id], flatHosted.features[id]);
  }
+ assert.equal(native.features['api.root-data'].version, '1.2.0'); assert.equal(flat.features['api.root-data'], '1.2.0');
  assert.equal(native.features['api.auth-register'].version, '1.4.0'); assert.equal(flat.features['api.capabilities'], '1.3.0');
  for (const id of ['api.things', 'api.storage-accounting', 'api.chatgpt-mcp', apiRouteCapabilityId('v1/private-diagnostic')]) {
   assert.equal(native.features[id], undefined); assert.equal(flat.features[id], undefined);
@@ -68,6 +70,7 @@ test('existing clients accept supported native contracts and refuse registry-onl
   const fetch = async () => Response.json(body), check = createThingtimeCapabilityChecker({ source });
   const transport = { fetch: fetch as typeof globalThis.fetch, currentOrigin: () => origin };
   await check('api.auth-register', '1.4.0', origin, transport);
+  await check('api.root-data', '1.2.0', origin, transport);
   await assert.rejects(check('api.things', '1.64.0', origin, transport), /incompatible/);
   await assert.rejects(check('api.auth-register', '2.0.0', origin, transport), /incompatible/);
   body = source === 'origin' ? { ...thingtimeCapabilityManifest(origin, runtime), origin: 'https://other.invalid' } : { ...createApiCapabilitiesManifest(keys, null, runtime), origin: 'https://other.invalid' };

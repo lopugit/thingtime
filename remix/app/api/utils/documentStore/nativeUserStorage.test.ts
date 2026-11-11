@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry';
-import { applyUserStorageDelta } from '../storage/userStorage';
+import { applyUserStorageDelta, retainDeletedThingStorage, markUserStorageNeedsReconcile } from '../storage/userStorage';
 import { thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS } from '../storage/storageCore';
 import { userSubscriptionLedgerEnvelopeIsTrusted, subscriptionShareId } from '../subscriptions/subscriptionIdentity';
 import { buildUserSecure, insertUser } from '../auth/users';
@@ -18,7 +18,7 @@ import { createNativeHomeAuthRepositories } from './nativeUserIdentities';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { createCollectionProvider } from './collectionProvider';
 import { openSqliteDocumentStore } from './sqliteStore';
-import { withNativeHomeStorageTransaction, type NativeUserStorageSession } from './nativeUserStorage';
+import { withNativeHomeStorageTransaction, withNativeHomeDeletionStorageTransaction, type NativeUserStorageSession } from './nativeUserStorage';
 import type { CollectionProvider, CollectionTransaction } from './collectionContract';
 const namespace = physicalCollectionName('things');
 const owner = 'synthetic-native-owner';
@@ -211,4 +211,179 @@ test('shared native Things definition composes identity and canonical accounting
  await next.run(async()=>assert.equal((await next.identities.findUserThingById(saved._id))!.ownerId,saved._id));
  await withNativeHomeStorageTransaction(reopened,binding,session=>applyUserStorageDelta(owner,-7,session));
  await reopened.transaction(s=>assert.equal(BSON.deserialize(s.collection(namespace).find({filter:eq(['shareId'],subscription.shareId),limit:1}).documents[0]).crystal.storageUsedBytes,10));
+});
+
+test('exact refund becomes retained history at overage atomically and survives reopen', async t => {
+ const bytes = thingStorageSizeBytes(content), { provider, open, subscription } = await fixture(t, { used: bytes + 123, allowance: 1 });
+ await provider.transaction(s => s.collection(namespace).insert(encode(content)));
+ await withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+  assert.equal(s.collection(namespace).deleteOne(eq(['shareId'], content.shareId)), true);
+  await applyUserStorageDelta(owner, -bytes, session);
+  await retainDeletedThingStorage(owner, bytes, session);
+  s.collection(namespace).insert(encode(history));
+ });
+ await provider.close(); const reopened = await open();
+ await reopened.transaction(s => {
+  const things = s.collection(namespace);
+  assert.equal(things.find({ filter: eq(['shareId'], content.shareId), limit: 1 }).documents.length, 0);
+  assert.equal(things.find({ filter: eq(['shareId'], history.shareId), limit: 1 }).documents.length, 1);
+  assert.equal(BSON.deserialize(things.find({ filter: eq(['shareId'], subscription.shareId), limit: 1 }).documents[0]).crystal.storageUsedBytes, bytes + 123);
+ });
+});
+
+test('retention requires matching refunds and rejects double consumption, invalid bytes and cleanup growth even when caught', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 10, allowance: 1 });
+ for (const attempt of [
+  async (s: NativeUserStorageSession) => retainDeletedThingStorage(owner, 1, s),
+  async (s: NativeUserStorageSession) => { await applyUserStorageDelta(owner, -5, s); await retainDeletedThingStorage(owner, 5, s); await retainDeletedThingStorage(owner, 1, s); },
+  async (s: NativeUserStorageSession) => applyUserStorageDelta(owner, 1, s),
+  async (s: NativeUserStorageSession) => retainDeletedThingStorage(owner, -1, s),
+  async (s: NativeUserStorageSession) => retainDeletedThingStorage(owner, NaN, s)
+ ]) {
+  await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+   s.collection(namespace).insert(encode(history)); await assert.rejects(attempt(session), code('storage_invariant'));
+  }), code('storage_invariant'));
+  assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 10); assert.equal(await read(history.shareId), null);
+ }
+});
+
+for (const state of ['missing', 'underflow', 'corrupt-count', 'needs-reconcile', 'invalid-envelope', 'old-version'] as const) {
+ test('cleanup keeps unavailable accounting unknown and refuses subsequent growth: ' + state, async t => {
+  const { provider, read, subscription } = await fixture(t, { used: 2, mutateLedger: row => {
+   if (state === 'corrupt-count') row.crystal.storageUsedBytes = 'unknown';
+   if (state === 'needs-reconcile') row.crystal.storageLedgerStatus = USER_STORAGE_STATUS.needsReconcile;
+   if (state === 'invalid-envelope') row.crystal.extra = 'untrusted';
+   if (state === 'old-version') row.crystal.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION - 1;
+  } });
+  if (state === 'missing') await provider.transaction(s => s.collection(namespace).deleteOne(eq(['shareId'], subscription.shareId)));
+  await provider.transaction(s => s.collection(namespace).insert(encode(content)));
+  await withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+   assert.equal(s.collection(namespace).deleteOne(eq(['shareId'], content.shareId)), true);
+   await applyUserStorageDelta(owner, -10, session); await retainDeletedThingStorage(owner, 10, session);
+   s.collection(namespace).insert(encode(history));
+  });
+  assert.equal(await read(content.shareId), null); assert.ok(await read(history.shareId));
+  const saved = await read(subscription.shareId);
+  if (state === 'missing') assert.equal(saved, null);
+  else {
+   assert.equal(saved.crystal.storageUsedBytes, state === 'corrupt-count' ? 'unknown' : 2);
+   assert.equal(saved.crystal.storageLedgerStatus, ['invalid-envelope', 'old-version'].includes(state) ? USER_STORAGE_STATUS.ready : USER_STORAGE_STATUS.needsReconcile);
+  }
+  let entered = false;
+  await assert.rejects(withNativeHomeStorageTransaction(provider, binding, () => { entered = true; }), code('accounting_unavailable'));
+  assert.equal(entered, false);
+ });
+}
+
+test('reconciliation fence is atomic and preserves the count', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 17 }), now = new Date('2026-11-12T12:34:56Z');
+ await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+  await markUserStorageNeedsReconcile(owner, session, now); s.collection(namespace).insert(encode(history)); throw Error('injected-after-fence');
+ }), /injected-after-fence/);
+ assert.equal((await read(subscription.shareId)).crystal.storageLedgerStatus, USER_STORAGE_STATUS.ready); assert.equal(await read(history.shareId), null);
+ await withNativeHomeDeletionStorageTransaction(provider, binding, session => markUserStorageNeedsReconcile(owner, session, now));
+ const saved = await read(subscription.shareId);
+ assert.equal(saved.crystal.storageUsedBytes, 17); assert.equal(saved.crystal.storageLedgerStatus, USER_STORAGE_STATUS.needsReconcile); assert.deepEqual(saved.crystal.storageUpdatedAt, now);
+});
+
+test('retention/fence reject counterfeit, owner, expired and foreign-provider handles and poison caught failures', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 10 }), other = await fixture(t, { used: 20 });
+ for (const operation of [
+  (who: string, session: unknown) => retainDeletedThingStorage(who, 0, session),
+  (who: string, session: unknown) => markUserStorageNeedsReconcile(who, session)
+ ]) {
+  await assert.rejects(operation(owner, { kind: 'native-user-storage' }), code('storage_invariant'));
+  await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+   s.collection(namespace).insert(encode(history)); await assert.rejects(operation('wrong-owner', session), code('storage_invariant'));
+  }), code('storage_invariant'));
+  let escaped!: NativeUserStorageSession, release!: () => void, signal!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; }), ready = new Promise<void>(resolve => { signal = resolve; });
+  const active = withNativeHomeDeletionStorageTransaction(provider, binding, async session => { escaped = session; signal(); await gate; });
+  await ready;
+  await assert.rejects(other.provider.transaction(async () => operation(owner, escaped)), code('TRANSACTION_OWNERSHIP'));
+  release(); await assert.rejects(active, code('TRANSACTION_OWNERSHIP'));
+  await assert.rejects(operation(owner, escaped), code('storage_invariant'));
+ }
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 10); assert.equal((await other.read(other.subscription.shareId)).crystal.storageUsedBytes, 20); assert.equal(await read(history.shareId), null);
+});
+
+test('competing retention transactions on separate SQLite handles serialize without losing bytes', async t => {
+ const { provider, open, read, subscription } = await fixture(t, { used: 100, allowance: 1 }), second = await open();
+ let signal!: () => void, release!: () => void;
+ const entered = new Promise<void>(resolve => { signal = resolve; }), gate = new Promise<void>(resolve => { release = resolve; });
+ const first = withNativeHomeDeletionStorageTransaction(provider, binding, async session => {
+  await applyUserStorageDelta(owner, -30, session); signal(); await gate; await retainDeletedThingStorage(owner, 30, session);
+ });
+ await entered;
+ let secondEntered = false;
+ const next = withNativeHomeDeletionStorageTransaction(second, binding, async session => {
+  secondEntered = true; await applyUserStorageDelta(owner, -20, session); await retainDeletedThingStorage(owner, 20, session);
+ });
+ await immediate(); assert.equal(secondEntered, false); release(); await Promise.all([first, next]);
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 100);
+});
+
+test('later history failure rolls back deletion, refund and retention as one transaction', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 100, allowance: 1 });
+ await provider.transaction(s => s.collection(namespace).insert(encode(content)));
+ await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, async (session, s) => {
+  s.collection(namespace).deleteOne(eq(['shareId'], content.shareId));
+  await applyUserStorageDelta(owner, -50, session); await retainDeletedThingStorage(owner, 50, session);
+  s.collection(namespace).insert(encode(history)); throw Error('injected-after-retention');
+ }), /injected-after-retention/);
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 100);
+ assert.ok(await read(content.shareId)); assert.equal(await read(history.shareId), null);
+});
+
+for (const options of [{ noUser: true }, { meta: { character: { ownerId: 'another', loginMode: 'inherit', disabled: false } } }]) {
+ test('deletion-only lane never relaxes owner identity: ' + JSON.stringify(options), async t => {
+  const { provider } = await fixture(t, options); let entered = false;
+  await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, () => { entered = true; }), code('accounting_unavailable'));
+  assert.equal(entered, false);
+ });
+}
+
+test('refund authority cannot escape its transaction or mutate a foreign ledger identity', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 10 });
+ await withNativeHomeDeletionStorageTransaction(provider, binding, session => applyUserStorageDelta(owner, -5, session));
+ await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, binding, session => retainDeletedThingStorage(owner, 5, session)), code('storage_invariant'));
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 5);
+ await provider.transaction(s => s.collection(namespace).updateOne(eq(['shareId'], subscription.shareId), [{ op: 'set', path: ['ownerId'], value: 'foreign' }]));
+ await withNativeHomeDeletionStorageTransaction(provider, binding, async session => {
+  await applyUserStorageDelta(owner, -5, session); await retainDeletedThingStorage(owner, 5, session); await markUserStorageNeedsReconcile(owner, session);
+ });
+ const foreign = await read(subscription.shareId);
+ assert.equal(foreign.ownerId, 'foreign'); assert.equal(foreign.crystal.storageUsedBytes, 5); assert.equal(foreign.crystal.storageLedgerStatus, USER_STORAGE_STATUS.ready);
+ let entered = false;
+ await assert.rejects(withNativeHomeDeletionStorageTransaction(provider, { ...binding, contentPlaneId: 'foreign' }, () => { entered = true; }), code('storage_invariant'));
+ assert.equal(entered, false);
+});
+
+test('normal shrink then fresh growth cannot reuse a refund for quota-exempt retention', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 100, allowance: 100 });
+ await assert.rejects(withNativeHomeStorageTransaction(provider, binding, async (session, s) => {
+  await applyUserStorageDelta(owner, -50, session);
+  await applyUserStorageDelta(owner, 50, session);
+  s.collection(namespace).insert(encode(history));
+  await retainDeletedThingStorage(owner, 50, session);
+ }), code('storage_invariant'));
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 100);
+ assert.equal(await read(history.shareId), null);
+});
+
+test('caught mixed-operation retention refusal poisons commit while ordinary shrink/growth stays supported', async t => {
+ const { provider, read, subscription } = await fixture(t, { used: 100, allowance: 100 });
+ await assert.rejects(withNativeHomeStorageTransaction(provider, binding, async (session, s) => {
+  await applyUserStorageDelta(owner, -50, session);
+  await applyUserStorageDelta(owner, 50, session);
+  s.collection(namespace).insert(encode(history));
+  await assert.rejects(retainDeletedThingStorage(owner, 50, session), code('storage_invariant'));
+ }), code('storage_invariant'));
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 100);
+ assert.equal(await read(history.shareId), null);
+ await withNativeHomeStorageTransaction(provider, binding, async session => {
+  await applyUserStorageDelta(owner, -50, session);
+  await applyUserStorageDelta(owner, 20, session);
+ });
+ assert.equal((await read(subscription.shareId)).crystal.storageUsedBytes, 70);
 });

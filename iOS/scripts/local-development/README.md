@@ -111,3 +111,71 @@ The latest corrective run's native HTTP readiness passed but WK provisional
 navigation timed out before rendering, so real explicit bootstrap/edit/reload
 acceptance remains incomplete. Consult the dated evidence instead of treating
 source assertions or helper tests as a working native UI.
+
+## Protected SQLite account development bootstrap
+
+`prepare.py` / `run.py --native-accounts` enables a separate protected account
+home within this already isolated development app. The default lane retains its
+previous unavailable-account behavior. This flag changes no hosted target,
+production signing, selected remote origin, or existing WebView IndexedDB home.
+The ordinary anonymous workspace and the account SQLite home remain distinct.
+
+The native host creates a single Keychain generic-password envelope, scoped to
+this development bundle, using random independent 32-byte JWT/vault/outbox keys.
+It uses `AfterFirstUnlockThisDeviceOnly`, no synchronization, and a noninteractive
+`LAContext`; an unavailable Keychain stops startup. The nonsecret profile marker
+and SQLite file are under Application Support/ThingtimeLocalDevelopment/
+NativeAccountHome. An existing missing/corrupt/mismatched envelope or marker,
+changed origin/path, or orphaned existing database refuses startup. There is no
+implicit recovery, rekey, migration, or deletion. Container/path changes can
+therefore require an explicit future recovery design; do not reset keys to fix it.
+
+A CLOEXEC anonymous pipe transfers the transient envelope directly into embedded
+Node. The native bridge puts only descriptor numbers into the shared process environment. No key is
+written to a plaintext file, command argument, receipt, renderer bridge or log.
+After the existing environment scrub, the private bootstrap applies the protected
+JWT/vault keys and publishes the immutable canonical native-home descriptor
+before importing genuine Nitro. Native account readiness requires the canonical
+anonymous `auth/me` response (`200`, null user); it is not registration/login or
+email delivery acceptance. Sensitive queued mail still awaits a real transport.
+
+The simulator account signature includes only its distinct application identifier
+and matching private Keychain group. It grants no production trust, real team
+identity or shared account group. A device/distribution build must instead obtain
+its valid application identifier and entitlements through normal Apple signing.
+Unsigned/ad-hoc simulator code without this private group fails Keychain access
+with `errSecMissingEntitlement`; never replace the key store with plaintext.
+
+A private control pipe supports listener drain → canonical
+`thingtime.native-home.close` → bootstrap key retirement. UIKit termination is
+best-effort: iOS may suspend/kill an app without a termination notification. This
+hook alone is not proof of graceful shutdown or unclean-WAL recovery.
+
+Focused checks (no production data):
+
+```sh
+node --test iOS/scripts/local-development/test-native-home.mjs \
+  iOS/scripts/local-development/test-environment.mjs
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  iOS/scripts/local-development/account-profile-control/run.py \
+  --cache /tmp/thingtime-protected-profile-new-control
+```
+
+The latter uses one fresh simulator and two actual Keychain/profile processes,
+retaining only safe booleans/PIDs/hashes and independently cleaning its simulator.
+Its ten-minute budget includes any explicit `--budget-anchor` recovery. It does
+not start Node, HTTP or WebView. Full application/account acceptance must consume
+the parent-frozen canonical payload with complete built/signed/installed inventory
+checks; the existing renderer observer still exercises its ordinary device-home
+flow and must not be presented as a full account lifecycle fixture.
+
+OS contract references: [Apple Keychain accessibility](https://developer.apple.com/documentation/security/ksecattraccessibleafterfirstunlockthisdeviceonly),
+[noninteractive authentication context](https://developer.apple.com/documentation/localauthentication/lacontext/interactionnotallowed),
+[application Keychain groups](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps).
+
+Current bounded validation: the actual full development target compiles; profile
+logic tests use an in-memory key-store adapter. The live simulator fixture first
+returned Keychain `-34018`; its corrected private-group signature was read back,
+but the subsequent launch returned no process handle. Actual Keychain retention,
+full iOS Node/account HTTP startup and graceful shutdown remain unverified. All
+owned simulator cleanup receipts succeeded; no unchanged launch retry follows.

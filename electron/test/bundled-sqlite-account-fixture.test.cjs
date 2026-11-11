@@ -23,8 +23,9 @@ test('requiring the fixture does not execute it; opt-in still requires an exact 
 test('compiled fixture negotiates actual available account operations and refuses registered-only or false-ready advertisements', () => {
  const { assertNativeManifest, failureReceipt } = require(fixture);
  const manifest = () => ({ schemaVersion: 1, origin: 'http://127.0.0.1:19885', runtime: { provider: 'sqlite', ready: true },
-  features: { 'api.auth-register': { version: '1.4.0' }, 'api.login': { version: '1.0.0' } }, registeredFeatures: { 'api.things': { version: '1.64.0' } },
+  features: { 'api.root-data': { version: '1.2.0' }, 'api.auth-register': { version: '1.4.0' }, 'api.login': { version: '1.0.0' } }, registeredFeatures: { 'api.things': { version: '1.64.0' } },
   operations: [
+   { path: '/api/root-data', methods: ['GET'], availableMethods: ['GET'] },
    { path: '/api/v1/auth/register', methods: ['POST'], availableMethods: ['POST'] },
    { path: '/api/v1/login', methods: ['POST'], availableMethods: ['POST'] },
    { path: '/api/v1/things', methods: ['GET', 'POST'], availableMethods: [] }

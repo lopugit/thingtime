@@ -10,6 +10,7 @@ import { MongoClient } from 'mongodb';
 import { NATIVE_HOME_HOST_KEY } from '../../app/api/utils/documentStore/nativeHomeSelection';
 import { getNativeHomeRuntime, closeNativeHomeRuntime } from './nativeHomeRuntime';
 import handleApi from '../routes/api/[...]';
+import handleRootData from '../routes/api/root-data.get';
 
 test('real Nitro dispatcher uses protected SQLite composition for canonical registration/login/session/roster and actor preconditions', async t => {
  const root = await mkdtemp(join(tmpdir(), 'thingtime-native-dispatch-'));
@@ -28,12 +29,17 @@ test('real Nitro dispatcher uses protected SQLite composition for canonical regi
   jwt.fill(0); vault.fill(0); outbox.fill(0); await rm(root, { recursive: true, force: true });
  });
  let attempts = 0; t.mock.method(MongoClient.prototype, 'connect', async function () { attempts++; throw Error('Mongo must remain fenced'); });
- const app = new H3(); app.all('/api/**', handleApi);
+ const app = new H3(); app.get('/api/root-data', handleRootData); app.all('/api/**', handleApi);
  let cookie = '';
  const api = async (path: string, body?: unknown, extra: Record<string,string> = {}) => app.fetch(new Request(origin + '/api/' + path, {
   method: body === undefined ? 'GET' : 'POST', headers: { Origin: origin, Cookie: cookie, 'Content-Type': 'application/json', ...extra },
   ...(body === undefined ? {} : { body: JSON.stringify(body) })
  }));
+ const anonymousRoot = await api('root-data'); assert.equal(anonymousRoot.status, 200);
+ const anonymousData = await anonymousRoot.json(); assert.equal(anonymousData.user, null);
+ assert.equal(anonymousData.dataEnvironment, null); assert.equal(anonymousData.titlePrefix, '[LC]');
+ assert.match(anonymousRoot.headers.get('Cache-Control')!, /private.*no-store/);
+ assert.ok(anonymousRoot.headers.getSetCookie().length);
  const credentials = { username: 'native-dispatch', email: 'native-dispatch@example.invalid', password: randomBytes(24).toString('base64url') };
  const created = await api('v1/auth/register', credentials); assert.equal(created.status, 200);
  const signup = await created.json(); assert.equal(signup.ok, true); assert.deepEqual(signup.verificationDelivery, { status: 'queued', delivered: false });
@@ -44,6 +50,18 @@ test('real Nitro dispatcher uses protected SQLite composition for canonical regi
  assert.equal((await api('v1/auth/me', undefined, { 'X-Thingtime-Expected-Actor': 'other-account' })).status, 409);
  assert.equal((await api('v1/auth/me', undefined, { 'X-Thingtime-Expected-Data-Plane': 'home' })).status, 409);
  const runtime = await getNativeHomeRuntime(); assert.equal(runtime!.snapshot().ready, true);
+ const rootResponse = await api('root-data'), rootBody = await rootResponse.json();
+ assert.equal(rootResponse.status, 200); assert.equal(rootBody.user.id, userId);
+ assert.equal(rootBody.dataPlane, runtime!.publicDataPlane); assert.equal(anonymousData.dataPlane, rootBody.dataPlane);
+ assert.equal(rootBody.dataEnvironment, null);
+ for (const privateValue of [id, root, jwt.toString('base64url'), vault.toString('base64url'), outbox.toString('base64url')]) assert.equal(JSON.stringify(rootBody).includes(privateValue), false);
+ assert.equal((await api('root-data', undefined, { 'X-Thingtime-Expected-Actor': 'other-account' })).status, 409);
+ assert.equal((await api('root-data', undefined, { 'X-Thingtime-Expected-Data-Plane': 'home' })).status, 409);
+ assert.equal((await api('root-data', undefined, { 'x-tt-mongo-url': 'mongodb://never.invalid/other' })).status, 503);
+ assert.equal((await api('root-data', undefined, { Origin: 'https://other.invalid' })).status, 403);
+ assert.equal((await api('root-data', undefined, { 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+ assert.equal((await api('root-data', undefined, { 'X-Thingtime-Background-Id': 'synthetic-background' })).status, 503);
+
  // Exercise the fixture against the two actual canonical generator shapes.
  const { assertNativeManifest } = createRequire(import.meta.url)('../../../electron/scripts/test-bundled-sqlite-account.cjs');
  const { createApiCapabilitiesManifest } = await import('../../app/docs/apiDocs');
@@ -58,6 +76,7 @@ test('real Nitro dispatcher uses protected SQLite composition for canonical regi
  assert.equal((await api('v1/things')).status, 503);
  assert.equal((await api('v1/auth/logout', {})).status, 200);
  assert.equal((await (await api('v1/auth/me')).json()).user, null);
+ assert.equal((await (await api('root-data')).json()).user, null);
  const loggedIn = await api('v1/login', credentials); assert.equal(loggedIn.status, 200); assert.equal((await loggedIn.json()).user.id, userId);
  assert.equal(attempts, 0);
 });

@@ -30,7 +30,7 @@ import {
 } from './storageCore';
 
 import { userStorageAllowanceFromCrystal, userStorageAllowanceIsValid, readyUserStorageAdmission, assertUserStorageQuota } from './userStorageAdmission';
-import { isNativeUserStorageSession, applyNativeUserStorageDelta } from '../documentStore/nativeUserStorage';
+import { isNativeUserStorageSession, applyNativeUserStorageDelta, retainNativeDeletedThingStorage, markNativeUserStorageNeedsReconcile } from '../documentStore/nativeUserStorage';
 export { userStorageAllowanceFromCrystal, userStorageAllowanceIsValid } from './userStorageAdmission';
 
 // Mongo expression matching userStorageAllowanceFromCrystal while preserving
@@ -344,6 +344,7 @@ export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number,
  * bytes into retained history without admitting new customer content. Existing
  * overage must not block cleanup. Unknown ledgers remain fenced for reconcile. */
 export const retainDeletedThingStorage = async (ownerId: string, bytes: number, session: any): Promise<void> => {
+  if (isNativeUserStorageSession(session)) return retainNativeDeletedThingStorage(ownerId, bytes, session);
   if (!session || (typeof session.inTransaction === 'function' && !session.inTransaction()) || !Number.isSafeInteger(bytes) || bytes < 0) throw new StorageMutationError(500, 'storage_invariant', 'Invalid retained deletion storage');
   if (!bytes) return;
   const result = await (await getThingsCollection()).updateOne({
@@ -361,6 +362,7 @@ export const markUserStorageNeedsReconcile = async (
   session: any,
   now = new Date()
 ): Promise<void> => {
+  if (isNativeUserStorageSession(session)) return markNativeUserStorageNeedsReconcile(ownerId, session, now);
   const fenced = await (await getThingsCollection()).updateOne(
     {
       ...userSubscriptionLedgerMatch(ownerId),

@@ -1,0 +1,37 @@
+{
+  "passed": false,
+  "launches": [
+    {
+      "mode": "initial",
+      "launchOutput": "com.thingtime.localaccountprofilecontrol: 52660",
+      "receipt": {
+        "error": "keychain(-34018)",
+        "passed": false,
+        "scope": "native Keychain profile only; no Node/HTTP/WebView acceptance",
+        "stage": "first-profile"
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "operation": "shutdown",
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "returncode": 0
+    }
+  ],
+  "scope": "iOS Simulator actual Keychain profile; no Node/Nitro/HTTP or physical-device acceptance",
+  "sourceHashes": {
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "2531caf2398b5acb9086f6efe28ad6e3e5db0bb7aa06f5c5ca3b54552559b2f0",
+    "iOS/scripts/local-development/account-profile-control/main.swift": "997bc2be672520b3ca8e73a2620afc7bebb05da7da1bf2bf2680874f7ee94549",
+    "iOS/scripts/local-development/account-profile-control/run.py": "a378a57746501a94ba18c1fcfaa01e8304ec72d6577985622ecc581abbdfbcbb"
+  },
+  "sdk": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk",
+  "toolchain": "Xcode 27.0\nBuild version 27A5194q",
+  "binarySha256": "0fa101c9cd9ff5ecc499a14a7b9cbfa1c53faa349a528cda6e01567c10d0e315",
+  "ownSimulator": "7125833B-5356-441F-8AD2-81C4A03951DB",
+  "error": "Profile control refused: initial",
+  "observedAt": "2026-11-11T21:28:21.029846+00:00"
+}

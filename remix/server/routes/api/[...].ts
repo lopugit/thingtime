@@ -443,14 +443,12 @@ export default defineHandler(async (event) => {
   // Do not enter Mongo telemetry, recovery, background dispatch or proxy scopes.
   if (isNativeHomeSelected() && path !== 'v1/capabilities') {
     return runNativeHomeRequest(event.req, { method, path }, async () => {
-      if (event.req.headers.has('X-Thingtime-Background-Id')) return Response.json({ ok: false, code: 'NATIVE_HOME_OPERATION_UNAVAILABLE', error: 'Background dispatch is unavailable in this account profile.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       const load = routeModules[path];
       if (!load) return new Response(null, { status: 404 });
       const route = await load();
       const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
       if (!handler) return new Response(null, { status: 405 });
-      const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
-      return identityFailure || normalizeResponse(await handler({ request: event.req }));
+      return normalizeResponse(await handler({ request: event.req }));
     });
   }
 

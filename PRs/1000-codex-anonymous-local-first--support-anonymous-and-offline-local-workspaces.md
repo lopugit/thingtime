@@ -2,6 +2,41 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Final combined desktop validation — 12 November 2026
+
+TypeScript, zero-error ratchet, full lint (0 errors/374 warnings), canonical build,
+packaged-output verification and actual Mongo/SQLite HTTP pass with unchanged
+source. Nitro SHA-256: `599430a5e88c513acb7e5070ad00b732ada645bfba343062ed7231d5ec55e5a3`.
+The SQLite fixture proves root-data/session retention through a fresh process and
+actual macOS safeStorage. It still reports Things unavailable and mail undelivered.
+The separately frozen iOS compile payload is not replaced by this receipt.
+[Final integration evidence](../artifacts/anonymous-release-2026-11-12/root-data-bootstrap/final-integration/verification.json).
+
+## Native content and iOS prerequisites — 12 November 2026
+
+The explicit SQLite deletion lane retains only refunded bytes and refuses fresh
+content growth. Independent review found and fixed a refund-reuse quota defect;
+34 native SQLite and 41 existing storage/subscription tests pass, including
+caught-refusal rollback. No generic Things/Timeline routes are activated.
+
+The iOS target compiles the protected Keychain profile/private-pipe bootstrap
+against frozen Nitro `5617e642…`; five Node checks and the in-memory Swift profile
+contract pass. Real Keychain retention and full iOS account HTTP remain unverified:
+missing-entitlement refusal was followed by a corrected-signature simulator launch
+failure. Owned simulators were cleaned up; no full-app launch success is claimed.
+Physical-device, container-relocation and lifecycle checks remain open.
+
+## Native app-shell root data — 12 November 2026
+
+Canonical root data now executes inside the protected account composition with
+runtime-selected public data-plane identity and null hosted authority. Shared
+request fences remain intact; no Mongo or remote fallback is enabled.
+`api.root-data` 1.2.0 is advertised only when ready. Focused root-data/capability/
+native checks and the canonical compiled Mongo/SQLite HTTP fixtures pass, including
+real safeStorage, root session/plane retention after a fresh process, and logout.
+Generic Things require atomic content/Timeline persistence and remain unavailable.
+[Exact source and runtime evidence](../artifacts/anonymous-release-2026-11-12/root-data-bootstrap/README.md).
+
 ## Latest main integration — 12 November 2026
 
 Merged main `00c3d455ab801a9dfdca96c2b6d00329bec46545` into the feature branch.

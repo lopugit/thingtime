@@ -106,7 +106,7 @@ export async function createNativeHomeRuntime(value: unknown, compose: NativeHom
   if (!composition || typeof composition.run !== 'function' || !Array.isArray(composition.supportedOperations)) return unavailable();
   const operations = composition.supportedOperations.map(operation => {
    if (!operation || !['GET','POST','PATCH','PUT','DELETE','HEAD'].includes(operation.method) ||
-    !/^v1\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(operation.path)) return unavailable();
+    (!(operation.path === 'root-data' && operation.method === 'GET') && !/^v1\/[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(operation.path))) return unavailable();
    return Object.freeze({ method: operation.method, path: operation.path });
   });
   if (new Set(operations.map(op => op.method + ' ' + op.path)).size !== operations.length) return unavailable();
@@ -162,12 +162,17 @@ export async function getNativeHomeRuntime(): Promise<NativeHomeRuntime | null> 
  runtime ??= { host, promise: createNativeHomeRuntime(host) };
  return runtime.promise;
 }
-export async function runNativeHomeRequest(request: Request, operation: NativeHomeOperation, handler: () => Promise<Response>): Promise<Response> {
+export async function runNativeHomeRequest(request: Request, operation: NativeHomeOperation, handler: (runtime: NativeHomeRuntime) => Promise<Response>): Promise<Response> {
  try {
   const current = await getNativeHomeRuntime(); if (!current) return nativeHomeUnavailableResponse();
   return await current.dispatch(request, operation, async () => {
    if (readHost() !== runtime?.host) return unavailable();
-   const response = await handler();
+   if (request.headers.has('X-Thingtime-Background-Id')) return nativeHomeUnavailableResponse('NATIVE_HOME_OPERATION_UNAVAILABLE');
+   const { enforceExpectedActor } = await import('../../app/api/utils/auth/expectedActor');
+   const { getCurrentUser } = await import('../../app/api/utils/auth/getCurrentUser');
+   const identityFailure = await enforceExpectedActor(request, getCurrentUser);
+   if (identityFailure) return identityFailure;
+   const response = await handler(current);
    if (readHost() !== runtime?.host) { await response.body?.cancel().catch(() => {}); return unavailable(); }
    return response;
   });

@@ -1,5 +1,34 @@
 # Native web bundles and offline runtime
 
+<!-- Native app-shell bootstrap contract, 12 November 2026 -->
+The protected native account composition now serves `/api/root-data` through
+`loadRootData`, preserving public environment allowlisting, session projection
+and private/no-store cookies. Its authority comes from the selected native runtime,
+not request Mongo selectors: dataPlane is the runtime's public identity and
+hosted dataEnvironment is null. Actor, origin, data-plane, background-work and
+host-lifetime fences are shared with account routes. `api.root-data` 1.2.0 is
+advertised only when that composition is ready. Generic Things and complete
+SQLite product support remain separate work.
+
+
+## Native content prerequisites and iOS protected bootstrap — 12 November 2026
+
+SQLite deletion accounting now has an explicit cleanup transaction. It may retain
+only history covered by that transaction's refunds; ordinary growth cannot reuse
+those credits. Unknown or malformed ledgers remain unavailable, and trusted
+unready ledgers are fenced for reconciliation. No native reconciliation worker is
+claimed. Generic Things and atomic Timeline repository integration remain pending;
+this prerequisite does not activate their routes.
+
+The isolated iOS development target now includes a Keychain-backed native account
+profile and private-pipe bootstrap before Nitro imports. Its account lane is
+explicitly opt-in. The actual target compiles and focused Node/Swift contract
+checks pass, but live Keychain retention and iOS account HTTP acceptance are
+unverified: the first signed fixture lacked the required entitlement, and the
+corrected simulator signature failed to launch. Physical-device signing,
+app-container relocation/reinstall recovery and reliable lifecycle shutdown remain
+separate acceptance gates. See the [iOS development runbook](../iOS/scripts/local-development/README.md).
+
 ## Protected SQLite account API integration — 12 November 2026
 
 The explicit Electron host profile can now compose the canonical account API
@@ -8,10 +37,10 @@ outbox; request parameters and missing Mongo configuration cannot select it.
 MongoDB remains an independent supported local provider. There is no automatic
 database migration or dual write.
 
-The current SQLite operation set is registration, ordinary password login,
+The current SQLite operation set includes canonical app-shell root data, registration, ordinary password login,
 current user, account roster reads, logout, email verification, notification
 history and mark-read. Rate limits are durable and deny on unavailable storage.
-Invitation registration, email OTP login, generic Things/root-data, attachment
+Invitation registration, email OTP login, generic Things, attachment
 cleanup and other unimplemented operations cannot borrow Mongo or a remote API.
 The capability manifest retains the complete registry and advertises only the
 semantic operations actually available in the selected runtime.

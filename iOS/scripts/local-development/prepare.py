@@ -47,6 +47,7 @@ def prepare(args):
  if args.resume_preparation:
   if (args.cache/'DerivedData').exists() or (args.cache/'own-simulator.local.json').exists():raise ValueError('Resume only a preparation failure before build or simulator creation')
   previous=json.loads((args.cache/'preparation.json').read_text())
+  if previous.get('nativeAccountsRequested',False)!=bool(getattr(args,'native_accounts',False)):raise ValueError('Prepared account mode changed')
   if previous['entrySha256']!=args.entry_sha256 or previous['canonicalOutputInventory']!=source_inventory:raise ValueError('Prepared source inventory changed')
  else:args.cache.mkdir(parents=True,exist_ok=False)
  assets=args.cache/'LocalRuntime'
@@ -54,7 +55,7 @@ def prepare(args):
  if sha(assets/'.output/server/index.mjs')!=args.entry_sha256:raise ValueError('Canonical Nitro changed during stage')
  if args.resume_preparation:verify_payload(args.web_output,assets/'.output')
  elif inventory(assets/'.output')!=source_inventory or inventory(args.web_output)!=source_inventory:raise ValueError('Canonical full inventory changed during stage')
- shutil.copyfile(HERE/'entry.mjs',assets/'entry.mjs');shutil.copyfile(HERE/'acceptance.js',assets/'acceptance.js')
+ shutil.copyfile(HERE/'entry.mjs',assets/'entry.mjs');shutil.copyfile(HERE/'native-home.mjs',assets/'native-home.mjs');shutil.copyfile(HERE/'acceptance.js',assets/'acceptance.js')
  for name in ADDONS:
   target=assets/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(args.native_app/name,target)
  framework=args.cache/'Frameworks';framework.mkdir(exist_ok=args.resume_preparation);prefix='NodeMobile.xcframework/ios-arm64-simulator/'
@@ -80,6 +81,7 @@ def prepare(args):
  target.pop('entitlements',None)
  target['info']['path']=str(args.cache/'Info.plist')
  props=target['info']['properties'];props['CFBundleDisplayName']='Thingtime Local Dev';props['ThingtimeWebURL']=f'http://127.0.0.1:{args.port}'
+ props['ThingtimeLocalAccountsEnabled']=bool(getattr(args,'native_accounts',False))
  props['NSAppTransportSecurity']={'NSExceptionDomains':{'127.0.0.1':{'NSExceptionAllowsInsecureHTTPLoads':True,'NSIncludesSubdomains':False}}}
  props.pop('CFBundleURLTypes',None)
  settings=target['settings']['base'];settings.update({'PRODUCT_BUNDLE_IDENTIFIER':'com.thingtime.localdevelopment','THINGTIME_IOS_BUNDLE_IDENTIFIER':'com.thingtime.localdevelopment','THINGTIME_WIDGET_GROUP':'group.com.thingtime.localdevelopment','CODE_SIGNING_ALLOWED':'NO','SWIFT_ACTIVE_COMPILATION_CONDITIONS':'$(inherited) DEBUG THINGTIME_LOCAL_DEVELOPMENT','GCC_PREPROCESSOR_DEFINITIONS':'$(inherited) THINGTIME_LOCAL_DEVELOPMENT=1','SWIFT_OBJC_BRIDGING_HEADER':str(args.cache/'Bridging.h'),'IPHONEOS_DEPLOYMENT_TARGET':'18.0'})
@@ -87,7 +89,7 @@ def prepare(args):
  for script in target.get('preBuildScripts',[]):script['script']=script['script'].replace('$SRCROOT/..',str(ROOT))
  spec['settings']['base']['DEVELOPMENT_TEAM']='';spec['settings']['base']['CODE_SIGNING_ALLOWED']='NO'
  (args.cache/'project.yml').write_text(yaml.safe_dump(spec,sort_keys=False))
- receipt={'entrySha256':args.entry_sha256,'canonicalOutputInventory':source_inventory,'runtimeArchiveSha256':RUNTIME_SHA,'sourceToBinaryReproducibility':'unproven','origin':props['ThingtimeWebURL'],'bundleId':'com.thingtime.localdevelopment','localAccountApiSupported':False,'nativeAddonSha256':ADDONS,'toolCheckoutHead':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True,timeout=10).strip()}
+ receipt={'entrySha256':args.entry_sha256,'canonicalOutputInventory':source_inventory,'runtimeArchiveSha256':RUNTIME_SHA,'sourceToBinaryReproducibility':'unproven','origin':props['ThingtimeWebURL'],'bundleId':'com.thingtime.localdevelopment','nativeAccountsRequested':bool(getattr(args,'native_accounts',False)),'localAccountApiSupported':'pending-runtime-validation' if getattr(args,'native_accounts',False) else False,'nativeAddonSha256':ADDONS,'toolCheckoutHead':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True,timeout=10).strip()}
  (args.cache/'preparation.json').write_text(json.dumps(receipt,indent=2)+'\n')
  env={k:os.environ[k] for k in ['PATH','HOME','TMPDIR','DEVELOPER_DIR'] if k in os.environ}
  env['USER']=pwd.getpwuid(os.getuid()).pw_name
@@ -99,6 +101,7 @@ if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
  for name in ['cache','web-output','runtime-cache','native-app']:p.add_argument('--'+name,required=True,type=lambda x:Path(x).resolve())
  p.add_argument('--entry-sha256',required=True);p.add_argument('--port',type=int,default=29741)
+ p.add_argument('--native-accounts',action='store_true',help='Opt-in protected Keychain/SQLite account home; never uses hosted credentials')
  p.add_argument('--resume-preparation',action='store_true')
  p.add_argument('--check-inputs',action='store_true');p.add_argument('--allow-public-prerelease',action='store_true')
  prepare(p.parse_args())

@@ -1,0 +1,15 @@
+{
+  "passed": false,
+  "launches": [],
+  "cleanup": [],
+  "scope": "iOS Simulator actual Keychain profile; no Node/Nitro/HTTP or physical-device acceptance",
+  "sourceHashes": {
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "da34896660f1bfcb7918efd82436a0a6e0a33b516b893d4d8e6e8fb6a393f97a",
+    "iOS/scripts/local-development/account-profile-control/main.swift": "c34de896d4e5f75ff4fda796dd1e175ead13cf9e1f2daac26af69a1e71a3173c",
+    "iOS/scripts/local-development/account-profile-control/run.py": "857a195e684898455e0eab470c699b60393ca952f827d9ea89b60e432be7abd6"
+  },
+  "sdk": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk",
+  "toolchain": "Xcode 27.0\nBuild version 27A5194q",
+  "error": "xcrun: /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/iOS/scripts/local-development/account-profile-control/main.swift:4:1: error: 'main' attribute cannot be used in a module that contains top-level code\n 1 | import UIKit\n   | |- note: top-level code defined in this source file\n   | `- note: pass '-parse-as-library' to compiler invocation if this is intentional\n 2 | import CryptoKit\n 3 | \n 4 | @main final class ProfileControl: UIResponder, UIApplicationDelegate {\n   | `- error: 'main' attribute cannot be used in a module that contains top-level code\n 5 |     var window: UIWindow?\n 6 |     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {\n",
+  "observedAt": "2026-11-11T21:23:29.841424+00:00"
+}

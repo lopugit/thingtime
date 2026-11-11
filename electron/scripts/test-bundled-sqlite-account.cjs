@@ -16,7 +16,7 @@ const sourceRoot = path.resolve(__dirname, '..');
 const entry = path.join(sourceRoot, 'dist/web/.output/server/index.mjs');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const port = 19885, origin = 'http://127.0.0.1:' + port;
-const STAGES = Object.freeze(['guard','build','profile','os-storage','configure','bootstrap','manifest','register','session','roster','unsupported','reopen','logout','login','close','cleanup']);
+const STAGES = Object.freeze(['guard','build','profile','os-storage','configure','bootstrap','manifest','register','session','roster','root-data','unsupported','reopen','logout','login','close','cleanup']);
 let stage = 'guard', lastHttpStatus = null, manifestInvariant = null;
 const setStage = value => {
  if (!STAGES.includes(value)) throw Error('Unknown fixture stage'); stage = value;
@@ -159,7 +159,16 @@ async function runFixture() {
     assertNativeManifest(await response.json(), { kind: route.startsWith('/.well-known/') ? 'well-known' : 'flat', expectedOrigin: origin, responseUrl: response.url });
    }
   }
-  await manifests(); setStage('register');
+  async function rootData(expectedUser, expectedPlane) {
+   setStage('root-data'); const result = await api('GET', 'root-data');
+   assert.equal(result.status, 200); assert.equal(result.body.user?.id ?? null, expectedUser);
+   assert.match(result.body.dataPlane, /^custom-[a-f0-9]{64}$/); assert.equal(result.body.dataEnvironment, null);
+   assert.equal(result.body.titlePrefix, '[LC]');
+   if (expectedPlane) assert.equal(result.body.dataPlane, expectedPlane);
+   assert.equal(JSON.stringify(result.body).includes(directory), false);
+   return result.body.dataPlane;
+  }
+  await manifests(); const publicPlane = await rootData(null); setStage('register');
   const username = 'sqlite-' + crypto.randomUUID().slice(0, 12), password = crypto.randomBytes(24).toString('base64url');
   const created = await api('POST', 'v1/auth/register', { username, email: username + '@example.invalid', password });
   assert.equal(created.status, 200, 'Canonical account registration failed.'); assert.equal(created.body.ok, true);
@@ -171,22 +180,23 @@ async function runFixture() {
   setStage('roster'); assert.equal((await api('GET', 'v1/auth/accounts')).body.accounts?.some(account => account.user?.id === userId), true);
   setStage('unsupported');
   for (const route of ['v1/things', 'v1/passwords']) assert.equal((await api('GET', route)).status, 503, 'Unsupported storage operations cannot fall through to Mongo.');
-  const rootData = await fetch(origin + '/api/root-data', { signal: AbortSignal.timeout(10000) }); assert.equal(rootData.status, 503);
+  await rootData(userId, publicPlane);
   const wrongOrigin = await fetch(origin + '/api/v1/auth/me', { headers: { Origin: 'https://synthetic.invalid' }, signal: AbortSignal.timeout(10000) }); assert.equal(wrongOrigin.status, 403);
   setStage('close'); await stop(); setStage('reopen');
   const second = await start(false); assert.equal(second.identity, first.identity, 'Protected profile/key identity changed on reopen.');
-  await manifests(); setStage('reopen');
+  await manifests(); await rootData(userId, publicPlane); setStage('reopen');
   assert.equal((await api('GET', 'v1/auth/me')).body.user?.id, userId, 'Canonical session must persist across fresh Electron/API processes.');
   assert.equal((await api('GET', 'v1/auth/accounts')).body.accounts?.some(account => account.user?.id === userId), true);
   setStage('logout'); assert.equal((await api('POST', 'v1/auth/logout', {})).status, 200);
   assert.equal((await api('GET', 'v1/auth/me')).body.user, null);
+  await rootData(null, publicPlane);
   setStage('login'); const wrong = await api('POST', 'v1/login', { username, password: 'synthetic wrong credential' }); assert.equal(wrong.status, 401);
   const login = await api('POST', 'v1/login', { username, password }); assert.equal(login.status, 200); assert.equal(login.body.user?.id, userId);
   assert.equal((await api('GET', 'v1/auth/me')).body.user?.id, userId);
   setStage('close'); await stop(); setStage('cleanup'); await assertFreePort(port);
   receipt = { ok: true, claim: 'compiled-Nitro SQLite account HTTP with real Electron safeStorage and fresh-process reopen',
    nitroSha, sourceHashes, osProtected: true, provider: 'sqlite', registered: true, sessionReopened: true, rosterReopened: true,
-   logoutAndLogin: true, manifestsVerified: true, unsupportedRefused: true, externalMailDelivered: false, thingsSupported: false, socketClosed: true, runtimeClosed: true, cleanupVerified: true };
+   logoutAndLogin: true, rootDataReopened: true, manifestsVerified: true, unsupportedRefused: true, externalMailDelivered: false, thingsSupported: false, socketClosed: true, runtimeClosed: true, cleanupVerified: true };
  } finally { try { await stop(); } finally { cookies.clear(); await fs.rm(directory, { recursive: true, force: true }); } }
  console.log(JSON.stringify(receipt));
 }
@@ -204,11 +214,12 @@ function assertNativeManifest(manifest, { kind = 'well-known', expectedOrigin = 
  const version = value => typeof value === 'string' ? value : value?.version;
  check('manifest-availability', () => {
   assert.equal(version(manifest.features?.['api.auth-register']), '1.4.0');
+  assert.equal(version(manifest.features?.['api.root-data']), '1.2.0');
   assert.match(version(manifest.features?.['api.login']) || '', /^1\./);
   assert.equal(Object.hasOwn(manifest.features || {}, 'api.things'), false);
   assert.ok(manifest.registeredFeatures?.['api.things']);
  });
- check('manifest-operations', () => { for (const [route, method, available] of [['/api/v1/auth/register', 'POST', true], ['/api/v1/login', 'POST', true], ['/api/v1/things', 'GET', false]]) {
+ check('manifest-operations', () => { for (const [route, method, available] of [['/api/root-data', 'GET', true], ['/api/v1/auth/register', 'POST', true], ['/api/v1/login', 'POST', true], ['/api/v1/things', 'GET', false]]) {
   const operation = manifest.operations?.find(item => item.path === route && item.methods.includes(method));
   assert.ok(operation); assert.equal(operation.availableMethods.includes(method), available);
  } });

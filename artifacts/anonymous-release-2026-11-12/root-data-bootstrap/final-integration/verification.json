@@ -1,0 +1,113 @@
+{
+  "status": "passed",
+  "baseCommit": "e603402b50350c0370aa1142271edc60c7f87d74",
+  "attribution": "Base commit plus frozen source inventory, not a clean-commit build",
+  "startedAt": "2026-11-11T21:38:14.964128+00:00",
+  "endedAt": "2026-11-11T21:40:26.304064+00:00",
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "startedAt": "2026-11-11T21:38:14.978380+00:00",
+      "endedAt": "2026-11-11T21:38:48.937767+00:00",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "name": "ratchet",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "startedAt": "2026-11-11T21:38:48.937824+00:00",
+      "endedAt": "2026-11-11T21:39:22.092824+00:00",
+      "exitCode": 0,
+      "log": "ratchet.log"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "startedAt": "2026-11-11T21:39:22.092925+00:00",
+      "endedAt": "2026-11-11T21:39:53.505487+00:00",
+      "exitCode": 0,
+      "log": "lint.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "startedAt": "2026-11-11T21:39:53.505558+00:00",
+      "endedAt": "2026-11-11T21:40:14.404001+00:00",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "name": "verify",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "startedAt": "2026-11-11T21:40:14.404067+00:00",
+      "endedAt": "2026-11-11T21:40:15.007169+00:00",
+      "exitCode": 0,
+      "log": "verify.log"
+    },
+    {
+      "name": "mongo-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "startedAt": "2026-11-11T21:40:15.007225+00:00",
+      "endedAt": "2026-11-11T21:40:23.612604+00:00",
+      "exitCode": 0,
+      "log": "mongo-http.log"
+    },
+    {
+      "name": "sqlite-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-sqlite-account.cjs"
+      ],
+      "startedAt": "2026-11-11T21:40:23.615198+00:00",
+      "endedAt": "2026-11-11T21:40:25.989354+00:00",
+      "exitCode": 0,
+      "log": "sqlite-http.log"
+    }
+  ],
+  "sourceUnchanged": true,
+  "sourceChanges": [],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "599430a5e88c513acb7e5070ad00b732ada645bfba343062ed7231d5ec55e5a3",
+    "electron/dist/web-integrity.json": "d88843085ae88df201d0260a7f8569dac5ffdb85d50736d953d95e82a9c0e968",
+    "electron/dist/web/metadata.json": "11011bb40b3c24bccf9906337fd3174cf9f86d0ff62218652ceef84a197fb708"
+  }
+}

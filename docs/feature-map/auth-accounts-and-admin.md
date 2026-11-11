@@ -1,5 +1,13 @@
 # Auth, accounts and admin
 
+Native app-shell `/api/root-data` runs canonical `loadRootData` inside the same
+protected home composition as account APIs. `nativeHomeRuntime` supplies the
+public data-plane identity and shared request fences; hosted dataEnvironment is
+null and request Mongo selectors cannot redirect reads. Negotiate api.root-data
+1.2.0. Regressions: test:root-data, nativeHomeDispatch and the compiled SQLite
+account fixture, including fresh-process and logout projections.
+
+
 ## Explicit native account home
 
 `documentStore/nativeAccountHttpHome.ts` composes the existing account routes

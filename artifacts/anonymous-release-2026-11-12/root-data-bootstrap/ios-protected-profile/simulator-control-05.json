@@ -1,0 +1,27 @@
+{
+  "passed": false,
+  "launches": [],
+  "cleanup": [
+    {
+      "operation": "shutdown",
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "returncode": 0
+    }
+  ],
+  "scope": "iOS Simulator actual Keychain profile; no Node/Nitro/HTTP or physical-device acceptance",
+  "sourceHashes": {
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "2531caf2398b5acb9086f6efe28ad6e3e5db0bb7aa06f5c5ca3b54552559b2f0",
+    "iOS/scripts/local-development/account-profile-control/main.swift": "997bc2be672520b3ca8e73a2620afc7bebb05da7da1bf2bf2680874f7ee94549",
+    "iOS/scripts/local-development/account-profile-control/run.py": "81511569f68f466b0e797f3e0b218fe42cf831e57d3b57987a0f4ed48e3fab71"
+  },
+  "sdk": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk",
+  "toolchain": "Xcode 27.0\nBuild version 27A5194q",
+  "signedEntitlements": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"https://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>application-identifier</key><string>com.thingtime.localaccountprofilecontrol</string><key>keychain-access-groups</key><array><string>com.thingtime.localaccountprofilecontrol</string></array></dict></plist>",
+  "binarySha256": "41dc5fd2643d3efc1d025496dd6388479b1278a750afc298bc12666473cacd57",
+  "ownSimulator": "C1028FED-46FF-475B-8212-1CEBB05BFDB1",
+  "error": "xcrun: An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to launch com.thingtime.localaccountprofilecontrol.\nNo such process\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tApplication launch for 'com.thingtime.localaccountprofilecontrol' did not return a process handle nor launch error.\n\tNo such process\n",
+  "observedAt": "2026-11-11T21:30:31.158270+00:00"
+}
