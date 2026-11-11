@@ -36,16 +36,52 @@ import ThingtimePasswordCore
     private var expiry: Task<Void, Never>?
     var onStatus: ((String) -> Void)?
     var destinationIsCurrent: (() -> Bool)?
-    private var statusMessage: String?
-    // The webpage owns review/save/cancel copy. Native chrome keeps a neutral
-    // destination label, while errors remain visible even before web startup.
-    func report(_ message: String, nativeNotice: Bool = true) {
-        statusMessage = message
-        if nativeNotice { onStatus?(message) }
+    enum StatusKind: Equatable { case workflow, error, verificationFailure }
+    private(set) var statusMessage: String?
+    private var statusResolvesOnVerification = false
+    // Workflow feedback is one-shot. Only genuine errors may be replayed;
+    // authentication/destination failures resolve after fresh verification.
+    func report(_ message: String, kind: StatusKind = .error) {
+        if kind != .workflow {
+            statusMessage = message
+            statusResolvesOnVerification = kind == .verificationFailure
+            onStatus?(message)
+        }
         if let nonce = lastNonce, let owner = lastOwner { emit(kind: "status", nonce: nonce, owner: owner, message: message) }
     }
-    func destinationVerified(_ root: URL) {
-        onStatus?("Destination: \(root.absoluteString)")
+    @discardableResult func destinationVerified(_ root: URL) -> String {
+        if statusResolvesOnVerification {
+            statusMessage = nil; statusResolvesOnVerification = false
+        }
+        onStatus?(statusMessage ?? "Destination: \(root.absoluteString)")
+        // Empty status is already supported by the web bridge. Send it on
+        // ready so an initialized page also clears resolved stale feedback.
+        return statusMessage ?? ""
+    }
+    func bindPendingSetup(_ binding: AuthenticatorSetupInbox.Binding) -> UUID? {
+        inbox.bind(binding, expectedOwner: expectedOwner, dataPlane: "home")
+    }
+    func acceptPendingSetup(_ input: String) throws -> Bool {
+        guard try inbox.offer(input) else { return false }
+        // Only a newly accepted request supersedes prior request errors.
+        // Malformed/duplicate offers and cancellation cannot hide them.
+        if !statusResolvesOnVerification {
+            statusMessage = nil
+            if let origin { onStatus?("Destination: \(origin.absoluteString)") }
+        }
+        return true
+    }
+    func consumePendingSetup(_ id: UUID, binding: AuthenticatorSetupInbox.Binding) -> AuthenticatorSetup? {
+        guard let setup = inbox.consume(id, binding: binding) else { return nil }
+        expiry?.cancel(); expiry = nil
+        return setup
+    }
+    func expirePendingSetup(_ request: UUID) {
+        guard inbox.requestID == request else { return }
+        let nonce = lastNonce, owner = lastOwner
+        cancel()
+        if let nonce, let owner { emit(kind: "expired", nonce: nonce, owner: owner, id: request, message: "The pending setup expired. Open the setup code again.") }
+        report("The pending setup expired. Open the setup code again when you are ready.")
     }
 
     static func canonicalOrigin(_ value: URL) -> URL? {
@@ -65,19 +101,15 @@ import ThingtimePasswordCore
         guard deliveryID != offeredDelivery else { return }
         offeredDelivery = deliveryID
         do {
-            guard try inbox.offer(url.absoluteString) else { report("Finish or cancel the pending setup before opening another code."); return }
+            guard try acceptPendingSetup(url.absoluteString) else { report("Finish or cancel the pending setup before opening another code.", kind: .workflow); return }
             expiry?.cancel()
             let request = inbox.requestID
             expiry = Task { [weak self] in
                 do { try await Task.sleep(for: .seconds(600)) } catch { return }
-                guard let self, self.inbox.requestID == request else { return }
-                let nonce = self.lastNonce, owner = self.lastOwner
-                self.cancel()
-                if let nonce, let owner, let request { self.emit(kind: "expired", nonce: nonce, owner: owner, id: request, message: "The pending setup expired. Open the setup code again.") }
-                self.report("The pending setup expired. Open the setup code again when you are ready.")
+                guard let self, let request else { return }
+                self.expirePendingSetup(request)
             }
-            guard origin != nil else { report("Setup is held only in memory while the configured destination is unavailable. Unlock this device and reactivate this window to retry."); return }
-            report("Sign in to the displayed Thingtime destination, then review the pending setup in Passwords.", nativeNotice: false)
+            guard origin != nil else { report("Setup is held only in memory while the configured destination is unavailable. Unlock this device and reactivate this window to retry.", kind: .verificationFailure); return }
             announce()
         } catch { report("This link is not a supported TOTP setup code. HOTP and migration links are not supported.") }
     }
@@ -104,7 +136,7 @@ import ThingtimePasswordCore
               let body = message.body as? [String: String], body["version"] == Self.version,
               let operation = body["operation"], let nonce = body["nonce"], UUID(uuidString: nonce) != nil,
               let documentNonce = body["documentNonce"], UUID(uuidString: documentNonce) != nil else { return }
-        guard destinationIsCurrent?() ?? true else { cancel(); report("The linked destination or account changed. Reopen setup after signing in to the current destination."); return }
+        guard destinationIsCurrent?() ?? true else { cancel(); report("The linked destination or account changed. Reopen setup after signing in to the current destination.", kind: .verificationFailure); return }
         if operation == "cancel" {
             if lastNonce == nonce && lastDocumentNonce == documentNonce { cancel() }
             return
@@ -121,16 +153,14 @@ import ThingtimePasswordCore
             do {
                 try await Self.verifySession(web: web, root: root, owner: owner)
                 guard !Task.isCancelled, self.destinationIsCurrent?() ?? true, AuthenticatorSetupDeliveryGate.permits(capturedGeneration: current, currentGeneration: self.generation, capturedDocument: documentNonce, currentDocument: self.lastDocumentNonce), self.validPage(web, root), self.lastNonce == nonce else { return }
-                self.destinationVerified(root)
+                let readyStatus = self.destinationVerified(root)
                 let binding = AuthenticatorSetupInbox.Binding(owner: owner, nonce: nonce, generation: current)
                 if operation == "ready" {
-                    if let id = self.inbox.bind(binding, expectedOwner: self.expectedOwner, dataPlane: "home") { self.emit(kind: "available", nonce: nonce, owner: owner, id: id) }
-                    if let status = self.statusMessage { self.emit(kind: "status", nonce: nonce, owner: owner, message: status) }
+                    if let id = self.bindPendingSetup(binding) { self.emit(kind: "available", nonce: nonce, owner: owner, id: id) }
+                    self.emit(kind: "status", nonce: nonce, owner: owner, message: readyStatus)
                 } else if let text = body["requestId"], let id = UUID(uuidString: text) {
-                    if let setup = self.inbox.consume(id, binding: binding) {
-                        self.expiry?.cancel(); self.expiry = nil
+                    if let setup = self.consumePendingSetup(id, binding: binding) {
                         self.emit(kind: "setup", nonce: nonce, owner: owner, id: id, setup: setup.uri)
-                        self.report("Review the draft and select Save. Nothing has been saved automatically.", nativeNotice: false)
                     } else {
                         self.emit(kind: "unavailable", nonce: nonce, owner: owner, id: id)
                     }
@@ -138,7 +168,7 @@ import ThingtimePasswordCore
             } catch {
                 guard !Task.isCancelled, current == self.generation else { return }
                 self.emit(kind: "unavailable", nonce: nonce, owner: owner)
-                self.report("Sign in to the configured account on this destination and retry in Passwords.")
+                self.report("Sign in to the configured account on this destination and retry in Passwords.", kind: .verificationFailure)
             }
         }
     }
