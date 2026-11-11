@@ -470,7 +470,6 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							continue;
 						}
 						await sourceCheck();
-						await sourceCheck();
 						const transferAbort = new AbortController();
 						const deadline = createSyncTransferDeadline(AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : [])]));
 						const uploadSignal = deadline.signal;
