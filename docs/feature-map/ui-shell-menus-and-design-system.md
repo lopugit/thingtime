@@ -43,6 +43,15 @@ icons and accents; `TransientBlockHost` binds selection and permitted actions.
 `TESTING.md`; `scripts/incoming-share-acceptance.mjs` exercises real disposable
 API data and desktop/mobile rendering.
 
+The native iOS `ThingtimeWebView` has a 44pt **Dismiss shared draft reminder**
+control beside **Continue shared draft**. `ShareInbox.dismissComposerReminder`
+writes a separate per-draft marker; `pendingComposers(includeDismissed: false)`
+filters reminders while the default read retains every recoverable draft.
+`DestinationPickerDrawer` → **Shared drafts** opens the origin-scoped recovery
+list, including dismissed reminders, without deleting payloads or changing
+composer ownership/submission metadata. Run `ThingtimeTests/ShareInboxTests`
+and the opt-in `SharedDraftReminderUITests` on an isolated seeded simulator.
+
 `ContextActionDock`, `useContextViewportDock` and `contextViewport` share keyboard
 placement across the toolbar and existing destination controls. Keep CSS layout
 coordinates distinct from client rectangles when WebKit pans its visual

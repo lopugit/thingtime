@@ -8553,6 +8553,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
+- [ ] On a failed YouTube sync, distinguish disabled YouTube Data API v3,
+      missing read permission, invalid/expired authorization and exhausted quota
+      using fixed redacted diagnostics. Unknown, malformed and oversized upstream
+      errors must remain generic; never show upstream messages, tokens, URLs or
+      trace IDs. Facebook errors distinguish request/field, permission and
+      authorization categories without claiming which field failed.
+- [ ] Verify all YouTube uploads-playlist requests failing records a sync error;
+      a successful empty playlist remains an empty success, and a partial failure
+      preserves successfully fetched uploads. Synthetic regression coverage:
+      `providerErrors.test.ts`; real-provider acceptance is separate.
+
+
 Automated first: `pnpm --dir remix run verify:connections` (94 real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
@@ -15294,6 +15306,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - From the real iOS system share sheet, select Thingtime for a link, text, photo,
   Live Photo, PDF, video, audio, ZIP, custom UTI and mixed files/folders. The first
   screen is New post with the content prefilled; no Saved locally dead end.
+- In the native iOS app, leave an unfinished share and tap the close control on
+  **Continue shared draft**. Only the reminder disappears: background/foreground
+  and relaunch must keep it dismissed. Open the native drawer → **Shared drafts**
+  and resume it; compare its text/attachments with the original. A new share must
+  still show a reminder; switching destinations must not show another origin's
+  drafts. Check VoiceOver's dismiss label/hint, the 44pt target, large Dynamic
+  Type, narrow screens and the empty Shared drafts list. A failed dismissal must
+  keep the reminder and offer a clear error without deleting anything.
+  For repeatable synthetic native acceptance, boot a dedicated simulator named
+  `Thingtime shared draft dismiss QA`, then run
+  `SHARED_DRAFT_SIMULATOR_ID=<uuid> iOS/scripts/test-shared-draft-reminder.sh`.
+  The script refuses other simulator names, seeds only local synthetic content,
+  and retains the installed app and simulator for screenshot review.
 - Verify image previews separately from original upload bytes. Live Photo
   resources, unknown binary bytes, names, nested paths and empty folders survive.
   Repeat with more than 25 items and identical names in different folders.
