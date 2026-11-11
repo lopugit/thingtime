@@ -4,6 +4,29 @@ import XCTest
 @testable import Thingtime
 
 final class NativePhotoQueueReceiptTests: XCTestCase {
+    @MainActor
+    func testTransferRefusalsRetainClosedReasonsWithoutMisreportingSavedSettings() throws {
+        let failures: [(NativeDeferredUploadClient.Failure, NativePhotoRunActivity.Reason)] = [
+            (.denied, .transferPermission), (.expired, .transferExpired), (.missing, .transferMissing),
+            (.stateChanged, .transferState), (.configurationChanged, .savedSettings), (.destinationChanged, .destinationReview)]
+        for (failure, reason) in failures {
+            XCTAssertTrue(failure.terminal)
+            XCTAssertEqual(NativePhotoRunActivity.reason(for: failure), reason)
+            let wrapped = NativeDeferredUploadClient.RequestFailure(failure: failure, operation: .checkPhotoRun)
+            XCTAssertEqual(NativeDeferredUploadClient.failure(wrapped), failure)
+            XCTAssertEqual(NativeDeferredUploadClient.operation(wrapped), .checkPhotoRun)
+            XCTAssertEqual(NativePhotoRunActivity.reason(for: wrapped), reason)
+        }
+        XCTAssertEqual(NativeDeferredUploadClient.conflictFailure(["code": "sync_configuration_changed"]), .configurationChanged)
+        XCTAssertEqual(NativeDeferredUploadClient.conflictFailure(["code": "sync_destination_changed"]), .destinationChanged)
+        XCTAssertEqual(NativeDeferredUploadClient.conflictFailure(["error": ["code": "photo_path_conflict"]]), .photoPathConflict)
+        XCTAssertEqual(NativeDeferredUploadClient.conflictFailure(["error": "upload_parts_retryable"]), .partsRetryable)
+        XCTAssertEqual(NativeDeferredUploadClient.conflictFailure(["error": "private raw server text"]), .stateChanged)
+        XCTAssertEqual(NativePhotoRunActivity.reason(for: NativePhotoRunActivity.SourceFailure.grantChanged), .grantChanged)
+        XCTAssertEqual(NativePhotoRunActivity.reason(for: NativePhotoRunActivity.SourceFailure.queueChanged), .queueChanged)
+        XCTAssertEqual(NativePhotoRunActivity.reason(for: NativePhotoRunActivity.SourceFailure.photoAccess), .photoAccess)
+    }
+
     func testOnlyExactObservedCloudBytesCanAcknowledgePreparedOriginal() throws {
         let path = String(repeating: "a", count: 64) + "-0-Paired Original.mov"
         let digest = String(repeating: "f", count: 64)

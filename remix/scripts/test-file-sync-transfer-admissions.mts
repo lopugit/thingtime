@@ -443,9 +443,16 @@ try {
 	// One owner authorization, then paired-only reserve/sign/upload/publish.
 	// Six originals cross the native four-original initial lookahead boundary.
 	const refilled: any[] = [];
+	const refillParts = Array.from({ length: 6 }, (_, i) => i === 4 ? multi : single);
+	const refillRequests = refillParts.map((parts, i) => newOriginal(run.runId, 'refill-' + i, parts));
+	// Match the installed native worker's five lanes. A shared path-observation
+	// ceiling must apply backpressure, rather than reject siblings and cancel
+	// the whole batch before its first publication.
+	const firstWave = await Promise.all(refillRequests.slice(0, 5).map(async request => (await expect(admissions, request, node)).data));
+	assert.equal(new Set(firstWave.map(row => row.uploadId)).size, 5);
 	for (let i = 0; i < 6; i++) {
-		const parts = i === 4 ? multi : single, request = newOriginal(run.runId, 'refill-' + i, parts);
-		const reserved = (await expect(admissions, request, node)).data;
+		const parts = refillParts[i], request = refillRequests[i];
+		const reserved = i < firstWave.length ? firstWave[i] : (await expect(admissions, request, node)).data;
 		assert.equal(reserved.state, 'reserved');
 		if (i === 0) {
 			const observer = await expect('/api/v1/login', { username: ownerName, password });
@@ -485,7 +492,7 @@ try {
 	const interruptedRequest = newOriginal(run.runId, 'paused-run');
 	const interrupted = (await expect(admissions, interruptedRequest, node)).data;
 	saved = (await expect(things, { id: saved.id, crystal: { ...configuration, paused: true }, expectedUpdatedAt: saved.updatedAt }, { ...owner, method: 'PATCH' })).data.thing;
-	await expect(admissions, checkRun(run.runId), node, 409);
+	assert.equal((await expect(admissions, checkRun(run.runId), node, 409)).data.code, 'sync_configuration_changed');
 	await expect(admissions, interruptedRequest, node, 409);
 	await expect(admissions, signParts(interrupted.admissionId, single), node, 409);
 	await expect(admissions, openRun(), owner, 409);

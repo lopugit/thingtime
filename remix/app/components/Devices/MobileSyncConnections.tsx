@@ -1,3 +1,6 @@
+import { isPhotoAutomationOnlyEdit } from '~/fileSync/photoSettingsPolicy';
+import { PhotoTransferScopeControls } from './PhotoTransferScopeControls';
+import { effectivePhotoTransferPolicy, supportsNativePhotoTransferPolicy, type PhotoTransferPolicy } from '~/fileSync/photoTransferPolicy';
 import { iosManagedSyncResources, IOS_SYNC_RESOURCE_STATUS } from './deviceSyncResourceDisplay';
 import { activityManager } from '~/activity/activityManager';
 import { prepareExplicitSyncStart } from '~/fileSync/configurationStart';
@@ -17,7 +20,7 @@ import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mob
 import { cloudFolderPaths, type CloudFolderPath } from '~/fileSync/folderPaths';
 import { fileSyncDownloadRequirements } from '~/fileSync/signedDownloadTarget';
 import { SyncResourceControls } from './SyncResourceControls';
-import { PhotoAutomationControls } from './PhotoAutomationControls';
+import { PhotoAutomationControls, photoUploadSaveBlocks } from './PhotoAutomationControls';
 import { photoSyncScheduleLabel, photoSyncWaitingMessage, useSyncJobs } from './photoSyncPresentation';
 import { nativePhotoActivityDisplay, nativePhotoBackgroundLabel, nativePhotoCanContinue, nativePhotoRunActive, nativePhotoRunGlance, nativePhotoRunLabel, nativePhotoRunSchedule, useNativePhotoRunProgress } from './nativePhotoRunView';
 import { SyncIgnoreRulesEditor } from './SyncIgnoreRulesEditor';
@@ -229,6 +232,7 @@ function Connections({
 	useEffect(() => () => onNativePhotoActivity?.(false), [onNativePhotoActivity]);
 	const busy = viewBusy || (appOwned && !!nativeTask?.active) || nativePhotoTransferActive;
 	const connectionsRef = useRef(connections);
+	const [photoScopePolicies, setPhotoScopePolicies] = useState<Record<string, PhotoTransferPolicy>>({});
 	const [transfers, setTransfers] = useState<Record<string, ConnectionProgress>>({});
 	const [progressDescriptors, setProgressDescriptors] = useState<Record<string, SyncProgressDescriptor | undefined>>({});
 	const [inventoryDescriptors, setInventoryDescriptors] = useState<Record<string, SyncInventoryDescriptor | undefined>>({});
@@ -812,12 +816,14 @@ function Connections({
 	};
 	const save = (startAfterSave: boolean) =>
 		void run(async (assertCurrent) => {
-			if (!draft || !ready || isConfigRunning(draft.id)) return;
+			const previous = draft && connectionsRef.current.find(row => row.id === draft.id);
+            const policyOnly = !!(draft && previous && isPhotoAutomationOnlyEdit(previous, draft));
+			if (!draft || !ready || (isConfigRunning(draft.id) && !policyOnly)) return;
 			const release = startAfterSave ? claimSyncEnrollment(scope) : undefined;
 			if (startAfterSave && !release) throw Error('Automatic setup is already being checked.');
 			try {
 				const deferRootVerification = startAfterSave && canQueueDraft(draft);
-				if (mobileFolderBusy && !deferRootVerification && !draft.enrollment?.savedRevision) return;
+				if (mobileFolderBusy && !policyOnly && !deferRootVerification && !draft.enrollment?.savedRevision) return;
 				const verify = async (deviceId: string, rootId: string) => {
 					assertCurrent();
 					if (deferRootVerification && deviceId === scope.deviceId && roots.some(root => root.id === rootId)) return;
@@ -986,6 +992,31 @@ function Connections({
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
 						path={folderManagement ? '' : (nativeRoot?.sourceKind === 'photos' || saved.configuration.sourceKind === 'photos' ? nativeRoot?.name || 'Photo Library' : undefined) || (supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
                         destination={folders.find(folder => folder.id === saved.configuration.remoteFolderId)?.path || 'Saved cloud folder'}
+                        settingsContent={photos && (automatic || saved.configuration.photoAutomation) && (() => {
+                                const retained = retainedDrafts.current.get(saved.id);
+                                const current = retained ?? { version: 1 as const, id: saved.id, baseUpdatedAt: saved.updatedAt, pending: false,
+                                    exclusions: saved.configuration.excludedPaths.join('\n'), configuration: saved.configuration };
+                                const effective = effectivePhotoTransferPolicy(photoScopePolicies.device, photoScopePolicies[saved.configuration.localRootId], { uploadBytesPerSecond: current.configuration.photoAutomation?.uploadBytesPerSecond ?? 625000, uploadBytesPerHour: current.configuration.photoAutomation?.uploadBytesPerHour });
+                                const inheritedSummary = supportsNativePhotoTransferPolicy(capabilities) && (!photoScopePolicies.device || !photoScopePolicies[saved.configuration.localRootId]) ? 'Shared device and folder limits are loading.' :
+                                    `${retained ? 'After saving: strictest' : 'Strictest'} upload settings: ${effective.uploadBytesPerSecond! / 1_000_000} MB/s${effective.uploadBytesPerHour === undefined ? ' · no hourly data ceiling' : ` · ${effective.uploadBytesPerHour / 1_000_000} MB per hour`}.`;
+                                const policyOnly = !!retained && isPhotoAutomationOnlyEdit(saved, retained);
+                                const activeSaveBlocked = isConfigRunning(saved.id) && !policyOnly;
+                                const limitsDisabled = !automatic || viewBusy || !ready || !!storageError || !!retained?.pending;
+                                return <Box marginTop={3} minW={0}>
+                                    <PhotoAutomationControls policy={current.configuration.photoAutomation} draft={current.photoAutomationDraft}
+                                        disabled={limitsDisabled} scopeKey={`${key}:${generation}:visible-limits:${saved.id}`} accountTransport={reviewTransport}
+                                        availability={activeSaveBlocked && retained ? 'Other sync settings changed too. Pause this backup to apply those changes.' :
+                                            automatic ? `${inheritedSummary} Upload settings for this sync config; save changes below.` : 'Open the paired iPhone’s Thingtime app to change upload settings.'}
+                                        onValidityChange={valid => { resourceValidity.current.set(saved.id, valid); if (selectedId === saved.id) setResourceDraftValid(valid); }}
+                                        onChange={(photoAutomationDraft, policy) => edit({ ...current, photoAutomationDraft,
+                                            configuration: policy ? { ...current.configuration, configurationVersion: 4, sourceKind: 'photos', photoAutomation: policy } : current.configuration })} />
+                                    <SyncEditorBlocks documentKey="photo-backup-visible-limit-actions" title="Save upload settings" blocks={photoUploadSaveBlocks}
+                                        scopeKey={`${key}:visible-limit-save:${saved.id}`} accountTransport={reviewTransport}
+                                        scope={{ limits: { label: 'Save upload settings', disabled: limitsDisabled || !retained || selectedId !== saved.id || activeSaveBlocked || resourceValidity.current.get(saved.id) === false,
+                                            status: retained ? 'Unsaved upload settings' : 'Saved upload settings' } }}
+                                        actions={{ save: () => { if (retained && selectedId === saved.id && !limitsDisabled && !activeSaveBlocked && resourceValidity.current.get(saved.id) !== false) save(false); } }} />
+                                </Box>;
+                            })()}
                         summaryContent={active && appOwned && !nativeOwns && <SyncConfigActivity scope={progressScope} scopeKey={`${key}:activity:${saved.id}`}
                             currentOrigin={runtimeOrigin} generation={generation} accountTransport={reviewTransport} live={task?.active ? task.activity : undefined} />}
                         error={runError || ''}
@@ -1082,6 +1113,10 @@ function Connections({
 	return (
 		<Box as="section" aria-label="Folders & sync configs" minWidth={0} marginTop={3}>
 			{renderHeader()}
+            {photoAutomation && appOwned && scope.dataPlane === 'home' && <PhotoTransferScopeControls
+                supported={supportsNativePhotoTransferPolicy(capabilities)} key={`${key}:device-limits`} ownerId={scope.ownerId} deviceId={scope.deviceId} scopeKey={`${key}:${generation}:device-limits`}
+                accountTransport={reviewTransport} request={requestFolders} assertCurrent={assertCurrent}
+                onSaved={policy => setPhotoScopePolicies(previous => ({ ...previous, device: policy }))} />}
 			{groups.size === 0 && loaded && rootsReady && !error && !folderManagement?.error && <Text fontSize="sm" marginBlock={3}>No folders added yet.</Text>}
 			{[...groups].map(([id, { root, saved, drafts }]) => {
 				const hasConfigs = !!(saved.length || drafts.length);
@@ -1101,6 +1136,10 @@ function Connections({
 							scan: () => { if (root && !nativeDisabled) return folderManagement?.run({ action: 'scan', rootId: id }); },
 							remove: () => { if (root && !nativeDisabled) return folderManagement?.run({ action: 'remove', rootId: id }); }
 						}} />
+                    {root?.sourceKind === 'photos' && photoAutomation && appOwned && scope.dataPlane === 'home' && <PhotoTransferScopeControls
+                        supported={supportsNativePhotoTransferPolicy(capabilities)} key={`${key}:${id}:folder-limits`} ownerId={scope.ownerId} deviceId={scope.deviceId} rootId={id} scopeKey={`${key}:${generation}:${id}:folder-limits`}
+                        accountTransport={reviewTransport} request={requestFolders} assertCurrent={assertCurrent}
+                        onSaved={policy => setPhotoScopePolicies(previous => ({ ...previous, [id]: policy }))} />}
 					{saved.map(renderSaved)}
 					{drafts.map(row => <SyncFolderCard key={row.id} title={row.configuration.name || 'New sync config'} description="Unsaved sync config"
 						stats="Draft" path="" scopeKey={`${key}:draft:${row.id}`} accountTransport={reviewTransport}
@@ -1219,7 +1258,7 @@ export function SyncConfigurationForm({
 		c = draft.configuration;
 	const selectedRoot = roots.find((root) => root.id === c.localRootId);
 	const photos = selectedRoot?.sourceKind === 'photos' || c.sourceKind === 'photos';
-	const showPhotoControls = photos && (photoAutomation || !!c.photoAutomation);
+	const showPhotoControls = photos && draft.baseUpdatedAt === null && (photoAutomation || !!c.photoAutomation);
 	const change = (patch: Partial<FileSyncConfiguration>) => onChange({ ...draft, configuration: { ...c, ...patch } });
 	const key = scopeKey ?? `${draft.id}:${c.deviceId}`;
 	const rootOptions = c.localRootId && !selectedRoot ? [{ id: c.localRootId, name: 'Folder access missing' }, ...roots] : roots;
@@ -1276,7 +1315,7 @@ export function SyncConfigurationForm({
 				scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
 				onChange={ignoreRules => change({ configurationVersion: c.photoAutomation ? 4 : c.resourceLimits ? 3 : ignoreRules ? 2 : 1, ignoreRules })} />
 			</Stack></Box>
-			<Box as="details" open={showPhotoControls || undefined}><Box as="summary" cursor="pointer" paddingY={2}>{showPhotoControls ? 'Upload speed, data and notifications' : 'Resource limits'}</Box>
+			{(!photos || showPhotoControls) && <Box as="details" open={showPhotoControls || undefined}><Box as="summary" cursor="pointer" paddingY={2}>{showPhotoControls ? 'Upload speed, data and notifications' : 'Resource limits'}</Box>
 			{showPhotoControls ? <PhotoAutomationControls
 				policy={c.photoAutomation} draft={draft.photoAutomationDraft} disabled={disabled || !photoAutomation}
 				availability={photoAutomation ? 'Thingtime applies these limits to this Photos backup.' : 'Open the paired iPhone’s Thingtime app to edit these settings.'}
@@ -1286,7 +1325,7 @@ export function SyncConfigurationForm({
 					configuration: policy ? { ...c, configurationVersion: 4, sourceKind: 'photos', photoAutomation: policy } : c })} />
 			: <SyncResourceControls key={draft.baseUpdatedAt ?? 'new'} initialDraft={draft.resourceDraft} onDraftChange={onResourceDraftChange} onValidityChange={onResourceValidityChange} resourceLimits={c.resourceLimits} availabilityStatus={iosManagedResources ? IOS_SYNC_RESOURCE_STATUS : photos ? 'Native resource controls are unavailable for this photo source.' : ''} disabled={disabled || photos || iosManagedResources} scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
 				onChange={resourceLimits => change({ resourceLimits, configurationVersion: resourceLimits ? 3 : c.ignoreRules ? 2 : 1 })} />}
-			</Box>
+			</Box>}
 		</Stack>
 	);
 }

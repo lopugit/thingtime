@@ -136,7 +136,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         do {
             if let photoAuthorization, let conditions {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
-                    scope: scope, authorization: photoAuthorization, conditions: conditions, sender: sender)
+                    scope: scope, authorization: photoAuthorization, conditions: conditions, signedExpiry: try Self.signedUploadExpiry(signed, partNumber: partNumber), sender: sender)
             } else {
                 try await sender.send(request, file: part.url, configuration: configuration)
             }
@@ -145,6 +145,15 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
             throw NativeUploadAuthorization.Wait.wifi
         }
         try checkActive(); try await verifyOwner()
+    }
+    /// Scheduling uses the exact authenticated signer receipt, never a new
+    /// relative lifetime inferred after signing or from an arbitrary PUT URL.
+    static func signedUploadExpiry(_ signed: [String: Any], partNumber: Int, now: Date = Date()) throws -> Date {
+        guard signed["ok"] as? Bool == true, let parts = signed["parts"] as? [[String: Any]], parts.count == 1,
+              parts[0]["partNumber"] as? Int == partNumber, let raw = parts[0]["expiresAt"] as? String,
+              let expiry = MobileDevicePairing.date(raw) else { throw MobileFolderStore.Failure.invalid }
+        guard expiry > now else { throw NativePhotoUploadBudget.Wait(retryAt: now.addingTimeInterval(1)) }
+        return expiry
     }
     static func signedUploadRequest(_ signed: [String: Any], origin: URL, checksum: String, length: Int64, partNumber: Int) throws -> URLRequest {
         guard signed["ok"] as? Bool == true, let parts = signed["parts"] as? [[String: Any]], parts.count == 1,

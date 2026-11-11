@@ -1,5 +1,18 @@
 # Attachments and media
 
+Photos transfer settings are visible on the saved device/folder/config cards.
+`PhotoTransferScopeControls` uses the iOS automation 1.6 native policy bridge;
+`NativePhotoTransferPolicyStore`, `NativePhotoUploadBudget` and the background
+admission calendar share device/folder limits across config workers. Config
+policy remains in the canonical saved Thing. Run the visible saved-card browser
+check and native scope/legacy-budget regressions. Closed transfer-admission
+1.5.1 diagnostics distinguish actual configuration/destination changes from
+permission, expiry and other transfer conflicts; raw server errors stay private.
+`files/inventory.ts` queues exact-path observations behind two active snapshots
+instead of rejecting concurrent Photos reservations (`api.files` 1.13.1).
+Exercise five concurrent reserves through the built HTTP API, plus FIFO,
+cancellation, access revalidation and deadline checks in `inventory.test.ts`.
+
 Folder management and its sync configs share the editable device UI. Enrollment
 and config-scoped activity live in `fileSync/`; shared file payloads use the
 protected `attachments/attachmentBlobs.ts` lifecycle and
