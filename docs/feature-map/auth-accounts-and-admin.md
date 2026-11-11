@@ -506,3 +506,16 @@ and mode changes without a new key. No platform/admin credential is migrated.
 Run `anthropicApiKey.test.ts`, `userVaultCore.test.ts`, `vaultProviders.test.ts`,
 `voice.test.ts`, `chat.streaming.test.mts`, `completion.test.ts` and capability
 coverage. Live Console inference and installed-native acceptance remain separate.
+
+
+## Named Google service reads
+
+`connections/googleServiceActions.ts` extends the shared named-operation catalog;
+`api/utils/connections/googleServiceRequests.ts` validates fixed service/resource
+requests and redacts exact credentials from complete results. The existing
+`useNamedConnection` path retains owner/origin/environment, exact-grant refresh,
+scope and post-read revocation fences. `NamedConnectionPanel` and its editable
+block template expose resource IDs and opaque next-page actions. Existing grants
+do not acquire operations automatically. See [service actions](../google-service-actions.md),
+`namedServiceActions.test.mts`, `googleServiceRequests.test.ts`, and the existing
+isolated OAuth-tab UI fixture. Provider consent/data acceptance is separate.

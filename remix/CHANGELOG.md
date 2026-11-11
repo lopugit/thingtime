@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add explicitly scoped Google service reads to named connections,
+  with document IDs, opaque pagination, complete redacted JSON, editable action
+  controls and compatible older-client projections. Real provider acceptance
+  remains separate; see [PR 1464 evidence](../PRs/1464-codex-google-service-actions-current-add-scoped-google-service-actions-to-saved-authorizations.md). **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 

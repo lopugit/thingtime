@@ -7013,9 +7013,10 @@ retires only that local credential. It does not call provider revocation.
 The card separates the scopes requested from the provider, scopes the provider
 explicitly reported, and operations Thingtime permits. Choose provider
 permissions separately from allowed operations. Google account offers verified
-profile and email reads. Google Workspace service cards and Facebook can save
-explicitly selected provider permissions for future supported use. Their only
-executable operation here is saved account identity. Providers with no
+profile and email reads. Google Workspace service cards additionally expose
+explicitly allowed Drive file lists, Gmail message-ID lists, calendar lists,
+Contacts lists, Docs reads and Sheets reads. Facebook supports saved account
+identity here; feed permissions remain separate. Providers with no
 configurable permission catalog use their standard consent. See the official
 [Google scope catalog](https://developers.google.com/identity/protocols/oauth2/scopes),
 [Calendar permissions](https://developers.google.com/workspace/calendar/api/auth),
@@ -7028,10 +7029,21 @@ can affect other grants in the same project. These are provider behaviors and
 do not limit how many named connections Thingtime saves.
 
 The **Use a saved connection** picker calls a fixed server operation using
-the selected ID. API clients negotiate `api.connections-named` 1.0 and
-Connections management 2.1 before using named features. Credentials and
+the selected ID. Current API clients negotiate `api.connections-named` 1.1,
+Connections management 2.2, and OAuth begin/callback 2.2 before using expanded
+Google actions. They explicitly request `includeServiceOperations=1` when
+listing named grants; older clients retain their original operation-ID projection. Credentials and
 arbitrary provider requests are never returned or accepted by that contract.
 Existing feed connections are separate and keep their existing behavior.
+
+For a fork, enable the **Drive API**, **Gmail API**, **Google Calendar API**,
+**Google Docs API**, **Google Sheets API**, and **People API** in the Google Cloud
+project that owns the configured OAuth client. Configure the exact callback and
+consent/test-user access normally. API enablement does not create user grants:
+select each service operation and complete Google consent for its required scope.
+Use a document/spreadsheet ID for resource reads and the returned opaque token
+for subsequent list pages. See [Google service actions](docs/google-service-actions.md)
+for scopes, contracts, pagination, security and live-acceptance requirements.
 
 ### Social OAuth platform vault setup
 

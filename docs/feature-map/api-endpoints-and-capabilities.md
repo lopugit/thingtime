@@ -962,3 +962,16 @@ The additive saved-provider kind `anthropic-api-key` is published by
 records retain their original Claude Code runtime; Console keys never infer
 subscription access or fall back to platform billing. Both manifests derive
 these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
+
+
+## Google service actions on named grants
+
+The existing Connections list contract is 2.2.0, named-action contract 1.1.0,
+and OAuth begin/callback 2.2.0. Current clients negotiate the selected origin and
+request `includeNamed=1&includeServiceOperations=1`; original clients receive
+only original named-operation IDs. POST named accepts typed `resourceId` and
+opaque `pageToken` for fixed allowlisted Google operations. Routes remain in the
+canonical registry/import map; both manifests derive from their explicit
+versions. Run Connections and capability tests, the compiled Connections
+manifest smoke, and the isolated desktop/mobile OAuth-tab fixture. See
+[service actions](../google-service-actions.md) for the exact operations/scopes.
