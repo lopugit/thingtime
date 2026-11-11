@@ -451,8 +451,14 @@ link. Explicit Disconnect saves an account/origin opt-out until Connect; automat
 work never replaces a foreign or independently linked companion session. A local
 runtime returns `unsupportedOrigin` and directs macOS users to **Thingtime →
 API Endpoint → Production** in the menu bar, then account sign-in. It leaves an
-existing provider untouched. Canonical installation updates both the
-nested and standalone signed companion from the same verified source.
+existing provider untouched. Canonical installation verifies the nested and
+standalone signed companions. If the standalone companion has the same bundle,
+team, Keychain group, AutoFill entitlement and provisioning identity, and a
+strictly newer compatible app/build version, installation preserves that
+running standalone app without replacing it. Equal or older versions retain
+the normal quit-and-replace guard; incompatible or uncertain identity fails
+closed. This local no-downgrade rule does not establish native bridge API
+compatibility, which is negotiated at runtime.
 
 Only a matching connection shows Disconnect; disconnected or different-session
 states show Connect. Unavailable status shows Retry, and older app bridges show

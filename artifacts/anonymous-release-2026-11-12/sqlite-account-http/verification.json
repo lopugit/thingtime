@@ -85,5 +85,12 @@
     "Verification and notification checks exercise canonical handlers against real files; no externally delivered email or full native UI claim.",
     "iOS protected-key/account integration, physical-device acceptance, release trust and connected-host artifacts remain open."
   ],
-  "failedAttemptsPreserved": true
+  "failedAttemptsPreserved": true,
+  "latestMainIntegration": {
+    "main": "00c3d455ab801a9dfdca96c2b6d00329bec46545",
+    "receipt": "main-integration/verification.json",
+    "status": "passed",
+    "nitroSha256": "89594f4a2e5881d8490a96802135e9088066ecebfc8836e272aad936be11a98a",
+    "sourceUnchanged": true
+  }
 }

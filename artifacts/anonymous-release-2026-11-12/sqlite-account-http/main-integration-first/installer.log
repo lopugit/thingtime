@@ -1,0 +1,33 @@
+✔ refuses to replace an app with another bundle identifier (2.65425ms)
+✔ refuses a symbolic-link install destination (1.978459ms)
+✔ serializes concurrent install attempts with an exclusive lock (1.763875ms)
+✔ leaves the installed app untouched when copying fails (2.578709ms)
+✔ restores the prior app when final installed verification fails (3.920125ms)
+✔ refuses replacement while the installed executable is running (3.113166ms)
+✔ atomically replaces the intended app and cleans temporary state (3.703417ms)
+✔ stops and restarts a registered persistent node around atomic replacement (3.292083ms)
+✔ waits for a stopped managed node and its Electron child before replacing the app (115.39225ms)
+✔ restores the prior node service when the desktop app remains open after node shutdown (2030.829833ms)
+✔ restores the prior app before restarting its persistent node after verification failure (8.020875ms)
+✔ restores the prior app and retries its node service when the replacement service cannot start (3.764209ms)
+✔ refuses an unmanaged persistent node process without stopping it (3.163916ms)
+✔ validates the managed LaunchAgent marker and exact installed helper path (0.288125ms)
+✔ default node lifecycle targets only the managed exact-label service and plist (2.192375ms)
+✔ installs the verified nested provider as the standalone companion with the same revision (48.424ms)
+✔ restores both main and standalone apps when replacement companion verification fails (6.745417ms)
+✔ keeps a signed newer running companion out of staging, replacement, and rollback (8.87175ms)
+✔ an idle newer or unverified companion is never replaced on ambiguous identity (13.439916ms)
+✔ an unverifiable running companion is refused before the quit-and-replace path (3.618208ms)
+✔ refuses a preserved companion changed during staging before main replacement (5.964541ms)
+✔ only same-major monotone newer companion versions qualify for preservation (0.366958ms)
+✔ provision profiles must authorize the exact group with typed membership (0.203958ms)
+✔ equal and older running companions retain the replacement guard (12.712375ms)
+✔ a failed companion rollback still restores the prior main app independently (0.19675ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2334.30275

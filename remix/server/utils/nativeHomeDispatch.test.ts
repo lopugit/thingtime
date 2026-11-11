@@ -50,7 +50,7 @@ test('real Nitro dispatcher uses protected SQLite composition for canonical regi
  const { thingtimeCapabilityManifest } = await import('../../app/api/utils/capabilities/thingtimeCapabilities');
  const snapshot = runtime!.snapshot();
  const wellKnown = thingtimeCapabilityManifest(origin, snapshot), flat = createApiCapabilitiesManifest([], null, snapshot);
- assert.equal(Object.hasOwn(flat, 'origin'), false);
+ assert.equal(Object.prototype.hasOwnProperty.call(flat, 'origin'), false);
  assertNativeManifest(wellKnown, { expectedOrigin: origin, responseUrl: origin + '/.well-known/thingtime-capabilities.json' });
  assertNativeManifest(flat, { kind: 'flat', expectedOrigin: origin, responseUrl: origin + '/api/v1/capabilities' });
  assert.equal((await api('v1/auth/me', undefined, { 'X-Thingtime-Expected-Data-Plane': runtime!.publicDataPlane })).status, 200);

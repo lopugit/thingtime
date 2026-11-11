@@ -2,6 +2,18 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main integration — 12 November 2026
+
+Merged main `00c3d455ab801a9dfdca96c2b6d00329bec46545` into the feature branch.
+Incoming changes preserve newer standalone AutoFill companions and improve saved
+sync recovery/activity UI. Documentation additions from both sides are retained;
+no account/database runtime source conflict occurred. The database checkpoint
+before this merge is `13313f03c`. Final integration checks and exact rebuilt
+payload evidence are recorded in the SQLite checkpoint's `main-integration/` folder.
+The installer/sync regressions, native dispatcher, typecheck/ratchet, full lint,
+build/inventory and both actual database HTTP fixtures pass; source stayed unchanged.
+The integrated Nitro payload is `89594f4a2e5881d8490a96802135e9088066ecebfc8836e272aad936be11a98a`.
+
 ## Protected SQLite account API — 12 November 2026
 
 The protected Electron host profile selects an explicit SQLite home before Nitro

@@ -69,3 +69,18 @@ The scoped semantic refresh expanded to 202 slices across the large changed
 manuals and screenshots. It was stopped after the initial four slices to bound
 indexing cost; no partial semantic snapshot was accepted. The repository wrapper
 then refreshed structural output. Full semantic coverage remains incomplete.
+
+## Latest main integration
+
+Main `00c3d455ab801a9dfdca96c2b6d00329bec46545` is incorporated. Incoming
+AutoFill installer and sync recovery/activity tests pass. The updated dispatcher
+regression uses the project's supported property-ownership check; a failed
+TypeScript attempt is retained in `main-integration-first/`.
+
+The final integration run passes typecheck, the zero-error ratchet, full lint,
+canonical native web build, packaged-output verification and both actual MongoDB
+and SQLite HTTP fixtures on the rebuilt payload. Source hashes are unchanged
+through the run. [Integration receipt](main-integration/verification.json).
+
+Final integrated Nitro SHA-256: `89594f4a2e5881d8490a96802135e9088066ecebfc8836e272aad936be11a98a`.
+The earlier payload receipts above remain attributed to their original source.

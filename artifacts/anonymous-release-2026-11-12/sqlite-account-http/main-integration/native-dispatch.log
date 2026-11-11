@@ -1,0 +1,11 @@
+[attachments] session replacement draft scan failed (NativeHomeMongoUnavailableError)
+[notifications] emit failed: Native notification history was saved; external delivery is unavailable
+✔ real Nitro dispatcher uses protected SQLite composition for canonical registration/login/session/roster and actor preconditions (1286.828583ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1808.090667

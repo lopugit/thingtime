@@ -1,7 +1,7 @@
 {
   "passed": true,
   "source": "docs/progress/anonymous-local-first.html",
-  "sourceSha256": "c2595da0b339310e449a4082c00bbd813c9f60704a5cc6aa61801b58d8ca87ad",
+  "sourceSha256": "2e064b0bfba6082368c663c9c38eefee99dc234b0ac3eb8375974b530c9a2b78",
   "scope": "Static plan in isolated task-owned Chromium; no account session",
   "viewports": [
     {
@@ -57,7 +57,7 @@
         ]
       },
       "scroll": {
-        "steps": 144,
+        "steps": 145,
         "bottom": true
       },
       "filters": true,
