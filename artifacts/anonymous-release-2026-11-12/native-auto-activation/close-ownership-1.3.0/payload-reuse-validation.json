@@ -1,0 +1,42 @@
+{
+  "basedOn": "artifacts/anonymous-release-2026-11-12/native-auto-activation/checkpoint-1.3.0/run-input.json",
+  "sourceInventorySha256": "950548bf2a4c20f313e967e96fdc1733a0247237f5a87f65dd8b78a86506496c",
+  "checkedFiles": 4849,
+  "changedFiles": [
+    {
+      "path": "electron/lib/web-bundle-activation.cjs",
+      "before": "7c5f3749a8a249b138c69550f4ac1af76f3c75468ecfda826ba36833315a5571",
+      "after": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283"
+    },
+    {
+      "path": "electron/main.cjs",
+      "before": "50fee11ff7a16e2a4990ba974567b3cbd9bc943919ed2e3a161e3d67c27bf896",
+      "after": "64fb93729ec082f507444107228781c81c2492505fef21270fecbd15d67b123e"
+    },
+    {
+      "path": "electron/scripts/verify-web-bundle-auto-activation.mjs",
+      "before": "bd6607577325f93752d9999949705ca420eacd0cb5301dd7bea2ee554421c9d5",
+      "after": "3cae71845885bd31d9d1972e72f591a068df96702f13130fc422656b100f9a4b"
+    },
+    {
+      "path": "electron/test/desktop-shutdown.test.cjs",
+      "before": "abed043fdef46f2a184a9b62aeee0f5f5d37a2da107be0e05417251b3c6a67a1",
+      "after": "dacd8d37f87f39a000fe5630b71ff0bb6fda4f1d54723ee3c234a1a89e383bc0"
+    },
+    {
+      "path": "electron/test/password-provider.test.cjs",
+      "before": "f3861d015f4661cee59afff6aa8626491987ec210fdd2034506c428faa4a2143",
+      "after": "e5d4daaa13dd7851b30f982b7284aa880eed06c5a678b3653fdb02a573ebd725"
+    },
+    {
+      "path": "electron/test/web-bundle-activation.test.cjs",
+      "before": "859969004dcfaf6d2d0b90b0304eae052252cbc785c4d5407e17b58d4c822621",
+      "after": "5c559a3d001c5ea805f863b2e1c4ad97dde8c37ef7043166ba0d7cdeeb99386c"
+    }
+  ],
+  "rendererServerBuildInputsUnchanged": true,
+  "webIntegritySha256": "8bfab7b39b9f4d51560667ab07d642e91d7a03560393a3fef75f96ae9892aa25",
+  "webMetadataSha256": "3ca8f08766f5be7401bcd3d4d7163c5ebc273152ff85aa2eb47bdcd5a78cf6d8",
+  "reusedPayload": true,
+  "reason": "Only native shell lifecycle/helper, verifier and tests changed; fresh canonical snapshot will copy current shell and verify identical staged web inventory."
+}

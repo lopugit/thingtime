@@ -1,0 +1,21 @@
+{
+  "scope": "Actual module/real browser MutationObserver; synthetic host and background; no native acceptance",
+  "browserVersion": "149.0.7827.55",
+  "observations": [
+    {
+      "case": "real-mutation-observer",
+      "ready": false,
+      "reason": "cancel-dom"
+    },
+    {
+      "case": "safety-during-persistence",
+      "ready": false,
+      "reason": "cancel-safety"
+    },
+    {
+      "case": "pre-ready-versus-durable",
+      "draftRefusedBeforeWrite": true,
+      "unchangedPageWaitedForWrite": true
+    }
+  ]
+}

@@ -2,6 +2,57 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native checkpoint attribution and close ownership — 12 November 2026
+
+Activation1.3 adds optional closed-enum renderer/host reasons with exact current
+window/nonce checks and old-client compatibility. The fresh native run verifies
+durable readiness, then sees pagehide cancellation during close; later CDP reads
+report a detached frame. It still fails automatic process replacement. This
+observation alone does not identify the terminal native failure.
+
+Fix the independently demonstrated ownership defect: a dispatched close remains
+owned after cancellation until Chromium reports a real veto or closure. Preserve
+all editor, identity, persistence and host-work gates. Focused tests cover late
+terminal events and exactly-once release/relaunch. Task-development stage logs
+allow precise follow-up; supervisor send completion is not receiver acceptance.
+[Original 1.3 failure evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/checkpoint-1.3.0/README.md).
+
+The follow-up uses the exact verified web payload with only the recorded native
+shell changes. All 51 focused native tests pass. Actual staging, dirty refusal,
+Enter, persistence and reload pass again, but the host stays blocked at
+`embeddedHttpIdle`; no prepare or close occurs. The retained data cannot identify
+the request class. Cleanup passes. Keep real automatic replacement open and
+trace that actual HTTP lifetime next. [Follow-up evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/close-ownership-1.3.0/README.md).
+
+## iOS SQLite process-crash recovery — 12 November 2026
+
+Actual frozen primitive/collection modules run under embedded Node24.22.1 and
+SQLite3.53.4 in a disposable iOS27 simulator. Real BSON bytes/types, async and
+caught-error rollback, durable uniqueness, queries and reopen pass. The stronger
+second run requires both nonempty WALs, twice validates the writer's exact task
+app executable before SIGKILL, verifies unchanged retained WAL hashes and reads
+committed data/definitions in a distinct process. Exact task cleanup passes.
+The earlier normal process-restart receipt remains separately labeled.
+
+This imported-runtime simulator harness does not establish reproducible runtime
+binaries, canonical HTTP/account integration, full WebView lifecycle or physical
+devices. [Evidence](../artifacts/anonymous-release-2026-11-12/ios-sqlite-runtime/README.md).
+
+## SQLite accounting consumer — 12 November 2026
+
+The canonical `applyUserStorageDelta` now dispatches an explicit opaque native
+owner/home-plane capability. It validates a persisted ordinary account and ready
+ledger before entering a writable transaction, then applies shared quota policy
+with exact logical-byte deltas. Forty-eight focused checks pass, including
+competing allowance claims, caught-error rollback, BSON counter promotion,
+identity/lifetime fencing and hosted imports without SQLite. Mongo mutation and
+deletion algorithms remain intact. Lint and TypeScript pass.
+
+This is not an activated provider. Synthetic history rows prove atomicity only;
+normal API registration/session initialization, canonical Things/Timeline writes,
+Character inheritance, reconciliation and deletion recovery remain required.
+[Exact source hashes and evidence](../artifacts/anonymous-release-2026-11-12/sqlite-accounting/README.md).
+
 ## Native eligibility observation — 12 November 2026
 
 Native activation 1.2 exposes the actual eligibility projection on the existing

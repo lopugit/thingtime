@@ -25,8 +25,9 @@ const log = await open(path.join(temporary, 'development.log'), 'w', 0o600);
 let phase = 'preflight', failure, cleanupFailure, receipt, launcher, api, browser, page, originalPolicy, createdWorkspace = false;
 const startedAt = new Date().toISOString(), observations = [];
 const activationDiagnostics = [];
-let hostActivationDiagnostics = [];
+let hostActivationDiagnostics = [], hostLifecycleDiagnostics = [];
 const diagnosticTemplate = require('../lib/web-bundle-activation.cjs').projectBundleActivationEligibility({});
+const { BUNDLE_LIFECYCLE_STAGES, BUNDLE_CHECKPOINT_REASONS, BUNDLE_CANCELLATION_REASONS } = require('../lib/web-bundle-activation.cjs');
 function publicActivationDiagnostics(value) {
  if (!value || value.format !== 1 || typeof value.eligible !== 'boolean' || !Array.isArray(value.blockers)) throw Error('Unsupported native activation diagnostics');
  const gates = {}, counts = {}, idle = {};
@@ -45,19 +46,33 @@ function publicActivationDiagnostics(value) {
  }
  const blockers = Object.keys(gates).filter(name => !gates[name]);
  if (value.eligible !== (blockers.length === 0) || JSON.stringify(value.blockers) !== JSON.stringify(blockers)) throw Error('Inconsistent native activation projection');
- return { format: 1, eligible: value.eligible, blockers, gates, counts, idle };
+ let checkpoint = null;
+ if (value.checkpoint !== null) {
+  if (!value.checkpoint || ![true,false,null].includes(value.checkpoint.ready) ||
+   (value.checkpoint.reason !== null && !BUNDLE_CHECKPOINT_REASONS.includes(value.checkpoint.reason))) throw Error('Malformed native checkpoint observation');
+  checkpoint = { ready: value.checkpoint.ready, reason: value.checkpoint.reason };
+ }
+ if (value.cancellation !== null && !BUNDLE_CANCELLATION_REASONS.includes(value.cancellation)) throw Error('Malformed native cancellation observation');
+ return { format: 1, eligible: value.eligible, blockers, gates, counts, idle, checkpoint, cancellation: value.cancellation };
 }
 async function captureHostActivationLog() {
  const lines = (await readFile(path.join(temporary, 'development.log'), 'utf8')).split('\n');
  lines.pop(); // A concurrent writer may not have finished its last JSON line.
  const prefix = '[thingtime:bundle-activation] ';
- const records = [];
+ const records = [], lifecycle = [];
+ for (const line of lines) if (line.startsWith('[thingtime:bundle-lifecycle] ')) {
+  const value = JSON.parse(line.slice('[thingtime:bundle-lifecycle] '.length));
+  if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0 || !BUNDLE_LIFECYCLE_STAGES.includes(value.stage) ||
+   Object.keys(value).some(key => !['observedAt', 'stage'].includes(key))) throw Error('Malformed native lifecycle observation');
+  lifecycle.push({ observedAt: value.observedAt, stage: value.stage });
+ }
  for (const line of lines) if (line.startsWith(prefix)) {
   const value = JSON.parse(line.slice(prefix.length));
   if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0) throw Error('Malformed native observation timestamp');
   records.push({ observedAt: value.observedAt, ...publicActivationDiagnostics(value) });
  }
- hostActivationDiagnostics = records;
+ hostActivationDiagnostics = records; hostLifecycleDiagnostics = lifecycle;
+ await writeFile(path.join(output, 'host-lifecycle-diagnostics.json'), JSON.stringify(lifecycle, null, 2));
  await writeFile(path.join(output, 'host-activation-diagnostics.json'), JSON.stringify(records, null, 2));
 }
 const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
@@ -160,7 +175,7 @@ async function captureActivationState() {
     blockers, receivedMessages: window.__nativeAutoQa || [] };
   }), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Task public state observation timed out')), 4000); })]);
   const nativeVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(state.featureVersions['native.web-bundle-activation'] || '');
-  if (!state.featureOriginMatches || !nativeVersion || Number(nativeVersion[1]) < 2) throw Error('Current origin requires native activation diagnostics 1.2.0');
+  if (!state.featureOriginMatches || !nativeVersion || Number(nativeVersion[1]) < 3) throw Error('Current origin requires native activation diagnostics 1.3.0');
   state.activation = publicActivationDiagnostics(state.activation);
   activationDiagnostics.push({ at: new Date().toISOString(), ...state });
   await writeFile(path.join(output, 'activation-diagnostics.json'), JSON.stringify(activationDiagnostics, null, 2));
@@ -257,7 +272,7 @@ try {
  assert.equal(new URL(initial.apiOrigin).origin, apiOrigin);
  const diagnosticVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(initial.nativeFeatures?.features?.['native.web-bundle-activation']?.version || '');
  assert.equal(initial.nativeFeatures?.origin, initial.origin);
- assert.ok(diagnosticVersion && Number(diagnosticVersion[1]) >= 2, 'Negotiate native diagnostics 1.2.0 before depending on them');
+ assert.ok(diagnosticVersion && Number(diagnosticVersion[1]) >= 3, 'Negotiate native diagnostics 1.3.0 before depending on them');
  publicActivationDiagnostics(initial.webBundle?.activation);
  await page.evaluateOnNewDocument(() => {
   window.__nativeAutoQa = [];
@@ -399,7 +414,7 @@ finally {
  await log.close();
 }
 const result = { ...receipt, passed: Boolean(receipt && !failure && !cleanupFailure), startedAt, finishedAt: new Date().toISOString(), phase,
- cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, hostActivationDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
+ cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, hostActivationDiagnostics, hostLifecycleDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
  cleanupFailure: cleanupFailure ? { name: cleanupFailure.name, message: cleanupFailure.message } : undefined,
  ...(failure || cleanupFailure ? { retainedDiagnostics: temporary } : {}) };
 await writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2) + '\n');

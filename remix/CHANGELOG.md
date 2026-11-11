@@ -145,6 +145,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Verify real embedded iOS SQLite/BSON collections and recovery after
+  an ownership-verified process crash with retained WAL evidence. Harden the
+  isolated probe's exact source freezing, dependency resolution, deadlines and
+  cleanup receipts. Full API/app/device acceptance remains separate. **Codex (AI)**
+
+- 2026-11-12: Connect canonical storage charging to an explicit native SQLite
+  transaction capability, sharing ready-ledger and allowance policy with Mongo.
+  Preserve existing Mongo mutations; reject unsupported native account states
+  before writable callbacks. Real-file accounting passes; full API/provider
+  activation remains open. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+- 2026-11-12: Add optional native activation 1.3 checkpoint/cancellation reasons
+  without changing authority or safety gates; preserve older 1.x receipts and
+  cover actual browser DOM invalidation during persistence. Retain dispatched
+  close ownership until an actual veto/closed outcome. **Codex (AI)**
+
 - 2026-11-12: Expose native activation 1.2 eligibility diagnostics through the
   existing bridge, using the actual gate's allowlisted projection. Retain bounded
   task-development observations independently of renderer IPC; lifecycle errors

@@ -1,6 +1,6 @@
 import { desktopBundleSafety, waitForDesktopUpdateWork } from './desktopBundleSafety';
 import { rootIdentity } from './rootIdentity';
-import type { ThingtimeDesktopBridge } from './electronBridge';
+import type { DesktopBundleCheckpointReason, ThingtimeDesktopBridge } from './electronBridge';
 
 export const DESKTOP_BUNDLE_ACTIVATION_REQUIREMENTS = { 'native.web-bundle-activation': '1.0.0' } as const;
 const compatible = (version?: string) => typeof version === 'string' && /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version);
@@ -29,9 +29,13 @@ export function watchDesktopBundleActivation({ bridge, router, isHealthy, docume
   if (!bridge || !compatible(bridge.bundleActivationVersion) || !bridge.onBundleActivation || !bridge.bundleActivationCheckpoint || !bridge.setBundleUpdatePolicy) return () => {};
   let disposed = false, lastActivity = Date.now(), controller: AbortController | null = null;
   let nonce: string | null = null, valid: (() => boolean) | null = null, closing = false;
-  const cancel = () => {
+  let diagnosticReasonsEnabled = false, cancellationReason: DesktopBundleCheckpointReason | null = null;
+  const sendCheckpoint = (expected: string, ready: boolean, reason: DesktopBundleCheckpointReason) =>
+    bridge.bundleActivationCheckpoint!({ nonce: expected, ready, ...(diagnosticReasonsEnabled ? { reason } : {}) });
+  const cancel = (reason: DesktopBundleCheckpointReason = 'cancel-input') => {
+    cancellationReason = reason;
     lastActivity = Date.now(); controller?.abort(); valid = null;
-    if (nonce) void bridge.bundleActivationCheckpoint!({ nonce, ready: false }).catch(() => {});
+    if (nonce) void sendCheckpoint(nonce, false, reason).catch(() => {});
   };
   const dirtyControls = new Set<Element>();
   const edited = (event: Event) => {
@@ -39,9 +43,18 @@ export function watchDesktopBundleActivation({ bridge, router, isHealthy, docume
     if (event.target instanceof Element && event.target.matches('input, textarea, select, [contenteditable="true"]')) dirtyControls.add(event.target);
     cancel();
   };
-  const ready = () => !disposed && !doc.hasFocus() && Date.now() - lastActivity >= idleMs && isHealthy() &&
-    !rootIdentity.read().pending && router.state.initialized && router.state.navigation.state === 'idle' &&
-    (!router.state.errors || Object.keys(router.state.errors).length === 0) && !hasUnknownDesktopDraft(doc) && ![...dirtyControls].some(element => element.isConnected);
+  const readinessReason = (): DesktopBundleCheckpointReason | null => {
+    if (disposed) return 'renderer-disposed';
+    if (doc.hasFocus()) return 'renderer-focused';
+    if (!(Date.now() - lastActivity >= idleMs)) return 'renderer-recent-activity';
+    if (!isHealthy()) return 'renderer-unhealthy';
+    if (rootIdentity.read().pending) return 'identity-pending';
+    if (!router.state.initialized || router.state.navigation.state !== 'idle' || (router.state.errors && Object.keys(router.state.errors).length)) return 'router-unready';
+    if (hasUnknownDesktopDraft(doc)) return 'unknown-draft';
+    if ([...dirtyControls].some(element => element.isConnected)) return 'dirty-control';
+    return null;
+  };
+  const ready = () => { try { return readinessReason() === null; } catch { return false; } };
   const beforeUnload = (event: BeforeUnloadEvent) => {
     // This is only a final race veto; it is never the durability certificate.
     if (closing && (!valid || !ready() || !valid())) { event.preventDefault(); event.returnValue = ''; }
@@ -50,30 +63,36 @@ export function watchDesktopBundleActivation({ bridge, router, isHealthy, docume
     if (message.type === 'release') { if (nonce === message.nonce) { controller?.abort(); valid = null; closing = message.keepVeto === true; if (!closing) nonce = null; } return; }
     if (message.type !== 'prepare' || !/^[a-f0-9-]{36}$/i.test(message.nonce)) return;
     const idleSince = lastActivity;
-    cancel(); nonce = message.nonce; closing = true;
+    cancel('checkpoint-invalidated'); nonce = message.nonce; closing = true; cancellationReason = null;
     const expected = nonce, identity = rootIdentity.read().generation;
     // Do not reset the already observed idle interval merely for a request.
     lastActivity = idleSince;
     controller = new AbortController();
     const signal = controller.signal;
+    let refusal: DesktopBundleCheckpointReason = 'readiness-unavailable';
     void (async () => {
       try {
-        if (!ready()) throw Error('Renderer is busy');
+        const preflight = readinessReason();
+        if (preflight) { refusal = preflight; throw Error('Renderer is busy'); }
+        refusal = 'host-unsupported';
         const info = await waitForDesktopUpdateWork(bridge.getInfo!(), signal);
         const feature = info.nativeFeatures?.features?.['native.web-bundle-activation'];
         if (info.nativeFeatures?.origin !== win.location.origin || !compatible(feature?.version) || !info.sessionHash) throw Error('Unsupported desktop host');
-        valid = await desktopBundleSafety.checkpoint(signal, info.sessionHash);
-        if (!ready() || identity !== rootIdentity.read().generation || signal.aborted || nonce !== expected || !valid()) throw Error('Renderer changed');
-        await bridge.bundleActivationCheckpoint!({ nonce: expected, ready: true });
-      } catch { if (nonce === expected) { valid = null; await bridge.bundleActivationCheckpoint!({ nonce: expected, ready: false }).catch(() => {}); } }
+        valid = await desktopBundleSafety.checkpoint(signal, info.sessionHash, reason => { refusal = reason; });
+        const finalReadiness = readinessReason();
+        refusal = finalReadiness || 'checkpoint-invalidated';
+        if (finalReadiness || identity !== rootIdentity.read().generation || signal.aborted || nonce !== expected || !valid()) throw Error('Renderer changed');
+        await sendCheckpoint(expected, true, 'renderer-ready');
+      } catch { if (nonce === expected) { valid = null; await sendCheckpoint(expected, false, cancellationReason || refusal).catch(() => {}); } }
     })();
   });
   const events = ['pointerdown', 'keydown', 'beforeinput', 'input', 'change', 'focus', 'pagehide'] as const;
-  for (const event of events) win.addEventListener(event, cancel, true);
+  const activity = (event: Event) => cancel(event.type === 'focus' ? 'cancel-focus' : event.type === 'pagehide' ? 'cancel-pagehide' : 'cancel-input');
+  for (const event of events) win.addEventListener(event, activity, true);
   win.addEventListener('beforeunload', beforeUnload);
   win.addEventListener('input', edited, true); win.addEventListener('change', edited, true);
-  const offRouter = router.subscribe(cancel), offIdentity = rootIdentity.subscribe(cancel), offSafety = desktopBundleSafety.subscribe(cancel);
-  const observer = new MutationObserver(() => { if (nonce) cancel(); });
+  const offRouter = router.subscribe(() => cancel('cancel-router')), offIdentity = rootIdentity.subscribe(() => cancel('cancel-identity')), offSafety = desktopBundleSafety.subscribe(() => cancel('cancel-safety'));
+  const observer = new MutationObserver(() => { if (nonce) cancel('cancel-dom'); });
   observer.observe(doc.documentElement, { childList: true, subtree: true, characterData: true, attributes: true });
   let enabled: boolean | undefined;
   let policyRequest: Promise<void> | null = null;
@@ -84,6 +103,7 @@ export function watchDesktopBundleActivation({ bridge, router, isHealthy, docume
       const info = await bridge.getInfo!();
       if (disposed || info.nativeFeatures?.origin !== win.location.origin ||
         !compatible(info.nativeFeatures?.features?.['native.web-bundle-activation']?.version)) return;
+      diagnosticReasonsEnabled = Number(info.nativeFeatures.features['native.web-bundle-activation'].version.split('.')[1]) >= 3;
       const next = !rootIdentity.read().pending && desktopBundleSafety.automaticUpdatesEnabled(info.sessionHash || '');
       enabled = next; await bridge.setBundleUpdatePolicy!({ enabled });
     } catch { /* Older/unresponsive bridge leaves download and activation pending. */ }
@@ -93,8 +113,8 @@ export function watchDesktopBundleActivation({ bridge, router, isHealthy, docume
   const timer = win.setInterval(() => { void refreshPolicy(); }, 5000);
   void refreshPolicy();
   return () => {
-    disposed = true; cancel(); observer.disconnect(); win.clearInterval(timer); unsubscribe(); offRouter(); offIdentity(); offSafety();
-    for (const event of events) win.removeEventListener(event, cancel, true);
+    disposed = true; cancel('cancel-dispose'); observer.disconnect(); win.clearInterval(timer); unsubscribe(); offRouter(); offIdentity(); offSafety();
+    for (const event of events) win.removeEventListener(event, activity, true);
     win.removeEventListener('beforeunload', beforeUnload);
     win.removeEventListener('input', edited, true); win.removeEventListener('change', edited, true);
   };

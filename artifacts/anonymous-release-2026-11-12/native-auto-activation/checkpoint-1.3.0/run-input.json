@@ -1,0 +1,25 @@
+{
+  "sourceRevision": "40c57f919ac1824103cb8307a1fcda145ceb25f5",
+  "sourceInventorySha256": "950548bf2a4c20f313e967e96fdc1733a0247237f5a87f65dd8b78a86506496c",
+  "uncontendedBuildExitCode": 0,
+  "hashes": {
+    "electron/main.cjs": "50fee11ff7a16e2a4990ba974567b3cbd9bc943919ed2e3a161e3d67c27bf896",
+    "electron/preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "electron/lib/web-bundle-activation.cjs": "7c5f3749a8a249b138c69550f4ac1af76f3c75468ecfda826ba36833315a5571",
+    "electron/lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "electron/lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "electron/dist/web/metadata.json": "3ca8f08766f5be7401bcd3d4d7163c5ebc273152ff85aa2eb47bdcd5a78cf6d8",
+    "remix/app/utils/electronBridge.ts": "a5eff71749435660307f9d53f0f22b55406dd34f82f41a2f6f41a3412f5ed892",
+    "remix/app/utils/desktopBundleActivation.ts": "8b57d7cd6bc849e3c49e6ae85acb0f115bfb1cd049800499f834f25fc453d6ec",
+    "remix/app/utils/desktopBundleSafety.ts": "52f5cc0867d0adb58d06b9ff0f4c992308343652c1d14da96ae69ffbb151dc47",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bd6607577325f93752d9999949705ca420eacd0cb5301dd7bea2ee554421c9d5"
+  },
+  "workspace": "native-bundle-qa-auto-pr1000-check13",
+  "ports": {
+    "renderer": 28640,
+    "api": 48423,
+    "database": 48424,
+    "inspector": 48425
+  },
+  "mode": "Actual app with synthetic remote publication; native1.3 diagnostic-only renderer/host cancellation attribution; no local account API claim"
+}

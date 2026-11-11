@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T14:40:58.021095+00:00",
+  "scope": "Canonical applyUserStorageDelta consumed by an explicit opaque native home/account transaction capability over actual SQLite BSON collection provider; no runtime provider selection or API registration acceptance.",
+  "authoredFiles": [
+    "remix/app/api/utils/documentStore/nativeUserStorage.ts",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts",
+    "remix/app/api/utils/storage/userStorageAdmission.ts",
+    "remix/app/api/utils/storage/userStorage.ts"
+  ],
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/nativeUserStorage.ts": "a5737c092a94ab626a1c0f17738d57e9602235585590295b389d637290c4d37a",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts": "1770c5d35883b0be68da342106c96d417056870760b8b6a776d3c58bb5fe3c42",
+    "remix/app/api/utils/storage/userStorageAdmission.ts": "facd3f803adbc10da844118df1c7b02f327f8718ba3d00faf42788af491e137c",
+    "remix/app/api/utils/storage/userStorage.ts": "51cefb7b323ce3a1fdc0b6214f32c9aa9e4c4b6295c3ada339cfb0a3acc59a20",
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "b41324fd4a1041c0d18fc2a64902e57e64d13c65b767267aadadfbdde187ce4e",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/storage/storageCore.ts": "97f148137bf20e698767d4e2ff6c6fe6447b353d539782a04e5de7ed06db7eed",
+    "remix/app/api/utils/storage/storagePending.ts": "10bbbdcfda8201a5a2fe3f0647bb697ef2414695987e7472dd53d36ab1f239e8",
+    "remix/app/api/utils/subscriptions/subscriptionIdentity.ts": "a6b5fa9e62178af384ee9469cf795eb982588dc6f7008f289ada01756e6dae6c",
+    "remix/app/api/utils/auth/users.ts": "64881a1716280a3eb2cdc706b8840cc68864597bcffa5d15f7c148a703e4538a",
+    "remix/app/api/utils/auth/binary.ts": "3f2b17110d9c9ba3f65fe119b980ff03e9afd0ce17317efb574bf5ea82fd803c",
+    "remix/app/api/utils/auth/characterCore.ts": "25ce916aba115a73077f6976cbe7050afd8412b129185f11b0c70ac77363540c",
+    "remix/app/api/utils/mongodb/collectionNames.ts": "e8d98412ed648ba1d6d8d1ac92edbe95608d018e1a39db9a9e8b039a48f5725f",
+    "remix/app/schemas/registry.ts": "775d57c36011c5877b06e8ef395746d28c241b055533ecf71c0c8b76457872d0"
+  },
+  "verification": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/*.test.ts app/api/utils/storage/userStorageReadiness.test.ts app/api/utils/storage/storageCore.test.ts",
+      "exitCode": 0,
+      "tests": 48,
+      "passed": 48,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "log": "/tmp/pr1000-native-ledger-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/documentStore/nativeUserStorage.ts app/api/utils/documentStore/nativeUserStorage.test.ts app/api/utils/storage/userStorageAdmission.ts app/api/utils/storage/userStorage.ts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "/tmp/pr1000-native-ledger-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit --pretty false",
+      "exitCode": 0,
+      "diagnostics": 0,
+      "log": "/tmp/pr1000-native-ledger-types.log"
+    }
+  ],
+  "verifiedBehavior": [
+    "Actual canonical applyUserStorageDelta with real-file SQLite commits/debits, logical bytes from canonical thingStorageSizeBytes and subscription-envelope validators.",
+    "Finite exact quota boundary, unlimited allowance, Int32-to-Long promotion, overflow and underflow refusal.",
+    "Caught quota failures roll back content, ledger and synthetic history rows atomically; synthetic rows do not prove canonical Timeline persistence.",
+    "Two actual store handles serialize competing allowance claims; exactly one succeeds.",
+    "Wrong owner/plane, counterfeit handles, foreign async context and expired native session refuse without Mongo fallback.",
+    "Persisted normal user identity is read from the same transaction using actual buildUserSecure fixture output; Character and unsupported ledger states refuse before exposing writable callback.",
+    "Ready ledgers missing optional storageUpdatedAt and normal metadata with a null Character field remain accepted.",
+    "Hosted userStorage import does not construct/open SQLite; child process rejects SQLite require while exercising existing zero/sandbox/session ordering."
+  ],
+  "unchangedMongoBehavior": "Mongo mutation and deletion/reconcile algorithms remain unchanged. Allowance/ready-envelope/quota-diagnosis policy is extracted and reused; original helper exports remain available.",
+  "limitations": [
+    "No user/runtime/provider activation, native UI acceptance, actual API signup/session or private CRUD acceptance.",
+    "Canonical Timeline repository and History adapters are not implemented; synthetic history rows prove transaction atomicity only.",
+    "Native Character entitlement inheritance, pending deltas, reconciliation and corrupt/underflow deletion recovery remain explicitly unsupported and must be completed before activation.",
+    "Native identity/subscription/session initialization, home/content-plane selection, Things collection adapters, required query/index/migration semantics and full API acceptance remain required.",
+    "The typed collection provider uses correctness-first scans, not Mongo syntax or production index performance."
+  ]
+}

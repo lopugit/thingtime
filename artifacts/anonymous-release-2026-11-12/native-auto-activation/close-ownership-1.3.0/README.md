@@ -1,0 +1,11 @@
+# Close ownership regression and native observation
+
+The native close coordinator now retains its single operation, nonce, observer and reservations after cancellation/deadline once Chromium close has been dispatched. Only actual veto or accepted close/relaunch settlement ends the operation. All renderer readiness, pagehide, input, identity, persistence, unload and admission gates are unchanged. Closed-enum task-development stderr records describe lifecycle stages; supervisor-send-complete describes IPC send completion only.
+
+Focused native tests: 51 passed, 0 failed/skipped; main/helper/verifier syntax passed. Earlier unchanged renderer/safety/flush tests (21) and actual Chromium module tests with a synthetic host (3) remain separately recorded in checkpoint-1.3.0. New tests cover retained coordinator ownership, real deadline, late veto/closed, exactly-once relaunch and pre-dispatch cancellation.
+
+One fresh canonical isolated snapshot reused the exact verified 1,822-file web payload after comparing all 4,849 prior source/build inputs. Only six native shell/verifier/test files changed. Canonical verify-web-build passed; prepared-source.json records eight matching shell/payload hashes. No web rebuild was needed.
+
+Actual signed download/staging, 70-second dirty refusal, normal Enter submission, canonical persistence acknowledgement, reload and closed drawer blocker check passed (screenshots inspected). Automatic replacement failed before prepare/close: seven host records identify embeddedHttpIdle, while rendererRequests/ipcWork were zero and ChatGPT/runtime were idle. The new close-ownership behavior is unit verified only. Lifecycle milestones in this run were normal fixture cleanup, not automatic activation. No fresh PID, local account API restart or drawer post-restart acceptance is claimed.
+
+cleanupVerified:true. Stable app and personal data were preserved. The finite attempt ended; no retry or forced checkpoint/restart occurred. HTTP idle currently combines middleware/response completion and upgraded sockets, and retained logs do not identify the outstanding request class. That lifetime must be identified before another attempt. See source-and-outcome.json and immutable verification.json for exact hashes.

@@ -12,7 +12,7 @@ test('immediate service cleanup retries Quit after the native quit dispatch unwi
  const listener = source.match(/app\.on\('before-quit', \(event\) => \{[\s\S]*?\n\}\);/)[0];
  let beforeQuit, nativeDispatch = true, completed = 0, prevented = false, launchClosed = false, activationClosed = false, timerCleared = false;
  const timer = {};
- vm.runInNewContext(listener, {
+ vm.runInNewContext(listener, { reportBundleLifecycle() {},
   app: { on: (_name, fn) => { beforeQuit = fn; }, quit: () => { if (!nativeDispatch) completed++; } },
   desktopServicesClosed: false, desktopServicesClosing: false,
   localRuntime: {}, agentBrowsersPromise: undefined, webBundleUpdates: null,
@@ -44,7 +44,7 @@ test('activation during or after service shutdown cannot create another window',
  for (const phase of phases) {
   const context = { desktopServicesClosing: false, desktopServicesClosed: false, automaticBundleClosing: false,
    bundleClosePending: false, bundleCloseAccepted: false, authorityTransition: { restarting: false },
-   mainWindow: null, appOrigin: 'http://127.0.0.1:28631', presentBundleWindow,
+   reportBundleLifecycle() {}, mainWindow: null, appOrigin: 'http://127.0.0.1:28631', presentBundleWindow,
    BrowserWindow: class { constructor() { throw new Error('Unexpected window during Quit'); } }, ...phase };
   assert.doesNotThrow(() => vm.runInNewContext(blocked + '\n' + create + '; createWindow()', context));
   assert.equal(vm.runInNewContext(blocked + '\n' + create + '\n' + present + '; presentMainWindow()', context), false);
@@ -56,7 +56,7 @@ test('activation during or after service shutdown cannot create another window',
 test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo shutdown as one barrier', async () => {
  const passwords = gate(), browser = gate(), oauth = gate(), database = gate();
  const calls=[];
- const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+ const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', { reportBundleLifecycle() {},
   process: {platform: 'linux'}, passwordProvider: {close: async()=>{calls.push('passwords'); await passwords.promise;}},
   agentBrowsersPromise: Promise.resolve({close:async()=>{calls.push('browser'); await browser.promise;}}),
   globalThis:{[Symbol.for('thingtime.chatgpt-plan.close')]:async()=>{calls.push('oauth'); await oauth.promise;}},
@@ -77,7 +77,7 @@ test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo 
 
 test('browser cleanup failure still waits for local database cleanup', async () => {
  const database=gate(); let warned=false;
- const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
+ const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', { reportBundleLifecycle() {},
   process: {platform: 'darwin'}, webBundleUpdates: null,
   agentBrowsersPromise:Promise.resolve({close:async()=>{throw new Error('fixture');}}),
   globalThis:{},Symbol,localRuntime:{stop:()=>database.promise},console:{warn:()=>{warned=true;}}
@@ -105,7 +105,7 @@ test('failed bundle startup restarts before a page or password session exists', 
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
  const calls = []; let onFailure;
  const context = {
-  queueDesktopRelaunch, parallelDevMode: true, process: { env: {}, versions: {}, connected: true,
+  reportBundleLifecycle() {}, queueDesktopRelaunch, parallelDevMode: true, process: { env: {}, versions: {}, connected: true,
    send: (message, callback) => { calls.push(message.type); callback(); } },
   app: { getPath: () => '/isolated-profile', getVersion: () => '1.0.0', quit: () => calls.push('quit') },
   __dirname: '/shell', path: require('node:path'), fs: { readFileSync: () => '{}' },
@@ -127,7 +127,7 @@ test('failed bundle startup restarts before a page or password session exists', 
 test('relaunch requires supervisor acceptance and preserves native application relaunch', async () => {
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
  let quits = 0, relaunches = 0, retained = 0;
- const context = {queueDesktopRelaunch, parallelDevMode: true, process: {connected: true, send: (_message, callback) => callback(new Error('IPC closed'))},
+ const context = {reportBundleLifecycle() {}, queueDesktopRelaunch, parallelDevMode: true, process: {connected: true, send: (_message, callback) => callback(new Error('IPC closed'))},
   app: {quit: () => quits++, relaunch: () => relaunches++}, authorityTransition: {retainUntilRestart() { retained++; }}};
  await assert.rejects(vm.runInNewContext(relaunch + '; relaunchDesktopProcess()', context), /did not accept/);
  assert.equal(quits, 0); assert.equal(relaunches, 0); assert.equal(retained, 0);

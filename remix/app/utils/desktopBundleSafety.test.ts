@@ -43,3 +43,15 @@ test('an unresponsive persistence participant releases the cancelled checkpoint 
   safety.register({ kind: 'persistence', ready: () => true, automaticUpdates: () => true, checkpoint: () => new Promise(() => {}) });
   const result = safety.checkpoint(controller.signal, 'session'); controller.abort(); await assert.rejects(result);
 });
+test('optional checkpoint observations cannot bypass or break actual persistence and work checks', async () => {
+  const safety = createDesktopBundleSafety(), signal = new AbortController().signal;
+  const reasons: string[] = [];
+  await assert.rejects(safety.checkpoint(signal, 'session', reason => reasons.push(reason)));
+  assert.deepEqual(reasons, ['persistence-missing']);
+  safety.register({ kind: 'persistence', ready: () => true, automaticUpdates: () => true });
+  const certificate = await safety.checkpoint(signal, 'session', () => { throw Error('PRIVATE_SENTINEL'); });
+  assert.equal(certificate(), true);
+  safety.register({ kind: 'work', ready: () => false }); reasons.length = 0;
+  await assert.rejects(safety.checkpoint(signal, 'session', reason => reasons.push(reason)));
+  assert.deepEqual(reasons, ['work-unready']);
+});

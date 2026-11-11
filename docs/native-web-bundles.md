@@ -126,7 +126,7 @@ installed acceptance distinct from the recorded startup/rollback receipt.
 ## Automatic activation work in progress
 
 The renderer now supports a nonce-bound durable persistence checkpoint through
-`native.web-bundle-activation` 1.2.0. The existing automatic-update preference
+`native.web-bundle-activation` 1.3.0. The existing automatic-update preference
 controls it. An unfocused window must be idle for 30 seconds; dirty or unknown
 editors, active media, failed persistence and identity changes keep the candidate
 pending. This source checkpoint still requires final installed-app acceptance.
@@ -164,6 +164,22 @@ before relying on it. Task development builds emit the same projection only whil
 a candidate is pending, on changed blockers and at a bounded heartbeat interval.
 This gives evidence independent of renderer IPC; it cannot acquire a reservation,
 force a restart or relax a safety gate. Throwing lifecycle discovery fails closed.
+
+Version 1.3 adds optional closed-enum renderer checkpoint and host cancellation
+reasons. They are diagnostics only: the current window, origin and nonce still
+govern acceptance, and stale receipts cannot overwrite current diagnostics.
+Older 1.x hosts continue to receive the original two-field checkpoint. Actual
+renderer-module Chromium tests distinguish pre-ready draft refusal, durable
+persistence completion, DOM invalidation and safety invalidation; their host
+and background controls are synthetic, not native activation acceptance.
+
+A dispatched close now retains its operation, nonce and shutdown reservations
+after cancellation until Chromium confirms an actual veto or closure. It cannot
+start another close or claim cancellation has completed while native close is
+still pending. Focused regressions cover cancellation followed by delayed veto
+or closure and exactly-once relaunch/release. Task-development lifecycle logs use
+closed stage names only; a supervisor send callback is send completion, not an
+acknowledgment that a replacement process started.
 
 Admission follows the actual asynchronous operation after response deadlines or
 reader cancellation: transcript saves and lease renewal, parallel tools, provider
@@ -204,13 +220,51 @@ driver. Numeric equality retains BSON types; null and missing are distinct;
 paths do not implicitly traverse arrays. The current correctness-first provider
 scans a collection for each operation, so it is not ready for production scale.
 It does not yet translate canonical API queries, authorize an account, integrate
-the storage ledger/history or select a native profile. No runtime switches to
+canonical history or select a native profile. No runtime switches to
 SQLite as a result of these tests. See [collection evidence and next integration](../artifacts/anonymous-release-2026-11-12/sqlite-collections/README.md)
 and [local development foundations](feature-map/local-development-and-worktrees.md).
 
+An explicit native transaction capability now reaches the canonical
+`applyUserStorageDelta` entry point. It checks the persisted ordinary account,
+home/content plane, trusted ready ledger and allowance before exposing a writable
+callback. Content, ledger and synthetic history test rows commit or roll back
+together, even after a caught accounting error. Mongo mutation/deletion paths
+retain their existing behavior; importing them does not load SQLite. This is a
+bounded accounting consumer, not API activation. Character inheritance, pending
+accounting, reconciliation, deletion recovery, normal registration/session
+initialization and the real Timeline adapter remain required. See
+[accounting evidence](../artifacts/anonymous-release-2026-11-12/sqlite-accounting/README.md).
+
+The isolated iOS simulator now executes the actual frozen SQLite primitive and
+collection modules in embedded Node 24.22.1 / SQLite 3.53.4. It verifies BSON
+fidelity, rollback, uniqueness, queries and reopening. A stronger follow-up
+verifies both nonempty WALs, force-kills only the independently identified task
+app process, confirms unchanged WAL bytes and recovers the committed data in a
+new process. The task simulator is deleted after the run. This is simulator
+storage acceptance with an imported runtime, not source-to-binary reproducibility,
+canonical Nitro/account integration, full WebView lifecycle or physical-device
+acceptance. [Probe and exact evidence](../artifacts/anonymous-release-2026-11-12/ios-sqlite-runtime/README.md).
+
 ## Remaining integration and acceptance
 
-The subsequent 1.2 diagnostics run observes a host-eligible state, zero work
+The fresh 1.3 run passes download/staging, dirty refusal, canonical persistence
+and reload. It observes `renderer-ready`, then `cancel-pagehide` six milliseconds
+later while close is pending, followed by a detached renderer frame. It does not
+observe the terminal close/relaunch stages, so pagehide alone does not establish
+the cause of missing process replacement. Cleanup passes. The later close
+ownership correction has separate focused tests and needs its own actual path
+acceptance. [Immutable 1.3 receipt](../artifacts/anonymous-release-2026-11-12/native-auto-activation/checkpoint-1.3.0/README.md).
+
+The ownership-fix run passes the same download, dirty protection, persistence and
+reload checks, but never reaches preparation or close: its final blocker is
+`embeddedHttpIdle`, while renderer request/IPC counts are zero and the Nitro and
+ChatGPT providers are idle. The bounded observation does not expose which HTTP
+request or upgraded socket remains active. Cleanup succeeds. Thus the fix has
+51 passing focused native checks but no positive actual close-path acceptance.
+The next investigation must identify that real HTTP lifetime, not bypass it.
+[Ownership-run evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/close-ownership-1.3.0/README.md).
+
+The earlier 1.2 diagnostics run observes a host-eligible state, zero work
 counters and idle HTTP/ChatGPT/Nitro providers, followed by a prepare/release
 exchange one millisecond apart. It again passes dirty refusal, persistence and
 reload, then times out awaiting process replacement. Later bridge observations
@@ -244,9 +298,9 @@ do not retroactively call this run final-source native acceptance.
    installed acceptance of both account modes and external frozen-process
    recovery remain open.
 3. **P1 — iOS runtime and storage.** Continue from the actual simulator result:
-   Node 24, genuine bcrypt and Sharp/libvips now import the canonical Nitro
-   bundle in a disposable simulator. Prove the full API and in-process
-   transactional storage, stable local origin and lifecycle. Do not substitute
+   Node 24, genuine bcrypt and Sharp/libvips import the canonical Nitro bundle;
+   a separate SQLite experiment verifies transactions and process-crash recovery.
+   Connect that storage to the full API, stable local origin and lifecycle. Do not substitute
    a static shell or weaken the Node/transaction contract.
 4. **P1 — complete platform acceptance.** Verify cold offline startup, durable
    data/edit recovery, compatible updates, incompatible-shell refusal and
@@ -279,8 +333,9 @@ patch, parser replacement or weakened security policy is used.
 
 The experiment uses the previous pinned source snapshot (`39be8cf1…`), whose
 Things/search versions are 1.63/1.7, not the current merged 1.64/1.8 contract.
-`node:sqlite` exposes `DatabaseSync`, but no database was opened or transaction
-contract tested. A reserved non-listening loopback destination fences Mongo;
+That earlier Fetch experiment exposed `DatabaseSync` but opened no SQLite
+database; the separate 12 November SQLite probe above supplies that evidence.
+A reserved non-listening loopback destination fenced Mongo in the Fetch fixture;
 no data writes or credentials are used. The server and owned simulator were
 cleaned up. This proves API startup/discovery and Fetch behavior, not full
 offline storage or production WebView/device integration.

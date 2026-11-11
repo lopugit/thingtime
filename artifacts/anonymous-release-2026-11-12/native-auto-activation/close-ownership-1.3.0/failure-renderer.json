@@ -1,0 +1,63 @@
+{
+  "pathname": "/",
+  "fields": [
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": null,
+      "visible": true,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "Content"
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "Edit this to your heart's desire."
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "How?"
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "Just search for Content and edit the value to whatever you want."
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "Example:"
+    },
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "\nContent = New Content!\nContent.Nested Content = New Nested Content!\n    "
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": null,
+      "visible": true,
+      "text": "",
+      "value": ""
+    }
+  ]
+}

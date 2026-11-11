@@ -44,6 +44,11 @@ export type ThingtimeLocalRuntime = {
 	downloadUrl: string;
 };
 
+export type DesktopBundleCheckpointReason = 'renderer-ready' | 'renderer-disposed' | 'renderer-focused' | 'renderer-recent-activity' |
+ 'renderer-unhealthy' | 'identity-pending' | 'router-unready' | 'unknown-draft' | 'dirty-control' | 'host-unsupported' | 'checkpoint-invalidated' |
+ 'cancel-input' | 'cancel-focus' | 'cancel-pagehide' | 'cancel-router' | 'cancel-identity' | 'cancel-safety' | 'cancel-dom' | 'cancel-dispose' |
+ 'persistence-missing' | 'persistence-unready' | 'work-unready' | 'participant-unavailable' | 'preference-disabled' | 'preference-unavailable' | 'readiness-unavailable' | 'participant-changed' |
+ 'participant-checkpoint' | 'persistence-checkpoint' | 'certificate-invalid' | 'certificate-ready';
 export type ThingtimeDesktopBundleActivationDiagnostics = {
  format: 1;
  eligible: boolean;
@@ -52,6 +57,9 @@ export type ThingtimeDesktopBundleActivationDiagnostics = {
  counts: Readonly<Record<string, number | null>>;
  idle: Readonly<{ reserved: boolean; reservation: 'absent' | 'idle' | 'busy' | 'unavailable' | 'error';
   http: 'idle' | 'busy' | 'unavailable' | 'error'; chatgpt: 'idle' | 'busy' | 'unavailable' | 'error'; runtime: 'idle' | 'busy' | 'unavailable' | 'error' }>;
+ /** Optional checkpoint attribution requires native.web-bundle-activation >=1.3.0. */
+ checkpoint?: Readonly<{ ready: boolean | null; reason: DesktopBundleCheckpointReason | null }> | null;
+ cancellation?: 'host-changed' | 'host-input' | 'host-authority' | 'host-network' | 'host-work' | 'host-preference' | 'renderer-refused' | null;
 };
 
 export type ThingtimeDesktopInfo = {
@@ -353,7 +361,7 @@ export type ThingtimeDesktopBridge = {
 	rendererReady?: () => Promise<boolean>;
  bundleActivationVersion?: string;
  setBundleUpdatePolicy?: (request: { enabled: boolean }) => Promise<boolean>;
- bundleActivationCheckpoint?: (request: { nonce: string; ready: boolean }) => Promise<boolean>;
+ bundleActivationCheckpoint?: (request: { nonce: string; ready: boolean; reason?: DesktopBundleCheckpointReason }) => Promise<boolean>;
  onBundleActivation?: (callback: (message: { type: 'prepare' | 'release'; nonce: string; keepVeto?: boolean }) => void) => () => void;
 	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
 	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;

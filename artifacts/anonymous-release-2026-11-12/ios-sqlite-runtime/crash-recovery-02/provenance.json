@@ -1,0 +1,8 @@
+{
+  "frozenSourceGitBlobParity": true,
+  "currentToolMatchesExecutedHashes": true,
+  "signedExecutedFrameworkSha256": "5b45997dcec5f3bab33147d071ef76e1931054b271fea138604fb0da626c3397",
+  "signedHarnessSha256": "8be2414a14447738ed4a82daba05431e1e5d572ff24ede18b4a37bcc9b89488c",
+  "bundleSha256": "bf0c97d91bd2871a78b6a9ab05f272d501ee3b78cfc05cb737dd8bde1717bcec",
+  "note": "frameworkSha256 in verification is archive-extracted before ad hoc simulator signing; this supplemental digest identifies the signed copy actually loaded"
+}

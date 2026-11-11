@@ -1,0 +1,22 @@
+{
+  "executedToolSha256": {
+    "iOS/scripts/native-sqlite-probe/run.py": "f843903dc4ddb3903c791d9883447687fb525030baaf6f9665e241843c27c700",
+    "iOS/scripts/native-sqlite-probe/probe.mjs": "a1ea210349ada7170156375a0226c1f60d743d0687ba7dafb82caa6165e4fd03",
+    "iOS/scripts/native-runtime-probe/main.mm": "e03af67c0f03997ce9d73f10d467f15ae8ab8fac679c74a7e2b42ebff545cd6f"
+  },
+  "frozenSourceGitBlobParity": true,
+  "dependencies": {
+    "esbuild": {
+      "version": "0.28.1",
+      "packageJsonSha256": "d55d1d19fcc5b6079e4a71dd4111340c79c682bc36835ac7058a0c364c7db58a"
+    },
+    "mongodb": {
+      "version": "6.21.0",
+      "packageJsonSha256": "14cce59424bafda1089a440a5ccd3c9649572a44477b53a22068d03a5bc6643d"
+    },
+    "bson": {
+      "version": "6.10.4",
+      "packageJsonSha256": "ded0e42e4e1cd876a11c9f799e0692f83ee73ebc9fb7796a5bca05039b4b3e23"
+    }
+  }
+}

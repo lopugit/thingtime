@@ -1,6 +1,25 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
-const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.2.0', methods: Object.freeze(['set-policy', 'checkpoint']), modes: Object.freeze(['remote-account', 'local-api']) });
+const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.3.0', methods: Object.freeze(['set-policy', 'checkpoint']), modes: Object.freeze(['remote-account', 'local-api']) });
+const BUNDLE_CHECKPOINT_REASONS = Object.freeze(['renderer-ready', 'renderer-disposed', 'renderer-focused', 'renderer-recent-activity',
+  'renderer-unhealthy', 'identity-pending', 'router-unready', 'unknown-draft', 'dirty-control', 'host-unsupported', 'checkpoint-invalidated',
+  'cancel-input', 'cancel-focus', 'cancel-pagehide', 'cancel-router', 'cancel-identity', 'cancel-safety', 'cancel-dom', 'cancel-dispose',
+  'persistence-missing', 'persistence-unready', 'work-unready', 'participant-unavailable', 'preference-disabled', 'preference-unavailable', 'readiness-unavailable', 'participant-changed',
+  'participant-checkpoint', 'persistence-checkpoint', 'certificate-invalid', 'certificate-ready']);
+const BUNDLE_CANCELLATION_REASONS = Object.freeze(['host-changed', 'host-input', 'host-authority', 'host-network', 'host-work', 'host-preference', 'renderer-refused']);
+/** Diagnostics are optional and never grant readiness. Stale/wrong-window
+ * messages cannot replace the current operation's diagnostic record. */
+function acceptBundleActivationCheckpoint({ request, pending, window, record, cancel }) {
+  if (!request || typeof request !== 'object' || Array.isArray(request) || typeof request.ready !== 'boolean' || !pending ||
+      pending.window !== window || request.nonce !== pending.nonce) return false;
+  const keys = Object.keys(request);
+  if (!keys.every(key => ['nonce', 'ready', 'reason'].includes(key)) || !keys.includes('nonce') || !keys.includes('ready') ||
+      (keys.includes('reason') && !BUNDLE_CHECKPOINT_REASONS.includes(request.reason))) return false;
+  try { record(Object.freeze({ ready: request.ready, reason: request.reason ?? null })); }
+  catch { /* A diagnostic observer cannot change protocol acceptance. */ }
+  if (!request.ready) cancel('renderer-refused');
+  pending.respond({ nonce: request.nonce, ready: request.ready }); return true;
+}
 const bundleActivationManifest = origin => ({ origin, features: { 'native.web-bundle-activation': BUNDLE_ACTIVATION_FEATURE } });
 function assertBundleActivationSender(event, window, origin) {
   if (!window || window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
@@ -96,19 +115,23 @@ function projectBundleActivationEligibility(input) {
     contextAvailable: input.contextAvailable === true
   };
   const blockers = Object.freeze(Object.keys(gates).filter(name => !gates[name]));
+  const checkpoint = input.checkpoint && [true, false, null].includes(input.checkpoint.ready) &&
+    (input.checkpoint.reason === null || BUNDLE_CHECKPOINT_REASONS.includes(input.checkpoint.reason))
+    ? Object.freeze({ ready: input.checkpoint.ready, reason: input.checkpoint.reason }) : null;
+  const cancellation = BUNDLE_CANCELLATION_REASONS.includes(input.cancellation) ? input.cancellation : null;
   return Object.freeze({ format: 1, eligible: blockers.length === 0, blockers,
-    gates: Object.freeze(gates), counts: Object.freeze(counts), idle: Object.freeze(idle) });
+    gates: Object.freeze(gates), counts: Object.freeze(counts), idle: Object.freeze(idle), checkpoint, cancellation });
 }
 /** The caller gates this to staged-pending task development builds. Ordinary
  * app startup/polling emits nothing; unchanged reasons emit one heartbeat. */
 function createBundleActivationDiagnosticReporter({ emit, now = Date.now, heartbeatMs = 30000 }) {
   let previous, lastAt;
   return state => {
-    const signature = JSON.stringify(state.blockers), at = now();
+    const signature = JSON.stringify([state.blockers, state.checkpoint, state.cancellation]), at = now();
     if (previous === signature && at - lastAt < heartbeatMs) return false;
     try {
       emit({ observedAt: at, format: state.format, eligible: state.eligible,
-        blockers: state.blockers, gates: state.gates, counts: state.counts, idle: state.idle });
+        blockers: state.blockers, gates: state.gates, counts: state.counts, idle: state.idle, checkpoint: state.checkpoint, cancellation: state.cancellation });
       previous = signature; lastAt = at; return true;
     } catch { return false; } // An optional observer cannot alter eligibility.
   };
@@ -138,17 +161,33 @@ function reserveBundleShutdown(providers) {
   } catch { release(); return null; }
 }
 
+// Diagnostic events are deliberately independent of permissions and readiness.
+const BUNDLE_LIFECYCLE_STAGES = Object.freeze([
+  'close-dispatch', 'close-event', 'close-prevented', 'close-cancel-pending',
+  'unload-prevented', 'contents-destroyed', 'window-closed', 'relaunch-entry',
+  'restart-check', 'password-disconnect-start', 'password-disconnect-end',
+  'supervisor-queue', 'supervisor-send-complete', 'quit-request', 'before-quit',
+  'services-close-start', 'services-close-end', 'quit-retry'
+]);
+function observeBundleLifecycle(observer, stage) {
+  if (!BUNDLE_LIFECYCLE_STAGES.includes(stage)) return false;
+  try { observer?.(Object.freeze({ stage })); return true; }
+  catch { return false; } // Optional observation must not change shutdown.
+}
+
 /** Retain session authority only after a replacement process is queued. */
-async function queueDesktopRelaunch({ app, authorityTransition, parallelDevMode, process }) {
+async function queueDesktopRelaunch({ app, authorityTransition, parallelDevMode, process, observe }) {
   if (parallelDevMode) {
     if (!process.connected || typeof process.send !== 'function') throw Error('Restart this development app through the parallel development launcher.');
     await new Promise((resolve, reject) => {
+      observeBundleLifecycle(observe, 'supervisor-queue');
       process.send({ type: 'thingtime-dev-restart' }, error => {
         if (error) { reject(Error('The development launcher did not accept the restart request.')); return; }
-        authorityTransition.retainUntilRestart(); app.quit(); resolve();
+        observeBundleLifecycle(observe, 'supervisor-send-complete');
+        authorityTransition.retainUntilRestart(); observeBundleLifecycle(observe, 'quit-request'); app.quit(); resolve();
       });
     });
-  } else { app.relaunch(); authorityTransition.retainUntilRestart(); app.quit(); }
+  } else { app.relaunch(); authorityTransition.retainUntilRestart(); observeBundleLifecycle(observe, 'quit-request'); app.quit(); }
 }
 
 /** Both application activation entry points use this admission decision. */
@@ -211,31 +250,44 @@ function createWebBundleActivation({ context, pending, checkpoint, release, clos
 
 /** Never queue app.relaunch while a window can veto close. In particular, a
  * sync close-to-hide and beforeunload refusal leave the old app fully usable. */
-function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onCloseState = () => {} }) {
+function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onCloseState = () => {}, observe }) {
   return new Promise((resolve, reject) => {
-    let accepted = false, started = false;
+    let accepted = false, started = false, settled = false;
+    const report = stage => observeBundleLifecycle(observe, stage);
     const cleanup = () => {
       window.removeListener('closed', onClosed); window.removeListener('close', onClose);
-      window.webContents?.removeListener('will-prevent-unload', onVeto);
+      window.webContents?.removeListener('will-prevent-unload', onUnloadVeto);
+      window.webContents?.removeListener('destroyed', onDestroyed);
       signal.removeEventListener('abort', onAbort); onCloseState(false, accepted);
     };
     // A close already dispatched into Chromium cannot be cancelled natively.
     // Keep exactly one observer and the renderer's fail-closed unload veto
     // until Chromium reports refusal/acceptance; don't schedule another close.
-    const onAbort = () => { if (!accepted) { if (!started) cleanup(); resolve(false); } };
-    const onVeto = () => { cleanup(); resolve(false); };
-    const onClose = event => { if (event.defaultPrevented) onVeto(); };
+    const onAbort = () => {
+      if (settled) return;
+      if (started) { report('close-cancel-pending'); return; }
+      settled = true; cleanup(); resolve(false);
+    };
+    const onVeto = () => {
+      if (settled) return;
+      settled = true; cleanup(); resolve(false);
+    };
+    const onUnloadVeto = () => { report('unload-prevented'); onVeto(); };
+    const onDestroyed = () => report('contents-destroyed');
+    const onClose = event => { report(event.defaultPrevented ? 'close-prevented' : 'close-event'); if (event.defaultPrevented) onVeto(); };
     const onClosed = () => {
-      accepted = true; cleanup();
-      Promise.resolve().then(relaunch).then(() => resolve(true), reject);
+      if (settled) return;
+      accepted = true; settled = true; report('window-closed'); cleanup();
+      Promise.resolve().then(() => { report('relaunch-entry'); return relaunch(); }).then(() => resolve(true), reject);
     };
     try {
       assertCurrent(); signal.throwIfAborted();
       window.once('closed', onClosed); window.on('close', onClose);
-      window.webContents?.once('will-prevent-unload', onVeto);
+      window.webContents?.once('will-prevent-unload', onUnloadVeto);
+      window.webContents?.once('destroyed', onDestroyed);
       signal.addEventListener('abort', onAbort, { once: true });
-      started = true; onCloseState(true); window.close();
+      started = true; onCloseState(true); report('close-dispatch'); window.close();
     } catch (error) { cleanup(); reject(error); }
   });
 }
-module.exports = { observeBundleIdle, bundleShutdownIdleState, projectBundleActivationEligibility, createBundleActivationDiagnosticReporter, queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };
+module.exports = { BUNDLE_LIFECYCLE_STAGES, observeBundleLifecycle, BUNDLE_CHECKPOINT_REASONS, BUNDLE_CANCELLATION_REASONS, acceptBundleActivationCheckpoint, observeBundleIdle, bundleShutdownIdleState, projectBundleActivationEligibility, createBundleActivationDiagnosticReporter, queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };

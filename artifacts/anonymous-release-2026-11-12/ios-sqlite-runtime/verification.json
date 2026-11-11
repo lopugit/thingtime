@@ -1,0 +1,70 @@
+{
+  "sourceRef": "40c57f919ac1824103cb8307a1fcda145ceb25f5",
+  "runtimeDistributionSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+  "sourceToBinaryReproducibility": "unproven",
+  "simulatorDeleted": true,
+  "passed": true,
+  "phases": [
+    {
+      "phase": "write",
+      "node": "v24.22.1",
+      "platform": "ios",
+      "arch": "arm64",
+      "checks": [
+        "real-node-sqlite",
+        "async-rollback",
+        "caught-error-aborts",
+        "primitive-pagination",
+        "close-reopen",
+        "byte-exact-bson",
+        "bson-types",
+        "collection-unique-rollback",
+        "collection-query-update-pagination-type-equality",
+        "collection-close-reopen",
+        "collection-persisted-definition-and-data",
+        "unclosed-commit-ready"
+      ],
+      "passed": true,
+      "sqliteVersion": "3.53.4",
+      "bsonSha256": "a6cb5c12f3873f54be6206756486ee4a48eadbcdeea2e089874c6697a314d716"
+    },
+    {
+      "phase": "restart-read",
+      "node": "v24.22.1",
+      "platform": "ios",
+      "arch": "arm64",
+      "checks": [
+        "real-node-sqlite",
+        "byte-exact-bson",
+        "bson-types",
+        "collection-persisted-definition-and-data",
+        "app-process-restart-wal-recovery",
+        "final-close"
+      ],
+      "passed": true,
+      "sqliteVersion": "3.53.4",
+      "bsonSha256": "a6cb5c12f3873f54be6206756486ee4a48eadbcdeea2e089874c6697a314d716"
+    }
+  ],
+  "frameworkSha256": "08faa1c98ec78a4156040fe2288435137b09c0a85dd9d5f3646a0f4de061574d",
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "b41324fd4a1041c0d18fc2a64902e57e64d13c65b767267aadadfbdde187ce4e"
+  },
+  "mongodbVersion": "6.21.0",
+  "bundleSha256": "c7bd1d5e815aaad01631214dd46fe5f7dffe15ca25650505e5c1d5f896586ee4",
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "launchPids": [
+    41363,
+    46382
+  ],
+  "distinctProcessRestart": true,
+  "databaseHeaders": {
+    "primitive.sqlite": "SQLite format 3\u0000",
+    "collections.sqlite": "SQLite format 3\u0000"
+  },
+  "observedAt": "2026-11-11T14:36:55.958124+00:00"
+}

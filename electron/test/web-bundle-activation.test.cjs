@@ -63,7 +63,23 @@ test('activation sender requires current exact window, main frame and loaded app
   for (const altered of [{ ...event, sender: {} }, { ...event, senderFrame: { ...frame } }]) assert.throws(() => assertBundleActivationSender(altered, window, 'http://127.0.0.1:18423'));
   assert.throws(() => assertBundleActivationSender(event, window, 'https://thingtime.com'));
   assert.throws(() => assertBundleActivationSender(event, null, 'http://127.0.0.1:18423'));
-  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.2.0', methods: ['set-policy', 'checkpoint'], modes: ['remote-account', 'local-api'] });
+  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.3.0', methods: ['set-policy', 'checkpoint'], modes: ['remote-account', 'local-api'] });
+});
+test('only current nonce/window receipts may update closed diagnostic codes; old two-field clients remain valid', () => {
+  const { acceptBundleActivationCheckpoint: accept } = require('../lib/web-bundle-activation.cjs');
+  const window = {}, responses = [], records = [], cancellations = [];
+  const pending = { window, nonce: 'current', respond: value => responses.push(value) };
+  const request = value => accept({ request: value, pending, window, record: value => records.push(value), cancel: reason => cancellations.push(reason) });
+  for (const bad of [{ nonce: 'old', ready: false, reason: 'cancel-dom' }, { nonce: 'current', ready: true, reason: 'PRIVATE_SENTINEL' },
+    { nonce: 'current', ready: false, reason: 'cancel-dom', content: 'PRIVATE_SENTINEL' }]) assert.equal(request(bad), false);
+  assert.equal(accept({ request: { nonce: 'current', ready: true }, pending, window: {}, record: () => assert.fail('wrong window'), cancel() {} }), false);
+  assert.deepEqual(records, []); assert.deepEqual(responses, []);
+  assert.equal(request({ nonce: 'current', ready: true }), true); assert.deepEqual(records.at(-1), { ready: true, reason: null });
+  assert.equal(request({ nonce: 'current', ready: false, reason: 'cancel-dom' }), true);
+  assert.deepEqual(records.at(-1), { ready: false, reason: 'cancel-dom' }); assert.deepEqual(cancellations, ['renderer-refused']);
+  assert.equal(Object.hasOwn(records.at(-1), 'nonce'), false); assert.equal(Object.isFrozen(records.at(-1)), true);
+  assert.equal(accept({ request: { nonce: 'current', ready: true }, pending, window,
+    record() { throw Error('observer unavailable'); }, cancel() {} }), true);
 });
 
 function healthyEligibility() {
@@ -149,7 +165,9 @@ test('native verifier retains only the canonical diagnostic allowlist and reject
   const source = require('node:fs').readFileSync(require.resolve('../scripts/verify-web-bundle-auto-activation.mjs'), 'utf8');
   const start = source.indexOf('function publicActivationDiagnostics('), end = source.indexOf('async function captureHostActivationLog(', start);
   assert.ok(start >= 0 && end > start);
-  const copy = new Function('diagnosticTemplate', source.slice(start, end) + '\nreturn publicActivationDiagnostics;')(project({}));
+  const helpers = require('../lib/web-bundle-activation.cjs');
+  const copy = new Function('diagnosticTemplate', 'BUNDLE_CHECKPOINT_REASONS', 'BUNDLE_CANCELLATION_REASONS', source.slice(start, end) + '\nreturn publicActivationDiagnostics;')(
+    project({}), helpers.BUNDLE_CHECKPOINT_REASONS, helpers.BUNDLE_CANCELLATION_REASONS);
   const good = project(healthyEligibility());
   const untrusted = { ...good, profile: 'PRIVATE_SENTINEL', counts: { ...good.counts, private: 'PRIVATE_SENTINEL' }, idle: { ...good.idle, private: 'PRIVATE_SENTINEL' } };
   assert.deepEqual(copy(untrusted), good); assert.equal(JSON.stringify(copy(untrusted)).includes('PRIVATE_SENTINEL'), false);
@@ -177,7 +195,8 @@ function actualMainEligibility(patch = {}) {
     desktopSpeech: { current: null }, desktopMail: { active: new Map() }, desktopAttachmentUpload: { active: new Map() },
     desktopFileExport: { active: null }, desktopFolderSync: { active: null, streamWaiter: null, resourceRequest: null, ordinaryQueue: [] },
     aiSyncSessions: new Map(), syncWindowLease: { window: null }, agentBrowsersPromise: null,
-    parallelDevMode: true, webBundleUpdates: { snapshot: () => ({ status: 'pending' }) }, reportBundleActivation: value => emitted.push(value), ...patch };
+    parallelDevMode: true, webBundleUpdates: { snapshot: () => ({ status: 'pending' }) }, reportBundleActivation: value => emitted.push(value),
+    bundleLastCheckpoint: null, bundleLastCancellation: null, ...patch };
   const run = new Function(...Object.keys(values), source.slice(start, end) + '\nreturn { read: bundleActivationDiagnostics, eligible: bundleActivationEligible };');
   return { ...run(...Object.values(values)), context, emitted };
 }
@@ -222,10 +241,11 @@ test('close timeout retains one observer and work fence until actual Chromium ve
   const window = new EventEmitter(); window.webContents = new EventEmitter(); window.close = () => {};
   const abort = new AbortController(); let pending = false, relaunch = 0;
   const result = closeForBundleActivation({ window, signal: abort.signal, assertCurrent() {}, relaunch: () => { relaunch++; }, onCloseState: value => { pending = value; } });
-  abort.abort(); assert.equal(await result, false); assert.equal(pending, true); assert.equal(window.listenerCount('closed'), 1);
+  let settled = false; result.finally(() => { settled = true; });
+  abort.abort(); await tick(); assert.equal(settled, false); assert.equal(pending, true); assert.equal(window.listenerCount('closed'), 1);
   // Returning focus can no longer undo Electron's close dispatch. Renderer veto
   // ends that close, then ordinary work can be admitted again.
-  window.webContents.emit('will-prevent-unload', {}); assert.equal(pending, false); assert.equal(relaunch, 0); assert.equal(window.listenerCount('closed'), 0);
+  window.webContents.emit('will-prevent-unload', {}); assert.equal(await result, false); assert.equal(pending, false); assert.equal(relaunch, 0); assert.equal(window.listenerCount('closed'), 0);
 });
 test('ordinary work is tracked to settlement, cancels preparation and is refused after close starts', async () => {
   const { createBundleWorkAdmission } = require('../lib/web-bundle-activation.cjs');
@@ -273,10 +293,11 @@ test('unresolved close holds both admissions; a veto releases them and allows wi
   const controller = new AbortController();
   const result = closeForBundleActivation({ window, signal: controller.signal, assertCurrent() {}, relaunch: () => assert.fail('veto cannot relaunch'),
     onCloseState: (value, accepted) => { pending = value; if (!value && !accepted) reservation.release(); } });
-  controller.abort(); assert.equal(await result, false); assert.equal(pending, true); assert.deepEqual(reserved, [true, true]);
+  let settled = false; result.finally(() => { settled = true; });
+  controller.abort(); await tick(); assert.equal(settled, false); assert.equal(pending, true); assert.deepEqual(reserved, [true, true]);
   for (const event of ['activate', 'second-instance']) assert.equal(presentBundleWindow({ blocked: pending, window: null, origin: 'http://127.0.0.1:18423', create: () => { created++; } }), false, event);
   assert.equal(created, 0);
-  window.webContents.emit('will-prevent-unload', {}); assert.equal(pending, false); assert.deepEqual(reserved, [false, false]);
+  window.webContents.emit('will-prevent-unload', {}); assert.equal(await result, false); assert.equal(pending, false); assert.deepEqual(reserved, [false, false]);
   assert.equal(presentBundleWindow({ blocked: pending, window: null, origin: 'http://127.0.0.1:18423', create: () => { created++; } }), true); assert.equal(created, 1);
 });
 test('accepted close keeps activation and second-instance fenced while password disconnect/relaunch is unresolved', async () => {
@@ -288,9 +309,9 @@ test('accepted close keeps activation and second-instance fenced while password 
   const result = closeForBundleActivation({ window, signal: controller.signal, assertCurrent() {},
     onCloseState: (value, committed) => { pending = value; if (committed) accepted = true; },
     relaunch: () => new Promise(resolve => { relaunchStarted = true; finish = resolve; }) });
-  window.emit('closed'); await result; await tick(); assert.equal(relaunchStarted, true); assert.equal(pending, false); assert.equal(accepted, true);
+  window.emit('closed'); await tick(); assert.equal(relaunchStarted, true); assert.equal(pending, false); assert.equal(accepted, true);
   for (const event of ['activate', 'second-instance']) assert.equal(presentBundleWindow({ blocked: pending || accepted, window: null, origin: 'http://127.0.0.1:18423', create: () => { creates++; } }), false, event);
-  assert.equal(creates, 0); finish(); await tick();
+  assert.equal(creates, 0); finish(); assert.equal(await result, true);
 });
 test('ordinary presentation restores an existing window and never creates before an origin is ready', () => {
   const { presentBundleWindow } = require('../lib/web-bundle-activation.cjs'); const actions = [];
@@ -374,4 +395,58 @@ test('a queued replacement retains authority before quit; delayed launcher ackno
   acknowledge(null); await operation; assert.deepEqual(events, ['quit']);
   const nativeAuthority = new AuthorityTransition();
   await queueDesktopRelaunch({ app: { relaunch: () => { assert.equal(nativeAuthority.restarting, false); }, quit: () => { assert.equal(nativeAuthority.restarting, true); } }, authorityTransition: nativeAuthority, parallelDevMode: false });
+});
+
+test('dispatched close retains coordinator ownership across cancellation until the real terminal event', async () => {
+  for (const terminal of ['veto', 'closed']) {
+    const window = new EventEmitter(); window.webContents = new EventEmitter();
+    let dispatches = 0, relaunches = 0, checkpointCalls = 0, releases = 0, finishRelaunch;
+    window.close = () => { dispatches++; };
+    const identity = {}, stages = [];
+    const host = createWebBundleActivation({ context: () => identity, pending: async () => true,
+      checkpoint: async ({ nonce }) => { checkpointCalls++; return { nonce, ready: true }; },
+      release: () => { releases++; }, timeoutMs: 1000,
+      closeAndRelaunch: args => closeForBundleActivation({ ...args, window, observe: event => stages.push(event.stage),
+        relaunch: () => { relaunches++; return new Promise(resolve => { finishRelaunch = resolve; }); } }) });
+    const result = host.attempt(); let settled = false; result.then(() => { settled = true; });
+    await tick(); host.cancel(); await tick();
+    assert.equal(settled, false); assert.equal(host.attempt(), result);
+    assert.equal(releases, 0); assert.equal(dispatches, 1); assert.equal(checkpointCalls, 1);
+    assert.deepEqual(stages, ['close-dispatch', 'close-cancel-pending']);
+    if (terminal === 'veto') {
+      window.webContents.emit('will-prevent-unload', {});
+      assert.equal(await result, false); window.emit('closed'); assert.equal(relaunches, 0);
+    } else {
+      window.webContents.emit('destroyed'); window.emit('closed'); window.emit('closed'); await tick();
+      assert.equal(relaunches, 1); assert.equal(settled, false); assert.equal(host.attempt(), result); assert.equal(releases, 0);
+      finishRelaunch(); assert.equal(await result, true);
+    }
+    assert.equal(releases, 1); assert.equal(window.listenerCount('closed'), 0);
+    assert.equal(window.webContents.listenerCount('will-prevent-unload'), 0); host.close();
+  }
+});
+test('pre-dispatch abort never closes; lifecycle observations accept only closed codes and cannot change control', async () => {
+  const { observeBundleLifecycle } = require('../lib/web-bundle-activation.cjs');
+  const controller = new AbortController(); controller.abort(); let closes = 0;
+  const window = new EventEmitter(); window.webContents = new EventEmitter(); window.close = () => { closes++; };
+  await assert.rejects(closeForBundleActivation({ window, signal: controller.signal, assertCurrent() {}, relaunch() {} }));
+  assert.equal(closes, 0); assert.equal(window.listenerCount('closed'), 0);
+  assert.equal(observeBundleLifecycle(() => assert.fail('invalid code'), 'PRIVATE_SENTINEL'), false);
+  const observed = []; assert.equal(observeBundleLifecycle(value => observed.push(value), 'before-quit'), true);
+  assert.deepEqual(observed, [{ stage: 'before-quit' }]); assert.equal(Object.isFrozen(observed[0]), true);
+  assert.equal(observeBundleLifecycle(() => { throw Error('private'); }, 'window-closed'), false);
+});
+
+test('an actual inspection deadline cannot release a dispatched close owner before Chromium resolves it', async () => {
+  const window = new EventEmitter(); window.webContents = new EventEmitter(); window.close = () => {};
+  const signal = AbortSignal.timeout(10), stages = []; let settled = false;
+  const watchdog = setTimeout(() => assert.fail('deadline did not fire'), 1000);
+  try {
+    const result = closeForBundleActivation({ window, signal, assertCurrent() {}, relaunch() {}, observe: event => stages.push(event.stage) });
+    result.then(() => { settled = true; });
+    await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true })); await tick();
+    assert.equal(settled, false); assert.deepEqual(stages, ['close-dispatch','close-cancel-pending']);
+    window.emit('closed'); assert.equal(await result, true);
+    assert.deepEqual(stages, ['close-dispatch','close-cancel-pending','window-closed','relaunch-entry']);
+  } finally { clearTimeout(watchdog); }
 });

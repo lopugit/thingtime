@@ -1,0 +1,73 @@
+{
+  "passed": true,
+  "source": "docs/progress/anonymous-local-first.html",
+  "sourceSha256": "4cd4b764c8c26725b6d224916c092adaf0f1580d01c8d22f4d4b3490de5ae2df",
+  "scope": "Static progress plan in task-owned clean Chromium",
+  "viewports": [
+    {
+      "width": 1440,
+      "counts": {
+        "done": 65,
+        "local": 25,
+        "todo": 4,
+        "displayed": [
+          65,
+          25,
+          4
+        ]
+      },
+      "scroll": {
+        "positions": 44,
+        "bottom": true,
+        "width": 1440
+      },
+      "filters": true,
+      "emptySearch": true,
+      "navigationTargets": true
+    },
+    {
+      "width": 390,
+      "counts": {
+        "done": 65,
+        "local": 25,
+        "todo": 4,
+        "displayed": [
+          65,
+          25,
+          4
+        ]
+      },
+      "scroll": {
+        "positions": 91,
+        "bottom": true,
+        "width": 390
+      },
+      "filters": true,
+      "emptySearch": true,
+      "navigationTargets": true
+    },
+    {
+      "width": 320,
+      "counts": {
+        "done": 65,
+        "local": 25,
+        "todo": 4,
+        "displayed": [
+          65,
+          25,
+          4
+        ]
+      },
+      "scroll": {
+        "positions": 114,
+        "bottom": true,
+        "width": 320
+      },
+      "filters": true,
+      "emptySearch": true,
+      "navigationTargets": true
+    }
+  ],
+  "errors": [],
+  "cleanup": true
+}

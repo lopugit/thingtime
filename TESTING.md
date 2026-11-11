@@ -28,6 +28,22 @@
   Unsupported operators/options and malicious wrapper internals must be refused
   before writes even on empty or unmatched collections; custom hooks never run.
   These synthetic collection names do not prove canonical API accounting/ACLs.
+- The same suite must exercise canonical `applyUserStorageDelta` through the
+  opaque native owner/home-plane capability: real persisted ordinary account,
+  trusted ready ledger, exact logical bytes, allowance boundary/unlimited,
+  integer promotion, competing claims, and caught-error atomic rollback.
+  Refuse counterfeit, expired, wrong-owner and foreign-context sessions. Reject
+  unsupported Character/pending/reconciliation states before writable callbacks.
+  A valid ledger may omit optional `storageUpdatedAt`. Hosted Mongo import must
+  work without loading SQLite. Synthetic history is not Timeline acceptance.
+- For the opt-in iOS SQLite probe, use a fresh task-owned simulator/cache and
+  verified imported runtime. Freeze exact source bytes and record actual package
+  resolution. Check real SQLite/BSON/collection behavior; require nonempty WALs,
+  twice verify the writer PID belongs to that exact installed test executable
+  before SIGKILL, verify retained WAL hashes and committed-data recovery in a
+  distinct process. Always attempt each bounded cleanup independently and save
+  the final receipt. Cleanup failure fails acceptance. Do not infer physical
+  device, API account integration or power-loss durability from this process test.
 
 ## Main integration compatibility — 2026-11-11
 
@@ -54,6 +70,18 @@
   production and non-pending startup must not emit development heartbeats. In a
   real isolated native run, retain main-process heartbeat evidence independently
   of renderer `getInfo` timeouts. Diagnostics never authorize forced activation.
+- For activation 1.3, cover optional closed-enum reasons, old two-field clients,
+  wrong-window/stale-nonce refusal and observer exceptions. Run actual-module
+  `desktopBundleActivation.browser.test.mjs`: a real DOM or safety change during
+  persistence revokes readiness; a blocked draft starts no durable write, while
+  a healthy page must complete one before readiness. Its host/background are
+  synthetic; repeat the actual isolated native run before claiming replacement.
+- After native close dispatch, timeout/cancellation must retain the same
+  coordinator operation, nonce, listener and reservations until actual veto or
+  closure. Cover delayed veto and delayed closure after cancellation: one close,
+  one terminal release, at most one relaunch, and no accepted-window recreation.
+  A send callback does not prove the development supervisor started a process.
+  Record actual terminal lifecycle stages without content, paths or credentials.
 
 - Run `node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
   Cover wrong signatures/key scopes, ABI/target/shell mismatch, replay floors,

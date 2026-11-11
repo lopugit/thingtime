@@ -1,3 +1,4 @@
+import type { DesktopBundleCheckpointReason } from './electronBridge';
 /** Explicit lifecycle participants. No draft content or credentials cross IPC. */
 export type DesktopUpdateParticipant = {
   kind: 'persistence' | 'work';
@@ -30,19 +31,39 @@ export function createDesktopBundleSafety() {
       return Boolean(sessionHash) && members.length > 0 && members.every(p => p.ready()) &&
         members.some(p => p.automaticUpdates?.(sessionHash) === true) && !members.some(p => p.automaticUpdates?.(sessionHash) === false);
     },
-    async checkpoint(signal: AbortSignal, sessionHash: string) {
+    async checkpoint(signal: AbortSignal, sessionHash: string, observe?: (reason: DesktopBundleCheckpointReason) => void) {
+      const report = (reason: DesktopBundleCheckpointReason) => { try { observe?.(reason); } catch { /* Diagnostics cannot change safety. */ } };
       const start = generation, members = [...participants];
-      const current = () => !signal.aborted && start === generation && members.every(p => p.ready());
+      const current = () => {
+        if (signal.aborted || start !== generation) { report('participant-changed'); return false; }
+        for (const member of members) {
+          let ready: boolean;
+          try { ready = member.ready(); } catch (error) { report('participant-unavailable'); throw error; }
+          if (!ready) { report(member.kind === 'persistence' ? 'persistence-unready' : 'work-unready'); return false; }
+        }
+        return true;
+      };
       const persistence = members.filter(p => p.kind === 'persistence');
-      if (!persistence.length || !current() || !persistence.some(p => p.automaticUpdates?.(sessionHash) === true) ||
-        persistence.some(p => p.automaticUpdates?.(sessionHash) === false)) throw Error('Desktop persistence is not ready');
+      if (!persistence.length) { report('persistence-missing'); throw Error('Desktop persistence is not ready'); }
+      if (!current()) throw Error('Desktop persistence is not ready');
+      let enabled: boolean;
+      try { enabled = persistence.some(p => p.automaticUpdates?.(sessionHash) === true) && !persistence.some(p => p.automaticUpdates?.(sessionHash) === false); }
+      catch (error) { report('preference-unavailable'); throw error; }
+      if (!enabled) {
+        report('preference-disabled'); throw Error('Desktop persistence is not ready');
+      }
       const checks: (() => boolean)[] = [];
       for (const member of members) {
         signal.throwIfAborted();
         if (!current()) throw Error('Desktop work changed');
-        if (member.checkpoint) checks.push(await waitForDesktopUpdateWork(member.checkpoint(signal), signal));
+        if (member.checkpoint) {
+          report(member.kind === 'persistence' ? 'persistence-checkpoint' : 'participant-checkpoint');
+          checks.push(await waitForDesktopUpdateWork(member.checkpoint(signal), signal));
+        }
       }
-      if (!current() || !checks.every(check => check())) throw Error('Desktop checkpoint changed');
+      if (!current()) throw Error('Desktop checkpoint changed');
+      if (!checks.every(check => check())) { report('certificate-invalid'); throw Error('Desktop checkpoint changed'); }
+      report('certificate-ready');
       return () => current() && checks.every(check => check());
     }
   };

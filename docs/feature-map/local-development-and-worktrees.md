@@ -28,8 +28,13 @@ background download until supported provisioning.
 preserve isolated actual Node 24/bcrypt and Sharp/libvips experiments. Genuine
 image operations, canonical Nitro and its manifest through native Fetch now pass
 on the recorded prior bundle. The probe preserves the runtime's required
-`UNDICI_NO_WASM_SIMD=1` default. No transactional storage or production iOS app
-integration follows from this evidence; see the [current image probe](../../iOS/scripts/native-image-probe/README.md).
+`UNDICI_NO_WASM_SIMD=1` default. See the [current image probe](../../iOS/scripts/native-image-probe/README.md).
+The separate `iOS/scripts/native-sqlite-probe/` runs frozen real document/collection
+modules in the imported Node runtime. It proves transactions, BSON fidelity and
+committed WAL recovery after an ownership-verified SIGKILL in a disposable
+simulator. Exact receipts and cleanup are retained; canonical API selection,
+full app integration, physical devices and runtime reproducibility remain open.
+[SQLite probe](../../iOS/scripts/native-sqlite-probe/README.md).
 
 `electron/scripts/verify-web-bundle-auto-activation.mjs` uses a separate
 remote-mode development workspace and synthetic signed catalogue/content fixture.
@@ -64,16 +69,35 @@ ordered paging and durable sparse/multikey single-field uniqueness. The existing
 test command also runs `collectionProvider.test.ts`, including cross-collection
 rollback, competing revision claims and hostile/unsupported input admission.
 This scan-based adapter is not Mongo syntax/parity or an activated API provider.
-Canonical query translation, ledger/history and ACL route acceptance, efficient
-indexes, native profile bootstrap and iOS file persistence are still required.
+Canonical query translation, complete ledger/history and ACL route acceptance,
+efficient indexes and native profile bootstrap are still required.
 Do not select this store in production merely because these foundation tests pass.
 
-The native 1.2 activation host negotiates the process-local Nitro runtime-work
+`documentStore/nativeUserStorage.ts` consumes canonical `applyUserStorageDelta`
+through an opaque owner/home-plane transaction capability. The persisted ordinary
+account and trusted ready ledger are validated before entering the callback.
+`storage/userStorageAdmission.ts` shares existing allowance/ready/quota policy
+with Mongo. `nativeUserStorage.test.ts`, included in `test:document-store`, covers
+real-file accounting, competing claims, rollback and escaped-session refusals.
+Synthetic history rows do not prove the canonical Timeline adapter. Character,
+pending/reconciliation/deletion recovery and API identity/session bootstrap
+remain disabled gaps. [Evidence](../../artifacts/anonymous-release-2026-11-12/sqlite-accounting/README.md).
+
+The native 1.3 activation host negotiates the process-local Nitro runtime-work
 contract and combines its reservation with the HTTP and ChatGPT admissions.
 The existing `getInfo` bridge adds an allowlisted activation projection used by
 the actual gate; the isolated verifier negotiates its origin/version. Development
 pending-release heartbeats distinguish main-process observation from renderer
 IPC failure. Keep diagnostic callbacks read-only and test throwing discovery.
+Optional closed-enum checkpoint/cancellation reasons preserve the exact current
+window/nonce checks and old two-field clients. Run the renderer/safety unit tests
+and `node --test remix/app/utils/desktopBundleActivation.browser.test.mjs`;
+the latter uses real Chromium MutationObserver with synthetic host controls.
+The close coordinator retains operation/nonce ownership after cancellation until
+the dispatched close actually ends. Its focused tests cover delayed veto/closed
+events and exactly-once release/relaunch. Closed-enum development lifecycle
+observations distinguish close, disconnect, send completion and service cleanup;
+they never authorize shutdown or claim a replacement process exists.
 `CustomDrawerItems` omits its known closed editor from the rendered projection;
 open drafts and Builder layouts retain every saved block. The global unknown-draft
 guard still protects hidden unsaved editors. Run `test:nav` for the projection.

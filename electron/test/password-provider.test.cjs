@@ -58,10 +58,11 @@ test('native provider uses the running authority and restarts await disconnect',
  assert.match(source,/await passwordProvider\.disconnect\(\);\n await settings\.selectEndpoint\(target\.id\)/);
  const restart = source.match(/async function restartDesktopRuntime\([^\n]*\) \{[\s\S]*?\n\}/)[0];
  const relaunch = source.match(/async function relaunchDesktopProcess\(\) \{[\s\S]*?\n\}/)[0];
- const calls=[]; let finish;
- const running=vm.runInNewContext(relaunch+'\n'+restart+'; restartDesktopRuntime()', {queueDesktopRelaunch,process:{},authorityTransition:{retainUntilRestart(){calls.push('retain');}},mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
+ const calls=[], lifecycle=[]; let finish;
+ const running=vm.runInNewContext(relaunch+'\n'+restart+'; restartDesktopRuntime()', {reportBundleLifecycle: stage => lifecycle.push(stage), queueDesktopRelaunch,process:{},authorityTransition:{retainUntilRestart(){calls.push('retain');}},mainWindow:{webContents:{stop(){calls.push('stop');}}},passwordProvider:{disconnect(){calls.push('disconnect');return new Promise(resolve=>{finish=resolve;});}},parallelDevMode:false,app:{relaunch(){calls.push('relaunch');},quit(){calls.push('quit');}}});
  assert.deepEqual(calls,['stop','disconnect']); finish(); await running;
  assert.deepEqual(calls,['stop','disconnect','relaunch','retain','quit']);
+ assert.deepEqual(lifecycle,['password-disconnect-start','password-disconnect-end','quit-request']);
  assert.match(source,/restart-runtime', async \(event\) => \{[^\n]*await restartDesktopRuntime\(\)/);
 });
 
