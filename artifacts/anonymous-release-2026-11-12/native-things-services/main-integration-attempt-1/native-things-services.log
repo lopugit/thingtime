@@ -1,0 +1,26 @@
+✔ execution receipts use the selected native history without hosted fallback (822.896ms)
+✔ canonical content mutations fence old held ownership during transfer, deduping unchanged provenance (1.325375ms)
+✔ unheld ordinary writes do not acquire an operation fence; forged hold fields refuse (0.235166ms)
+✔ Mongo adapter preserves selected collection, actual session, chronological cursor and CAS fields (4.036333ms)
+✔ SQLite audience reads preserve both friend directions, membership filters and every page after reopen (1926.645083ms)
+✔ canonical native Things CRUD, projections, folder move, CAS and History use real SQLite (147.750291ms)
+✔ native canonical ACL never exposes foreign private content; unsupported operations have no side effects (18.117584ms)
+✔ private unsupported Things remain indistinguishable from absent records (8.3825ms)
+✔ folder deletion admits a legacy child baseline before deleting the root and retains accounting (50.308792ms)
+✔ native candidate pagination is stable and rejects cross-selection cursors; unsupported ordinary rows never disappear silently (38.170917ms)
+✔ protected history and archived rows are excluded before paging and every selection predicate binds the cursor (193.570708ms)
+✔ real SQLite request selection preserves exact transaction binding and expires cached handles (31.749458ms)
+✔ foreign owner selection poisons caught errors and rolls back content (8.003542ms)
+✔ provider, plane, missing native scope and bootstrap lifetime fail closed without Mongo (5.263166ms)
+✔ readonly Timeline ports retain author identity and expire within a live request (6.186416ms)
+✔ closing bootstrap during content callback prevents a caught-error commit (6.162125ms)
+✔ expired async descendants cannot acquire a replacement repository or borrow Mongo (5.101875ms)
+✔ a leaked readonly Timeline port is expired even while its parent request remains active (5.307166ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2688.626375

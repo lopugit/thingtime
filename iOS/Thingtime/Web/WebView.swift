@@ -248,6 +248,7 @@ struct WebView: UIViewRepresentable {
                 "deviceLocationVersion": "1.1.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
                 "filePhotoAutomationVersion": MobileFolderBridge.photoAutomationVersion,
+                "fileUploadPolicyVersion": MobileFolderBridge.uploadPolicyVersion,
                 "fileUploadVersion": MobileFolderBridge.uploadVersion,
                 "fileExportVersion": FileExportBridge.version,
                 "fileReplicaVersion": FileReplicaBridge.version,
@@ -357,6 +358,10 @@ struct WebView: UIViewRepresentable {
                     }, verifyDevice: { [weak self, weak webView] scope, deviceId, check in
                         guard let self, let webView else { throw CancellationError() }
                         try await self.mobileDevice.verifyDevice(scope, deviceId: deviceId, webView: webView,
+                            cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
+                    }, pairedDevice: { [weak self, weak webView] scope, check in
+                        guard let self, let webView else { throw CancellationError() }
+                        return try await self.mobileDevice.pairedDeviceId(scope, webView: webView,
                             cookies: { [weak self] values, url in self?.cookies(values, matching: url) ?? [] }, check: check)
                     }, reply: { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) })
             case "mobile-device-location":

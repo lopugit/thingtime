@@ -1,0 +1,17 @@
+{
+  "startedAt": "2026-11-11T23:12:21.011084+00:00",
+  "endedAt": "2026-11-11T23:12:30.866760+00:00",
+  "scope": "Test-only postbuild correction; no runtime or compiled payload changes",
+  "file": "electron/scripts/test-bundled-local-runtime.cjs",
+  "previousSha256": "68ec57e5bafa1b24ad67696b4ec1d77b744568364bf12e1d995b259ae82c6921",
+  "finalSha256": "ec0e3aebaa13d986bf73aafdfe76652ee3349235587c83bf5cb95df8d151f5d9",
+  "change": "Require Things >=1.65 and equality across both actual built manifest formats",
+  "command": [
+    "node",
+    "electron/scripts/test-bundled-local-runtime.cjs"
+  ],
+  "exitCode": 0,
+  "nitroSha256": "a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801",
+  "nitroUnchanged": true,
+  "log": "mongo-manifests-final.log"
+}

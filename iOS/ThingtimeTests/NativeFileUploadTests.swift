@@ -133,3 +133,27 @@ final class NativeFileUploadTests: XCTestCase {
         XCTAssertThrowsError(try NativeUploadPartRequest(source:source,uploadId:"upload",requestId:"operation",partNumber:2,offset:0,length:4).validate())
     }
 }
+
+@MainActor
+final class NativeMultipartAcceptanceTests: XCTestCase {
+    func testTransientPartLookupRetriesWithoutWeakeningAuthorityRefusals() {
+        for code in [408, 429, 500, 503] { XCTAssertTrue(NativeFileSession.retryablePartStatus(code)) }
+        for code in [200, 400, 401, 403, 404, 409, 410] { XCTAssertFalse(NativeFileSession.retryablePartStatus(code)) }
+    }
+    func testOnlyStrictProviderAcceptanceSkipsValidatedParts() throws {
+        let checksum = Data(repeating: 7, count: 32).base64EncodedString()
+        let origin = URL(string: "https://sync.test")!
+        let part: [String: Any] = ["partNumber": 1, "url": "https://storage.test/part", "headers": ["x-amz-checksum-sha256": checksum]]
+        func proof(_ value: Any?) -> [String: Any] {
+            var next = part; next["alreadyUploaded"] = value
+            return ["ok": true, "parts": [next]]
+        }
+        _ = try NativeFileSession.signedUploadRequest(proof(true), origin: origin, checksum: checksum, length: 8, partNumber: 1)
+        XCTAssertTrue(try NativeFileSession.alreadyUploaded(proof(true)))
+        XCTAssertFalse(try NativeFileSession.alreadyUploaded(proof(false)))
+        XCTAssertFalse(try NativeFileSession.alreadyUploaded(proof(nil)), "legacy replies do not claim provider acceptance")
+        for malformed: Any in ["true", 1, NSNull()] { XCTAssertThrowsError(try NativeFileSession.alreadyUploaded(proof(malformed))) }
+        XCTAssertThrowsError(try NativeFileSession.signedUploadRequest(proof(true), origin: origin, checksum: "changed", length: 8, partNumber: 1))
+        XCTAssertThrowsError(try NativeFileSession.signedUploadRequest(proof(true), origin: origin, checksum: checksum, length: 8, partNumber: 2))
+    }
+}

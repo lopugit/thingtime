@@ -22,7 +22,7 @@ support the full `api.things` contract: app/PAT namespaces, composed hooks, sche
 provenance, managed kinds and target cascades require their canonical adapters.
 Unsupported private items retain the ordinary not-found response for unauthorized
 viewers. Do not advertise the whole feature merely because its HTTP verbs could
-be dispatched. Real SQLite service tests and hosted Mongo HTTP regression are
+be dispatched. Real SQLite service tests and local Mongo HTTP regression are
 separate acceptance layers. See [service evidence](../artifacts/anonymous-release-2026-11-12/native-things-services/README.md).
 
 ## Content and Timeline persistence — 12 November 2026

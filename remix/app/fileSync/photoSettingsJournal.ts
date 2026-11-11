@@ -1,6 +1,6 @@
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { validateSyncRun, type SyncRun } from './execute';
-import { samePhotoBackupSource } from './photoSettingsPolicy';
+import { sameRecoverableBackupSource } from './photoSettingsPolicy';
 import { PAGED_RUN_HEADS, PAGED_RUN_STORES, parsePagedRunSpec, validatePagedRunHeader, type PagedRunHeader } from './pagedRunJournal';
 import { REVIEW_DRAFT_HEADS, REVIEW_DRAFT_STORES, parseReviewDraftSpec, validateReviewDraftHeader, type ReviewDraftHeader } from './pagedReviewDraft';
 import { sameSyncScope, type SyncScope } from './reconcile';
@@ -26,7 +26,7 @@ export function parkPhotoSettings(
 		request.onsuccess = () => { try { consume(request.result); } catch (error) { fail(error); } };
 	};
 	const matches = (id: string, configuration: FileSyncConfiguration | undefined, prior: string | undefined) => {
-		if (id !== prior || !configuration || !samePhotoBackupSource(configuration, current) ||
+		if (id !== prior || !configuration || !sameRecoverableBackupSource(configuration, current) ||
 			(!reviewedChanged && JSON.stringify(configuration) === JSON.stringify(current))) throw new SyncJobConfigurationChanged();
 		return configuration.remoteFolderId;
 	};

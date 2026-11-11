@@ -344,7 +344,7 @@ test('active API source keeps explicit origin, schema and response endpoint fenc
 });
 
 
-test('Archive read gate rejects either older variant behind a 1.64 frontend and retries after rollout', async () => {
+test('Archive read gate rejects either older variant behind a 1.65 frontend and retries after rollout', async () => {
   const origin = 'https://thingtime.test';
   let activeVersion: string | undefined = '1.62.0';
   const calls: string[] = [];
@@ -353,19 +353,19 @@ test('Archive read gate rejects either older variant behind a 1.64 frontend and 
     calls.push(path);
     return Response.json(path === '/api/v1/capabilities'
       ? { ok: true, schemaVersion: 1, features: activeVersion ? { 'api.things': activeVersion } : {} }
-      : { schemaVersion: 1, origin, features: { 'api.things': { version: '1.64.0' } } });
+      : { schemaVersion: 1, origin, features: { 'api.things': { version: '1.65.0' } } });
   }) as typeof fetch;
   const check = createLibraryArchiveReadChecker(createThingtimeCapabilityChecker(), createThingtimeCapabilityChecker({ source: 'active-api' }));
   const transport = { fetch: fetcher, currentOrigin: () => origin };
   let queries = 0;
   const query = async () => { await check(origin, transport); queries++; };
-  for (const version of ['1.62.0', '1.63.0', undefined, '2.0.0']) {
+  for (const version of ['1.62.0', '1.63.0', '1.64.0', '1.64.99', undefined, '2.0.0']) {
     activeVersion = version;
     await assert.rejects(query(), /api.things is incompatible/);
     assert.equal(queries, 0, 'an incompatible active API cannot reach the library query');
   }
   assert.deepEqual(new Set(calls), new Set(['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']));
-  activeVersion = '1.64.0';
+  activeVersion = '1.65.0';
   await query();
   assert.equal(queries, 1);
 });

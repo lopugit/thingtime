@@ -1,7 +1,7 @@
 {
   "passed": true,
   "source": "docs/progress/anonymous-local-first.html",
-  "sourceSha256": "7f0a2f5744e8f6f615d98075fa4929c25af59526a1c0567acf5515434d570803",
+  "sourceSha256": "8ae065b5375a0fca3d525a90e8f7e8bb3a8400c51c033d56249f65be59bafde4",
   "scope": "Static plan in isolated task-owned Chromium; no account session",
   "viewports": [
     {

@@ -129,8 +129,9 @@ export function migratePhotoAutomationLabels(nodes: WebpageBlock[]): WebpageBloc
  });
 }
 
-export function PhotoAutomationControls({ policy, draft, disabled, availability, scopeKey, accountTransport, onChange, onValidityChange, transferScope }: {
-	transferScope?: 'device' | 'folder';
+export function PhotoAutomationControls({ policy, draft, disabled, availability, scopeKey, accountTransport, onChange, onValidityChange, transferScope, generalUploads = false }: {
+	transferScope?: 'device' | 'folder' | 'configuration';
+ generalUploads?: boolean;
 	policy?: Policy;
 	draft?: Draft;
 	disabled: boolean;
@@ -162,29 +163,26 @@ export function PhotoAutomationControls({ policy, draft, disabled, availability,
 		let parsed: Policy;
 		try { parsed = parseDraft(next); }
 		catch { onChange(next); return; }
-		// Unit and cadence edits should not round an untouched stored ceiling.
-		if (policy?.uploadBytesPerSecond !== undefined && next.speed === current.speed && next.speedUnit === current.speedUnit)
-			parsed.uploadBytesPerSecond = policy.uploadBytesPerSecond;
-		if (policy?.uploadBytesPerHour !== undefined && next.data === current.data && next.dataUnit === current.dataUnit)
-			parsed.uploadBytesPerHour = policy.uploadBytesPerHour;
+		// Display/unit conversion is byte-exact. Every field comes from this
+		// complete draft, including edits made before an unrelated field event.
 		onChange(next, parsed);
 	};
     const scopeBlocks = React.useMemo(() => {
         if (!transferScope) return blocks;
         const copy = structuredClone(blocks);
         const fieldset = copy[0];
-        fieldset.props = { ...fieldset.props, 'aria-label': `${transferScope === 'device' ? 'Device' : 'Folder'} Photos upload limits` };
+        fieldset.props = { ...fieldset.props, 'aria-label': `${transferScope === 'device' ? 'Device' : transferScope === 'folder' ? 'Folder' : 'Configuration'} ${generalUploads ? '' : 'Photos '}upload limits` };
         fieldset.children = fieldset.children?.filter(node => !['photo-backup-notification-help', 'notification-interval-ms-label', 'notification-interval-ms-input', ...(transferScope === 'folder' ? ['photo-backup-speed-help'] : [])].includes(node.id)).map(node => {
-            if (node.id === 'photo-backup-limits-heading') node.text = transferScope === 'device' ? 'Device upload limits' : 'Folder upload limits';
-            if (node.id === 'photo-backup-speed-help') node.text = 'MB/s = megabytes per second; Mbps = megabits per second. Blank inherits. The strictest limits apply. Apple manages iCloud downloads.';
+            if (node.id === 'photo-backup-limits-heading') node.text = transferScope === 'device' ? 'Device upload limits' : transferScope === 'folder' ? 'Folder upload limits' : 'Configuration upload limits';
+            if (node.id === 'photo-backup-speed-help') node.text = `MB/s = megabytes per second; Mbps = megabits per second. Blank inherits. The strictest limits apply.${generalUploads ? '' : ' Apple manages iCloud downloads.'}`;
             if (node.id === 'speed-input') node.props = { ...node.props, placeholder: 'Inherit' };
             return node;
         });
         const input = findBlock(copy, 'speed-input');
         if (input) input.props = { ...input.props, placeholder: 'Inherit' };
         return copy;
-    }, [transferScope]);
-	return <SettingsDocumentHost documentKey={transferScope ? `photo-backup-${transferScope}-limits` : 'photo-backup-automation-controls'} defaultDocument={scopeBlocks} migrateBlocks={transferScope ? undefined : migratePhotoAutomationLabels} scopeKey={scopeKey} title="Photos backup settings" accountTransport={accountTransport}>
+    }, [transferScope, generalUploads]);
+	return <SettingsDocumentHost documentKey={transferScope ? `${generalUploads ? 'sync-upload' : 'photo-backup'}-${transferScope}-limits` : 'photo-backup-automation-controls'} defaultDocument={scopeBlocks} migrateBlocks={transferScope ? undefined : migratePhotoAutomationLabels} scopeKey={scopeKey} title={generalUploads ? "Upload settings" : "Photos backup settings"} accountTransport={accountTransport}>
 		{({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} enabled={!editing}
 			scope={{ resources: { ...current, ids, disabled, availability, error, hasError: !!error } }}
 			actions={Object.fromEntries(keys.map(key => [syncResourceOperation(key), ({ value }: { value?: unknown }) => change(key, value)]))}>

@@ -13,6 +13,12 @@ The bundled Mongo HTTP fixture must also move into a valid existing folder,
 refuse a cycle, preserve/reparent children on deletion and retain them on restart.
 Generic native Things HTTP and broad capability publication remain separate gates.
 
+When integrating parallel API additions, reject the earlier colliding capability
+version before mutation. The combined Things 1.65 contract must refuse 1.64 for
+attachment PATCH/retained DELETE and v5 upload-policy clients; both generated
+manifests and native host requirements must agree. Preserve newer independent
+feature minors and align exact route tests with their current documented version.
+
 ## Native deletion accounting and iOS profile bootstrap — 12 November 2026
 
 - Run `nativeUserStorage.test.ts`: deletion-only refunds may fund retained history
@@ -19515,3 +19521,41 @@ never print the file-download JSON, encryption metadata or signed URL.
   projection, dependency capture and service dispatch are integrated. Adapter
   tests do not substitute for real API registration/CRUD/history, full native UI,
   iOS Keychain/device or production acceptance.
+
+### iOS ordinary folder backup upload limits
+
+- Negotiate independent native upload-policy support and selected-origin v5
+  Things/update/transfer-admission contracts before saving or dispatching. An
+  older host must retain the draft and refuse before any upload mutation.
+- On device, folder and saved Backup config cards, independently edit upload
+  speed, units and hourly allowance. Save/reload and select nested text, numeric
+  input and unit blocks separately in Builder at desktop and phone widths.
+- Begin with nonempty saved limits, edit speed then hourly allowance (including
+  clearing it), repeat unchanged unit events and Save twice. Native readback
+  must match every displayed draft value. A v5 iOS Backup retains its direction
+  and policy when all limits are blank; unsupported direction changes stay disabled.
+- Compare actual native bytes/timing for concurrent configs against strictest
+  device/folder/config caps. Include Photos plus folder workers, retries, partial
+  failure, cancellation and relaunch. Editing limits must preserve consumed and
+  uncertain usage. Historical unattributed part bytes count conservatively.
+- Exhaust a rolling-hour allowance, verify its exact persisted deadline and
+  automatic resume; an allowance below one provider part remains an actionable
+  wait and retains the pending original. Explicit Pause must prevent resume.
+- Stop the host after one accepted multipart part, retain its upload/operation
+  IDs, and resume the same file across allowances that each fit only one part.
+  Provider-confirmed parts must not be PUT again; compare each part hash and the
+  final full file hash. Test malformed/unavailable proof, expiry/revocation after
+  provider awaits, owner/session change while a verified-part reply is delayed,
+  and legacy signing without lookup opt-in. Verified skips add zero new payload
+  bytes and never refund prior consumption or uncertain usage.
+- Change only upload policy on an existing interrupted Backup job, reload, and
+  verify old plan receipts and completed cloud copies survive without duplicate
+  publication. Direction, destination, network and security edits stay guarded.
+- With multiple configs on the same device, a runnable config must not cause
+  policy edits to restart completed, paused or attention admissions. Only
+  runnable/scheduled admissions participate in automatic policy recovery.
+- Run `uploadPolicy.test.ts`, `photoSettingsRecovery.test.ts`,
+  `mobileFolders.client.test.ts`, `syncJobJournal.test.ts`, the native
+  `NativePhotoTransferPolicyTests`/`NativeFolderUploadPolicyTests`, and
+  `node remix/scripts/test-folder-upload-limits-ui.mjs`. Real native byte and
+  installed-device acceptance are separate from mocks and test-bundle builds.

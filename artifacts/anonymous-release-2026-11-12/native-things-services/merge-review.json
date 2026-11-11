@@ -1,0 +1,31 @@
+{
+  "reportedAt": "2026-11-11T23:06:56.949737+00:00",
+  "reporting": "Parent-relayed reports from bounded internal agents; no invented child workspace IDs",
+  "review": {
+    "agent": "native_persistence_review",
+    "finding": "Both parents used api.things 1.64.0 for different additive contracts; combined clients need a distinct version",
+    "otherReviewedBoundaries": "Native root-data and iOS offline bootstrap preserved"
+  },
+  "resolution": {
+    "agent": "canonical_native_things",
+    "apiThingsVersion": "1.65.0",
+    "affectedClients": "attachment PATCH/retained DELETE, upload policy including iOS host, Archive read",
+    "command": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "app/docs/apiCapabilities.test.ts",
+      "app/local-workspace/accountTransport.test.ts",
+      "app/local-workspace/accountApi.test.ts",
+      "app/fileSync/uploadPolicy.test.ts"
+    ],
+    "cwd": "remix",
+    "passed": 152,
+    "failed": 0,
+    "skipped": 0,
+    "evidence": "Worker tool session 57059, final chunk 321786; no filesystem log retained",
+    "testTimestamp": null
+  },
+  "parentCorrection": "api.files route assertions now match existing documented 1.13.1, after first combined run exposed stale 1.13.0 assertions"
+}

@@ -66,7 +66,12 @@ async function fixture(directory) {
   const manifest = await (await fetch(origin + '/.well-known/thingtime-capabilities.json')).json();
   assert.equal(manifest.origin, origin, 'Capabilities must belong to the isolated local origin.');
   const thingsVersion = manifest.features?.['api.things']?.version?.split('.').map(Number);
-  assert.ok(thingsVersion?.[0] === 1 && thingsVersion[1] >= 64, 'Private content requires the canonical Things contract.');
+  assert.ok(thingsVersion?.[0] === 1 && thingsVersion[1] >= 65, 'Private content requires the combined canonical Things contract.');
+  const flatResponse = await fetch(origin + '/api/v1/capabilities');
+  assert.equal(flatResponse.status, 200, 'The flat capability manifest must be served by the built API.');
+  const flatManifest = await flatResponse.json();
+  assert.equal(flatManifest.features?.['api.things'], manifest.features['api.things'].version, 'Both built manifests must publish the same Things contract.');
+  if (Object.hasOwn(flatManifest, 'origin')) assert.equal(flatManifest.origin, origin);
   const registration = await fetch(origin + '/api/v1/auth/register', { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'bundled-mongo-synthetic', password: crypto.randomBytes(24).toString('base64url'), email: 'fixture@example.invalid' }) });
   assert.equal(registration.status, 200, 'Normal registration did not succeed.');
   const registered = await registration.json(); assert.equal(registered.ok, true); assert.ok(registered.user?.id);

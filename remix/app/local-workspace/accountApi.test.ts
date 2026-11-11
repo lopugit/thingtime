@@ -638,7 +638,7 @@ test('restored folder membership reaches a recreated cache-first facade after an
  const wait = new Promise<void>(resolve => { release = resolve; });
  Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async (input: string, init?: RequestInit) => {
   const url = new URL(input, scope.origin);
-  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.64.0' }, 'api.things-update': { version: '1.27.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.65.0' }, 'api.things-update': { version: '1.27.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Actor'), scope.ownerId);
   assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Data-Plane'), 'home');
   assert.equal(url.searchParams.get('folder'), row.folderId); assert.equal(url.searchParams.get('libraryArchive'), 'active');

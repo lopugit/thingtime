@@ -2,6 +2,30 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Main integration and contract collision — 12 November 2026
+
+Integrated newly fetched main `762afab2fd157f8490c53fb497cbb31fcf2071b3`, retaining
+its iOS upload-policy/multipart recovery changes and this branch's native account,
+root-data and attachment mutation contracts. Both parents had used Things 1.64
+for different additions; the combined contract is now 1.65 and affected clients
+reject either incomplete 1.64 variant before mutation. A stale api.files route
+expectation is corrected to the already documented 1.13.1 contract.
+
+All 13 combined commands pass against 5,493 unchanged source files: 2,138 test
+passes, three skipped Things checks, no failures; TypeScript/ratchet/full lint
+(0 errors/375 warnings), build/inventory and actual Mongo/SQLite HTTP restart
+fixtures. Nitro SHA-256:
+`a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801`.
+The final test-only manifest correction passes separately against these unchanged
+bytes and checks both actual built formats for the combined Things contract.
+Unsigned isolated iOS arm64 compilation passes with the same payload; 1,846
+canonical files match prepared/built copies, apart from two pinned native addon
+substitutions. No iOS launch, installation, Keychain or UI acceptance is claimed.
+The earlier stopped integration run is preserved. Full native Things HTTP, native
+UI/iOS launch, production trust and current-host render/export artifacts remain
+separate unfinished acceptance work; the chat catalogue has no dedicated anonymous
+render/export tool. [Current integration evidence](../artifacts/anonymous-release-2026-11-12/native-things-services/README.md).
+
 ## Canonical native Things services — 12 November 2026
 
 The canonical Data/Folder services now use the protected native request scope

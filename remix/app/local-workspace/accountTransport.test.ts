@@ -58,7 +58,7 @@ test('transport pins account and database on reads and writes and retires mismat
   result = Response.json({ ok: true });
   const deletion = { id: 'thing', operationId: 'delete', version: 1, method: 'delete' as const, body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } };
   await assert.rejects(transport.remove!(deletion, new AbortController().signal), /incompatible/);
-  thingVersion = '1.64.0';
+  thingVersion = '1.65.0';
   await transport.remove!(deletion, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
   assert.equal(JSON.parse(calls.at(-1).init.body).retainAttachmentReceipts,true);
@@ -272,11 +272,11 @@ test('parent deletion refuses an origin without durable cascade receipts and per
   // The checker first rejects any cached manifest from another origin.
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
-  for (const older of ['1.42.0', '1.56.0', '1.57.0', '1.62.0', '2.0.0']) {
+  for (const older of ['1.42.0', '1.56.0', '1.57.0', '1.62.0', '1.64.0', '1.64.99', '2.0.0']) {
    version=older; await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
    assert.deepEqual(mutations,[]);
   }
-  version='1.64.0';await transport.remove!(op,new AbortController().signal);
+  version='1.65.0';await transport.remove!(op,new AbortController().signal);
   assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
  }finally{Object.assign(globalThis,saved);}
 });
@@ -322,10 +322,10 @@ test('atomic attachment edits require generic PATCH support before transport', a
   const op={id:'post',operationId:'binding',version:1,method:'update' as const,body:{id:'post',attachmentIds:['file'],expectedUpdatedAt:'2026-10-17T00:00:00.000Z'}};
   // First refusal also discards a cached manifest belonging to another origin.
   await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);
-  for(const older of ['1.42.0','1.56.0','1.57.0','1.62.0','2.0.0']){
+  for(const older of ['1.42.0','1.56.0','1.57.0','1.62.0','1.64.0','1.64.99','2.0.0']){
    version=older;await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
   }
-  version='1.64.0';await transport.write(op,new AbortController().signal);
+  version='1.65.0';await transport.write(op,new AbortController().signal);
   const writes=mutations.filter(init=>init.method==='PATCH');
   assert.equal(writes.length,1);assert.equal(mutations.length,2);
   assert.deepEqual(JSON.parse(writes[0].body),op.body);

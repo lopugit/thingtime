@@ -1,5 +1,7 @@
 import { capabilitySatisfies } from '~/api/utils/capabilities/capabilityContract';
 import type { FolderCapabilities } from './mobileFolders.client';
+export const supportsNativeUploadPolicy = (capabilities?: { platform?: string; fileUploadPolicyVersion?: string; filePhotoAutomationVersion?: string; fileResourceLimitsVersion?: string }) =>
+ capabilities?.platform === 'ios' && capabilitySatisfies(capabilities.fileUploadPolicyVersion ?? '', '1.1.0');
 export type PhotoTransferPolicy = { uploadBytesPerSecond?: number; uploadBytesPerHour?: number };
 export const supportsNativePhotoTransferPolicy = (capabilities?: FolderCapabilities) =>
  capabilities?.platform === 'ios' && capabilitySatisfies(capabilities.filePhotoAutomationVersion ?? '', '1.6.0');

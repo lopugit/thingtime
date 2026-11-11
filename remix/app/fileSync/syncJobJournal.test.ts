@@ -451,3 +451,40 @@ test('strict scan interruption gets one durable verified retry before attention'
  assert.equal(syncJobDue(attention, 999_999, true), false);
  journal.close();
 });
+
+test('verified folder/device policy edits wake only matching hourly jobs, preserving Pause, receipts and relaunch state', async () => {
+ const { wakeUploadPolicyJobs } = await import('./syncJobJournal');
+ const factory = new IDBFactory(); let journal = await open(factory);
+ const now = Date.now(), deadline = now + 3_600_000;
+ const rows = [];
+ for (const [id, grant, device, owner, origin, reason, state] of [
+  ['one', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['two', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['scheduled', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'scheduled'],
+  ['other-folder', 'other-grant', 'device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-device', 'grant', 'other-device', 'owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-owner', 'grant', 'device', 'other-owner', scope.origin, 'data-budget', 'runnable'],
+  ['other-origin', 'grant', 'device', 'owner', 'https://other.example', 'data-budget', 'runnable'],
+  ['charging', 'grant', 'device', 'owner', scope.origin, 'charging', 'runnable'],
+  ['paused', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'paused'],
+  ['review', 'grant', 'device', 'owner', scope.origin, 'data-budget', 'attention']
+ ] as const) {
+  const binding = { ...scope, rootId: id, deviceId: device, ownerId: owner, origin };
+  const jobs = jobsFor(journal, binding), configuration = { ...saved(binding), configuration: { ...saved(binding).configuration, localRootId: grant } };
+  let job = await jobs.admit(configuration, 'job-' + id, state === 'scheduled' ? 60_000 : undefined);
+  if (state === 'scheduled') job = (await jobs.finish(job, now))!;
+  job = (await jobs.defer(job, now, 30_000, { reason, retryAt: deadline }))!;
+  if (state !== 'runnable' && state !== 'scheduled') job = (await jobs.transition(job, state))!;
+  rows.push({ binding, job });
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { ...scope, rootId: 'grant' }, () => {}), 3);
+ journal.close(); journal = await open(factory);
+ for (const { binding, job } of rows) {
+  const current = (await jobsFor(journal, binding).read())!;
+  assert.equal(current.id, job.id); assert.deepEqual(current.reviewed, job.reviewed);
+  if (['one', 'two', 'scheduled'].includes(binding.rootId)) { assert.equal(current.retryAt, undefined); assert.equal(syncJobDue(current, Date.now()), true); assert.equal(current.intervalMs, job.intervalMs); }
+  else assert.deepEqual(current, job, 'unrelated/pause/authority state stays exact: ' + binding.rootId);
+ }
+ assert.equal(await wakeUploadPolicyJobs(journal, { origin: scope.origin, ownerId: scope.ownerId, deviceId: scope.deviceId }, () => {}), 1);
+ journal.close();
+});

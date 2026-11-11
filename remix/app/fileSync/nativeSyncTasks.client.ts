@@ -2,6 +2,7 @@ import { nativePathObserver } from './nativePathObservation';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { createSyncActivityObservation } from './syncActivityJournal';
+import { supportsNativeUploadPolicy } from './photoTransferPolicy';
 import { deviceResourceKey, nativeDeviceSyncGovernor, readDeviceSyncResourcePolicy } from './deviceResourcePolicy';
 import { activityManager } from '~/activity/activityManager';
 import { fileSyncDownloadRequirements } from './signedDownloadTarget';
@@ -9,8 +10,8 @@ import { createSyncProgressCache } from './syncProgressCache';
 import { type SyncResourceStatus } from './resourceGovernor';
 import { readCloudIndexChanges } from './cloudIndexChanges.client';
 import { readNativeIndexChanges } from './streamingIndex';
-import { FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
-import { samePhotoBackupSource } from './photoSettingsPolicy';
+import { FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS, FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS, PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
+import { samePhotoBackupSource, sameFolderUploadPolicySource } from './photoSettingsPolicy';
 import { SyncConditionsWait } from './foregroundSyncContext';
 import { cloudSyncHttpError, SYNC_RETRY_MAX_MS, SyncConnectionWait, isSyncConnectionFailure } from './syncConnectionWait';
 import { pauseSyncJobAdmission, retireStrictCapture, SYNC_INTERVALS, SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
@@ -55,7 +56,7 @@ let folderEnrollment: { key: string; controller: AbortController } | undefined;
 const queuedFolderEnrollments = new Map<string, AbortController>();
 
 
-async function readNativeConfiguration(host: Awaited<ReturnType<typeof createNativeSyncHost>>, scope: SyncScope, signal: AbortSignal) {
+export async function readNativeConfiguration(host: Awaited<ReturnType<typeof createNativeSyncHost>>, scope: SyncScope, signal: AbortSignal) {
  const url = new URL('/api/v1/things', scope.origin);
  url.searchParams.set('id', scope.rootId);
  const response = await host.fetch(url, { credentials: 'include', cache: 'no-store', redirect: 'error', signal,
@@ -105,6 +106,7 @@ function folderEnrollmentContext(saved: SavedFileSyncConfiguration, scope: SyncS
  if (!SYNC_INTERVALS.some(interval => interval === intervalMs)) throw Error('Choose a supported sync interval.');
  const adapter = getNativeSyncAdapter();
  if (!adapter) throw Error('Update Thingtime before using automatic folder sync.');
+ if (config.uploadPolicy && !supportsNativeUploadPolicy(adapter.bridge)) throw Error('Update Thingtime before using folder upload limits.');
  const check = () => {
   signal.throwIfAborted();
   const identity = rootIdentity.read();
@@ -184,6 +186,7 @@ async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, 
  };
  await host.requireCapability('api.things', config.resourceLimits ? '1.39.0' : config.ignoreRules ? '1.38.0' : '1.36.0');
  if (config.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
+ if (config.uploadPolicy) for (const [feature, minimum] of Object.entries(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS)) await host.requireCapability(feature, minimum);
  const downloadRequirements = fileSyncDownloadRequirements(config);
  for (const [feature, minimum] of Object.entries(downloadRequirements)) await host.requireCapability(feature, minimum);
  if (Object.keys(downloadRequirements).length && !supportsNativeCloudStaging(host.capabilities))
@@ -371,6 +374,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (adapter.platform === 'macos') releaseWindow = await holdDesktopSyncWindow(adapter.bridge); check();
 			if (photoAutomation && (reviewed.configuration.ignoreRules || reviewed.configuration.resourceLimits))
 				throw Error('This Photos connection has folder-only resource or Gitignore settings. Review its settings before continuing.');
+			if (reviewed.configuration.uploadPolicy && !supportsNativeUploadPolicy(adapter.bridge)) throw Error('Update Thingtime before using folder upload limits.');
 			const resourceKey = deviceResourceKey(binding.origin, binding.ownerId, binding.deviceId);
 			const resources = nativeDeviceSyncGovernor(resourceKey, adapter.platform === 'macos' || supportsNativeResourceLimits(adapter.bridge), reviewed.configuration.resourceLimits);
 			let nativeResources: SyncResourceStatus | undefined;
@@ -378,6 +382,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 			if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
 			await host.requireCapability('api.things', reviewed.configuration.resourceLimits ? '1.39.0' : reviewed.configuration.ignoreRules ? '1.38.0' : '1.36.0');
 			if (reviewed.configuration.resourceLimits) await host.requireCapability('api.file-sync-batches', '1.2.0');
+			if (reviewed.configuration.uploadPolicy) for (const [feature, minimum] of Object.entries(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS)) await host.requireCapability(feature, minimum);
 			if (photoAutomation) for (const [feature, minimum] of Object.entries(FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS)) await host.requireCapability(feature, minimum);
 			const downloadRequirements = fileSyncDownloadRequirements(reviewed.configuration);
 			for (const [feature, minimum] of Object.entries(downloadRequirements)) await host.requireCapability(feature, minimum);
@@ -521,6 +526,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const localTarget = ['download', 'two-way'].includes(reviewed.configuration.mode)
 					? await approveMobileSyncTarget(reviewed, binding, signal, request, capabilities, resume ? 'existing' : 'request') : undefined;
 				let resumeJob = resume;
+				if (resumeJob && sameFolderUploadPolicySource(resumeJob.reviewed.configuration, reviewed.configuration) && JSON.stringify(resumeJob.reviewed) !== JSON.stringify(reviewed)) resumeJob = undefined;
 				if (automaticPhoto && (prior?.state === 'attention' || prior?.state === 'complete' ||
 					JSON.stringify(prior?.reviewed) !== JSON.stringify(reviewed))) resumeJob = undefined;
 				if (automaticPhoto && resumeJob && !syncJobDue(resumeJob, Date.now(), automaticPhoto.wakeConditions)) return;
@@ -550,7 +556,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						captureId: prior.nativeCaptureId, capturePolicy: 'backup-supported', excludedPaths: configuration.excludedPaths,
 						...(configuration.ignoreRules ? { ignoreRules: configuration.ignoreRules } : {}) }, signal); check();
 				};
-				const photoSettings = !resumeJob && photoSource && adapter.platform === 'ios' ? await preparePhotoSettingsRecovery(
+				const photoSettings = !resumeJob && (photoSource || sameFolderUploadPolicySource(prior?.reviewed.configuration ?? reviewed.configuration, reviewed.configuration)) && adapter.platform === 'ios' ? await preparePhotoSettingsRecovery(
 					journal!, { scope: binding, currentScope, signal }, prior, reviewed, {
 						check,
 						verify: verifyCurrentPhoto,

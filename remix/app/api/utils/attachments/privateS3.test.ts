@@ -7,6 +7,7 @@ import {
 	DeleteObjectCommand,
 	GetObjectCommand,
 	HeadObjectCommand,
+	ListPartsCommand,
 	PutObjectTaggingCommand,
 	S3Client,
 	UploadPartCommand,
@@ -278,4 +279,14 @@ test('real offline S3 presigner cryptographically includes Range and exact objec
   assert.ok(query.get('X-Amz-SignedHeaders')?.split(';').includes('range'));
   assert.equal(query.get('X-Amz-Expires'), '60'); assert.equal(query.get('versionId'), 'exact-fixture-version');
  } finally { client.destroy(); }
+});
+
+test('exact multipart reconciliation reads only one provider part instead of relisting earlier pages', async()=>{
+ const calls:any[]=[];const checksum=Buffer.alloc(32,7).toString('base64');
+ const client={send:async(command:any)=>{assert.ok(command instanceof ListPartsCommand);calls.push(command.input);return{Parts:[{PartNumber:3,ETag:'three',Size:8,ChecksumSHA256:checksum}],IsTruncated:true,NextPartNumberMarker:'3'}}};
+ const s3=createPrivateS3({roleArn:'arn:aws:iam::123456789012:role/thingtime',bucket:'example-private-bucket',region:'ap-southeast-2',expectedBucketOwner:'123456789012'},client as any,async()=> 'https://s3.example/signed');
+ assert.deepEqual(await s3.listParts({objectKey:'objects/test',uploadId:'upload',partNumber:3}),[{partNumber:3,etag:'three',sizeBytes:8,checksumSha256:checksum}]);
+ assert.equal(calls.length,1);assert.equal(calls[0].MaxParts,1);assert.equal(calls[0].PartNumberMarker,'2');
+ assert.deepEqual(await s3.listParts({objectKey:'objects/test',uploadId:'upload',partNumber:2}),[]);
+ assert.equal(calls.length,2,'a missing exact part does not traverse later pages');
 });

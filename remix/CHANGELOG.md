@@ -12,6 +12,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-12: Harden authorized-part refusal, scoped policy-edit wake and draft-safe
+  legacy recovery; hide redundant unsupported iOS resource controls.
+- 2026-11-12: Preserve all unsaved upload-policy fields across independent input
+  and unit events, keep v5 iOS Backup directions valid, and prevent policy edits
+  from reopening completed or attention jobs on a shared device. **Codex (AI)**
+- 2026-11-12: Resume accepted multipart parts from exact provider metadata across
+  hourly waits and host restarts, retaining operation identity and consumed
+  usage. New native/browser clients opt in; legacy signing remains independent
+  of lookup availability. See [the contract](../docs/ios-folder-upload-policy.md).
+  **Codex (AI)**
+- 2026-11-12: Add negotiated iOS folder Backup upload speed and hourly policy
+  controls with shared persisted device/folder budgets, exact scoped native
+  enforcement, legacy-part accounting and policy-only interrupted-job recovery.
+  See [the contract and remaining native acceptance](../docs/ios-folder-upload-policy.md).
+
 - 2026-11-07: Wake indexed native sync feeds when their durable consumer drains,
   keeping live 25-second change reads during uploads instead of repeated
   two-second polling. Retain fresh admission, cancellation and native revision
@@ -144,6 +159,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-12: Integrate main `762afab2` into the offline-workspace branch,
+  retaining iOS folder-upload policy and multipart recovery alongside native
+  database contracts. Give their combined Things contract a distinct 1.65
+  version and align the file-route regression with the existing 1.13.1 contract.
+  Combined runtime verification is recorded in
+  [PR #1000's note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
 
 - 2026-11-12: Connect canonical Data/Folder services to scoped native persistence,
   including real audience/receipt reads, optimistic writes and child-preserving

@@ -815,3 +815,22 @@ test('ordinary sync preserves file purpose and exact native upload provenance', 
  assert.equal(upload.fileSyncOrigin.deviceId, scope.deviceId); assert.equal(upload.fileSyncOrigin.localRootId, scope.rootId);
  assert.equal(upload.fileSyncOrigin.folderId, write.folderId); assert.equal(upload.fileSyncOrigin.path, write.operation.mutation.path);
 });
+
+test('provider-confirmed retained parts skip PUT while keeping source and final fingerprint checks', async () => {
+ const f = await fixture(), write = f.make().cloudWrites[0], samples: (number|null)[] = [];
+ f.hook((path, body) => path.endsWith('/parts') ? Response.json({ok:true,parts:[{partNumber:1,url:'https://storage.test/part',headers:{'x-amz-checksum-sha256':body.parts[0].checksumSha256},alreadyUploaded:true}]}) : null);
+ await createCloudFileTransport(f.runtime,write).apply(source(),undefined,n=>samples.push(n));
+ assert.equal(f.counts().puts,0);assert.deepEqual(samples,[0]);
+ for(const value of ['true',1,null]) {
+  const bad=await fixture();const pending=bad.make().cloudWrites[0];
+  bad.hook((path,body)=>path.endsWith('/parts')?Response.json({ok:true,parts:[{partNumber:1,url:'https://storage.test/part',headers:{'x-amz-checksum-sha256':body.parts[0].checksumSha256},alreadyUploaded:value}]}):null);
+  await assert.rejects(createCloudFileTransport(bad.runtime,pending).apply(source()),/acceptance proof/);assert.equal(bad.counts().puts,0);
+ }
+});
+
+test('verified new native retained receipts report zero while legacy zero remains unknown', async()=>{
+ const f=await fixture(),write=f.make().cloudWrites[0],samples:(number|null)[]=[];
+ const digest=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+ const native:FingerprintSource={...source(),nativePartPayloadBytes:true,uploadPart:async()=>({sha256:digest,payloadBytes:0,alreadyUploaded:true})};
+ await createCloudFileTransport(f.runtime,write).apply(native,undefined,n=>samples.push(n));assert.deepEqual(samples,[0,0]);
+});

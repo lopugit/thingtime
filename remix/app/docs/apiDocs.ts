@@ -6112,13 +6112,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
 		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
-		detail: 'Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
+		detail: 'Version 1.3 accepts optional reconcileAcceptedParts:true to reconcile exact provider-confirmed multipart acceptance and return alreadyUploaded:true for the requested part number, byte length and checksum. Opted-in clients validate the echoed checksum before skipping a PUT; retained parts incur zero new network bytes. Provider lookup failures and changed/expired reservations fail closed for reconciliation. Legacy requests retain ordinary signing without a new provider lookup dependency. All signed grants retain full Content-Length even when acceptance is confirmed. Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
@@ -6134,10 +6134,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		requestExamples: [
 			{
 				name: 'Sign two parts',
-				description: 'Checksums are illustrative base64 SHA-256 values.',
+				description: 'Opt in to exact provider acceptance; checksums are illustrative base64 SHA-256 values.',
 				method: 'POST',
 				body: {
 					uploadId: '3bda8208-625c-4f5d-941f-348020021848',
+					reconcileAcceptedParts: true,
 					parts: [
 						{ partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
 						{ partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
@@ -6431,15 +6432,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-		id: 'file-sync-transfer-admissions', contractVersion: '1.5.1', featureVersion: '1.5.1', group: 'attachments',
+		id: 'file-sync-transfer-admissions', contractVersion: '1.7.0', featureVersion: '1.7.0', group: 'attachments',
 		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
 		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
-		detail: 'Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
+		detail: 'Version 1.7 accepts optional reconcileAcceptedParts:true on parts requests and replies with exact provider-confirmed alreadyUploaded metadata, allowing checkpoint recovery without retransmitting accepted parts or charging new network bytes. Lookup failures and changed or expired authority remain refused. Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
       'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
 		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete, publish when explicitly admitted, or revoke only its own admission.' },
 		methods: ['POST'],
 		steps: [
-			'Negotiate api.file-sync-transfer-admissions 1.0.0 on the selected account origin. In the owning browser session, reserve a positive-size attachment with purpose=file, a stable requestId and exact fileSyncOrigin from the reviewed run.',
+			'Version 1.6 supports saved v5 folder-backup upload policy in exact configuration authority checks; native upload-policy clients share device/folder rolling usage with Photos. No background-file daemon transport is implied for folders.',
+            'Negotiate api.file-sync-transfer-admissions 1.0.0 on the selected account origin. In the owning browser session, reserve a positive-size attachment with purpose=file, a stable requestId and exact fileSyncOrigin from the reviewed run.',
 			'Version 1.5 adds optional parts[].transport for native Photos runs requesting transport=background-file-v1 on action=parts: {kind:background-file-v1,origin,path,method:PUT,redirects:provider-managed,expiresAt}. It is issued only by the direct canonical regional S3 signer, with exact bucket, path, part, checksum, Content-Length and bucket-owner binding. Background-file clients negotiate 1.5.0 and compare the descriptor to the exact signed URL before scheduling. iOS background URLSession follows provider redirects and requires file-backed bodies; this deliberately trusts the canonical S3 provider, never an arbitrary or local target. Legacy/custom/local signers omit the descriptor and retain foreground transport. Background grants last at most 600 seconds, bounded by both admission and upload expiry; other delegated grants remain at most 120 seconds. A queued task may still expire before iOS starts it and must recover through the same admitted operation. Pause, revocation and changed settings still deny further signing, completion and publication; an already-issued byte grant can remain valid until its expiry.',
 			'POST action=admit with uploadId, requestId, configurationId, configurationRevision (saved updatedAt), deviceId, localRootId, grantRevision (SHA-256 of the current native grant identity), sourceVersion, sizeBytes and fingerprint:{partSizeBytes,partCount,sha256}. The fingerprint is SHA-256 of the concatenated binary part SHA-256 values. Exact retries under the same issuing session return the same admissionId and expiresAt. Changed input cannot retarget an existing admission. To allow background publication, negotiate 1.1.0 and include publication:{expectedRevision} with the reviewed file revision or null for a new path. The original operation, private destination, flat Photos resource path, byte fingerprint, source and native grant are immutable. Earlier admissions remain staging-only.',
 			'With the paired device credential POST action=parts, admissionId and parts:[{partNumber,checksumSha256}] (canonical Base64). Use returned short-lived URLs in memory. Each URL binds the reservation, part number, checksum and byte length. When the file is one part, the server verifies the approved fingerprint before signing. For multiple parts the complete request verifies the concatenated provider checksums before the provider finalizes, without requiring a second scan or full checksum list at admission.',
@@ -9832,8 +9834,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.64.0',
-    contractVersion: '1.64.0',
+    featureVersion: '1.65.0',
+    contractVersion: '1.65.0',
 
 
     group: 'things',
@@ -9843,7 +9845,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.64 combines version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.61 authored content contract. ' +
+      'Version 1.65 combines the independently published 1.64 contracts; clients requiring either addition must reject 1.64 origins. It preserves closed v5 folder-backup uploadPolicy with byte-rate and rolling-hour ceilings. Hosts must negotiate independent upload-policy support. ' +
+      'The combined contract includes version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.61 authored content contract. ' +
       'Editable blocks also preserve explicit scalar argBindings. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'The combined contract expands owner-library Archive to eligible user-facing Things, including dedicated message and community content. Protected-content Archived rows carry libraryArchivePresentation:metadata and only a static title, kind and canonical identity; ordinary content retains inherited audience checks. ' +
       'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
@@ -11975,14 +11978,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.27.0',
-    contractVersion: '1.27.0',
+    featureVersion: '1.28.0',
+    contractVersion: '1.28.0',
 
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
+    notes: ['Version 1.28.0 validates and preserves v5 folder-backup uploadPolicy without implying CPU, scan or download support.', 'Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
       'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +

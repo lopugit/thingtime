@@ -37,12 +37,15 @@ final class NativePhotoTransferPolicyStore {
         let device: NativePhotoTransferPolicy
         let folder: NativePhotoTransferPolicy
         let configuration: NativePhotoTransferPolicy
-        var rate: Int64 { rates.map(\.rate).min() ?? 625_000 }
+        var defaultRate: Int64? = 625_000
+        var rate: Int64? { rates.map(\.rate).min() }
         var rates: [NativePhotoRateConstraint] {
             var values: [NativePhotoRateConstraint] = []
             if let rate = device.uploadBytesPerSecond { values.append(.init(key: "device", rate: rate)) }
             if let rate = folder.uploadBytesPerSecond { values.append(.init(key: "folder:" + rootId, rate: rate)) }
-            values.append(.init(key: "configuration:" + configurationId, rate: configuration.uploadBytesPerSecond ?? 625_000))
+            if let rate = configuration.uploadBytesPerSecond ?? defaultRate {
+                values.append(.init(key: "configuration:" + configurationId, rate: rate))
+            }
             return values
         }
         let rootId: String
@@ -79,12 +82,24 @@ final class NativePhotoTransferPolicyStore {
         try JSONEncoder().encode(state).write(to: target, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         var folder = directory, values = URLResourceValues(); values.isExcludedFromBackup = true; try folder.setResourceValues(values)
     }
+    func legacyLimits(scope: FileSyncOwnerScope, deviceId: String, rootId: String) throws -> Limits {
+        let state = try load(file(scope: scope, deviceId: deviceId))
+        return .init(device: state.device, folder: state.folders[rootId] ?? .unlimited,
+            configuration: .unlimited, defaultRate: nil, rootId: rootId, configurationId: "legacy-part")
+    }
     func limits(scope: FileSyncOwnerScope, authorization: NativeUploadAuthorization) throws -> Limits {
-        guard let configuration = authorization.configuration.managedPhotos, configuration.valid else { throw MobileFolderStore.Failure.invalid }
+        let c = authorization.configuration
+        let configuration: NativePhotoTransferPolicy
+        if let photos = c.managedPhotos, photos.valid {
+            configuration = .init(uploadBytesPerSecond: photos.uploadBytesPerSecond, uploadBytesPerHour: photos.uploadBytesPerHour)
+        } else {
+            guard c.sourceKind != "photos", c.uploadPolicy?.valid != false else { throw MobileFolderStore.Failure.invalid }
+            configuration = c.uploadPolicy ?? .unlimited
+        }
         let state = try load(file(scope: scope, deviceId: authorization.scope.deviceId))
         return .init(device: state.device, folder: state.folders[authorization.configuration.localRootId] ?? .unlimited,
-                     configuration: .init(uploadBytesPerSecond: configuration.uploadBytesPerSecond, uploadBytesPerHour: configuration.uploadBytesPerHour),
-                     rootId: authorization.configuration.localRootId, configurationId: authorization.id)
+                     configuration: configuration,
+                     defaultRate: c.sourceKind == "photos" ? 625_000 : nil, rootId: c.localRootId, configurationId: authorization.id)
     }
 }
 

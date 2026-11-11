@@ -342,6 +342,26 @@ final class NativeDeferredUpload {
         }
     }
 
+    /// Recheck scheduling after verified preferences change; payload accounting,
+    /// saved authority and explicit Pause remain intact.
+    func uploadPolicyChanged(scope: FileSyncOwnerScope, deviceId: String, rootId: String? = nil) throws {
+        var changed = false
+        for var row in try store.load() where row.armed && !row.revoked && !row.ready && row.expiresAt > Date() &&
+            row.scope == scope && row.configuration.deviceId == deviceId && (rootId == nil || row.rootId == rootId) {
+            row.retryAt = .distantPast
+            try store.update(row); changed = true
+        }
+        for var run in try photoRuns.load() where run.armed && run.userPaused != true && run.syncWait == "data-budget" &&
+            run.scope == scope && run.authorization.scope.deviceId == deviceId && (rootId == nil || run.rootId == rootId) {
+            run.retryAt = .distantPast
+            try photoRuns.update(run); changed = true
+        }
+        guard changed else { return }
+        if scheduled { scheduler.cancel(); scheduled = false }
+        _ = schedule()
+        startNativeForegroundIfNeeded()
+    }
+
     func verifiedForegroundScope(_ scope: FileSyncOwnerScope) {
         guard let rows = try? store.load() else { return }
         if let other = rows.first(where: { $0.armed && $0.scope != scope })?.scope { disarm(matching: other) }

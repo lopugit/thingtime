@@ -27,6 +27,18 @@ export const canonicalResourceLimitFields = (value: FileSyncResourceLimits) => F
  const view = new DataView(new ArrayBuffer(8)); view.setFloat64(0, n);
  return view.getBigUint64(0).toString(16).padStart(16, '0');
 });
+export const FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS = { 'api.things': '1.65.0', 'api.things-update': '1.28.0', 'api.file-sync-transfer-admissions': '1.7.0', 'api.attachment-upload-parts': '1.3.0' } as const;
+export type UploadPolicy = { uploadBytesPerSecond?: number; uploadBytesPerHour?: number };
+export function parseUploadPolicy(value: unknown): UploadPolicy | undefined {
+ if (value === undefined) return undefined;
+ if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['uploadBytesPerSecond', 'uploadBytesPerHour'].includes(key))) throw Error('Invalid upload policy.');
+ const result: UploadPolicy = {};
+ for (const key of ['uploadBytesPerSecond', 'uploadBytesPerHour'] as const) {
+  const n = (value as UploadPolicy)[key];
+  if (n !== undefined) { if (!Number.isSafeInteger(n) || n <= 0) throw Error('Upload limits must be positive whole bytes.'); result[key] = n; }
+ }
+ return result;
+}
 export const FILE_SYNC_PHOTO_AUTOMATION_REQUIREMENTS = { 'api.things': '1.53.0', 'api.things-update': '1.21.0' } as const;
 export const PHOTO_AUTOMATION_INTERVAL_MS = 300_000;
 export const DEFAULT_PHOTO_AUTOMATION = { notificationIntervalMs: 1_800_000, uploadBytesPerSecond: 625_000 } as const;
@@ -46,7 +58,8 @@ export function parsePhotoAutomation(value: unknown): PhotoAutomation | undefine
 }
 export const MAX_SYNC_EXCLUSIONS = 100;
 export type FileSyncConfiguration = {
- configurationVersion: 1 | 2 | 3 | 4;
+ configurationVersion: 1 | 2 | 3 | 4 | 5;
+ uploadPolicy?: UploadPolicy;
  photoAutomation?: PhotoAutomation;
  resourceLimits?: FileSyncResourceLimits;
  name: string;
@@ -69,7 +82,9 @@ const id = (value: unknown): value is string => typeof value === 'string' && /^[
  * origin and data plane, and obtain device-local approval of the exact policy. */
 export function parseFileSyncConfiguration(value: unknown): FileSyncConfiguration {
  const c = value as FileSyncConfiguration;
- if (!c || (c.configurationVersion !== 1 && c.configurationVersion !== 2 && c.configurationVersion !== 3 && c.configurationVersion !== 4)) throw Error('Unsupported file sync configuration version.');
+ if (!c || (c.configurationVersion !== 1 && c.configurationVersion !== 2 && c.configurationVersion !== 3 && c.configurationVersion !== 4 && c.configurationVersion !== 5)) throw Error('Unsupported file sync configuration version.');
+ const uploadPolicy = parseUploadPolicy(c.uploadPolicy);
+ if ((c.configurationVersion === 5) !== !!uploadPolicy || (uploadPolicy && (c.sourceKind === 'photos' || c.mode !== 'backup' || c.propagateDeletes || c.resourceLimits || c.ignoreRules))) throw Error('Version 5 upload policy requires folder backup with retained destination files and no unsupported resource or ignore settings.');
  const resourceLimits = parseFileSyncResourceLimits(c.resourceLimits);
  const photoAutomation = parsePhotoAutomation(c.photoAutomation);
  if ((c.configurationVersion === 4) !== !!photoAutomation || (photoAutomation && c.sourceKind !== 'photos'))
@@ -90,8 +105,8 @@ export function parseFileSyncConfiguration(value: unknown): FileSyncConfiguratio
  if (c.excludedPaths.reduce((n, path) => n + new TextEncoder().encode(path).length, 0) > 16_384) throw Error('Sync exclusions exceed 16 KiB.');
  const keys = c.excludedPaths.map(syncPathKey);
  if (new Set(keys).size !== keys.length) throw Error('Sync exclusions contain duplicate or ambiguous paths.');
- return { configurationVersion: photoAutomation ? 4 : resourceLimits ? 3 : ignoreRules ? 2 : 1, name: c.name.trim(), deviceId: c.deviceId, localRootId: c.localRootId, remoteFolderId: c.remoteFolderId,
-  ...(c.sourceKind !== undefined ? { sourceKind: c.sourceKind } : {}), mode: c.mode, paused: c.paused, propagateDeletes: c.propagateDeletes, network: c.network, chargingOnly: c.chargingOnly, excludedPaths: [...c.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(resourceLimits ? { resourceLimits } : {}), ...(photoAutomation ? { photoAutomation } : {}) };
+ return { configurationVersion: uploadPolicy ? 5 : photoAutomation ? 4 : resourceLimits ? 3 : ignoreRules ? 2 : 1, name: c.name.trim(), deviceId: c.deviceId, localRootId: c.localRootId, remoteFolderId: c.remoteFolderId,
+  ...(c.sourceKind !== undefined ? { sourceKind: c.sourceKind } : {}), mode: c.mode, paused: c.paused, propagateDeletes: c.propagateDeletes, network: c.network, chargingOnly: c.chargingOnly, excludedPaths: [...c.excludedPaths], ...(ignoreRules ? { ignoreRules } : {}), ...(resourceLimits ? { resourceLimits } : {}), ...(photoAutomation ? { photoAutomation } : {}), ...(uploadPolicy ? { uploadPolicy } : {}) };
 }
 
 export function newFileSyncConfiguration(input: Pick<FileSyncConfiguration, 'name' | 'deviceId' | 'localRootId' | 'remoteFolderId'> & Pick<Partial<FileSyncConfiguration>, 'sourceKind'>): FileSyncConfiguration {
@@ -100,11 +115,11 @@ export function newFileSyncConfiguration(input: Pick<FileSyncConfiguration, 'nam
 }
 
 export const fileSyncSchema: ThingtimeSchema = {
- id: FILE_SYNC_KIND, version: 5, kind: 'crystal', collection: null, title: 'File sync',
+ id: FILE_SYNC_KIND, version: 6, kind: 'crystal', collection: null, title: 'File sync',
  summary: 'An editable connection between a selected device folder and a cloud folder.',
  detail: 'One ordinary Thing per connection, private by default. Native paths, bookmarks, tree URIs and credentials stay on the device. Workers require current ownership, private audience, matching device-local approval and fresh folder authorization. Enabled iOS Photos connections can run automatically after these checks. Direction, exclusions and network/power choices apply before planning; confirmed transfer history stays in Timeline. Defaults are paused, Wi-Fi and no deletion propagation; folders default to two-way and photo libraries to backup.',
  fields: [
-  { name: 'configurationVersion', type: 'number', required: true, min: 1, max: 4, description: 'Configuration format version. Version 2 describes ignore rules, version 3 adds resource limits, and version 4 adds Photos automation. Older clients must refuse unsupported policy versions.' },
+  { name: 'configurationVersion', type: 'number', required: true, min: 1, max: 5, description: 'Version 5 adds folder backup upload policy. Configuration format version. Version 2 describes ignore rules, version 3 adds resource limits, and version 4 adds Photos automation. Older clients must refuse unsupported policy versions.' },
   { name: 'name', type: 'string', required: true, max: 120, description: 'Display name.' },
   { name: 'deviceId', type: 'id', required: true, max: 200, description: 'Paired device identity; never a credential.' },
   { name: 'localRootId', type: 'id', required: true, max: 200, description: 'Opaque device-local selected-folder grant identity; never a path or URI.' },
@@ -122,6 +137,10 @@ export const fileSyncSchema: ThingtimeSchema = {
    { name: 'transferConcurrency', type: 'number', required: false, min: 1, description: 'Positive safe integer maximum simultaneous file/folder transfers.' },
    { name: 'indexingConcurrency', type: 'number', required: false, min: 1, description: 'Positive safe integer maximum simultaneous indexing workers.' },
    { name: 'cpuPercent', type: 'number', required: false, min: 1, max: 100, description: 'Whole percent of total available CPU capacity attributed to this sync.' }
+  ] },
+  { name: 'uploadPolicy', type: 'object', required: false, description: 'Version 5 folder backup upload limits. Native upload-policy support is required; no download, CPU or scan enforcement is implied.', children: [
+   { name: 'uploadBytesPerSecond', type: 'number', required: false, min: 1, description: 'Aggregate upload bytes per second for this configuration; omitted inherits device/folder limits.' },
+   { name: 'uploadBytesPerHour', type: 'number', required: false, min: 1, description: 'Rolling hourly payload allowance, including failed and uncertain transmissions.' }
   ] },
   { name: 'photoAutomation', type: 'object', required: false, description: 'iOS Photos backup controls for configurationVersion 4.', children: [
    { name: 'notificationIntervalMs', type: 'number', required: true, min: 0, description: 'Desired interval in whole minutes expressed in milliseconds. Zero disables progress notifications. Background timing is controlled by iOS.' },

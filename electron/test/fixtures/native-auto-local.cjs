@@ -8,7 +8,7 @@ const path = require('node:path');
 const { supportsVersion } = require('../../lib/endpoint-compatibility.cjs');
 
 const REQUIRED = Object.freeze({ 'api.auth-register': '^1.3.2', 'api.login': '^1.3.1',
- 'api.auth-me': '^1.2.0', 'api.root-data': '^1.1.0', 'api.things': '^1.64.0' });
+ 'api.auth-me': '^1.2.0', 'api.root-data': '^1.1.0', 'api.things': '^1.65.0' });
 function loopbackOrigin(value) {
  const url = new URL(value);
  assert.equal(url.origin, value, 'Require an exact task origin');

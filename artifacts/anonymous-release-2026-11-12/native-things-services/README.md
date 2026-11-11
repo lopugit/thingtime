@@ -28,7 +28,45 @@ These are service/primitive fixtures, not a claim of native HTTP activation.
 - Request/provider/identity/lifetime, membership pagination, completion-receipt
   binding and no-hosted-fallback checks are retained.
 
-## Verification and remaining work
+## Latest main integration
+
+Main `762afab2fd157f8490c53fb497cbb31fcf2071b3` is integrated with the service
+checkpoint. The combined contract is `api.things` 1.65.0: both parents used 1.64
+for different additions, so affected attachment-mutation and upload-policy clients
+must reject either incomplete older contract. New requirement regressions cover
+that refusal before mutation. Incoming multipart recovery and iOS upload limits
+are retained alongside the native account/root-data contracts.
+
+All 13 [combined verification commands](main-integration/verification.json) pass
+against 5,493 unchanged inventoried source files (including iOS source). The six
+test commands record 2,138 passes, zero failures and the same three skipped Things
+checks. TypeScript, zero-error ratchet, full lint (0 errors/375 warnings), canonical
+build/inventory and real Mongo/SQLite HTTP restart checks pass. Final Nitro:
+`a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801`.
+
+A [final test-only correction](main-integration/postbuild-test-correction.json)
+tightens the Mongo fixture to require Things 1.65+ and agreement between both
+built manifest formats. That fixture passes again against unchanged compiled
+bytes; its test-file hash change is recorded separately from the frozen run.
+
+The [isolated unsigned iOS compile](ios-main-integration/verification.json) also
+passes with this same Nitro payload. All 1,846 canonical payload files match in
+prepared and built copies, with only the two pinned native addon substitutions;
+native source stays unchanged. This proves compilation and payload integrity,
+not simulator launch, Keychain retention, account HTTP, physical-device behavior
+or source-to-binary reproducibility of the supplied runtime archive.
+
+The [first integration attempt](main-integration-attempt-1/verification.json)
+stopped at a stale file-route capability assertion (1.13.0 instead of the already
+documented 1.13.1); its earlier passing checks are retained without claiming the
+stopped build/runtime checks ran. [Merge review evidence](merge-review.json)
+records the version-collision finding and worker-reported targeted regressions.
+
+The [current chat tool inventory](host-tool-inventory.json) exposes no dedicated
+anonymous render/export artifact tool. Current-host artifact invocation remains
+unverified; this is separate from local runtime verification.
+
+## Pre-merge service verification and remaining work
 
 All 15 ordered verification commands passed against 5,257 unchanged source
 files. The eight test commands recorded 1,300 passes, zero failures and three
@@ -44,7 +82,7 @@ slice through actual macOS safeStorage and a fresh process. It explicitly report
 Built Nitro SHA-256:
 `756f299d694d02ab319145defeb1494cd159e1f3d2d61fc763bc66d7d1ed7550`.
 
-[Final command/source receipt](verification/verification.json) records the exact
+[Service command/source receipt](verification/verification.json) records the exact
 base plus source inventory, commands, exits and built payload hashes. The
 [plan receipt](plan/verification.json) covers isolated Chromium at 1440/390/320px.
 The actual bundled Mongo HTTP fixture now covers valid folder moves, cycle
