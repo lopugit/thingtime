@@ -132,7 +132,8 @@ test('shared page audience includes its author components, never a foreign priva
 		});
 		const argumentPage = await create(owner, ['webpage'], { name: 'Two saved action instances', blocks: [
 			{ id: 'moon', type: 'component', component: argumentComponent.id, args: { action: moonAction.id, label: 'Draw Moon' } },
-			{ id: 'sun', type: 'component', component: argumentComponent.id, args: { action: sunAction.id, label: 'Draw Sun' } }
+			{ id: 'sun', type: 'component', component: argumentComponent.id, args: { action: sunAction.id, label: 'Draw Sun' } },
+			{ id: 'bound', type: 'component', component: argumentComponent.id, argBindings: { action: unrelatedAction.id, label: '{item.label}' } }
 		] }, ['tt:hidden', 'tt:user']);
 		const argumentRun = (action: string, linkKey = argumentPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: argumentPage.id, key: linkKey });
 		for (const [action, expected] of [[childAction.id, 'The Star'], [moonAction.id, 'The Moon'], [sunAction.id, 'The Sun']]) {

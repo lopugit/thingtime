@@ -9,6 +9,7 @@ import { loadCollectionPages, type CollectionSource } from './collectionSource';
 import { MAP_POINTS_SOURCE_REQUIREMENTS } from '~/schemas/authoredControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { ownsAuthoredControl } from './authoredControlOwnership';
 import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExecutionHold';
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
@@ -380,6 +381,7 @@ export const useComponentArgValues = (
 export const LiveTemplate = ({
 	render,
 	scope,
+	argumentKey,
 	resolved: alreadyResolved = false,
 	interactive,
 	onUnowned,
@@ -391,6 +393,7 @@ export const LiveTemplate = ({
 	render: unknown;
 	resolved?: boolean;
 	scope: Record<string, unknown>;
+	argumentKey?: string;
 	interactive: boolean;
 	onUnowned?: TtActionUnownedHandler;
 	confirm?: TtActionConfirmHandler;
@@ -412,7 +415,7 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope]);
+	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope, argumentKey]);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
 	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
@@ -465,6 +468,7 @@ export const LiveTemplate = ({
 		}));
 	};
 	const onTtAction = useTtActionClicks({
+		identity,
 		executionHeld: held,
 		onUnowned,
 		confirm,
@@ -504,6 +508,7 @@ export const LiveTemplate = ({
 								interactive
 									? (event) => {
 											const field = event.target as HTMLInputElement;
+											if (!ownsAuthoredControl(event.currentTarget, field)) return;
 											if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
 											try {
 												const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
