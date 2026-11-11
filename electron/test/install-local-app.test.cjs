@@ -455,19 +455,45 @@ test('keeps a signed newer running companion out of staging, replacement, and ro
  } finally {rmSync(value.root,{recursive:true,force:true});}
 });
 
-test('refuses incompatible installed companion identity before changing the main app', async () => {
+test('an installed companion that cannot prove preservation is replaced, not left installed', async () => {
+ const {installLocalApp}=await installerPromise;
+ // Unproven installed companions must stay on the quit-and-replace path. Failing
+ // the desktop install instead would both block upgrades and leave the unproven
+ // companion registered as the standalone AutoFill provider.
+ const unproven=[
+  companion=>app=>app===companion?companionFacts('1.0.10','11',{group:'DIFFERENTGROUP'}):companionFacts('1.0.8','9'),
+  companion=>app=>app===companion?companionFacts('1.0.10','11',{hostAuthorities:['Authority=Apple Development']}):companionFacts('1.0.8','9'),
+  companion=>app=>{if(app===companion) throw new Error('Password AutoFill provisioning profile failed.');return companionFacts('1.0.8','9');}
+ ];
+ for(const reader of unproven) {
+  const value=fixture();
+  try {
+   makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
+   const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
+   makeApp(value.targetDir,'com.thingtime.desktop','original');
+   const installed=installLocalApp(installOptions(value.sourceApp,value.targetDir,{
+    verifyCompanion:()=>{},companionRunningPids:()=>[],companionFactsReader:reader(companion)
+   }));
+   assert.equal(installed.companionPreserved,false);
+   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'new-helper');
+   assert.equal(readFileSync(path.join(installed.targetApp,'marker.txt'),'utf8'),'new');
+  } finally {rmSync(value.root,{recursive:true,force:true});}
+ }
+});
+
+test('an unverifiable installed companion keeps the quit guard instead of being preserved', async () => {
  const {installLocalApp}=await installerPromise;const value=fixture();
  try {
   makeCompanion(path.join(value.sourceApp,'Contents','Helpers','Thingtime Passwords.app'),'new-helper');
   const companion=makeCompanion(path.join(value.targetDir,'Thingtime Passwords.app'),'old-helper');
   const target=makeApp(value.targetDir,'com.thingtime.desktop','original');
   assert.throws(()=>installLocalApp(installOptions(value.sourceApp,value.targetDir,{
-   verifyCompanion:()=>{},
-   companionFactsReader:app=>app===companion
-    ? companionFacts('1.0.10','11',{group:'DIFFERENTGROUP'}) : companionFacts('1.0.8','9')
-  })),/identity is incompatible/u);
-  assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
+   verifyCompanion:app=>{if(app===companion) throw new Error('installed companion signature is broken');},
+   companionFactsReader:app=>app===companion?companionFacts('1.0.10','11'):companionFacts('1.0.8','9'),
+   companionRunningPids:()=>[123]
+  })),/Quit the Thingtime AutoFill companion/u);
   assert.equal(readFileSync(path.join(companion,'marker.txt'),'utf8'),'old-helper');
+  assert.equal(readFileSync(path.join(target,'marker.txt'),'utf8'),'original');
  } finally {rmSync(value.root,{recursive:true,force:true});}
 });
 

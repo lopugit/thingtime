@@ -147,9 +147,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-12: Preserve a verified newer signed standalone macOS Passwords
   companion when installing an older nested companion, without stopping or
-  rolling back the standalone app. Retain equal/older replacement guards and
-  fail closed on incompatible versions or signing identity; runtime native
-  capability acceptance remains separate. **Codex (AI)**
+  rolling back the standalone app. Preserve only on proof: equal, older,
+  unverifiable or differently signed installed companions keep the existing
+  quit-and-replace path rather than blocking the desktop install; runtime
+  native capability acceptance remains separate. **Codex (AI)**, reviewed and
+  corrected by **Lopu (AI)**
 
 - 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
   and saved sync cards, with native aggregate enforcement and active policy-only

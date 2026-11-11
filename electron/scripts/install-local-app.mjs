@@ -364,7 +364,6 @@ export function installLocalApp(options = {}) {
   const verifyApp = options.verifyApp || ((appPath) => defaultVerifyApp(appPath, signatureMode));
   const copyApp = options.copyApp || defaultCopyApp;
   const companionName = 'Thingtime Passwords.app';
-  const companionIdentifier = 'com.thingtime.passwords';
   const sourceCompanion = join(sourceApp, 'Contents', 'Helpers', companionName);
   const targetCompanion = join(targetDir, companionName);
   // verifyApp validates the nested helper before it becomes the canonical
@@ -402,10 +401,22 @@ export function installLocalApp(options = {}) {
       verifyCompanion(sourceCompanion);
       if (companionExists) {
         assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
-        verifyCompanion(targetCompanion);
-        const sourceFacts = companionFactsReader(sourceCompanion);
-        preservedCompanionFacts = companionFactsReader(targetCompanion);
-        preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
+        // Preservation is the exception, so classification must stay advisory.
+        // An installed companion that cannot prove it is a newer build of the
+        // same signed identity — expired provisioning profile, different
+        // signing authority, unreadable metadata — keeps the existing
+        // quit-and-replace path instead of failing the whole desktop install.
+        // Aborting would also leave that unproven companion installed.
+        try {
+          verifyCompanion(targetCompanion);
+          const sourceFacts = companionFactsReader(sourceCompanion);
+          preservedCompanionFacts = companionFactsReader(targetCompanion);
+          preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
+        } catch (error) {
+          preserveCompanion = false;
+          preservedCompanionFacts = null;
+          console.warn(`[install:local] Replacing the installed Password AutoFill companion; it is not a verified newer build (${error instanceof Error ? error.message : String(error)}).`);
+        }
       }
     }
     const verifyPreservedCompanion = () => {
