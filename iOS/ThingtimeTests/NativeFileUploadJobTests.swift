@@ -1,6 +1,7 @@
 import XCTest
 import AppleFileSync
 import CryptoKit
+import UIKit
 @testable import Thingtime
 
 @MainActor
@@ -201,6 +202,65 @@ final class NativeFileUploadJobTests: XCTestCase {
         }
         batchAcknowledged = true
         XCTAssertTrue(batchAcknowledged); XCTAssertEqual(receipts, [1, 2]); XCTAssertEqual(uploads, [1: 1, 2: 1])
+    }
+
+    func testLateVerifiedIdentityStartsPersistedDueRunOnceAfterAlreadyActiveEvent() async throws {
+        XCTAssertEqual(UIApplication.shared.applicationState, .active, "Run this lifecycle regression in an active installed test host")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory), run = try budgetWaitingRun(now: Date())
+        try store.write(run)
+        let authorityAttempted = expectation(description: "Persisted due run reaches its real native authority guard")
+        var grantReads = 0
+        let grants = MobileFolderStore(load: { scope in
+            XCTAssertEqual(scope, run.scope); grantReads += 1; authorityAttempted.fulfill()
+            // Stop at the real grant boundary. No permission, PhotoKit content,
+            // device credential or HTTP response is fabricated by this test.
+            throw NativePhotoRunActivity.SourceFailure.grantChanged
+        }, save: { _, _ in XCTFail("Lifecycle kickoff cannot grant folder access") })
+        let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler(), grants: grants)
+        worker.activate(foreground: true)
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        await Task.yield()
+        XCTAssertEqual(grantReads, 0, "An active event alone cannot start an unverified owner")
+        XCTAssertEqual(try store.lookup(run), run)
+        worker.verifiedForegroundScope(run.scope)
+        worker.verifiedForegroundScope(run.scope)
+        await fulfillment(of: [authorityAttempted], timeout: 2)
+        let stopped = try XCTUnwrap(store.lookup(run))
+        XCTAssertEqual(grantReads, 1, "Repeated identity verification must reuse the sole worker")
+        XCTAssertEqual(stopped.stage, "needs-review"); XCTAssertFalse(stopped.armed)
+        XCTAssertEqual(stopped.activity?.reason, .grantChanged, "Starting the worker still enforces native authority")
+        XCTAssertEqual(stopped.epoch, run.epoch); XCTAssertEqual(stopped.batch, run.batch)
+        XCTAssertEqual(stopped.captureId, run.captureId)
+        worker.disarm(matching: run.scope)
+    }
+
+    func testLateIdentityKeepsPausedFutureAndOtherOwnerRunsUnstarted() async throws {
+        XCTAssertEqual(UIApplication.shared.applicationState, .active)
+        for scenario in ["paused", "future", "other-owner"] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = NativePhotoRunStore(directory: directory)
+            var run = try budgetWaitingRun(now: Date())
+            if scenario == "paused" { run.pauseByUser() }
+            if scenario == "future" { run.stage = "waiting"; run.retryAt = Date(timeIntervalSinceNow: 60) }
+            try store.write(run)
+            let unstarted = expectation(description: "\(scenario) cannot enter native execution")
+            unstarted.isInverted = true
+            let grants = MobileFolderStore(load: { _ in unstarted.fulfill(); throw NativePhotoRunActivity.SourceFailure.grantChanged },
+                save: { _, _ in XCTFail("Identity verification cannot grant access") })
+            let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler(), grants: grants)
+            worker.activate(foreground: true)
+            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+            let verified = scenario == "other-owner" ? try FileSyncOwnerScope(ownerId: "other", url: run.scope.origin) : run.scope
+            worker.verifiedForegroundScope(verified)
+            await fulfillment(of: [unstarted], timeout: 0.15)
+            let saved = try XCTUnwrap(store.lookup(run))
+            if scenario == "other-owner" { XCTAssertFalse(saved.armed) }
+            else { XCTAssertEqual(saved, run, "\(scenario) checkpoint must remain intact") }
+            worker.disarm(matching: run.scope)
+        }
     }
 
     func testKnownBudgetDeadlineSurvivesDurableCheckpointWithoutFiveMinuteInflation() async throws {

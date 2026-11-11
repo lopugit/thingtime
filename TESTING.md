@@ -12468,6 +12468,11 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS deferred Photos transfers
 
+- [ ] Cold-launch with an already-armed native queue, then verify its owner
+  after the app's active notification. The due queue must start once without
+  another navigation, activation or manual arm request. Explicitly paused,
+  future-due and other-owner queues must not start. Verify actual fresh bytes
+  and checkpoint timestamps rather than trusting a retained uploading label.
 - [ ] Reserve five native Photos originals concurrently through the real HTTP
   API. Exact-path snapshot work must queue in FIFO order with at most two
   active observations; capacity alone must not return 503 or cancel admitted

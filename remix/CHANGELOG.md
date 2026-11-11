@@ -149,10 +149,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and saved sync cards, with native aggregate enforcement and active policy-only
   saves. Queue concurrent cloud path checks instead of rejecting a five-item
   Photos batch when two checks are active. Clear stale authority holds after
-  fresh authorization, preserve short pacing deadlines, queue paced background
+  fresh authorization, wake saved work after late foreground identity verification,
+  preserve short pacing deadlines, queue paced background
   tasks within signed URL lifetimes, checkpoint expected upload-limit waits,
   and report closed failure reasons and operations. Physical background
-  acceptance remains a separate release gate. **Codex (AI)**
+  acceptance remains a separate release gate. See [PR1481 evidence](../PRs/1481-codex-ios-photos-recovery-limits-fix-ios-sync-recovery-and-expose-scoped-upload-limits.md). **Codex (AI)**
 
 - 2026-11-12: Reconcile native TOTP setup-link intake with the current password
   editor and account lifecycle. Keep one-use seeds transient, require editable

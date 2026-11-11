@@ -350,6 +350,9 @@ final class NativeDeferredUpload {
         }
         verifiedScope = scope
         NativePhotoBackupSummaries.shared.resume(verified: scope)
+        // Web identity can settle after didBecomeActive. Resume the same
+        // persisted worker now rather than waiting for another lifecycle event.
+        startNativeForegroundIfNeeded()
     }
 
     private func disarmPhotoRuns(scope: FileSyncOwnerScope?, configurationId: String?, rootId: String?, deviceId: String? = nil,
