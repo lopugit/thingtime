@@ -122,6 +122,27 @@ final class NativeFileUploadJobTests: XCTestCase {
         _ = try restarted.reserve(scope: other, deviceId: "device", bytes: 100, cap: 100, now: now)
         _ = try restarted.reserve(scope: owner, deviceId: "device", bytes: 100, cap: 100, now: now.addingTimeInterval(4800))
     }
+    func testDurableBackgroundTrafficSettlementAndOldPartPruneAreIdempotent() throws {
+        let (request, _) = try fixture()
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativeDeferredUploadStore(directory: directory)
+        var record = NativeDeferredUploadRecord(scope: scope, request: request, grantRevision: String(repeating: "a", count: 64),
+            admissionId: "admission", expiresAt: Date(timeIntervalSinceNow: 3600))
+        let first = UUID(), second = UUID()
+        XCTAssertTrue(record.accountTransfer(.init(wifi: 30), settlement: first, partNumber: 1))
+        try store.save([record])
+        // Simulate death after the counter write but before job.accounted.
+        var reopened = try XCTUnwrap(store.lookup(record))
+        XCTAssertFalse(reopened.accountTransfer(.init(wifi: 30), settlement: first, partNumber: 1))
+        XCTAssertEqual(reopened.transferBytes?.total, 30)
+        reopened.confirmedParts = 1
+        XCTAssertTrue(reopened.accountTransfer(.init(wifi: 40), settlement: second, partNumber: 2))
+        XCTAssertFalse(reopened.accountTransfer(.init(wifi: 30), settlement: first, partNumber: 1), "Older confirmed part cannot replay after a newer settlement")
+        XCTAssertEqual(reopened.transferBytes?.total, 70)
+    }
+
     func testWholeFileUsesCanonicalOrderedPartsAndCompletesOnlyAfterCompositeVerification() async throws {
         let (request,digest) = try fixture()
         var parts = [Int](), progress = [Int64](), paths = [String](), authorizations = 0
@@ -217,7 +238,16 @@ final class NativeFileUploadJobTests: XCTestCase {
         XCTAssertTrue(try coordinator.enqueue(next1))
         XCTAssertEqual(try coordinator.renewalID(scope: scope, request: next2.request, grantRevision: grant), expired.admissionId)
         XCTAssertEqual(try checkpoint.lookup(next1)?.confirmedParts, 1)
-        for i in 3...5 { XCTAssertTrue(try coordinator.enqueue(record(i, 1))) }
+        XCTAssertEqual(NativeDeferredUploadStore.lookahead, 5)
+        let additions = (3...6).map { record($0, 1) }
+        for (index, addition) in additions.enumerated() {
+            XCTAssertTrue(try coordinator.enqueue(addition))
+            XCTAssertEqual(try checkpoint.load().count, min(index + 3, 5))
+        }
+        XCTAssertEqual(try checkpoint.lookup(next1)?.confirmedParts, 1, "An active cursor is never evicted")
+        for addition in additions { XCTAssertNotNil(try checkpoint.lookup(addition)) }
+        XCTAssertFalse(try coordinator.enqueue(record(7, 1)), "Five active reservations fill the working batch")
+        XCTAssertEqual(try checkpoint.load().count, 5)
         XCTAssertNil(try checkpoint.lookup(expired))
         XCTAssertEqual(try coordinator.renewalID(scope: scope, request: next2.request, grantRevision: grant), expired.admissionId)
         XCTAssertFalse(try coordinator.enqueue(next2), "Queue capacity only limits its working batch")

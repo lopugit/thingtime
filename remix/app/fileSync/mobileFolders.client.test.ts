@@ -1,5 +1,9 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { armNativePhotoRun } from './nativePhotoRun.client';
+import { getNativeSyncAdapter } from './nativeSyncHost.client';
+import { PHOTO_AUTOMATION_INTERVAL_MS } from './configuration';
 import {
 	parseMobileFolderResult,
 	supportsNativeSourcePaths,
@@ -25,6 +29,68 @@ const rootId = '00000000-0000-4000-8000-000000000001';
 const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://native.test' };
 const root = { id: rootId, name: 'Selected folder' };
 const entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, size: 3, sha256: 'a'.repeat(64) };
+test('automatic saved-settings recovery revalidates authority and backs off refusals', async t => {
+	const originals = new Map(['window', 'navigator', 'indexedDB', 'IDBKeyRange', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+	t.after(() => { for (const [key, descriptor] of originals) {
+		if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
+	} });
+	Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: new IDBFactory() });
+	Object.defineProperty(globalThis, 'IDBKeyRange', { configurable: true, value: IDBKeyRange });
+	Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (_key: string, _options: object, run: () => Promise<unknown>) => run() } } });
+	let now = Date.now(); t.mock.method(Date, 'now', () => now);
+	for (const scenario of ['recover', 'denied', 'native-pause', 'revoked', 'saved-pause', 'local-pause', 'destination-review', 'future-retry'] as const) {
+		const reviewed = { ...saved, id: 'authority-' + scenario, configuration: { ...saved.configuration, localRootId: rootId, sourceKind: 'photos' as const } };
+		const binding = { ...scope, rootId: reviewed.id }, actions: string[] = [], checks: string[] = [];
+		const target = Object.assign(new EventTarget(), { location: { origin: scope.origin }, thingtimeNativeBridge: {
+			version: '1.0.0', platform: 'ios' as const, isNativeWebView: true as const, devicePairingVersion: '1.0.0',
+			fileAccessVersion: '1.8.0', fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0', filePhotoAutomationVersion: '1.2.0',
+			postMessage: ({ type, payload }: { type: string; payload: any }) => {
+				actions.push(payload.action);
+				queueMicrotask(() => {
+					const photoRoot = { id: reviewed.configuration.localRootId, name: 'Photos', sourceKind: 'photos', photoAccess: scenario === 'revoked' ? 'unavailable' : 'full' };
+					let extra: object = { roots: [photoRoot] };
+					if (type === 'mobile-device') extra = { state: 'paired', deviceId: scope.deviceId };
+					else if (payload.action === 'photo-run-status') extra = { ...extra, rootId: photoRoot.id, configurationId: reviewed.id,
+						deviceId: scope.deviceId, configurationRevision: reviewed.updatedAt, photoRunProgress: {
+							stage: scenario === 'native-pause' ? 'paused' : 'needs-review', activity: { phase: 'waiting', reason: scenario === 'destination-review' ? 'destination-review' : 'saved-settings' },
+							...(scenario === 'future-retry' ? { retryAt: new Date(now + 600_000).toISOString() } : {}),
+							confirmed: { photos: 0, videos: 0, other: 0, wifiBytes: 0, mobileBytes: 0, unknownBytes: 0 }
+						} };
+					else if (payload.action === 'arm-photo-run') {
+						checks.push('arm');
+						assert.equal(payload.resume, undefined, 'automatic retries cannot bypass native Pause');
+						extra = scenario === 'denied' || scenario === 'native-pause' ? { error: 'Background transfer permission changed.' } : { ...extra,
+							rootId: photoRoot.id, configurationId: reviewed.id, deviceId: scope.deviceId, configurationRevision: reviewed.updatedAt,
+							photoRunArmed: true, scheduled: true, nativeOwnsRun: true, photoRunProgress: { stage: 'ready', confirmed: { photos: 0, videos: 0, other: 0, wifiBytes: 0, mobileBytes: 0, unknownBytes: 0 } } };
+					}
+					target.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: {
+						type: type === 'mobile-device' ? 'mobile-device-result' : 'mobile-files-result', payload: { ...payload, ...extra }
+					} }));
+				});
+			}
+		}, fetch: async () => {
+			checks.push('saved');
+			return Response.json({ ok: true, thing: { ...reviewed, crystal: { ...reviewed.configuration, paused: scenario === 'saved-pause' },
+				author: { id: scope.ownerId }, acl: ['tt:user'], thingtime: ['file-sync'] } });
+		} });
+		Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+		Object.defineProperty(globalThis, 'fetch', { configurable: true, value: async () => Response.json({ schemaVersion: 1, origin: scope.origin, features: {
+			'api.things': { version: '1.53.0' }, 'api.things-update': { version: '1.21.0' }, 'api.file-sync-transfer-admissions': { version: '1.3.0' }
+		} }) });
+		const run = () => armNativePhotoRun({ reviewed, scope: binding, generation: rootIdentity.read().generation,
+			adapter: getNativeSyncAdapter()!, automatic: true, isPaused: () => scenario === 'local-pause', resumeScope: () => assert.fail('automatic recovery cannot resume a user pause') });
+		if (['denied', 'native-pause', 'revoked', 'saved-pause'].includes(scenario)) await assert.rejects(run()); else await run();
+		if (scenario === 'recover' || scenario === 'denied') {
+			assert.deepEqual(checks, ['saved', 'arm']);
+			assert.ok(actions.indexOf('list') < actions.indexOf('arm-photo-run'));
+			await run(); assert.deepEqual(checks, ['saved', 'arm'], 'condition wakes retain cooldown after refusal');
+			now += PHOTO_AUTOMATION_INTERVAL_MS;
+			if (scenario === 'denied') await assert.rejects(run()); else await run();
+			assert.deepEqual(checks, ['saved', 'arm', 'saved', 'arm']);
+		} else if (scenario === 'native-pause') assert.deepEqual(checks, ['saved', 'arm'], 'native refuses an automatic attempt without explicit Resume');
+		else assert.ok(!checks.includes('arm'), scenario + ' cannot obtain new authority');
+	}
+});
 const response = (extra = {}) => ({ type: 'mobile-files-result', payload: { ...expected, roots: [root], ...extra } });
 test('single-path inspection negotiates the native contract and requires explicit scoped absence', () => {
 	for (const [platform, version, supported] of [
