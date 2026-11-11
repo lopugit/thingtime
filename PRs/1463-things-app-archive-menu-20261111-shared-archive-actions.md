@@ -115,3 +115,22 @@ diagnostics update. Archive source, shared capability checker implementation and
 embed imports are unchanged; both capability suites pass together (179 tests).
 The full unit/type/embed and real API/browser evidence above remains applicable
 to those unchanged paths. Changelog entries from both branches are preserved.
+
+## Filesync receipt-recovery integration
+
+Reconciled main 36b0be25 (PR 1471) through the normal no-renames merge. The new
+Files terminal receipts occupy Timeline operation identities without changing
+file or attachment metadata. Archive eligibility, attachment readiness/binding
+checks, useApi and the shared Archive checker are unchanged. Archive retains
+Things 1.63/actions 1.1/search 1.7/bulk 1.9; upstream Files publishes 1.13.
+Both changelog entries and incoming schema/documentation changes are preserved.
+
+Combined capability suites pass 179 tests; focused Files API contracts pass
+113 tests. The focused suite exposed an incoming stale route-manifest fixture
+still expecting Files 1.12.2; both generator assertions now expect the published
+1.13.0 contract. No product behavior was changed for this correction. The embed
+remains 691,529 gzip bytes within the unchanged 716,800-byte budget. Prior real
+Archive API/browser and full-unit evidence applies to the unchanged paths.
+Raw TypeScript checking also passes with zero errors on this reconciled tree.
+The scoped PR-note semantic refresh was bounded at 60 seconds without completion;
+structural fallback is retained, without claiming new Markdown semantic coverage.

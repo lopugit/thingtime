@@ -22,6 +22,7 @@ export type CloudOperationBindings = {
 export type CloudSyncPortInput = {
 	currentScope(): SyncScope;
 	readLocal(path: string): Promise<SyncEntry | null>;
+	readLocalUploadSource?(expected: SyncEntry): Promise<SyncEntry | null>;
 	openSource(expected: SyncEntry): Promise<FingerprintSource>;
 	signal?: AbortSignal;
 	beforeLocalPublication?(operationId: string): Promise<void>;
@@ -103,7 +104,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			if (JSON.stringify(operation) !== JSON.stringify(write.operation)) throw Error('Deferred operation changed.');
 			await runtime.automaticStoragePlacement?.admit(m, true);
 			const file = createCloudFileTransport(runtime, write, input.signal);
-			if (!sameSyncStamp(m.source, await input.readLocal(m.path)) || !sameSyncStamp(m.expectedTarget, await file.read()))
+			if (!sameSyncStamp(m.source, await (input.readLocalUploadSource ? input.readLocalUploadSource(m.source) : input.readLocal(m.path))) || !sameSyncStamp(m.expectedTarget, await file.read()))
 				return null;
 			check();
 			return file.deferUpload(await input.openSource(m.source));
@@ -121,7 +122,16 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			const binding = await byPath(path);
 			return transport(binding).read();
 		},
+		...(input.readLocalUploadSource ? { readLocalUploadSource: input.readLocalUploadSource } : {}),
 		lookup: async (id, requestedScope) => { appliedId = undefined; return transport(await get(id, requestedScope)).lookup(); },
+		fence: async (id, requestedScope) => {
+			appliedId = undefined;
+			if (version !== 1) throw Error('Retention is not a file upload publication.');
+			const { write } = await get(id, requestedScope), m = write.operation.mutation;
+			if (m.kind !== 'copy' || m.from !== 'local' || m.source.kind !== 'file' || isCloudFolderWrite(write))
+				throw Error('Only the original file upload can be terminally fenced.');
+			return createCloudFileTransport(runtime, write, input.signal).fence();
+		},
 		trashExpected: async (operation, scope) => {
 			const { write, trashContext: context } = await get(operation.id, scope),
 				m = operation.mutation;
@@ -154,6 +164,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				check();
 				if ((await readLocalSource(write)) !== null) throw Error('The cloud path reappeared; preserve the local item.');
 				check();
+				await input.beforeLocalPublication?.(operation.id);
 				const receipt = await input.localTarget!.trash!(structuredClone(operation), { ...scope }, structuredClone(trashContext));
 				check();
 				return receipt;
