@@ -1,5 +1,11 @@
 import { parseSourceInputArgument } from './sourceInputs';
 
+export const COMPONENT_ARGUMENT_BINDING_REQUIREMENTS = {
+	'api.things': '1.62.0',
+	'api.things-update': '1.27.0',
+	'api.webpages-resolve': '1.19.0'
+} as const;
+
 export const AUTHORED_CONTROL_REQUIREMENTS = {
 	'api.things': '1.50.0',
 	'api.things-update': '1.19.0',
@@ -82,4 +88,9 @@ export function usesSourceInputReferences(value: unknown): boolean {
 		return !!inputs && typeof inputs === 'object' && !Array.isArray(inputs) &&
 			Object.values(inputs).some(parseSourceInputArgument);
 	});
+}
+
+export function usesComponentArgumentBindings(value: unknown): boolean {
+	return hasAuthoredNode(value, ({ type, argBindings }) => typeof type === 'string' && !!argBindings &&
+		typeof argBindings === 'object' && !Array.isArray(argBindings) && Object.keys(argBindings).length > 0);
 }

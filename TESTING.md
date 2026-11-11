@@ -8126,6 +8126,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- In two collection rows, bind the same saved Component using
+  `argBindings: { recordId: '{item.id}' }`. Confirm each source reads its own
+  ID and each nested expand button, local field change, Enter submission and
+  save runs once in its own Component. Check literal braces in default/saved/
+  instance args, missing links, delayed A read/save responses after selecting B, and
+  account/navigation changes. Expand the Component into editable blocks, save,
+  reload and confirm the binding and literal values survive.
+- In the argument inspector, toggle **Use parent data**, edit the binding,
+  and restore the literal argument by disabling it. Check mouse, keyboard,
+  touch, desktop and mobile widths. Run
+  `node remix/scripts/component-arguments.browser.mjs` for the synthetic browser
+  regression, and shared-composition tests to confirm binding values add no grants.
+
 ### Nested insertion, ancestry and structure (2026-10-29)
 
 - [ ] Add a second and third child to populated grid, row, column and HTML

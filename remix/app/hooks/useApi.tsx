@@ -5,7 +5,7 @@ import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '~/backups/contentCreation';
 import { BACKUP_WORKSPACE_PATH, BACKUP_WORKSPACE_REQUIREMENTS, type BackupWorkspaceCatalog, type BackupWorkspaceEntry, type BackupWorkspacePage, type BackupWorkspaceReview, type BackupWorkspaceCommand } from '~/backups/workspace';
 import type { BackupJobView } from '~/backups/workflow';
 import { BACKUP_DESTINATIONS_PATH, BACKUP_DESTINATIONS_REQUIREMENTS, type BackupDestinationsResult } from '~/backups/destinations';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
+import { AUTHORED_CONTROL_REQUIREMENTS, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PAGE_COLLECTION_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, SOURCE_INPUT_REFERENCE_REQUIREMENTS, usesAuthoredControls, usesComponentArgumentBindings, usesMapPointsSource, usesPageCollections, usesPassiveSource, usesSourceInputReferences } from '~/schemas/authoredControls';
 import { CONNECTOR_PROTECTIONS_FEATURE, CONNECTOR_PROTECTIONS_PATH, CONNECTOR_PROTECTIONS_VERSION, type ConnectorConfirmationPatch } from '~/api/utils/chatgpt/connectorProtections';
 import { isBuilderThing } from '~/schemas/builderThing';
 import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
@@ -186,8 +186,9 @@ export function useApi() {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.webpages-resolve', usesExpandedWebpageAuthoring(blocks)
-          ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
+        await requireThingtimeCapability('api.webpages-resolve', usesComponentArgumentBindings(blocks)
+          ? COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.webpages-resolve'] : usesExpandedWebpageAuthoring(blocks)
+            ? EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.webpages-resolve'] : CONTENT_EXECUTION_READ_REQUIREMENTS['api.webpages-resolve']);
         return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
       }, [asyncFetcher])
     },
@@ -1343,6 +1344,7 @@ export function useApi() {
           }
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things-update', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things-update', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things-update', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things-update', AUTHORED_CONTROL_REQUIREMENTS['api.things-update'], options?.expectedApiOrigin);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things-update']
             : actionActivationWriteMinimum(args?.crystal, 'api.things-update');
@@ -1437,6 +1439,7 @@ export function useApi() {
           if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
             await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things']);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things']);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things']);
           const activationMinimum = usesPassiveSource(args?.crystal) ? PASSIVE_SOURCE_REQUIREMENTS['api.things']
             : actionActivationWriteMinimum(args?.crystal, 'api.things');
           if (activationMinimum) await requireThingtimeCapability('api.things', activationMinimum);
@@ -1468,6 +1471,7 @@ export function useApi() {
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (sharedContentWrite(args)) await requireSharedContentCapability('api.things', options);
           if (usesSourceInputReferences(args?.crystal)) await requireThingtimeCapability('api.things', SOURCE_INPUT_REFERENCE_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
+          if (usesComponentArgumentBindings(args?.crystal)) await requireThingtimeCapability('api.things', COMPONENT_ARGUMENT_BINDING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesAuthoredControls(args?.crystal)) await requireThingtimeCapability('api.things', AUTHORED_CONTROL_REQUIREMENTS['api.things'], options?.expectedApiOrigin);
           if (usesExpandedWebpageAuthoring(args?.crystal?.blocks))
             await requireThingtimeCapability('api.things', EXPANDED_WEBPAGE_AUTHORING_REQUIREMENTS['api.things'], options?.expectedApiOrigin);

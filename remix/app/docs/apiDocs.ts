@@ -9732,8 +9732,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.61.0',
-    contractVersion: '1.61.0',
+    featureVersion: '1.62.0',
+    contractVersion: '1.62.0',
 
 
     group: 'things',
@@ -9743,6 +9743,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.62 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
       'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
       'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
@@ -11857,8 +11858,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.26.0',
-    contractVersion: '1.26.0',
+    featureVersion: '1.27.0',
+    contractVersion: '1.27.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11867,6 +11868,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Version 1.26 accepts expanded Webpage CSS and HTML authoring under the same validation as api.things 1.61.0 and existing revision checks. ' +
       'Version 1.25 preserves and validates saved Component and Webpage source input references under the same revision checks. ' +
@@ -13745,14 +13747,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.18.0',
-    featureVersion: '1.18.0',
+    contractVersion: '1.19.0',
+    featureVersion: '1.19.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.19 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
       'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +
       'Version 1.16 resolves named passive cursor-backed collections alongside authored selection and keyed repetition. ' +

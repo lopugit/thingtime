@@ -145,6 +145,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Bind saved Component instance arguments explicitly to parent rows,
+  preserve bindings through editable expansion, and keep nested Component
+  Actions and field submissions on their own live surface. **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 
