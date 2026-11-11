@@ -449,7 +449,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			pushItem({ id: assistantId, role: 'assistant', text: '' });
 			try {
 				const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-				await requireThingtimeCapability('api.lopu-voice-reply', '1.3.0');
+				await requireThingtimeCapability('api.lopu-voice-reply', '1.5.0');
 				if (requestOwner !== getLopuStoreSnapshot().userId) return;
 				const response = await aiTaskFetch(VOICE_REPLY_ENDPOINT, {
 					method: 'POST',
