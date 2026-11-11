@@ -5857,16 +5857,20 @@ const sanitizeWebpageBlock = (
 		if (Object.keys(css).length) block.css = css;
 	}
 
-		if (raw.args !== undefined && raw.args !== null) {
-			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
-				return fail(400, `Block ${id} args must be an object of scalar arg values`);
+		for (const field of ['args', 'argBindings'] as const) {
+			if (raw[field] === undefined || raw[field] === null) continue;
+			if (typeof raw[field] !== 'object' || Array.isArray(raw[field])) {
+				return fail(400, `Block ${id} ${field} must be an object of scalar arg values`);
 			}
 			const args: Record<string, unknown> = {};
-			const entries = Object.entries(raw.args as Record<string, unknown>);
+			const entries = Object.entries(raw[field] as Record<string, unknown>);
 			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
-				return fail(400, `Block ${id} args can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
+				return fail(400, `Block ${id} ${field} can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
 			}
 			for (const [key, value] of entries) {
+				if (field === 'argBindings' && ['__proto__', 'constructor', 'prototype'].includes(key)) {
+					return fail(400, `Block ${id} argument binding key is reserved`);
+				}
 				if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
 					return fail(400, `Block ${id} arg key "${key.slice(0, 40)}" is not a valid arg name`);
 				}
@@ -5874,7 +5878,7 @@ const sanitizeWebpageBlock = (
 				if (scalar === null && value !== null) return fail(400, `Block ${id} arg ${key} must be a string, number, or boolean`);
 				if (scalar !== null) args[key] = scalar;
 			}
-			if (Object.keys(args).length) block.args = args;
+			if (Object.keys(args).length) block[field] = args;
 		}
 	// Source bindings can scope any editable subtree. Execution retains the
 	// same viewer-owned Action authorization as a component source.

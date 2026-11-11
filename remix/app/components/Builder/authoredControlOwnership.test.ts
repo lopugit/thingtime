@@ -31,3 +31,13 @@ test('unrelated, inaccessible and cyclic document chains do not acquire surface 
 	doc.defaultView = { frameElement: { ownerDocument: doc } };
 	assert.equal(ownsAuthoredControl(boundary, { ownerDocument: doc } as any), false);
 });
+
+test('nested live surfaces own their controls while ordinary expanded fields retain their surrounding surface', () => {
+	const { boundary, owned } = fixture();
+	const nested: any = { contains: (node: any) => node === nested || node === owned };
+	owned.closest = () => nested;
+	assert.equal(ownsAuthoredControl(boundary, owned), false);
+	assert.equal(ownsAuthoredControl(nested, owned), true);
+	nested.contains = (node: any) => node === nested || node === boundary;
+	assert.equal(ownsAuthoredControl(boundary, owned), true);
+});

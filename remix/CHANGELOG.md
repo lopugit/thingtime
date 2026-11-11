@@ -149,6 +149,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   grant diagnostics and Claude effort corrections into one release; negotiate
   personal replies against the active same-origin API before sending. **Codex (AI)**
 
+- 2026-11-11: Bind saved Component instance arguments explicitly to parent rows,
+  preserve bindings through editable expansion, and keep nested Component
+  Actions and field submissions on their own live surface. See [PR 1465 evidence](../PRs/1465-codex-component-row-argument-bindings-reusable-component-arguments.md). **Codex (AI)**
+
 - 2026-11-11: Require both frontend and same-origin active API capabilities for
   named Google actions; keep newer previews unavailable against older shared
   handlers, and distinguish service projection 2.3 from Facebook metadata 2.2.

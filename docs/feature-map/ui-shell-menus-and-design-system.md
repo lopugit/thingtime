@@ -61,6 +61,15 @@ bounded settling, while the Builder blocks remain individually editable.
 
 ## Editable map markers and connector settings
 
+Ordinary Component instances and expanded source blocks accept explicit scalar
+`argBindings` from their parent row. `templateBlocks.resolveBlockArguments`
+preserves literal/default argument behavior and source identity. The Component
+argument inspector edits each binding separately. Nested live surfaces own
+their Actions, field changes and Enter submission through
+`authoredControlOwnership`. Run `component-arguments.browser.mjs` for the
+desktop/mobile nested-row, draft, async, expansion and inspector regression.
+See [Builder browser Actions](../builder-browser-actions.md) for capability floors.
+
 Authored buttons can opt in to Ctrl/Cmd primary selection and use ordinary
 touch and keyboard selection controls. `webpageRuntime.tsx` keeps a transient
 contextual list at `page.selection`; the owner-only delegated click handler
