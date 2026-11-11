@@ -145,6 +145,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Expose native activation 1.2 eligibility diagnostics through the
+  existing bridge, using the actual gate's allowlisted projection. Retain bounded
+  task-development observations independently of renderer IPC; lifecycle errors
+  fail closed and no shutdown permission changes. **Codex (AI)**
+
+- 2026-11-12: Add a typed SQLite collection foundation with conditional writes,
+  durable uniqueness and cross-collection rollback. Keep BSON identities and
+  scalar types explicit; reject unsupported operations and custom executable
+  hooks before mutation. MongoDB remains supported; canonical SQLite API and
+  native profile integration are not yet enabled. **Codex (AI)**
+
 - 2026-11-12: Preserve MagicInput text accepted before mount effects, escape initial
   values and honor genuine controlled resets while retaining caret-preserving
   echoes. Add actual-component browser coverage and explicit native update

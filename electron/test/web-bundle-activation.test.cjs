@@ -63,7 +63,160 @@ test('activation sender requires current exact window, main frame and loaded app
   for (const altered of [{ ...event, sender: {} }, { ...event, senderFrame: { ...frame } }]) assert.throws(() => assertBundleActivationSender(altered, window, 'http://127.0.0.1:18423'));
   assert.throws(() => assertBundleActivationSender(event, window, 'https://thingtime.com'));
   assert.throws(() => assertBundleActivationSender(event, null, 'http://127.0.0.1:18423'));
-  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.1.0', methods: ['set-policy', 'checkpoint'], modes: ['remote-account', 'local-api'] });
+  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.2.0', methods: ['set-policy', 'checkpoint'], modes: ['remote-account', 'local-api'] });
+});
+
+function healthyEligibility() {
+  return { closeAccepted: false, closePending: false, allowClosing: false, nativeAuthority: true,
+    automaticUpdates: true, rendererReady: true, windowAvailable: true, windowFocused: false,
+    servicesClosing: false, servicesClosed: false, authorityActive: false, idleInterval: true,
+    counts: { otherWindows: 0, rendererRequests: 0, ipcWork: 0, mailWork: 0, attachmentUploads: 0, folderQueue: 0, aiSyncWork: 0 },
+    idle: { reserved: false, reservation: 'absent', http: 'idle', chatgpt: 'idle', runtime: 'idle' },
+    speechActive: false, fileExportActive: false, folderSyncActive: false, folderStreamActive: false,
+    folderRequestActive: false, syncWindowActive: false, agentBrowserActive: false, contextAvailable: true };
+}
+test('eligibility projects every existing native gate and independently identifies IPC/request/work counters', () => {
+  const { projectBundleActivationEligibility: project } = require('../lib/web-bundle-activation.cjs');
+  assert.equal(project(healthyEligibility()).eligible, true);
+  const flags = { closeAccepted: 'closeAccepted', closePending: 'closePending', nativeAuthority: 'nativeAuthority',
+    automaticUpdates: 'automaticUpdates', rendererReady: 'rendererReady', windowAvailable: 'windowAvailable', windowFocused: 'windowUnfocused',
+    servicesClosing: 'servicesOpen', servicesClosed: 'servicesOpen', authorityActive: 'authorityStable', idleInterval: 'idleInterval',
+    speechActive: 'speechIdle', fileExportActive: 'fileExportIdle', folderSyncActive: 'folderSyncIdle', folderStreamActive: 'folderStreamIdle',
+    folderRequestActive: 'folderRequestIdle', syncWindowActive: 'syncWindowIdle', agentBrowserActive: 'agentBrowserIdle', contextAvailable: 'contextAvailable' };
+  for (const [flag, blocker] of Object.entries(flags)) {
+    const input = healthyEligibility(); input[flag] = !input[flag];
+    assert.deepEqual(project(input).blockers, [blocker], flag);
+  }
+  const counters = { otherWindows: 'otherWindows', rendererRequests: 'rendererRequests', ipcWork: 'ipcWork', mailWork: 'mailIdle',
+    attachmentUploads: 'uploadsIdle', folderQueue: 'folderQueueIdle', aiSyncWork: 'aiSyncIdle' };
+  for (const [counter, blocker] of Object.entries(counters)) {
+    const input = healthyEligibility(); input.counts[counter] = 2;
+    assert.deepEqual(project(input).blockers, [blocker]); assert.equal(project(input).counts[counter], 2);
+    for (const invalid of [-1, NaN, undefined, '0']) { input.counts[counter] = invalid; assert.equal(project(input).eligible, false); }
+  }
+  assert.equal(project(null).eligible, false);
+});
+test('shutdown diagnostics distinguish unavailable, busy and failed providers without relaxing held reservation semantics', () => {
+  const { bundleShutdownIdleState: observe, projectBundleActivationEligibility: project } = require('../lib/web-bundle-activation.cjs');
+  const input = healthyEligibility();
+  input.idle = observe({ http: () => false, chatgpt: null, runtime: () => { throw Error('secret provider details'); } });
+  assert.deepEqual(input.idle, { reserved: false, reservation: 'absent', http: 'busy', chatgpt: 'unavailable', runtime: 'error' });
+  assert.deepEqual(project(input).blockers, ['embeddedHttpIdle', 'embeddedChatgptIdle', 'embeddedRuntimeIdle']);
+  input.idle = observe({ reservation: { isCurrent: () => true }, http: () => false, chatgpt: null, runtime: () => false });
+  assert.equal(project(input).eligible, true, 'The existing held composite reservation is authoritative');
+  input.idle = observe({ reservation: { isCurrent: () => false }, http: () => true, chatgpt: () => true, runtime: () => true });
+  assert.deepEqual(project(input).blockers, ['shutdownReservation']);
+  input.closePending = true; input.allowClosing = true; input.idle = healthyEligibility().idle;
+  assert.equal(project(input).eligible, true); input.closeAccepted = true; assert.equal(project(input).eligible, false);
+});
+test('diagnostics clone/freeze only the declared public primitives, never account content, provider errors or handles', () => {
+  const { projectBundleActivationEligibility: project } = require('../lib/web-bundle-activation.cjs');
+  const input = healthyEligibility(); input.sessionHash = input.account = input.profile = 'PRIVATE_SENTINEL';
+  input.counts.privateField = 'PRIVATE_SENTINEL'; input.idle.credentials = 'PRIVATE_SENTINEL';
+  const result = project(input); input.counts.ipcWork = 9; input.idle.http = 'busy';
+  assert.equal(JSON.stringify(result).includes('PRIVATE_SENTINEL'), false);
+  assert.equal(result.counts.ipcWork, 0); assert.equal(result.idle.http, 'idle');
+  for (const value of [result, result.gates, result.counts, result.idle, result.blockers]) assert.equal(Object.isFrozen(value), true);
+});
+test('development observer emits changed reasons and a bounded main-process heartbeat', () => {
+  const { projectBundleActivationEligibility: project, createBundleActivationDiagnosticReporter } = require('../lib/web-bundle-activation.cjs');
+  let at = 0; const emitted = [];
+  const report = createBundleActivationDiagnosticReporter({ now: () => at, emit: entry => emitted.push(entry) });
+  const idle = project(healthyEligibility()); assert.equal(report(idle), true);
+  at = 29_999; assert.equal(report(idle), false); at = 30_000; assert.equal(report(idle), true);
+  const input = healthyEligibility(); input.windowFocused = true; assert.equal(report(project(input)), true);
+  at = 30_001; assert.equal(report(project(input)), false);
+  assert.equal(emitted.length, 3); assert.deepEqual(emitted[2].blockers, ['windowUnfocused']);
+  const failed = createBundleActivationDiagnosticReporter({ emit() { throw Error('observer unavailable'); } });
+  assert.equal(failed(idle), false); assert.equal(idle.eligible, true);
+});
+test('actual main diagnostic emitter uses retained stderr without enabling suppressed stdout', () => {
+  const helpers = require('../lib/web-bundle-activation.cjs');
+  const source = require('node:fs').readFileSync(require.resolve('../main.cjs'), 'utf8');
+  const start = source.indexOf('const reportBundleActivation ='), end = source.indexOf('function handleDesktopOperation(', start);
+  assert.ok(start >= 0 && end > start);
+  const stdout = [], stderr = [];
+  const report = new Function('createBundleActivationDiagnosticReporter', 'console', source.slice(start, end) + '\nreturn reportBundleActivation;')(
+    helpers.createBundleActivationDiagnosticReporter, { log: value => stdout.push(value), error: value => stderr.push(value) });
+  const state = helpers.projectBundleActivationEligibility(healthyEligibility()); report(state);
+  assert.deepEqual(stdout, []); assert.equal(stderr.length, 1);
+  assert.ok(stderr[0].startsWith('[thingtime:bundle-activation] '));
+  const { observedAt, ...projected } = JSON.parse(stderr[0].slice('[thingtime:bundle-activation] '.length));
+  assert.equal(Number.isSafeInteger(observedAt), true); assert.deepEqual(projected, state);
+});
+test('native verifier retains only the canonical diagnostic allowlist and rejects malformed projections', () => {
+  const { projectBundleActivationEligibility: project } = require('../lib/web-bundle-activation.cjs');
+  const source = require('node:fs').readFileSync(require.resolve('../scripts/verify-web-bundle-auto-activation.mjs'), 'utf8');
+  const start = source.indexOf('function publicActivationDiagnostics('), end = source.indexOf('async function captureHostActivationLog(', start);
+  assert.ok(start >= 0 && end > start);
+  const copy = new Function('diagnosticTemplate', source.slice(start, end) + '\nreturn publicActivationDiagnostics;')(project({}));
+  const good = project(healthyEligibility());
+  const untrusted = { ...good, profile: 'PRIVATE_SENTINEL', counts: { ...good.counts, private: 'PRIVATE_SENTINEL' }, idle: { ...good.idle, private: 'PRIVATE_SENTINEL' } };
+  assert.deepEqual(copy(untrusted), good); assert.equal(JSON.stringify(copy(untrusted)).includes('PRIVATE_SENTINEL'), false);
+  for (const value of [null, { ...good, format: 2 }, { ...good, eligible: false }, { ...good, counts: { ...good.counts, ipcWork: 'PRIVATE_SENTINEL' } },
+    { ...good, gates: {} }, { ...good, blockers: ['PRIVATE_SENTINEL'] }]) assert.throws(() => copy(value));
+});
+
+// Exercise the real main-function wiring rather than a second eligibility
+// expression. No Electron process, profile, authority or native work is created.
+function actualMainEligibility(patch = {}) {
+  const { readFileSync } = require('node:fs'); const helpers = require('../lib/web-bundle-activation.cjs');
+  const source = readFileSync(require.resolve('../main.cjs'), 'utf8');
+  const start = source.indexOf('function bundleActivationDiagnostics('), end = source.indexOf('function startBundleUpdateCheck(', start);
+  assert.ok(start >= 0 && end > start);
+  const window = { isDestroyed: () => false, isFocused: () => false }, context = { window };
+  const emitted = [];
+  const values = { projectBundleActivationEligibility: helpers.projectBundleActivationEligibility,
+    nativeBundleActivationAllowed: helpers.nativeBundleActivationAllowed, localRuntimeInitialized: true,
+    localRuntime: { runningEnabled: false, state: { enabled: false }, error: null, child: null },
+    embeddedApiRuntimeWork: () => ({ version: '1.0.0', isIdle: () => true, reserveShutdown: () => null }),
+    embeddedShutdownState: () => healthyEligibility().idle, mainWindow: window, bundleActivationContext: context,
+    bundleCloseAccepted: false, bundleClosePending: false, bundleAutomaticUpdates: true, bundleRendererReady: true,
+    desktopServicesClosing: false, desktopServicesClosed: false, authorityTransition: { active: false }, bundleLastActivity: Date.now() - 31_000,
+    BrowserWindow: { getAllWindows: () => [window] }, bundleRendererRequests: new Set(), bundleWorkAdmission: { active: 0 },
+    desktopSpeech: { current: null }, desktopMail: { active: new Map() }, desktopAttachmentUpload: { active: new Map() },
+    desktopFileExport: { active: null }, desktopFolderSync: { active: null, streamWaiter: null, resourceRequest: null, ordinaryQueue: [] },
+    aiSyncSessions: new Map(), syncWindowLease: { window: null }, agentBrowsersPromise: null,
+    parallelDevMode: true, webBundleUpdates: { snapshot: () => ({ status: 'pending' }) }, reportBundleActivation: value => emitted.push(value), ...patch };
+  const run = new Function(...Object.keys(values), source.slice(start, end) + '\nreturn { read: bundleActivationDiagnostics, eligible: bundleActivationEligible };');
+  return { ...run(...Object.values(values)), context, emitted };
+}
+test('actual main gate and public projection agree on work/refusal and development-only emission', () => {
+  const good = actualMainEligibility(); assert.equal(good.eligible(), good.context); assert.equal(good.read().eligible, true);
+  assert.deepEqual(good.emitted, [good.read()]);
+  for (const [patch, blocker] of [
+    [{ bundleRendererRequests: new Set([1]) }, 'rendererRequests'], [{ bundleWorkAdmission: { active: 1 } }, 'ipcWork'],
+    [{ desktopMail: { active: new Map([[1, {}]]) } }, 'mailIdle'], [{ agentBrowsersPromise: Promise.resolve({}) }, 'agentBrowserIdle'],
+    [{ embeddedShutdownState: () => ({ ...healthyEligibility().idle, runtime: 'busy' }) }, 'embeddedRuntimeIdle'],
+    [{ authorityTransition: { active: true } }, 'authorityStable'], [{ bundleCloseAccepted: true }, 'closeAccepted']
+  ]) {
+    const host = actualMainEligibility(patch); assert.equal(host.eligible(), null); assert.deepEqual(host.read().blockers, [blocker]);
+  }
+  for (const patch of [{ parallelDevMode: false }, { webBundleUpdates: { snapshot: () => ({ status: 'checking' }) } }]) {
+    const host = actualMainEligibility(patch); host.eligible(); assert.deepEqual(host.emitted, []);
+  }
+});
+test('actual main idle/lifecycle discovery fails closed when accessors or provider probes throw', () => {
+  const helpers = require('../lib/web-bundle-activation.cjs');
+  const source = require('node:fs').readFileSync(require.resolve('../main.cjs'), 'utf8');
+  const functions = source.slice(source.indexOf('function embeddedPlanRuntimeIdle('), source.indexOf('function releaseBundleShutdown('));
+  const run = new Function('globalThis', 'nativeRuntimeWorkLifecycle', 'bundleShutdownIdleState', 'bundleShutdownReservation', 'bundledRendererServer',
+    functions + '\nreturn { read: embeddedShutdownState, idle: embeddedShutdownIdle, activity: embeddedApiRuntimeWork };');
+  const plan = Symbol.for('thingtime.chatgpt-plan.idle'), runtime = Symbol.for('thingtime.runtime-work.lifecycle');
+  const activity = { version: '1.0.0', isIdle: () => true, reserveShutdown: () => null };
+  for (const selected of [plan, runtime]) {
+    const globals = { [plan]: () => true, [runtime]: activity };
+    Object.defineProperty(globals, selected, { get() { throw Error('PRIVATE_SENTINEL'); } });
+    const host = run(globals, helpers.nativeRuntimeWorkLifecycle, helpers.bundleShutdownIdleState, null, { isIdle: () => true });
+    assert.equal(host.idle(), false); assert.equal(host.read()[selected === plan ? 'chatgpt' : 'runtime'], 'error');
+    assert.equal(JSON.stringify(host.read()).includes('PRIVATE_SENTINEL'), false);
+    if (selected === runtime) assert.equal(host.activity(), null);
+  }
+  for (const http of [{ get isIdle() { throw Error('private accessor'); } }, { isIdle() { throw Error('private probe'); } }]) {
+    const host = run({ [plan]: () => true, [runtime]: activity }, helpers.nativeRuntimeWorkLifecycle, helpers.bundleShutdownIdleState, null, http);
+    assert.equal(host.idle(), false); assert.equal(host.read().http, 'error');
+  }
+  assert.equal(helpers.nativeBundleActivationAllowed({ initialized: true, runtime: { get error() { throw Error('private'); } }, activity }), false);
 });
 test('close timeout retains one observer and work fence until actual Chromium veto', async () => {
   const window = new EventEmitter(); window.webContents = new EventEmitter(); window.close = () => {};

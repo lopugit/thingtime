@@ -31,7 +31,7 @@ const { createWebBundleStore } = require('./lib/web-bundle-store.cjs');
 const { createWebBundleLaunch } = require('./lib/web-bundle-launch.cjs');
 const { createWebBundleDownload } = require('./lib/web-bundle-download.cjs');
 const { createWebBundleUpdates } = require('./lib/web-bundle-updates.cjs');
-const { queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation } = require('./lib/web-bundle-activation.cjs');
+const { bundleShutdownIdleState, projectBundleActivationEligibility, createBundleActivationDiagnosticReporter, queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation } = require('./lib/web-bundle-activation.cjs');
 const { validateTrustPolicy, createElectronBundleHost, assertElectronBundleMetadata } = require('../native-bundles/host.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
@@ -108,6 +108,9 @@ let bundledRendererServer = null, bundleShutdownReservation = null, localRuntime
 let bundleLastActivity = Date.now();
 const bundleRendererRequests = new Set();
 const bundleWorkAdmission = createBundleWorkAdmission({ closing: () => bundleClosePending || bundleCloseAccepted, onStart: () => webBundleActivation?.cancel() });
+// Retained task launchers suppress stdout (which may contain email links), but
+// retain stderr diagnostics. Emit only this projected, credential-free record.
+const reportBundleActivation = createBundleActivationDiagnosticReporter({ emit: state => console.error('[thingtime:bundle-activation] ' + JSON.stringify(state)) });
 function handleDesktopOperation(channel, handler) {
  const discovery = ['thingtime-desktop:get-info', 'thingtime-desktop:renderer-ready', 'thingtime-desktop:bundle-update-policy', 'thingtime-desktop:bundle-activation-checkpoint'];
  ipcMain.handle(channel, discovery.includes(channel) ? handler : bundleWorkAdmission.wrap(handler));
@@ -123,7 +126,8 @@ function embeddedPlanRuntimeIdle() {
  } catch { return false; }
 }
 function embeddedApiRuntimeWork() {
- return nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle')));
+ try { return nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle'))); }
+ catch { return null; }
 }
 function desktopWindowPresentationBlocked() {
  return automaticBundleClosing || bundleClosePending || bundleCloseAccepted || desktopServicesClosing || desktopServicesClosed || authorityTransition.restarting;
@@ -132,25 +136,43 @@ function presentMainWindow() {
  return presentBundleWindow({ blocked: desktopWindowPresentationBlocked(), window: mainWindow, origin: appOrigin, create: createWindow });
 }
 function embeddedShutdownIdle() {
- try {
-  return bundleShutdownReservation ? bundleShutdownReservation.isCurrent() :
-    embeddedPlanRuntimeIdle() && bundledRendererServer?.isIdle?.() === true && embeddedApiRuntimeWork()?.isIdle() === true;
- } catch { return false; }
+ const state = embeddedShutdownState();
+ return state.reserved ? state.reservation === 'idle' : state.http === 'idle' && state.chatgpt === 'idle' && state.runtime === 'idle';
+}
+function embeddedShutdownState() {
+ return bundleShutdownIdleState({ reservation: bundleShutdownReservation,
+  http: () => { const idle = bundledRendererServer?.isIdle; return typeof idle === 'function' ? idle.call(bundledRendererServer) : undefined; },
+  chatgpt: () => { const idle = Reflect.get(globalThis, Symbol.for('thingtime.chatgpt-plan.idle')); return typeof idle === 'function' ? idle() : undefined; },
+  runtime: () => nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle')))?.isIdle() });
 }
 function releaseBundleShutdown() {
  bundleShutdownReservation?.release(); bundleShutdownReservation = null;
 }
+function bundleActivationDiagnostics(allowClosing = false) {
+ const available = Boolean(mainWindow && !mainWindow.isDestroyed());
+ const state = projectBundleActivationEligibility({
+  closeAccepted: bundleCloseAccepted, closePending: bundleClosePending, allowClosing,
+  nativeAuthority: nativeBundleActivationAllowed({ initialized: localRuntimeInitialized, runtime: localRuntime, activity: embeddedApiRuntimeWork() }),
+  automaticUpdates: bundleAutomaticUpdates === true, rendererReady: bundleRendererReady,
+  windowAvailable: available, windowFocused: available ? mainWindow.isFocused() : null,
+  servicesClosing: desktopServicesClosing, servicesClosed: desktopServicesClosed, authorityActive: authorityTransition.active,
+  idleInterval: Date.now() - bundleLastActivity >= 30000,
+  counts: { otherWindows: BrowserWindow.getAllWindows().filter(window => window !== mainWindow).length,
+   rendererRequests: bundleRendererRequests.size, ipcWork: bundleWorkAdmission.active,
+   mailWork: desktopMail.active.size, attachmentUploads: desktopAttachmentUpload.active.size,
+   folderQueue: desktopFolderSync.ordinaryQueue?.length || 0, aiSyncWork: aiSyncSessions.size },
+  idle: embeddedShutdownState(),
+  speechActive: Boolean(desktopSpeech.current), fileExportActive: Boolean(desktopFileExport.active),
+  folderSyncActive: Boolean(desktopFolderSync.active), folderStreamActive: Boolean(desktopFolderSync.streamWaiter),
+  folderRequestActive: Boolean(desktopFolderSync.resourceRequest), syncWindowActive: Boolean(syncWindowLease.window),
+  agentBrowserActive: Boolean(agentBrowsersPromise), contextAvailable: Boolean(bundleActivationContext)
+ });
+ return state;
+}
 function bundleActivationEligible(allowClosing = false) {
- if (bundleCloseAccepted || (bundleClosePending && !allowClosing)) return null;
- if (!nativeBundleActivationAllowed({ initialized: localRuntimeInitialized, runtime: localRuntime, activity: embeddedApiRuntimeWork() }) ||
-     !bundleAutomaticUpdates || !bundleRendererReady || !mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused() ||
-     desktopServicesClosing || desktopServicesClosed || authorityTransition.active || Date.now() - bundleLastActivity < 30000 ||
-     BrowserWindow.getAllWindows().some(window => window !== mainWindow) || bundleRendererRequests.size || bundleWorkAdmission.active ||
-     !embeddedShutdownIdle() ||
-     desktopSpeech.current || desktopMail.active.size || desktopAttachmentUpload.active.size || desktopFileExport.active ||
-     desktopFolderSync.active || desktopFolderSync.streamWaiter || desktopFolderSync.resourceRequest || desktopFolderSync.ordinaryQueue?.length ||
-     aiSyncSessions.size || syncWindowLease.window || agentBrowsersPromise) return null;
- return bundleActivationContext;
+ const state = bundleActivationDiagnostics(allowClosing);
+ if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') reportBundleActivation(state);
+ return state.eligible ? bundleActivationContext : null;
 }
 function startBundleUpdateCheck() {
  if (bundleAutomaticUpdates !== true || !bundleRendererReady || desktopWindowPresentationBlocked()) return;
@@ -406,7 +428,12 @@ async function initializeWebBundleLaunch() {
         }
       }
     });
-    bundleActivationTimer = setInterval(() => { if (!bundleClosePending) void webBundleActivation?.attempt(); }, 30000);
+    bundleActivationTimer = setInterval(() => {
+      // Independent main-process heartbeat also survives a renderer IPC stall
+      // or an unresolved close. It never starts/reserves work of its own.
+      if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') reportBundleActivation(bundleActivationDiagnostics());
+      if (!bundleClosePending) void webBundleActivation?.attempt();
+    }, 30000);
     bundleActivationTimer.unref();
   }
   webBundleLaunch = createWebBundleLaunch({ store, onFailure: async () => {
@@ -1930,7 +1957,7 @@ function getDesktopInfo() {
     nativeFeatures: bundleActivationManifest(appOrigin),
     appVersion: getCurrentAppVersion(),
     webBundle: { source: selectedWebBundle?.source || 'bundled', releaseId: selectedWebBundle?.releaseId || null,
-      update: webBundleUpdates?.snapshot() || { status: 'unconfigured' } },
+      update: webBundleUpdates?.snapshot() || { status: 'unconfigured' }, activation: bundleActivationDiagnostics() },
     buildIdentity: {
       gitBranch: typeof buildMetadata.gitBranch === 'string' ? buildMetadata.gitBranch : null,
       gitCommit: typeof buildMetadata.gitCommit === 'string' && /^[0-9a-f]{7,40}$/u.test(buildMetadata.gitCommit)

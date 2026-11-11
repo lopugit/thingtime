@@ -58,12 +58,22 @@ rollback and serialized async callbacks. The caller supplies an absolute path;
 no account authority, API capabilities or Mongo-compatible behavior is inferred.
 `test:document-store` runs actual SQLite file and fresh-process recovery checks
 and is included in `test:unit`. The runtime needs Node 24 with `node:sqlite`.
-The collection/query/update/index adapters, storage ledger and ACL route
-acceptance, native profile bootstrap and iOS file persistence are still required.
-Do not select this store in production merely because these primitive tests pass.
+`collectionContract.ts` and `collectionProvider.ts` add an explicit typed native
+collection vocabulary over that transaction boundary: conditional mutation,
+ordered paging and durable sparse/multikey single-field uniqueness. The existing
+test command also runs `collectionProvider.test.ts`, including cross-collection
+rollback, competing revision claims and hostile/unsupported input admission.
+This scan-based adapter is not Mongo syntax/parity or an activated API provider.
+Canonical query translation, ledger/history and ACL route acceptance, efficient
+indexes, native profile bootstrap and iOS file persistence are still required.
+Do not select this store in production merely because these foundation tests pass.
 
-The native 1.1 activation host negotiates the process-local Nitro runtime-work
+The native 1.2 activation host negotiates the process-local Nitro runtime-work
 contract and combines its reservation with the HTTP and ChatGPT admissions.
+The existing `getInfo` bridge adds an allowlisted activation projection used by
+the actual gate; the isolated verifier negotiates its origin/version. Development
+pending-release heartbeats distinguish main-process observation from renderer
+IPC failure. Keep diagnostic callbacks read-only and test throwing discovery.
 `CustomDrawerItems` omits its known closed editor from the rendered projection;
 open drafts and Builder layouts retain every saved block. The global unknown-draft
 guard still protects hidden unsaved editors. Run `test:nav` for the projection.

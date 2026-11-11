@@ -20,6 +20,14 @@
   and content/ledger/history rollback acceptance remain independent checks.
 - Preserve both MongoDB and SQLite providers; never infer SQLite API readiness
   from raw document-store tests or silently fallback between account stores.
+- Run `corepack pnpm --dir remix run test:document-store` for the explicit SQLite
+  collection provider as well as the primitive store. Check lossless BSON types,
+  distinct string/ObjectId identities, deterministic paging, sparse/multikey
+  uniqueness across reopen, conditional revision races and atomic content/ledger
+  rollback. An error caught inside the transaction must still abort commit.
+  Unsupported operators/options and malicious wrapper internals must be refused
+  before writes even on empty or unmatched collections; custom hooks never run.
+  These synthetic collection names do not prove canonical API accounting/ACLs.
 
 ## Main integration compatibility — 2026-11-11
 
@@ -38,6 +46,14 @@
   retain the incoming editable presentation.
 
 ## Native web release integrity and recovery — 2026-11-11
+
+- For native activation diagnostics 1.2, compare the actual eligibility decision
+  with its public projection across every work/identity/editor safety veto.
+  Unknown/throwing lifecycle discovery must fail closed without exposing errors.
+  Verify exact-origin capability negotiation and allowlisted primitive output;
+  production and non-pending startup must not emit development heartbeats. In a
+  real isolated native run, retain main-process heartbeat evidence independently
+  of renderer `getInfo` timeouts. Diagnostics never authorize forced activation.
 
 - Run `node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
   Cover wrong signatures/key scopes, ABI/target/shell mismatch, replay floors,

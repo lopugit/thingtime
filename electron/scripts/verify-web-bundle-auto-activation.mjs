@@ -25,6 +25,41 @@ const log = await open(path.join(temporary, 'development.log'), 'w', 0o600);
 let phase = 'preflight', failure, cleanupFailure, receipt, launcher, api, browser, page, originalPolicy, createdWorkspace = false;
 const startedAt = new Date().toISOString(), observations = [];
 const activationDiagnostics = [];
+let hostActivationDiagnostics = [];
+const diagnosticTemplate = require('../lib/web-bundle-activation.cjs').projectBundleActivationEligibility({});
+function publicActivationDiagnostics(value) {
+ if (!value || value.format !== 1 || typeof value.eligible !== 'boolean' || !Array.isArray(value.blockers)) throw Error('Unsupported native activation diagnostics');
+ const gates = {}, counts = {}, idle = {};
+ for (const name of Object.keys(diagnosticTemplate.gates)) {
+  if (typeof value.gates?.[name] !== 'boolean') throw Error('Malformed native activation gates'); gates[name] = value.gates[name];
+ }
+ for (const name of Object.keys(diagnosticTemplate.counts)) {
+  const count = value.counts?.[name];
+  if (count !== null && (!Number.isSafeInteger(count) || count < 0)) throw Error('Malformed native activation counts'); counts[name] = count;
+ }
+ if (typeof value.idle?.reserved !== 'boolean') throw Error('Malformed native shutdown observation');
+ idle.reserved = value.idle.reserved;
+ for (const name of ['http','chatgpt','runtime','reservation']) {
+  const status = value.idle?.[name];
+  if (!['idle','busy','unavailable','error',...(name === 'reservation' ? ['absent'] : [])].includes(status)) throw Error('Malformed native shutdown observation'); idle[name] = status;
+ }
+ const blockers = Object.keys(gates).filter(name => !gates[name]);
+ if (value.eligible !== (blockers.length === 0) || JSON.stringify(value.blockers) !== JSON.stringify(blockers)) throw Error('Inconsistent native activation projection');
+ return { format: 1, eligible: value.eligible, blockers, gates, counts, idle };
+}
+async function captureHostActivationLog() {
+ const lines = (await readFile(path.join(temporary, 'development.log'), 'utf8')).split('\n');
+ lines.pop(); // A concurrent writer may not have finished its last JSON line.
+ const prefix = '[thingtime:bundle-activation] ';
+ const records = [];
+ for (const line of lines) if (line.startsWith(prefix)) {
+  const value = JSON.parse(line.slice(prefix.length));
+  if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0) throw Error('Malformed native observation timestamp');
+  records.push({ observedAt: value.observedAt, ...publicActivationDiagnostics(value) });
+ }
+ hostActivationDiagnostics = records;
+ await writeFile(path.join(output, 'host-activation-diagnostics.json'), JSON.stringify(records, null, 2));
+}
 const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
 const persistenceReaderFiles = ['remix/app/local-workspace/editorTree.ts', 'remix/app/local-workspace/storage.ts', 'remix/app/Providers/thingtimeSerialization.ts'];
 const persistenceReaderSourceHashes = Object.fromEntries(await Promise.all(persistenceReaderFiles.map(async file => [file, hash(await readFile(path.join(repo, file)))])));
@@ -114,7 +149,9 @@ async function captureActivationState() {
     return !['button','submit','reset','hidden','checkbox','radio'].includes(element.type) && Boolean(element.value);
    }).map(element => ({ tag: element.tagName, label: element.getAttribute('aria-label'), visible: Boolean(element.getClientRects().length), nonempty: Boolean(element.value) }));
    return { pathname: location.pathname, focused: document.hasFocus(), visibility: document.visibilityState,
-    featureVersions: Object.fromEntries(Object.entries(info.nativeFeatures?.features || {}).map(([key, value]) => [key, value.version])),
+    featureVersions: { 'native.web-bundle-activation': info.nativeFeatures?.features?.['native.web-bundle-activation']?.version },
+    featureOriginMatches: info.nativeFeatures?.origin === location.origin,
+    activation: info.webBundle?.activation,
     updateStatus: info.webBundle?.update?.status, updateReleaseId: info.webBundle?.update?.releaseId || null,
     activeReleaseId: info.webBundle?.releaseId || null, buildIdentityPresent: Boolean(info.buildIdentity?.gitCommit),
     localRuntimeActive: info.localRuntime?.active === true, localRuntimeEnabled: info.localRuntime?.enabled === true,
@@ -122,10 +159,13 @@ async function captureActivationState() {
     closedDrawerEmojiFields: document.querySelectorAll('input[aria-label="Emoji"]').length,
     blockers, receivedMessages: window.__nativeAutoQa || [] };
   }), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Task public state observation timed out')), 4000); })]);
+  const nativeVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(state.featureVersions['native.web-bundle-activation'] || '');
+  if (!state.featureOriginMatches || !nativeVersion || Number(nativeVersion[1]) < 2) throw Error('Current origin requires native activation diagnostics 1.2.0');
+  state.activation = publicActivationDiagnostics(state.activation);
   activationDiagnostics.push({ at: new Date().toISOString(), ...state });
   await writeFile(path.join(output, 'activation-diagnostics.json'), JSON.stringify(activationDiagnostics, null, 2));
   return state;
- } finally { clearTimeout(timer); }
+ } finally { clearTimeout(timer); await captureHostActivationLog(); }
 }
 async function verifyDrawerEditor() {
  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
@@ -215,6 +255,10 @@ try {
  }, 120000, 'Real baseline renderer did not initialize');
  assert.equal(initial.webBundle.source, 'bundled'); assert.equal(initial.localRuntime.active, false); assert.equal(initial.localRuntime.enabled, false);
  assert.equal(new URL(initial.apiOrigin).origin, apiOrigin);
+ const diagnosticVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(initial.nativeFeatures?.features?.['native.web-bundle-activation']?.version || '');
+ assert.equal(initial.nativeFeatures?.origin, initial.origin);
+ assert.ok(diagnosticVersion && Number(diagnosticVersion[1]) >= 2, 'Negotiate native diagnostics 1.2.0 before depending on them');
+ publicActivationDiagnostics(initial.webBundle?.activation);
  await page.evaluateOnNewDocument(() => {
   window.__nativeAutoQa = [];
   window.thingtimeDesktop?.onBundleActivation?.(message => window.__nativeAutoQa.push({ type: message.type, at: Date.now(), keepVeto: message.keepVeto === true }));
@@ -351,10 +395,11 @@ finally {
   if (originalPolicy) await writeFile(path.join(workspace.source, 'native-web-policy.json'), originalPolicy);
   if (receipt && createdWorkspace) { await rm(workspace.app, { recursive: true }); await rm(workspace.root, { recursive: true }); }
  } catch (error) { cleanupFailure = error; }
+ await captureHostActivationLog().catch(error => { cleanupFailure ||= error; });
  await log.close();
 }
 const result = { ...receipt, passed: Boolean(receipt && !failure && !cleanupFailure), startedAt, finishedAt: new Date().toISOString(), phase,
- cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
+ cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, hostActivationDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
  cleanupFailure: cleanupFailure ? { name: cleanupFailure.name, message: cleanupFailure.message } : undefined,
  ...(failure || cleanupFailure ? { retainedDiagnostics: temporary } : {}) };
 await writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2) + '\n');

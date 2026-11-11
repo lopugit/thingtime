@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T14:01:57.535923+00:00",
+  "scope": "Explicit native collection vocabulary over real SQLite/BSON transactions; not a Mongo-compatible client or canonical API integration. Mongo remains unchanged; SQLite is not selected for users.",
+  "authoredFiles": [
+    "remix/app/api/utils/documentStore/collectionContract.ts",
+    "remix/app/api/utils/documentStore/collectionProvider.ts",
+    "remix/app/api/utils/documentStore/collectionProvider.test.ts"
+  ],
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "b41324fd4a1041c0d18fc2a64902e57e64d13c65b767267aadadfbdde187ce4e",
+    "remix/app/api/utils/documentStore/collectionProvider.test.ts": "9ca594e97efed1d59e03574be9fcb9eb0147043555e4de56529d1f69e4d0a814",
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/documentStore/sqliteStore.test.ts": "dce263357545a2ad6cf4297e54c7c453546981d6ebca3762e1a1b7568b780c0c",
+    "remix/app/api/utils/documentStore/reopen.fixture.mjs": "628722c1003110ad06654ed3d6981e4ed7c078963d6f00672b37a909050f65a3"
+  },
+  "verification": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/collectionProvider.test.ts app/api/utils/documentStore/sqliteStore.test.ts",
+      "exitCode": 0,
+      "tests": 21,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "log": "/tmp/pr1000-sqlite-collections-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/documentStore/collectionContract.ts app/api/utils/documentStore/collectionProvider.ts app/api/utils/documentStore/collectionProvider.test.ts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "/tmp/pr1000-sqlite-collections-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit --pretty false",
+      "exitCode": 0,
+      "diagnostics": 0,
+      "log": "/tmp/pr1000-sqlite-collections-types.log"
+    }
+  ],
+  "semantics": {
+    "identity": "Distinct nonempty string and ObjectId identities; deterministic identity-key ordering, not Mongo sort order.",
+    "filter": "Validated explicit eq/order/exists/contains/and/or AST; missing is distinct from null; equality is BSON-type-exact including numeric type. Ordering has no coercion or collation.",
+    "update": "Set, unset and checked existing integer increment; immutable _id; conflicting paths refused; no upsert/options/expression pipelines.",
+    "unique": "Immutable persisted single-field definitions; sparse skips missing only; non-sparse missing maps to null; multikey expands one scalar array level with within-document deduplication.",
+    "transactions": "Actual SQLite transaction, scoped synchronous operations, caught validation/write errors poison commit, cross-collection rollback and serialized two-handle conditional mutation.",
+    "cost": "Correctness-first complete scans; 128-row processing batch is not a truncation limit. Every find/mutation scans O(n) records; this is not production index performance."
+  },
+  "remainingRequirements": [
+    "No canonical API/provider selection or registration/session acceptance using SQLite.",
+    "Canonical Mongo filters/update expressions, projection/sort/cursor contracts, TTL, compound/partial indexes, aggregate/search and migration readiness remain unsupported.",
+    "ACL, logical-byte accounting, private Thing history, session/home-vs-active authority and secure profile bootstrap still require canonical adapter integration.",
+    "First native adapter consumer should implement the owner/revision-bound userStorage ledger repository using this transaction vocabulary and existing canonical validators, alongside the unchanged Mongo implementation; content, ledger and history must share one actual transaction.",
+    "Real API register/session/private Thing CRUD, competing-owner refusal, accounting/history rollback and cold-restart acceptance remain required."
+  ]
+}

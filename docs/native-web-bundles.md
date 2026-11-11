@@ -126,7 +126,7 @@ installed acceptance distinct from the recorded startup/rollback receipt.
 ## Automatic activation work in progress
 
 The renderer now supports a nonce-bound durable persistence checkpoint through
-`native.web-bundle-activation` 1.1.0. The existing automatic-update preference
+`native.web-bundle-activation` 1.2.0. The existing automatic-update preference
 controls it. An unfocused window must be idle for 30 seconds; dirty or unknown
 editors, active media, failed persistence and identity changes keep the candidate
 pending. This source checkpoint still requires final installed-app acceptance.
@@ -155,6 +155,16 @@ this contract; unknown or older bundles remain pending. The local lane also
 requires unchanged initialized authority and, for a managed database, a live
 owned child process. This source eligibility is not installed acceptance.
 
+Version 1.2 adds a read-only eligibility projection to `getInfo().webBundle.activation`
+on the existing bridge. The real eligibility decision uses that same projection:
+named boolean gates, counts and idle/busy/unavailable/error states only. It never
+returns account content, credentials, provider exceptions or native handles.
+The isolated verifier negotiates the loaded origin and compatible feature version
+before relying on it. Task development builds emit the same projection only while
+a candidate is pending, on changed blockers and at a bounded heartbeat interval.
+This gives evidence independent of renderer IPC; it cannot acquire a reservation,
+force a restart or relax a safety gate. Throwing lifecycle discovery fails closed.
+
 Admission follows the actual asynchronous operation after response deadlines or
 reader cancellation: transcript saves and lease renewal, parallel tools, provider
 cleanup, catalogue/inventory/overview streams, ZIP and avatar cleanup,
@@ -182,13 +192,33 @@ targets macOS arm64/x64; it does not establish an iOS server port. SQLite remain
 the in-process portability path for the mobile runtime.
 
 The internal `documentStore` primitive uses file-backed SQLite transactions and
-lossless BSON bytes. Real temporary-file tests cover typed data, rollback,
-serialization, scoped sessions and independent-process recovery. It does not yet
-implement the canonical collection/query/index facade, authorize an account,
-select a native storage path or advertise local API readiness. See
-[local development foundations](feature-map/local-development-and-worktrees.md).
+lossless BSON bytes. Its explicit collection provider adds typed identities,
+validated filters, conditional set/unset/increment, deterministic paging and
+durable single-field sparse/multikey uniqueness. Transactions span collections;
+a caught failed operation still aborts the entire transaction. Unsupported query
+syntax, options and executable/custom object hooks are refused before mutation,
+including when a collection is empty or no row matches.
+
+This vocabulary is deliberately not MongoDB query syntax or a drop-in Mongo
+driver. Numeric equality retains BSON types; null and missing are distinct;
+paths do not implicitly traverse arrays. The current correctness-first provider
+scans a collection for each operation, so it is not ready for production scale.
+It does not yet translate canonical API queries, authorize an account, integrate
+the storage ledger/history or select a native profile. No runtime switches to
+SQLite as a result of these tests. See [collection evidence and next integration](../artifacts/anonymous-release-2026-11-12/sqlite-collections/README.md)
+and [local development foundations](feature-map/local-development-and-worktrees.md).
 
 ## Remaining integration and acceptance
+
+The subsequent 1.2 diagnostics run observes a host-eligible state, zero work
+counters and idle HTTP/ChatGPT/Nitro providers, followed by a prepare/release
+exchange one millisecond apart. It again passes dirty refusal, persistence and
+reload, then times out awaiting process replacement. Later bridge observations
+are unavailable. The next required evidence is the renderer's checkpoint refusal
+or the host's cancellation reason; neither is inferred from DOM state alone.
+The retained launcher intentionally suppresses stdout, so that run has no host
+heartbeat samples. A shell-only stderr correction preserves this suppression and
+needs its own actual run. [Diagnostics evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/host-eligibility-1.2.0/README.md).
 
 The 12 November actual native run, following the reproduced input-mount fix,
 passes single typing, signed staging, 70-second dirty refusal, normal submission,

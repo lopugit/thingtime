@@ -1,0 +1,11 @@
+This isolated native run used source `01c6bc3afbe9970944ef4df51c338141792ed3ce` plus the exact diagnostic changes recorded in `run-input.json`. The uncontended `build:web` passed. This is synthetic signed delivery through the real app/downloader, not a production publication or local account API acceptance.
+
+Editor readiness, one typing action, staging, 70,434 ms dirty refusal, Enter submission, canonical persisted readback and hard reload passed. Home had no unknown DOM blockers. Twelve native 1.2 observations reported eligible with zero host work/request counters and HTTP, ChatGPT and runtime idle. One prepare/release pair occurred approximately 1 ms apart. Automatic process replacement did not occur within 150 seconds; twelve later renderer observations timed out.
+
+The tested checkpoint protocol does not identify whether that immediate release followed host-context cancellation or a renderer readiness/participant/persistence refusal. Those causes remain unproved. The next diagnosis should name the cancellation/refusal at the existing checkpoint boundaries without relaxing them.
+
+The retained launcher deliberately discards stdout. Consequently, this run retained no stdout heartbeat. The final shell-only correction sends only the projected tagged diagnostic to retained stderr, preserving stdout suppression. Its regression passes; no second native run tested that correction. Final focused checks: 47 passed, zero failed; syntax and bridge lint passed.
+
+`source-and-outcome.json` separates tested/final source hashes and records cleanup, build-log digest and payload reuse conditions. Both complete inventories match: 1,822 files, 269,974,217 bytes, inventory SHA-256 `06bbaaeb0829e0e25e662ecc0533b2f00d9cdece832cb0e5d8b651dedae39b05`. Only the approved main-process logger transport changed among recorded runtime inputs. Fresh canonical preparation can reuse these web bytes after revalidating that inventory and inputs; later renderer/server/packaging changes invalidate that claim.
+
+PID 36535 exited, task listeners and launcher are absent, and the original public trust policy was restored. The isolated development snapshot is retained; the stable app and personal accounts were untouched. Raw build output remains local; its digest is in the receipt.

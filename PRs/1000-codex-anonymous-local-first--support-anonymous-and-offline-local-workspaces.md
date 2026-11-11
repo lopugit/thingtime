@@ -2,6 +2,35 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native eligibility observation — 12 November 2026
+
+Native activation 1.2 exposes the actual eligibility projection on the existing
+bridge, with no additional shutdown permission. A fresh isolated app run passes
+signed staging, 70-second dirty refusal, normal Enter, canonical persistence and
+hard reload. It then observes the host eligible with zero work counters and all
+three providers idle, followed by one prepare/release exchange one millisecond
+apart. Automatic replacement still times out; later bridge observations also
+time out. Cleanup is verified. The exact renderer rejection or host cancellation
+reason is not yet exposed, so this does not establish a specific cause.
+
+The retained launcher suppresses stdout. The subsequent shell-only correction
+sends the same allowlisted development heartbeat to its retained stderr; this
+correction has focused coverage but has not been exercised by another native run.
+See [scoped native evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/host-eligibility-1.2.0/README.md).
+
+## SQLite collection foundation — 12 November 2026
+
+Extend the actual BSON/SQLite transaction store with an explicit typed collection
+contract: deterministic paging, conditional mutation and durable single-field
+sparse/multikey uniqueness. Real-file tests cover competing revision claims,
+cross-collection rollback even after a caught failure, BSON identity/type fidelity,
+reopen and eager rejection of unsupported or executable inputs.
+
+Keep the existing bundled MongoDB path. No account/profile selects SQLite yet;
+the scan-based collection layer is not Mongo query parity, canonical API/ledger
+acceptance or production-scale indexing. See
+[verification and remaining integration](../artifacts/anonymous-release-2026-11-12/sqlite-collections/README.md).
+
 ## Both local database providers — 12 November 2026
 
 Main advanced during this checkpoint to `284f73d44` (PR #1477 browser passkey

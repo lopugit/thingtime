@@ -44,9 +44,21 @@ export type ThingtimeLocalRuntime = {
 	downloadUrl: string;
 };
 
+export type ThingtimeDesktopBundleActivationDiagnostics = {
+ format: 1;
+ eligible: boolean;
+ blockers: readonly string[];
+ gates: Readonly<Record<string, boolean>>;
+ counts: Readonly<Record<string, number | null>>;
+ idle: Readonly<{ reserved: boolean; reservation: 'absent' | 'idle' | 'busy' | 'unavailable' | 'error';
+  http: 'idle' | 'busy' | 'unavailable' | 'error'; chatgpt: 'idle' | 'busy' | 'unavailable' | 'error'; runtime: 'idle' | 'busy' | 'unavailable' | 'error' }>;
+};
+
 export type ThingtimeDesktopInfo = {
  nativeFeatures?: { origin: string; features: Record<string, { version: string; methods: readonly string[] }> };
-	webBundle?: { source: 'bundled' | 'retained' | 'trial'; releaseId: string | null };
+	webBundle?: { source: 'bundled' | 'retained' | 'trial'; releaseId: string | null;
+  /** Requires native.web-bundle-activation >=1.2.0 on this loaded origin. */
+  activation?: ThingtimeDesktopBundleActivationDiagnostics };
  sessionStorage?: {
   mode: 'partitioned' | 'legacy';
   legacyApiOrigin: string | null;

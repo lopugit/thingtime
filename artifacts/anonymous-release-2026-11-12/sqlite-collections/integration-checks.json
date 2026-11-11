@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-11-11T14:05:17.551567+00:00",
+  "baseCommit": "01c6bc3afbe9970944ef4df51c338141792ed3ce",
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "b41324fd4a1041c0d18fc2a64902e57e64d13c65b767267aadadfbdde187ce4e",
+    "remix/app/api/utils/documentStore/collectionProvider.test.ts": "9ca594e97efed1d59e03574be9fcb9eb0147043555e4de56529d1f69e4d0a814",
+    "remix/app/utils/electronBridge.ts": "d4bb63d3cd924121afdeede2e77fa17cb1ce8e5bafb427035ede352acb73abf9"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run lint",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 372,
+      "log": "/tmp/pr1000-sqlite-collections-full-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "exitCode": 0,
+      "errors": 0,
+      "log": "/tmp/pr1000-sqlite-collections-ratchet.log"
+    }
+  ],
+  "scope": "Combined current storage and native bridge source; no production or installed-app acceptance is inferred."
+}

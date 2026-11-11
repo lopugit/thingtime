@@ -1,6 +1,6 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
-const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.1.0', methods: Object.freeze(['set-policy', 'checkpoint']), modes: Object.freeze(['remote-account', 'local-api']) });
+const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.2.0', methods: Object.freeze(['set-policy', 'checkpoint']), modes: Object.freeze(['remote-account', 'local-api']) });
 const bundleActivationManifest = origin => ({ origin, features: { 'native.web-bundle-activation': BUNDLE_ACTIVATION_FEATURE } });
 function assertBundleActivationSender(event, window, origin) {
   if (!window || window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
@@ -29,11 +29,89 @@ function nativeRuntimeWorkLifecycle(value) {
 /** Both API lanes require initialized, unchanged authority and the bundle's
  * background-work contract. Managed databases must still be alive. */
 function nativeBundleActivationAllowed({ initialized, runtime, activity }) {
+ try {
   if (initialized !== true || !runtime || !nativeRuntimeWorkLifecycle(activity) || runtime.error !== null || runtime.restartRequired === true ||
       typeof runtime.runningEnabled !== 'boolean' || runtime.runningEnabled !== runtime.state?.enabled) return false;
   if (!runtime.runningEnabled || runtime.state.databaseMode === 'external') return runtime.child === null;
   return runtime.state.databaseMode === 'managed' && Number.isSafeInteger(runtime.child?.pid) && runtime.child.pid > 0 &&
     runtime.child.exitCode === null && runtime.child.signalCode === null && runtime.child.killed === false;
+ } catch { return false; }
+}
+
+const idleStates = new Set(['idle', 'busy', 'unavailable', 'error']);
+function observeBundleIdle(probe) {
+  if (typeof probe !== 'function') return 'unavailable';
+  try { const result = probe(); return result === true ? 'idle' : result === false ? 'busy' : 'unavailable'; }
+  catch { return 'error'; }
+}
+/** Read-only observations. An acquired reservation remains authoritative, as in
+ * the existing shutdown gate; diagnostic probes never acquire/release it. */
+function bundleShutdownIdleState({ reservation, http, chatgpt, runtime }) {
+  return Object.freeze({ reserved: Boolean(reservation),
+    reservation: reservation ? observeBundleIdle(() => reservation.isCurrent()) : 'absent',
+    http: observeBundleIdle(http), chatgpt: observeBundleIdle(chatgpt), runtime: observeBundleIdle(runtime) });
+}
+function projectBundleActivationEligibility(input) {
+  input = input && typeof input === 'object' ? input : {};
+  const counts = {};
+  for (const name of ['otherWindows', 'rendererRequests', 'ipcWork', 'mailWork', 'attachmentUploads', 'folderQueue', 'aiSyncWork']) {
+    const value = input.counts?.[name];
+    counts[name] = Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
+  const reserved = input.idle?.reserved === true;
+  const idle = { reserved };
+  for (const name of ['http', 'chatgpt', 'runtime']) idle[name] = idleStates.has(input.idle?.[name]) ? input.idle[name] : 'unavailable';
+  idle.reservation = reserved && idleStates.has(input.idle?.reservation) ? input.idle.reservation : reserved ? 'unavailable' : 'absent';
+  // Every key is part of the public allowlist. Never return input objects,
+  // errors, live handles, URLs, IDs, paths or arbitrary provider metadata.
+  const gates = {
+    closeAccepted: input.closeAccepted === false,
+    closePending: input.closePending === false || input.allowClosing === true,
+    nativeAuthority: input.nativeAuthority === true,
+    automaticUpdates: input.automaticUpdates === true,
+    rendererReady: input.rendererReady === true,
+    windowAvailable: input.windowAvailable === true,
+    windowUnfocused: input.windowFocused === false,
+    servicesOpen: input.servicesClosing === false && input.servicesClosed === false,
+    authorityStable: input.authorityActive === false,
+    idleInterval: input.idleInterval === true,
+    otherWindows: counts.otherWindows === 0,
+    rendererRequests: counts.rendererRequests === 0,
+    ipcWork: counts.ipcWork === 0,
+    shutdownReservation: !reserved || idle.reservation === 'idle',
+    embeddedHttpIdle: reserved || idle.http === 'idle',
+    embeddedChatgptIdle: reserved || idle.chatgpt === 'idle',
+    embeddedRuntimeIdle: reserved || idle.runtime === 'idle',
+    speechIdle: input.speechActive === false,
+    mailIdle: counts.mailWork === 0,
+    uploadsIdle: counts.attachmentUploads === 0,
+    fileExportIdle: input.fileExportActive === false,
+    folderSyncIdle: input.folderSyncActive === false,
+    folderStreamIdle: input.folderStreamActive === false,
+    folderRequestIdle: input.folderRequestActive === false,
+    folderQueueIdle: counts.folderQueue === 0,
+    aiSyncIdle: counts.aiSyncWork === 0,
+    syncWindowIdle: input.syncWindowActive === false,
+    agentBrowserIdle: input.agentBrowserActive === false,
+    contextAvailable: input.contextAvailable === true
+  };
+  const blockers = Object.freeze(Object.keys(gates).filter(name => !gates[name]));
+  return Object.freeze({ format: 1, eligible: blockers.length === 0, blockers,
+    gates: Object.freeze(gates), counts: Object.freeze(counts), idle: Object.freeze(idle) });
+}
+/** The caller gates this to staged-pending task development builds. Ordinary
+ * app startup/polling emits nothing; unchanged reasons emit one heartbeat. */
+function createBundleActivationDiagnosticReporter({ emit, now = Date.now, heartbeatMs = 30000 }) {
+  let previous, lastAt;
+  return state => {
+    const signature = JSON.stringify(state.blockers), at = now();
+    if (previous === signature && at - lastAt < heartbeatMs) return false;
+    try {
+      emit({ observedAt: at, format: state.format, eligible: state.eligible,
+        blockers: state.blockers, gates: state.gates, counts: state.counts, idle: state.idle });
+      previous = signature; lastAt = at; return true;
+    } catch { return false; } // An optional observer cannot alter eligibility.
+  };
 }
 
 /** Acquire all in-process admission reservations without yielding. Failure of
@@ -160,4 +238,4 @@ function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onC
     } catch (error) { cleanup(); reject(error); }
   });
 }
-module.exports = { queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };
+module.exports = { observeBundleIdle, bundleShutdownIdleState, projectBundleActivationEligibility, createBundleActivationDiagnosticReporter, queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };
