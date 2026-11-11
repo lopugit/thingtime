@@ -536,3 +536,12 @@ than mapping it to an invented thinking mode. Console SDK streaming regression:
 `api/utils/lopu/chat.streaming.test.mts`; both manifest generators and personal
 provider client requirements advertise the compatible reply PATCH. Voice retains
 its existing strict tuning guard.
+
+Browser passkey AppID compatibility: `passwords/browserPasskey.ts` validates the
+empty/default or exact-origin HTTPS no-network FIDO facet subset and emits
+`appid:false` for ordinary RP-bound assertions. `browserProviderCeremony.ts`
+requires both frontend and active `api.passwords` 1.9.0 before AppID vault reads;
+full request hashing retains AppID in the verification/session binding.
+`browser-extension/page-hook.js` adapter 0.5.0 preserves input/output serialization
+and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
+browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.

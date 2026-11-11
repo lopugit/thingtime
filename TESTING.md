@@ -15975,6 +15975,20 @@ actions must stay unavailable, without following foreign authority URLs. After
 coherent API contracts are served, resource reads and opaque next-page actions
 must work. Also reject a metadata-only Connections 2.2 server for service
 projection, which requires 2.3. Retain both actual preview manifests separately.
+### Browser assertion AppID compatibility
+
+Run the passkey/provider/client and extension suites, then
+`THINGTIME_TEST_PLAYWRIGHT_MODULE=<installed-module> node browser-extension/test/appid-browser.mjs <evidence-dir>`.
+The isolated synthetic Chromium fixture must preserve AppID through serialization,
+return appid:false, verify the real ES256 assertion independently against the
+ordinary RP ID, and delegate an unsupported cross-origin request unchanged.
+Reject credential-bearing/HTTP/cross-origin/fragment/malformed AppIDs, unknown or
+mixed extensions, registration AppID, wrong RP and excluded credentials. Preserve
+fresh verification and reject changed request/session state. A newer frontend
+with an older active API must refuse before any vault operation and permit a
+fresh compatible retry. Real relying-party acceptance, installed extension
+reload, provider selection and device presence remain separate checks.
+
 ### Password workspace and imported field editor
 
 - Run `pnpm --dir remix test:passwords` for typed property round trips, preservation,

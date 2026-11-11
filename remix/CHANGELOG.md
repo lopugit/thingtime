@@ -7322,6 +7322,11 @@ Detailed PR notes:
 
 - 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
 
+- 2026-11-11: Add narrow browser assertion AppID compatibility with truthful
+  appid:false results, unchanged RP/allowlist verification, same-origin capability
+  negotiation and native fallback for unsupported authorization. Adapter 0.5.0,
+  passwords API 1.9.0; no AppID fetching or legacy key retargeting. **Codex (AI)**
+
 ## [1.0.0] - YYYY-MM-DD
 Move entries up from [Unreleased] when cutting a tagged release.
 -->
