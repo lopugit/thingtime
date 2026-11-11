@@ -1,3 +1,4 @@
+import { isTimelinePersistence, timelinePersistence } from './persistence';
 import type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 import { createHash } from 'node:crypto';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
@@ -41,7 +42,7 @@ export async function readTimelineLinks(things: any, ownerId: string, eventThing
 	if (eventThingIds.length > 128) throw new Error('Too many Timeline link sources requested.');
 	const result = new Map<string, TimelineLink[]>();
 	if (!eventThingIds.length) return result;
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_LINK_KIND, targetId: { $in: eventThingIds } }, { ...(session ? { session } : {}), projection: { shareId: 1, targetId: 1, thingtime: 1, timelineLinkVersion: 1, secure: 1, 'crystal.targetId': 1, 'crystal.linkKind': 1 } }).limit(eventThingIds.length * TIMELINE_MAX_LINKS + 1).toArray();
+	const docs = await timelinePersistence(things, session).related(ownerId, TIMELINE_LINK_KIND, eventThingIds, eventThingIds.length * TIMELINE_MAX_LINKS + 1);
 	if (docs.length > eventThingIds.length * TIMELINE_MAX_LINKS) throw new Error('Too many Timeline links.');
 	for (const doc of docs) {
 		const link = unpackTimelineLink(doc);
@@ -59,7 +60,7 @@ async function entriesFromDocs(things: any, ownerId: string, docs: any[], sessio
 export async function readTimelineEntries(things: any, ownerId: string, eventIds: string[], session?: any): Promise<TimelineEntry[]> {
 	if (eventIds.length > 128) throw new Error('Too many Timeline versions requested.');
 	if (!eventIds.length) return [];
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: [...new Set(eventIds)].map(id => timelineEventThingId(ownerId, id)) } }, session ? { session } : {}).toArray();
+	const docs = await timelinePersistence(things, session).records(ownerId, TIMELINE_EVENT_KIND, [...new Set(eventIds)].map(id => timelineEventThingId(ownerId, id)));
 	return entriesFromDocs(things, ownerId, docs, session);
 }
 
@@ -68,14 +69,14 @@ export type { TimelineGraphNode } from '../../../timeline/versionGraph.ts';
 export async function readTimelineNodes(things: any, ownerId: string, eventIds: string[]): Promise<TimelineGraphNode[]> {
 	if (eventIds.length > 128) throw new Error('Too many Timeline versions requested.');
 	if (!eventIds.length) return [];
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: [...new Set(eventIds)].map(id => timelineEventThingId(ownerId, id)) } }, { projection: { shareId: 1, targetId: 1, timelineNode: 1, timelineEnvelopeVersion: 1 } }).toArray();
+	const docs = await timelinePersistence(things).records(ownerId, TIMELINE_EVENT_KIND, [...new Set(eventIds)].map(id => timelineEventThingId(ownerId, id)), 'node');
 	// Only parent links are needed for ancestry. Avoid loading all dependencies.
 	const normalized = docs.filter((doc: any) => doc.timelineEnvelopeVersion === 3);
 	const parentIds = normalized.flatMap((doc: any) => {
 		if (!Number.isInteger(doc.timelineNode?.parentCount) || doc.timelineNode.parentCount < 0 || doc.timelineNode.parentCount > 2) throw new Error('Invalid Timeline parent count.');
 		return Array.from({ length: doc.timelineNode.parentCount }, (_, ordinal) => timelineLinkThingId(ownerId, timelineLinkId(doc.timelineNode.id, 'parent', ordinal)));
 	});
-	const parentDocs = parentIds.length ? await things.find({ ownerId, thingtime: TIMELINE_LINK_KIND, shareId: { $in: parentIds } }).toArray() : [];
+	const parentDocs = parentIds.length ? await timelinePersistence(things).records(ownerId, TIMELINE_LINK_KIND, parentIds) : [];
 	if (parentDocs.length > normalized.length * 2) throw new Error('Invalid Timeline parent count.');
 	const parents = new Map<string, TimelineLink[]>();
 	for (const doc of parentDocs) {
@@ -109,15 +110,17 @@ export async function readTimelineNodes(things: any, ownerId: string, eventIds: 
  * folder and shareId index. The lock and all dependent reads/writes must share
  * this active-plane transaction; no new uniqueness policy on user data. */
 export async function lockTimelineOwner(things: any, ownerId: string, session: any, at = new Date()) {
-	if (!ownerId || !session) throw new Error('Timeline locking requires the content transaction');
-	const folderId = timelineFolderId(ownerId);
-	const now = at;
-	await things.updateOne({ shareId: folderId }, { $setOnInsert: {
-		shareId: folderId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: ['folder'], ownerId: ownerId,
-		acl: ['tt:user'], targetId: null, folderId: null, crystal: { name: 'Timeline', icon: '🕰️' }, extended: null, tags: [],
-		storageClass: 'control', timelinePosition: 0, createdAt: now, updatedAt: now
-	} }, { session, upsert: true });
-	const folder = await things.findOne({ shareId: folderId }, { session });
+	const persistence = timelinePersistence(things, session);
+	return persistence.guard(ownerId, session, async () => {
+		if (!ownerId || !session) throw new Error('Timeline locking requires the content transaction');
+		const folderId = timelineFolderId(ownerId);
+		const now = at;
+		await persistence.ensureOwnerFolder({
+			shareId: folderId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: ['folder'], ownerId: ownerId,
+			acl: ['tt:user'], targetId: null, folderId: null, crystal: { name: 'Timeline', icon: '🕰️' }, extended: null, tags: [],
+			storageClass: 'control', timelinePosition: 0, createdAt: now, updatedAt: now
+	});
+	const folder = await persistence.recordByIdentity(folderId);
 	if (!folder || folder.ownerId !== ownerId || folder.thingtime?.length !== 1 || folder.thingtime[0] !== 'folder' ||
 		!Number.isSafeInteger(folder.timelinePosition) || folder.timelinePosition < 0) throw new Error('Invalid Timeline folder');
 	// A monotonic logical millisecond supplies a range cursor using the EXISTING
@@ -125,9 +128,10 @@ export async function lockTimelineOwner(things: any, ownerId: string, session: a
 	// account commits: a late transaction cannot land behind a published cursor.
 	const position = Math.max(now.getTime(), folder.timelinePosition + 1);
 	if (!Number.isSafeInteger(position) || position < 1 || !Number.isFinite(new Date(position).getTime())) throw new Error('Invalid Timeline position');
-	const advanced = await things.updateOne({ _id: folder._id, timelinePosition: folder.timelinePosition }, { $set: { timelinePosition: position } }, { session });
-	if (advanced.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Timeline changed during this operation — retry with the same operation id');
+	const advanced = await persistence.advanceOwnerPosition(folder, position);
+	if (!advanced) throw new StorageMutationError(409, 'storage_conflict', 'Timeline changed during this operation — retry with the same operation id');
 	return { folderId, position, now };
+	});
 }
 
 /** Collection and session MUST belong to the caller's chosen data plane.
@@ -140,54 +144,57 @@ export async function appendTimelineEvent(
 	session: any,
 	options: { plane?: 'active' | 'home'; debit?: typeof applyUserStorageDelta; now?: Date } = {}
 ): Promise<TimelineEntry> {
-	if (!session) throw new Error('Timeline recording requires the content transaction');
-	const event = parseTimelineEvent(input);
-	const shareId = timelineEventThingId(event.ownerId, event.id);
-	const existing = await things.findOne({ shareId }, { session });
-	if (existing) {
-		const entry = (await entriesFromDocs(things, event.ownerId, [existing], session))[0];
-		if (timelineEventText(entry.event) !== timelineEventText(event)) throw new StorageMutationError(409, 'storage_conflict', 'Timeline event identity was reused with different content');
+	const persistence = timelinePersistence(things, session);
+	return persistence.guard(input?.ownerId, session, async () => {
+		if (!session) throw new Error('Timeline recording requires the content transaction');
+		const event = parseTimelineEvent(input);
+		const shareId = timelineEventThingId(event.ownerId, event.id);
+		const existing = await persistence.recordByIdentity(shareId);
+		if (existing) {
+			const entry = (await entriesFromDocs(things, event.ownerId, [existing], session))[0];
+			if (timelineEventText(entry.event) !== timelineEventText(event)) throw new StorageMutationError(409, 'storage_conflict', 'Timeline event identity was reused with different content');
+			return entry;
+		}
+		// Missing parents are not an empty history. Clients push ancestors first;
+		// server operations retain a before snapshot for pre-Timeline Things.
+		if (event.parentIds.length) {
+			const parents = await persistence.records(event.ownerId, TIMELINE_EVENT_KIND, event.parentIds.map(id => timelineEventThingId(event.ownerId, id)), 'target');
+			if (parents.length !== event.parentIds.length || parents.some((parent: any) => parent.targetId !== event.thingId))
+				throw new StorageMutationError(409, 'storage_conflict', 'Load or upload the earlier changes before syncing this event');
+		}
+		for (let offset = 0; offset < event.dependencies.length; offset += 128) {
+			const refs = event.dependencies.slice(offset, offset + 128);
+			const targets = await persistence.records(event.ownerId, TIMELINE_EVENT_KIND, refs.map(ref => timelineEventThingId(event.ownerId, ref.eventId)), 'identity-target');
+			if (refs.some(ref => !targets.some((target: any) => target.shareId === timelineEventThingId(event.ownerId, ref.eventId) && target.targetId === ref.thingId))) throw new StorageMutationError(409, 'storage_conflict', 'A referenced dependency version is unavailable');
+		}
+		const { folderId, position, now } = await lockTimelineOwner(things, event.ownerId, session, options.now);
+		const entry: TimelineEntry = { event, receipt: { formatVersion: 1, eventId: event.id, ownerId: event.ownerId, position, acceptedAt: now.toISOString() } };
+		const linkRecords = splitTimelineEvent(event).links;
+		const doc: any = {
+			shareId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: [TIMELINE_EVENT_KIND], ownerId: event.ownerId,
+			acl: ['tt:user'], targetId: event.thingId, folderId, crystal: { name: 'Change' }, extended: null, tags: [],
+			createdAt: new Date(position), updatedAt: new Date(position), ...packTimelineEntry(entry)
+		};
+		doc.timelineEntryBytes = Buffer.byteLength(JSON.stringify(entry));
+		doc.timelineLinkBytes = linkRecords.reduce((bytes, link) => bytes + Buffer.byteLength(JSON.stringify(link)), 0);
+		doc.timelineNode = { id: event.id, thingId: event.thingId, parentCount: event.parentIds.length, afterAdapter: event.after?.adapter ?? null };
+		if (options.plane === 'home' || (isTimelinePersistence(things) ? persistence.billable : !isCustomMongoEndpointActive())) {
+			doc.storageClass = 'content';
+			doc.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION;
+			doc.sizeBytes = thingStorageSizeBytes(doc);
+			await (options.debit ?? applyUserStorageDelta)(event.ownerId, doc.sizeBytes, session);
+		}
+		await persistence.insert([doc]);
+		const links = linkRecords.map(link => ({
+			shareId: timelineLinkThingId(event.ownerId, link.id), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+			thingtime: [TIMELINE_LINK_KIND], ownerId: event.ownerId, acl: ['tt:user'], folderId,
+			targetId: shareId, crystal: { name: 'History link', targetId: timelineLinkTargetKey(link), linkKind: link.relation },
+			extended: null, tags: [], storageClass: 'control', createdAt: new Date(position), updatedAt: new Date(position), ...packTimelineLink(link)
+		}));
+		await persistence.insert(links);
+		await recordPublishedTimelineHead(things, entry, folderId, session);
 		return entry;
-	}
-	// Missing parents are not an empty history. Clients push ancestors first;
-	// server operations retain a before snapshot for pre-Timeline Things.
-	if (event.parentIds.length) {
-		const parents = await things.find({ ownerId: event.ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: event.parentIds.map(id => timelineEventThingId(event.ownerId, id)) } }, { session, projection: { targetId: 1 } }).toArray();
-		if (parents.length !== event.parentIds.length || parents.some((parent: any) => parent.targetId !== event.thingId))
-			throw new StorageMutationError(409, 'storage_conflict', 'Load or upload the earlier changes before syncing this event');
-	}
-	for (let offset = 0; offset < event.dependencies.length; offset += 128) {
-		const refs = event.dependencies.slice(offset, offset + 128);
-		const targets = await things.find({ ownerId: event.ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: refs.map(ref => timelineEventThingId(event.ownerId, ref.eventId)) } }, { session, projection: { shareId: 1, targetId: 1 } }).toArray();
-		if (refs.some(ref => !targets.some((target: any) => target.shareId === timelineEventThingId(event.ownerId, ref.eventId) && target.targetId === ref.thingId))) throw new StorageMutationError(409, 'storage_conflict', 'A referenced dependency version is unavailable');
-	}
-	const { folderId, position, now } = await lockTimelineOwner(things, event.ownerId, session, options.now);
-	const entry: TimelineEntry = { event, receipt: { formatVersion: 1, eventId: event.id, ownerId: event.ownerId, position, acceptedAt: now.toISOString() } };
-	const linkRecords = splitTimelineEvent(event).links;
-	const doc: any = {
-		shareId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: [TIMELINE_EVENT_KIND], ownerId: event.ownerId,
-		acl: ['tt:user'], targetId: event.thingId, folderId, crystal: { name: 'Change' }, extended: null, tags: [],
-		createdAt: new Date(position), updatedAt: new Date(position), ...packTimelineEntry(entry)
-	};
-	doc.timelineEntryBytes = Buffer.byteLength(JSON.stringify(entry));
-	doc.timelineLinkBytes = linkRecords.reduce((bytes, link) => bytes + Buffer.byteLength(JSON.stringify(link)), 0);
-	doc.timelineNode = { id: event.id, thingId: event.thingId, parentCount: event.parentIds.length, afterAdapter: event.after?.adapter ?? null };
-	if (options.plane === 'home' || !isCustomMongoEndpointActive()) {
-		doc.storageClass = 'content';
-		doc.storageAccountingVersion = USER_STORAGE_ACCOUNTING_VERSION;
-		doc.sizeBytes = thingStorageSizeBytes(doc);
-		await (options.debit ?? applyUserStorageDelta)(event.ownerId, doc.sizeBytes, session);
-	}
-	await things.insertOne(doc, { session });
-	const links = linkRecords.map(link => ({
-		shareId: timelineLinkThingId(event.ownerId, link.id), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-		thingtime: [TIMELINE_LINK_KIND], ownerId: event.ownerId, acl: ['tt:user'], folderId,
-		targetId: shareId, crystal: { name: 'History link', targetId: timelineLinkTargetKey(link), linkKind: link.relation },
-		extended: null, tags: [], storageClass: 'control', createdAt: new Date(position), updatedAt: new Date(position), ...packTimelineLink(link)
-	}));
-	await things.insertMany(links, { session });
-	await recordPublishedTimelineHead(things, entry, folderId, session);
-	return entry;
+	});
 }
 
 export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[], session?: any): Promise<TimelinePage & { names: TimelineVersionName[] }> {
@@ -195,13 +202,8 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 	if (!ownerId || (request.thingId !== null && !request.thingId) || (request.before !== null && request.after !== null) || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page request');
 	for (const cursor of [request.before, request.after]) if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 1 || !Number.isFinite(new Date(cursor).getTime()))) throw new Error('Invalid Timeline cursor');
 	const ascending = request.after !== null;
-	const headers = await things.find({
-		ownerId, ...(relatedIds ? { targetId: { $in: relatedIds } } : request.thingId === null ? {} : { targetId: request.thingId }), thingtime: TIMELINE_EVENT_KIND,
-		...(request.before !== null ? { createdAt: { $lt: new Date(request.before) } } : {}),
-		...(request.after !== null ? { createdAt: { $gt: new Date(request.after) } } : {})
-	// Positions are unique within an account; no tie-break is needed. Sorting
-	// only by createdAt fits both existing global and per-Thing index directions.
-	}, { ...(session ? { session } : {}), projection: { _id: 0, shareId: 1, createdAt: 1, timelineEntryBytes: 1, timelineLinkBytes: 1 } }).sort({ createdAt: ascending ? 1 : -1 }).limit(request.limit + 1).toArray();
+	const persistence = timelinePersistence(things, session);
+	const headers = await persistence.headers({ ownerId, targetIds: relatedIds ?? (request.thingId === null ? null : [request.thingId]), before: request.before, after: request.after, limit: request.limit + 1 });
 	const ids: string[] = [];
 	let bytes = 128; let readBytes = 128;
 	for (const header of headers.slice(0, request.limit)) {
@@ -215,7 +217,7 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 		ids.push(header.shareId); bytes += size + 1; readBytes += size + linkBytes;
 	}
 	if (headers.length && !ids.length) throw new Error('Invalid Timeline record size');
-	const docs = ids.length ? await things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: ids } }, session ? { session } : {}).toArray() : [];
+	const docs = ids.length ? await persistence.records(ownerId, TIMELINE_EVENT_KIND, ids) : [];
 	const byId = new Map<string, any>(docs.map((doc: any) => [doc.shareId, doc]));
 	const ordered = ids.map(id => {
 		const doc = byId.get(id);

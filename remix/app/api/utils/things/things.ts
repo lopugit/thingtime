@@ -1,4 +1,5 @@
 import { withGatewayWork } from '../deployment/environmentGateway';
+import { currentUserIdentityRepository } from '../auth/userIdentityRepository';
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
 import { sanitizeTags } from '../../../schemas/thingTags';
 import { eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
@@ -2090,8 +2091,8 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
   // things-era users first (shareId = the id every ownerId reference carries).
   // HOME collection: identity lives on the home deployment, so author cards
   // keep resolving while a custom data-plane endpoint override is active.
-  const things = await getHomeThingsCollection();
-  const userThings = await things
+  const identities = currentUserIdentityRepository();
+  const userThings = identities ? await identities.findUserThingsByIds(wanted) : await (await getHomeThingsCollection())
     .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
 		.project({ shareId: 1, 'crystal.username': 1, 'crystal.displayName': 1, 'crystal.avatarUrl': 1, 'crystal.avatarPresentation': 1, avatarAttachmentId: 1, secure: 1 })
     .toArray();
@@ -2107,7 +2108,9 @@ export const resolveProfiles = async (userIds: string[]): Promise<Map<string, Fe
     });
   }
 
-  const remaining = wanted.filter((id) => !profiles.has(id) && ObjectId.isValid(id));
+  // Native identity scope is authoritative, including a missing profile. It
+  // cannot fall through to hosted legacy users or borrow another data plane.
+  const remaining = identities ? [] : wanted.filter((id) => !profiles.has(id) && ObjectId.isValid(id));
   if (remaining.length) {
     const users = await getUsersCollection();
     const docs = await users

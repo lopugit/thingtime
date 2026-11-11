@@ -19481,3 +19481,22 @@ never print the file-download JSON, encryption metadata or signed URL.
   clicks retain their target, cached rows survive refresh and identity changes
   clear protected content. Scroll the panel and page to their bottoms.
   Synthetic account/API transport does not prove native automatic replacement.
+## Native content and Timeline persistence — 12 November 2026
+
+- Run `test:document-store`, `test:timeline`, and `things/mongoPersistence.test.ts`.
+  Compare unfiltered/empty-kind selection, more than one collection batch,
+  equal-date non-ASCII ID ordering, root/missing folders and exact batch ordering.
+  Selection, provider and owner changes must reject old cursors. Delete/recreate
+  with the same share ID and timestamp must reject an old physical version.
+- Compose the actual native content transaction with canonical `recordThingMutation`:
+  content, snapshots, Published head and exact storage delta commit together and
+  survive reopen. Caught validation/head/capture failures roll everything back,
+  including post-commit effects. Expired and foreign async transaction handles
+  must refuse. Read-only history must not grant mutation authority.
+- Native author profiles must retain canonical public projection, batching and
+  missing-ID behavior without hosted/legacy fallback; verify reopen and expired
+  scope. Mongo projection behavior must remain unchanged.
+- Keep generic SQLite Things HTTP unavailable until canonical ACL, public
+  projection, dependency capture and service dispatch are integrated. Adapter
+  tests do not substitute for real API registration/CRUD/history, full native UI,
+  iOS Keychain/device or production acceptance.

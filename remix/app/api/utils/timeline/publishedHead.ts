@@ -1,3 +1,4 @@
+import { timelinePersistence } from './persistence';
 import {
 	TIMELINE_BRANCH_KIND,
 	TIMELINE_BRANCH_HEAD_KIND,
@@ -27,31 +28,33 @@ export const isPublishedTimelineEvent = (entry: TimelineEntry) =>
  * Only trusted committed mutations advance Published. */
 export async function recordPublishedTimelineHead(things: any, entry: TimelineEntry, folderId: string, session: any) {
 	if (!isPublishedTimelineEvent(entry)) return;
-	if (!session?.inTransaction()) throw new Error('Published history requires the content transaction');
-	const { event, receipt } = entry;
-	const ownerId = event.ownerId,
-		branchId = 'main';
-	const branchShareId = timelineBranchThingId(ownerId, branchId);
-	const priorDoc = await things.findOne({ shareId: branchShareId }, { session });
-	const branch = priorDoc
-		? branchFromDoc(priorDoc)
-		: parseTimelineBranch({ formatVersion: 1, id: branchId, ownerId, name: 'Published', createdAt: receipt.acceptedAt });
-	if (branch.ownerId !== ownerId || branch.id !== branchId) throw new Error('Invalid Published branch identity');
-	const current = await readTimelineBranchHead(things, ownerId, branchId, event.thingId, session);
-	if (current?.eventId === event.id) return;
-	if ((current?.revision ?? 0) >= Number.MAX_SAFE_INTEGER)
-		throw new StorageMutationError(409, 'storage_conflict', 'Published history revision limit reached.');
-	const updatedAt = new Date(Math.max(Date.parse(receipt.acceptedAt), current ? Date.parse(current.updatedAt) + 1 : 0)).toISOString();
-	const head = parseTimelineBranchHead({
-		formatVersion: 1,
-		id: timelineBranchHeadId(branchId, event.thingId),
-		ownerId,
-		branchId,
-		thingId: event.thingId,
-		eventId: event.id,
-		revision: (current?.revision ?? 0) + 1,
-		createdAt: current?.createdAt ?? updatedAt,
-		updatedAt
+	const persistence = timelinePersistence(things, session);
+	return persistence.guard(entry.event.ownerId, session, async () => {
+		persistence.assertTransaction(session);
+		const { event, receipt } = entry;
+		const ownerId = event.ownerId,
+			branchId = 'main';
+		const branchShareId = timelineBranchThingId(ownerId, branchId);
+		const priorDoc = await persistence.recordByIdentity(branchShareId);
+		const branch = priorDoc
+			? branchFromDoc(priorDoc)
+			: parseTimelineBranch({ formatVersion: 1, id: branchId, ownerId, name: 'Published', createdAt: receipt.acceptedAt });
+		if (branch.ownerId !== ownerId || branch.id !== branchId) throw new Error('Invalid Published branch identity');
+		const current = await readTimelineBranchHead(things, ownerId, branchId, event.thingId, session);
+		if (current?.eventId === event.id) return;
+		if ((current?.revision ?? 0) >= Number.MAX_SAFE_INTEGER)
+			throw new StorageMutationError(409, 'storage_conflict', 'Published history revision limit reached.');
+		const updatedAt = new Date(Math.max(Date.parse(receipt.acceptedAt), current ? Date.parse(current.updatedAt) + 1 : 0)).toISOString();
+		const head = parseTimelineBranchHead({
+			formatVersion: 1,
+			id: timelineBranchHeadId(branchId, event.thingId),
+			ownerId,
+			branchId,
+			thingId: event.thingId,
+			eventId: event.id,
+			revision: (current?.revision ?? 0) + 1,
+			createdAt: current?.createdAt ?? updatedAt,
+			updatedAt
 	});
 	const common = {
 		schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
@@ -63,7 +66,7 @@ export async function recordPublishedTimelineHead(things: any, entry: TimelineEn
 		storageClass: 'control'
 	};
 	if (!priorDoc)
-		await things.insertOne(
+		await persistence.insert([
 			{
 				...common,
 				shareId: branchShareId,
@@ -73,19 +76,14 @@ export async function recordPublishedTimelineHead(things: any, entry: TimelineEn
 				createdAt: new Date(receipt.position),
 				updatedAt: new Date(updatedAt),
 				...packTimelineBranchRecord(branch)
-			},
-			{ session }
-		);
+			}
+		]);
 	const headId = timelineBranchHeadThingId(ownerId, branchId, event.thingId);
 	if (current) {
-		const changed = await things.updateOne(
-			{ shareId: headId, ownerId, branchRevision: current.revision },
-			{ $set: { ...packTimelineBranchRecord(head), branchRevision: head.revision, updatedAt: new Date(updatedAt) } },
-			{ session }
-		);
-		if (changed.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Published history changed during this operation.');
+		const changed = await persistence.advanceBranchHead(headId, ownerId, current.revision, { ...packTimelineBranchRecord(head), branchRevision: head.revision, updatedAt: new Date(updatedAt) });
+		if (!changed) throw new StorageMutationError(409, 'storage_conflict', 'Published history changed during this operation.');
 	} else
-		await things.insertOne(
+		await persistence.insert([
 			{
 				...common,
 				shareId: headId,
@@ -97,7 +95,7 @@ export async function recordPublishedTimelineHead(things: any, entry: TimelineEn
 				createdAt: new Date(receipt.position),
 				updatedAt: new Date(updatedAt),
 				...packTimelineBranchRecord(head)
-			},
-			{ session }
-		);
+			}
+		]);
+	});
 }

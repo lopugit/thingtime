@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add shared Things and Timeline persistence adapters for native SQLite,
+  preserving canonical mutation validation, atomic history/accounting, and Mongo
+  behavior. Native author projection stays on its selected identity repository.
+  Generic Things HTTP, saved-page capture and full native parity remain pending;
+  see [the native runtime contract](../docs/native-web-bundles.md). **Codex (AI)**
+
 - 2026-11-12: Add deletion-only SQLite retention accounting with rollback on
   reused refund credits, plus an opt-in iOS Keychain/private-pipe bootstrap.
   Desktop root-data acceptance is verified; iOS compiles but live protected

@@ -1,5 +1,31 @@
 # Native web bundles and offline runtime
 
+## Content and Timeline persistence — 12 November 2026
+
+The shared Things persistence contract now has Mongo and native SQLite adapters
+for exact/batched reads, selection-bound chronological windows, compare-and-swap
+writes, folder operations and post-commit effects. These are internal candidate
+reads: the canonical Things services still own validation, permissions and public
+projection. A repository is not an HTTP API or an authorization grant. Native
+physical identities are independent of portable share IDs, so deletion and
+recreation cannot make a stale content version valid again.
+
+Timeline uses a semantic persistence contract while retaining the canonical
+`recordThingMutation`, envelope/parent/dependency validation, snapshot parts,
+Published heads and accounting. The native adapter shares the actual content
+transaction; caught failures poison the operation and roll back prior writes.
+Read-only history does not require a ready growth ledger. Author profile
+projection uses the selected native identity repository without falling back to
+hosted or legacy account data.
+
+These foundations do **not** enable generic native Things HTTP routes. Remaining
+work includes canonical service/request integration, complete saved-page component
+captures, native note/version-name writes, indexed native query planning, and
+real HTTP plus desktop/mobile UI acceptance. Native Webpage after-image capture
+currently refuses before history append. SQLite scans use internal batches but
+are still O(n); this is not a performance-parity claim. See the
+[content/history evidence](../artifacts/anonymous-release-2026-11-12/native-content-history/README.md).
+
 <!-- Native app-shell bootstrap contract, 12 November 2026 -->
 The protected native account composition now serves `/api/root-data` through
 `loadRootData`, preserving public environment allowlisting, session projection
@@ -17,8 +43,9 @@ SQLite deletion accounting now has an explicit cleanup transaction. It may retai
 only history covered by that transaction's refunds; ordinary growth cannot reuse
 those credits. Unknown or malformed ledgers remain unavailable, and trusted
 unready ledgers are fenced for reconciliation. No native reconciliation worker is
-claimed. Generic Things and atomic Timeline repository integration remain pending;
-this prerequisite does not activate their routes.
+claimed. Semantic Things/Timeline adapters now share the transaction boundary;
+canonical Things service and HTTP integration remain pending. These prerequisites
+do not activate their routes.
 
 The isolated iOS development target now includes a Keychain-backed native account
 profile and private-pipe bootstrap before Nitro imports. Its account lane is

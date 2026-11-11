@@ -1,5 +1,15 @@
 # Things and folders
 
+Native persistence foundation (12 November 2026):
+`things/persistence.ts` defines internal semantic content reads/transactions,
+`things/mongoPersistence.ts` preserves Mongo behavior, and
+`documentStore/nativeContentRepository.ts` binds SQLite to native accounting.
+`timeline/persistence.ts` and `documentStore/nativeTimelinePersistence.ts` retain
+canonical history algorithms within that transaction. These adapters do not
+activate native Things routes or replace ACL/public projection. Coverage:
+`test:document-store`, `test:timeline`, `things/mongoPersistence.test.ts`.
+See [native runtime remaining work](../native-web-bundles.md).
+
 Local browser `http.request` Actions use `local-workspace/actionRequests.ts` for
 editable Things CRUD, owner-scoped search and bulk move/copy/delete. Bulk selection
 has no additional item ceiling; sequential ordinary writes retain interpreter

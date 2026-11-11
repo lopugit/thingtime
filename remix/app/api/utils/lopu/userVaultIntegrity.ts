@@ -1,3 +1,4 @@
+import { isTimelinePersistence, type TimelinePersistence } from '../timeline/persistence';
 import { LOPU_USER_VAULT_SYSTEM_TYPE, safeVaultId } from './userVaultModel';
 import { StorageMutationError } from '../storage/storageCore';
 
@@ -12,9 +13,10 @@ const group = (doc: any): doc is VaultThing => vaultThing(doc) && doc.crystal.re
  * Throwing rolls back content, accounting and History together. */
 export async function assertUserVaultMutationIntegrity(things: any, before: unknown, after: unknown, session: any): Promise<void> {
  if (!vaultThing(before) && !vaultThing(after)) return;
- if (!session?.inTransaction()) throw new Error('Vault relationships require the content transaction.');
+ if (isTimelinePersistence(things)) things.assertTransaction(session);
+ else if (!session?.inTransaction()) throw new Error('Vault relationships require the content transaction.');
  if (group(before) && (!group(after) || before.ownerId !== after.ownerId || before.shareId !== after.shareId)) {
-  const child = await things.findOne({ ownerId: before.ownerId, thingtime: 'data',
+  const child = isTimelinePersistence(things) ? await requiredIntegrity(things).vaultHasChildren(before.ownerId, before.shareId) : await things.findOne({ ownerId: before.ownerId, thingtime: 'data',
    'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE, 'crystal.groupId': before.shareId },
   { session, projection: { _id: 1 } });
   if (child) throw new StorageMutationError(409, 'storage_conflict', 'Move or delete the entries in this environment first.');
@@ -24,9 +26,14 @@ export async function assertUserVaultMutationIntegrity(things: any, before: unkn
   if (groupId === undefined || groupId === null || groupId === '') return;
   if (!safeVaultId(groupId) || safeVaultId(groupId) !== groupId || groupId === after.shareId)
    throw new StorageMutationError(409, 'storage_conflict', 'Vault environment was not found.');
-  const parent = await things.findOne({ shareId: groupId, ownerId: after.ownerId, thingtime: 'data',
+  const parent = isTimelinePersistence(things) ? await requiredIntegrity(things).vaultGroup(after.ownerId, groupId) : await things.findOne({ shareId: groupId, ownerId: after.ownerId, thingtime: 'data',
    'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE, 'crystal.recordKind': 'group' },
   { session, projection: { _id: 1 } });
   if (!parent) throw new StorageMutationError(409, 'storage_conflict', 'Vault environment was not found.');
  }
 }
+
+const requiredIntegrity = (things: TimelinePersistence) => {
+ if (!things.integrity) throw new Error('This Timeline provider cannot validate vault relationships');
+ return things.integrity;
+};

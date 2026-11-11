@@ -2,6 +2,29 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Shared content and history persistence — 12 November 2026
+
+Semantic Things adapters cover Mongo and SQLite reads, pagination, physical
+versions, folders and transactions. Canonical Timeline algorithms now use the
+same native transaction for content, snapshots, Published heads and accounting.
+Native author profiles preserve public projection without hosted identity
+fallback. Independent review corrected empty selection, UTF-8 ordering/cursors,
+delete/recreate ABA and vault-child existence work. The combined real-SQLite
+regression covers rollback after caught failure, after-commit suppression and
+reopen. All 445 focused tests pass (166 document-store, 278 Timeline, one Mongo
+compatibility).
+
+The final unchanged-source run also passes TypeScript, ratchet, full lint
+(0 errors/374 warnings), packaged build/inventory and both real Mongo/SQLite
+HTTP fixtures. Nitro SHA-256: `494e5750ecf225c1cbf8dbca193367b67ca7dc149839d83181ccc9999d980535`.
+SQLite generic Things remains unavailable and queued mail remains undelivered.
+
+These are persistence foundations, not activated generic SQLite Things routes.
+Canonical service/request integration, saved-page dependency capture, native
+note/version-name mutations, indexed query planning, real CRUD/ACL/folder HTTP
+and full native UI acceptance remain open. The iOS and production boundaries
+below remain unchanged. [Current evidence and verification receipt](../artifacts/anonymous-release-2026-11-12/native-content-history/README.md).
+
 ## Final combined desktop validation — 12 November 2026
 
 TypeScript, zero-error ratchet, full lint (0 errors/374 warnings), canonical build,

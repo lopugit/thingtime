@@ -1,3 +1,4 @@
+import { timelinePersistence } from './persistence';
 import { createHash } from 'node:crypto';
 import {
 	TIMELINE_NOTE_KIND, TIMELINE_NOTE_MAX_BYTES, TIMELINE_NOTES_PER_EVENT, parseTimelineNote, parseTimelineNoteRemoval, parseTimelineNoteCommand, sortTimelineNotes, timelineNoteId,
@@ -43,9 +44,7 @@ export async function readTimelineNotes(things: any, ownerId: string, eventIds: 
 	if (eventIds.length > 128) throw new Error('Too many Timeline note sources requested.');
 	const ids = [...new Set(eventIds)];
 	if (!ownerId || !ids.length) return [];
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_NOTE_KIND, targetId: { $in: ids.map(id => timelineEventThingId(ownerId, id)) } },
-		{ ...(session ? { session } : {}), projection: { _id: 0, shareId: 1, ownerId: 1, targetId: 1, thingtime: 1, timelineNoteVersion: 1, secure: 1, crystal: 1, createdAt: 1 } })
-		.sort({ createdAt: 1 }).limit(ids.length * TIMELINE_NOTES_PER_EVENT).toArray();
+	const docs = await timelinePersistence(things, session).related(ownerId, TIMELINE_NOTE_KIND, ids.map(id => timelineEventThingId(ownerId, id)), ids.length * TIMELINE_NOTES_PER_EVENT);
 	return sortTimelineNotes(docs.map(noteFromDoc));
 }
 

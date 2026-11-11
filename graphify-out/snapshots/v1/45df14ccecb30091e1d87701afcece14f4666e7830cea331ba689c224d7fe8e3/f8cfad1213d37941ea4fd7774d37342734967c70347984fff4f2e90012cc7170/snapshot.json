@@ -1,0 +1,12 @@
+{
+  "schema": "thingtime.graphify-snapshot.v1",
+  "source_fingerprint": "45df14ccecb30091e1d87701afcece14f4666e7830cea331ba689c224d7fe8e3",
+  "source_tree": "b22827e4d23b3a32ba7873686b29be039dede63d",
+  "artifact_hash": "f8cfad1213d37941ea4fd7774d37342734967c70347984fff4f2e90012cc7170",
+  "graphify_version": "graphify 0.9.89",
+  "node_count": 86926,
+  "link_count": 252783,
+  "graph_encoding": "gzip",
+  "graph_bytes": 120403133,
+  "graph_sha256": "a3b8aaa7ffd4d7f9abcf2998a31baecf33c94087770e0d891ffc9c9ef32a1bf7"
+}

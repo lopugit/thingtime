@@ -1,4 +1,6 @@
 import { BSON, Double, Int32, Long } from 'mongodb';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { DocumentStoreError } from './contract';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { characterIdentity } from '../auth/characterCore';
 import { fromBin } from '../auth/binary';
@@ -14,6 +16,7 @@ import type { CollectionFilter, CollectionProvider, CollectionTransaction } from
 export type NativeUserStorageSession = Readonly<{ kind: 'native-user-storage' }>;
 type Context = { active: boolean; ownerId: string; planeId: string; collections: CollectionTransaction; failed: boolean; failure: unknown; deletionOnly: boolean; refundBytes: number; uncertainRefund: boolean };
 const contexts = new WeakMap<object, Context>();
+const transactionOwnership = new AsyncLocalStorage<Context>();
 const invariant = (message: string): never => { throw new StorageMutationError(500, 'storage_invariant', message); };
 const unsupported = (): never => { throw new StorageMutationError(503, 'accounting_unavailable', 'This native account storage state requires an accounting adapter that is not available yet'); };
 export const isNativeUserStorageSession = (session: unknown): session is NativeUserStorageSession => {
@@ -44,7 +47,7 @@ function withStorageTransaction<T>(provider: CollectionProvider,
   contexts.set(session, context);
   try {
    if (deletionOnly) readNativeOwner(context); else readNativeReadyLedger(context);
-   const result = await work(session, collections);
+   const result = await transactionOwnership.run(context, () => work(session, collections));
    if (context.failed) throw context.failure;
    return result;
   } finally { context.active = false; }
@@ -129,12 +132,29 @@ export function withNativeHomeDeletionStorageTransaction<T>(provider: Collection
 const checkedContext = (ownerId: string, session: NativeUserStorageSession): Context => {
  const context = contexts.get(session);
  if (!context) return invariant('Unrecognized native account storage session');
+ if (context.active && !context.failed && context.ownerId === ownerId && transactionOwnership.getStore() !== context) {
+  const error = new DocumentStoreError('TRANSACTION_OWNERSHIP', 'Native account operation belongs to another asynchronous transaction scope');
+  context.failed = true; context.failure = error; throw error;
+ }
  if (!context.active || context.failed || context.ownerId !== ownerId) {
   const error = new StorageMutationError(500, 'storage_invariant', 'Native account storage session owner/lifetime mismatch');
   context.failed = true; context.failure = error; throw error;
  }
  return context;
 };
+/** Bind a complete semantic operation, including planning/validation, to the
+ * exact live content/account transaction. Catching its error cannot commit a
+ * preceding partial write. Async continuations cannot borrow another scope. */
+export async function withNativeStorageOperation<T>(ownerId: string, session: NativeUserStorageSession,
+ collections: CollectionTransaction, work: () => T | Promise<T>): Promise<T> {
+ const context = checkedContext(ownerId, session);
+ try {
+  if (context.collections !== collections) return invariant('Native operation used another collection transaction');
+  const result = await work();
+  checkedContext(ownerId, session);
+  return result;
+ } catch (error) { context.failed = true; context.failure = error; throw error; }
+}
 const guarded = <T>(ownerId: string, session: NativeUserStorageSession, work: (context: Context) => T): T => {
  const context = checkedContext(ownerId, session);
  try { readNativeOwner(context); return work(context); }

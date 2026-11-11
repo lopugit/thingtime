@@ -1,3 +1,4 @@
+import { isTimelinePersistence } from '../timeline/persistence';
 import { getThingsCollection } from '../mongodb/collections';
 import { readTimelineEntries } from '../timeline/repository';
 import type { TimelineEvent } from '../../../timeline/contract';
@@ -47,12 +48,13 @@ export async function recordCreationContentEpoch(things: any, before: any, after
 		seen.add(identity);
 		const filter = { shareId: hold.rootId, ownerId: doc.ownerId, 'creationCheckpoint.binding': hold.binding,
 			'creationCheckpoint.operationId': hold.operationId, 'creationCheckpoint.phase': { $in: ['planning', 'restoring'] } };
-		const root = await things.findOne(filter, { session, projection: { 'creationCheckpoint.contentEpoch': 1 } });
+		if (isTimelinePersistence(things) && !things.integrity) throw new Error('This Timeline provider cannot fence creation content');
+		const root = isTimelinePersistence(things) ? await things.integrity!.creationRoot(doc.ownerId, hold) : await things.findOne(filter, { session, projection: { 'creationCheckpoint.contentEpoch': 1 } });
 		if (!root) continue;
 		const epoch = root.creationCheckpoint?.contentEpoch ?? 0;
 		if (!Number.isSafeInteger(epoch) || epoch < 0 || epoch === Number.MAX_SAFE_INTEGER)
 			throw new StorageMutationError(409, 'storage_conflict', 'The active creation content fence requires recovery');
-		const updated = await things.updateOne({ ...filter, ...(root.creationCheckpoint?.contentEpoch === undefined
+		const updated = isTimelinePersistence(things) ? { modifiedCount: await things.integrity!.advanceCreationEpoch(doc.ownerId, hold, root.creationCheckpoint?.contentEpoch) ? 1 : 0 } : await things.updateOne({ ...filter, ...(root.creationCheckpoint?.contentEpoch === undefined
 			? { 'creationCheckpoint.contentEpoch': { $exists: false } } : { 'creationCheckpoint.contentEpoch': epoch }) },
 			{ $inc: { 'creationCheckpoint.contentEpoch': 1 } }, { session });
 		if (updated.modifiedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'The active creation changed during this mutation');

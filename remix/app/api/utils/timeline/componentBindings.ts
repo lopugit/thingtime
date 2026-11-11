@@ -1,3 +1,5 @@
+import { isTimelinePersistence } from './persistence';
+import { StorageMutationError } from '../storage/storageCore';
 import { createHash } from 'node:crypto';
 import { captureComponentBindings, COMPONENT_BINDING_PREFIX, type ComponentBindings } from '../../../timeline/componentBindings.ts';
 import type { TimelineEvent } from '../../../timeline/contract.ts';
@@ -15,6 +17,7 @@ export async function recordPageComponentBindings(things: any, session: any, bef
 		return { ...event, dependencies: prior.event.dependencies };
 	}
 	if (!after?.thingtime?.includes('webpage')) return event;
+	if (isTimelinePersistence(things)) throw new StorageMutationError(503, 'storage_invariant', 'This native Timeline provider cannot resolve saved page component captures yet');
 	const resolved = await resolvePageComponentCapture(things, session, after);
 	const byId = new Map(resolved.components.map((component) => [component.id, component]));
 	const bindings: ComponentBindings = Object.create(null);

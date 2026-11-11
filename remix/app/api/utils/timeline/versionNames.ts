@@ -1,3 +1,4 @@
+import { timelinePersistence } from './persistence';
 import { createHash } from 'node:crypto';
 import {
 	TIMELINE_VERSION_NAME_KIND, canNameTimelineVersion, parseTimelineVersionName, parseTimelineVersionNameCommand, timelineVersionNameEventId,
@@ -39,9 +40,7 @@ export async function readTimelineVersionNames(things: any, ownerId: string, eve
 	if (eventIds.length > 128) throw new Error('Too many Timeline version name sources requested.');
 	const ids = [...new Set(eventIds)];
 	if (!ownerId || !ids.length) return [];
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_VERSION_NAME_KIND, shareId: { $in: ids.map(id => timelineVersionNameThingId(ownerId, id)) } },
-		{ ...(session ? { session } : {}), projection: { _id: 0, shareId: 1, ownerId: 1, targetId: 1, thingtime: 1, timelineVersionNameVersion: 1, timelineVersionNameCleared: 1, nameRevision: 1, secure: 1, crystal: 1 } })
-		.limit(ids.length).toArray();
+	const docs = await timelinePersistence(things, session).records(ownerId, TIMELINE_VERSION_NAME_KIND, ids.map(id => timelineVersionNameThingId(ownerId, id)));
 	return docs.filter((doc: any) => doc.timelineVersionNameCleared !== true).map(versionNameFromDoc).sort((a: TimelineVersionName, b: TimelineVersionName) => a.eventId.localeCompare(b.eventId));
 }
 
