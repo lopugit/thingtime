@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
+  settings. Add the explicit canonical background-file transfer contract,
+  preserve automatic recovery after system interruption and distinguish
+  deferred work from a failed continued task. Simulator logic and physical
+  background execution remain separate acceptance gates. **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 
