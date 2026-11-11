@@ -911,14 +911,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['tt:service-workspace is a dynamic custom audience, valid only for an owner-matched workspace record or its bound builder page. It grants read/comment, never generic shared write. Memberships are owner-private.', 'Google Maps requires a separately configured, HTTP-referrer-restricted GOOGLE_MAPS_JAVASCRIPT_API_KEY in the owner Secure Vault; this key is intentionally browser-visible to authorized workspace readers. GOOGLE_PLACES_API_KEY stays server-only and enables fixed Google Places autocomplete/detail calls. configureMaps selects an owned Vault environment, null for Ungrouped, or __auto__ for unique matching entries. Ambiguous key matches fail closed. Responses expose only the intentionally browser-visible JavaScript key; they never expose the server Places key. Place IDs are retained; Google coordinates are fetched for the map without a persistent coordinate cache.']
   }),
 	endpoint({
-		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
-		endpoint: '/api/v1/things/actions', methods: ['POST'],
-		summary: 'Dispatch an explicit semantic action against a Thing by ID, irrespective of its presentation.',
-		detail: 'Accepts only id and action=send-to-lopu. This first action supports owned private ready Watch recording posts and standalone audio Things. The protected recording writer re-resolves source ownership, privacy, binding, ready state and enabled processing consent. Stable jobs deduplicate requests; transcription precedes a private Lopu conversation with normal billing and sensitive-tool confirmation. This is not arbitrary crystal mutation or permission inheritance. Existing /api/v1/things CRUD remains canonical; the recordings send-to-lopu operation is a compatibility adapter to this same dispatcher. No owner, endpoint, credentials or transcript may be supplied. The response includes ownerId and the action result, not recording settings. Ambiguous failures must be reconciled in recording activity, not blindly retried.',
-		auth: { mode: 'session-or-bearer', description: 'Full first-party user session only. Temporary, service, app, device and PAT actors are rejected. Same-origin application/json, 2 KiB maximum body. Uses the shared subscription-aware lopu.recordings account rate bucket; unlimited tiers still obey all security and provider limits. Private no-store responses.' },
-		steps: ['Negotiate api.things-actions >=1.0.0 with matching major on the selected origin.', 'Select the home data source; custom data sources return 409 to prevent cross-database ID collisions.', 'Read current recording consent and explicitly confirm sending this Thing to Lopu.', 'POST the exact Thing ID and action; inspect recording activity for progress.'],
-		requestExamples: [{ name: 'Send recording Thing', description: 'Explicitly act on this recording.', method: 'POST', body: { id: 'watch-upload-your-id', action: 'send-to-lopu' } }],
-		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
+		id: 'things-actions', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things', title: 'Thing actions',
+        endpoint: '/api/v1/things/actions', methods: ['GET', 'POST'],
+        summary: 'Discover and dispatch registered semantic actions against an exact Thing.',
+        detail: 'GET ?id returns only id, ownerId, availableActions and libraryArchived after the same owner-library eligibility checks used by Archive and Restore. Missing, foreign and protected subjects return the same 404 without owner or archive metadata. POST accepts only id and action=archive|restore|send-to-lopu. Archive and Restore update protected owner-library placement metadata only, preserving source content, audience, folder, relationships and timestamps. They do not unpublish shared content. User-facing chat, message, community and subspace content retains dedicated read/write APIs; its Archived entry is a private minimal static-title card without bodies, participants or binding fields. Account, credential, membership, control, sandbox and held content is excluded. Recording send-to-lopu retains the existing explicit-consent protected recording writer and subscription-aware rate bucket.',
+        auth: { mode: 'session-or-bearer', description: 'Full first-party user session on the home data source only. Temporary, service, app, device and PAT actors are rejected. Same-origin requests, private no-store responses. POST requires application/json with a 2 KiB control-body budget. Archive reads/writes use ordinary fail-closed Things rate buckets; recording processing retains the lopu.recordings subscription bucket.' },
+        steps: ['Negotiate api.things-actions >=1.1.0 on the selected origin.', 'GET the exact Thing action availability in the full owning session.', 'POST the exact id and registered action, then read the result. Recording handoff additionally requires current processing consent.'],
+        requestExamples: [{ name: 'Read action availability', description: 'Owner-private metadata only.', method: 'GET', query: { id: 'your-thing-id' } }, { name: 'Archive Thing', description: 'Archive its owner-library placement.', method: 'POST', body: { id: 'your-thing-id', action: 'archive' } }],
+        responseExamples: [{ status: 200, description: 'Current owner-library actions.', body: { ok: true, id: 'your-thing-id', ownerId: 'your-user-id', availableActions: ['archive'], libraryArchived: false } }, { status: 404, description: 'Unavailable exact subject.', body: { ok: false, error: 'Thing is not available in your library' } }]
+
 	}),
 	endpoint({
         id: 'lopu-background-tasks', contractVersion: '1.3.2', featureVersion: '1.3.2', group: 'lopu', title: 'Background AI tasks',
@@ -6431,7 +6432,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Ordered independent results; inspect every status before recording progress.', body: { ok: true, version: 1, batchId: 'original UUID', digest: 'sha256', results: [] } }]
   }),
 	endpoint({
-    id: 'files', contractVersion: '1.12.2', featureVersion: '1.12.2', notes: ['Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
+    id: 'files', contractVersion: '1.13.0', featureVersion: '1.13.0', notes: ['Version 1.13.0 adds a terminal no-effect receipt for an original file publication identity. Version 1.12.0 removes the application JSON body-size ceiling for authenticated shared-content writes. Authorization and rate admission precede incremental fatal UTF-8/JSON decoding; storage accounting and protocol constraints remain authoritative.'],
     group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
     detail: 'Version 1.12.2 fences automatic File publication against a paused cloud sync preference in the same transaction. Version 1.12.1 fences canonical file writes through an active reviewed creation epoch so interrupted account-file restores cannot release stale verified state. Version 1.8.1 refuses first publication of a provenance-stamped upload at a different file ID, folder or filename; current moves and retained-version restores keep their existing semantics and do not rewrite original provenance. Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
@@ -6446,7 +6447,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'In 1.5.0, GET rootId plus pages=1 streams application/x-ndjson from one read-only Mongo snapshot. Each version-1 page has rootId, rootRevision, generation, ordinal and nodes (at most 128 entries and 384 KiB UTF-8). Only the final page includes totalEntries; require ordered pages, unchanged generation/root revision, exact count, validated cross-page identities/physical ancestry and clean EOF before sealing the observation. HTTP 200 starts a stream, not a successful inventory. Failures may end with {ok:false,status,error} or an interrupted body; discard all partial pages. The traversal uses a private 128 MiB scratch queue, at most two active captures per server process, depth 64 and a 240-second deadline. Snapshot expiry/process loss requires a new generation; no durable resume is offered. Files/metadata only, not a byte backup. Legacy rootId responses and bounds are unchanged; path observations gained bounded-memory traversal in 1.6.0. Clients must separately reauthorize mutations. The live foreground combined-plan limit remains 10,000 paths.',
       'GET rootId plus path returns observation:{version:1,complete:true,rootId,rootRevision,path,entry}, where entry is a current file/folder sync stamp or explicit null for absence. It reads a fresh Mongo snapshot, validates the root ancestry and scans every sibling at each matching path segment, without traversing unrelated subtrees. Missing roots, invalid/foreign/inaccessible metadata, case or Unicode aliases, file ancestors and exceeded bounds are errors, never absence. In 1.6.0, siblings stream in batches of 100; a private request-owned sparse hash index proves unique IDs and normalized paths without retaining sibling metadata. The index is capped at 128 MiB and 2,097,152 keys (one root key and two keys per observed item), with 256 probes per addition and two concurrent path observations per service/process. Limits remain 64 path levels and 20 seconds across transaction retries. Capacity, scratch I/O, cancellation and snapshot failures never become absence; the workspace closes before a result is returned. Legacy whole-tree inventory limits remain unchanged. This observation is not a complete tree or an atomic cross-device deletion lock. Negotiate api.files >= 1.6.0 for bounded-memory wide-folder path checks (the envelope was introduced in 1.4.0); do not cache absence or infer it from an old object id returning 404.',
       'POST kind=folder, UUID id and operationId, name and folderId creates an ordinary private folder with an immutable canonical Timeline receipt. The original IDs and metadata must be retained for retries; changed replay input and occupied identities/paths fail. GET folderId reads a folder; adding operationId reads its immutable creation receipt even after later edits or deletion. This is folder creation, not folder overwrite or deletion.',
-      'GET id returns the current file. GET id plus operationId returns the exact committed receipt or null; null is not evidence of file deletion.',
+      'GET id returns the current file. GET id plus operationId returns the exact committed receipt or null and, when terminally fenced, terminal:{kind:terminal-no-effect,id,operationId,expectedRevision}; null alone is not evidence that an older request cannot still commit.',
+      'POST kind=terminal-no-effect with the original UUID file id and operationId and expectedRevision occupies that canonical Timeline operation identity through the normal owner-authorized, accounted transaction. It returns status=terminal with the exact immutable fence, or status=complete with the original committed receipt if publication won first. The fence never creates a file revision, binds staged bytes, changes file metadata or refunds quota. An old file commit with that occupied identity fails closed. Clients require api.files 1.13.0, retain uncertain operations until an exact receipt is proven, and recheck current source, destination and authority before planning replacement work.',
       'POST id and operationId (UUID v4), expectedRevision (null for create), name, folderId (or null), attachmentId, contentVersion and trashed. Obtain contentVersion from attachment-content fingerprint=1. Retain this entire payload for retries.',
       'A replay returns the original committed snapshot even after subsequent edits. Reusing an operation with different input, stale revisions, mismatched bytes, foreign/bound uploads or custom data planes fail without changing either file.',
       'POST kind=retained-version with the same commit fields, a non-null expectedRevision and trashed=false retains alternate bytes without changing the live file. Name and folder must still match the reviewed live file. An owner-private Timeline effect stores both versions; it never advances the Published head. GET id, operationId and kind=retained-version retrieves this separate immutable receipt. Replay the exact original payload after an uncertain response. This retains uploaded bytes; it does not capture device files automatically or create an independent disaster-recovery backup.',
@@ -9735,8 +9737,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.62.0',
-    contractVersion: '1.62.0',
+    featureVersion: '1.63.0',
+    contractVersion: '1.63.0',
 
 
     group: 'things',
@@ -9746,6 +9748,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.63 expands owner-library Archive to eligible user-facing Things, including dedicated message and community content. Protected-content Archived rows carry libraryArchivePresentation:metadata and only a static title, kind and canonical identity; ordinary content retains inherited audience checks. ' +
       'Version 1.62 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
       'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
@@ -10195,14 +10198,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-search',
     // 1.6.0: optional presentation metadata follows existing avatar projections.
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
+      'Version 1.7 applies the shared owner-library eligibility filter to archive searches and retains protected-content exclusions. Metadata-only message/community cards are discovered through the Archived list, never private-body search predicates. For first-party home library searches, libraryArchive=active or archived restricts results to the current owner and filters before paging. Omitting it preserves ordinary search. Archived results expose libraryArchived: true only to their owner in first-party reads. ' +
       'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
@@ -10460,8 +10463,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-bulk',
     // 1.8.0: first-party owners can archive and restore their library placements.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
     // 1.7.2: private backup coordinator Things remain inaccessible through generic exact, inherited and export reads.
     // 1.7.1: managed placement participates in active reviewed restore epochs.
     // 1.4.0: first-party owners can move complete private archive roots.
@@ -10471,7 +10474,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/bulk',
     summary: 'Multi-select operations for /things: move, copy, delete, share, archive, or restore owned Things.',
     detail:
-      'Archive and restore require a same-origin first-party home library owner. They toggle private library placement metadata on each selected Thing without moving it or changing its audience, links, contents, or timestamps. Folder operations do not recurse. Use libraryArchive=archived on the owner list to find archived items across folders. ' +
+      'Version 1.9 reuses the same exact owner-library Archive and Restore helper as semantic Thing actions, including dedicated content kinds. Only protected placement metadata changes, with full-session home-source checks and no content, audience, relationship or timestamp rewrite. Archive and restore require a same-origin first-party home library owner. They toggle private library placement metadata on each selected Thing without moving it or changing its audience, links, contents, or timestamps. Folder operations do not recurse. Use libraryArchive=archived on the owner list to find archived items across folders. ' +
       'Copying a webpage omits its optional automatic Action opt-in, including pages nested inside copied folders. ' +
       'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +

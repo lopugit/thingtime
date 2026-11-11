@@ -69,8 +69,9 @@ mock.module('../mongodb/legacyThingLayout', { namedExports: { legacyThingReadsRe
 mock.module('../mongodb/endpoint', { namedExports: { isCustomMongoEndpointActive: () => custom } });
 mock.module('../auth/resolveActor', { namedExports: { resolveActor: async () => actor, actorUser: () => null, actorPat: () => null, actorCors: () => ({}) } });
 mock.module('../rateLimit/enforce', { namedExports: { enforceRateLimit: async () => ({ allowed: false }), rateLimitedResponseInit: () => ({ status: 429 }), getRequestIp: () => null } });
-const { listThings, getThing, countThings, getThings } = await import('./things');
+const { listThings, getThing, countThings, getThings, getLibraryArchiveAction, setLibraryArchive, bulkThings } = await import('./things');
 const { loader } = await import('../../../routes/api/v1/things/_things.tsx');
+const { searchThings } = await import('./search');
 const date = new Date('2026-09-21T00:00:00Z');
 const doc = (id: string, extra: any = {}) => ({ shareId: id, ownerId: 'author', thingtime: ['data'], acl: ['tt:all'], crystal: {}, schemaVersion: 2, createdAt: date, updatedAt: date, ...extra });
 const comment = (id: string, extra: any = {}) => doc(id, { thingtime: ['post', 'comment'], targetId: 'root', acl: ['tt:inherit'], crystal: { text: id, richText: { blocks: [{ type: 'paragraph', data: { text: 'Rich text' } }] } }, ...extra });
@@ -484,4 +485,63 @@ test('later batch read failure never exposes an earlier partial batch', async co
     return find(query);
   });
   assert.deepEqual(await getThings(viewer, ids), { ok: false, status: 503, error: 'Things read is unavailable' });
+});
+
+
+test('owner archive metadata and full-content list/count retain revoked, blocked and dangling parent gates', async () => {
+  const own = { ...viewer, id: 'reader' };
+  rows.push(comment('archived-child', { ownerId: own.id, libraryArchived: true }));
+  for (const state of ['revoked', 'blocked', 'dangling']) {
+    const root = rows.find(row => row.shareId === 'root');
+    root.acl = state === 'revoked' ? ['tt:user'] : ['tt:all'];
+    root.moderation = state === 'blocked' ? { status: 'blocked' } : undefined;
+    const saved = [...rows];
+    if (state === 'dangling') rows = rows.filter(row => row.shareId !== 'root');
+    const result = await listThings(own, { libraryArchive: 'archived', limit: 1 }, null, { archiveOwnerId: own.id });
+    assert.equal(result.ok, true); if (result.ok) assert.deepEqual(result.things, []);
+    assert.deepEqual(await countThings(own, { libraryArchive: 'archived' }, null, { archiveOwnerId: own.id }), { ok: true, count: 0 });
+    assert.deepEqual(await getLibraryArchiveAction(own.id, 'archived-child'), { ok: false, status: 404, error: 'Thing is not available in your library' });
+    const search = await searchThings(own, { libraryArchive: 'archived', conditions: [] });
+    assert.equal(search.ok, true); if (search.ok) assert.deepEqual(search.things, []);
+    rows = saved;
+  }
+});
+
+test('owner Archived paginates protected message cards without hydrating private source content', async () => {
+  for (const id of ['message-a', 'message-b', 'message-c']) rows.push(doc(id, { ownerId: viewer.id, thingtime: ['chat-message'],
+    libraryArchived: true, targetId: 'private-chat', acl: ['tt:user'], crystal: { text: 'PRIVATE', participantIds: ['PRIVATE'], name: 'PRIVATE' }, extended: { binding: 'PRIVATE' } }));
+  rows.push(doc('vault', { ownerId: viewer.id, thingtime: ['password-manager-entry'], libraryArchived: true, crystal: { password: 'PRIVATE' } }));
+  const context = { archiveOwnerId: viewer.id };
+  const result = await listThings(viewer, { libraryArchive: 'archived', limit: 1 }, null, context);
+  assert.equal(result.ok, true); if (!result.ok) return;
+  assert.deepEqual(result.things.map(row => row.id), ['message-a']); assert.ok(result.nextCursor);
+  assert.equal(JSON.stringify(result.things).includes('PRIVATE'), false);
+  assert.equal(JSON.stringify(result.things).includes('private-chat'), false);
+  assert.deepEqual(result.things[0].crystal, { name: 'Archived message' });
+  const next = await listThings(viewer, { libraryArchive: 'archived', limit: 1, cursor: result.nextCursor }, null, context);
+  assert.equal(next.ok, true); if (next.ok) assert.deepEqual(next.things.map(row => row.id), ['message-b']);
+  assert.deepEqual(await countThings(viewer, { libraryArchive: 'archived' }, null, context), { ok: true, count: 3 });
+  assert.equal(reads.some(read => read.query.thingtime === 'user'), false, 'minimal message cards never hydrate source authors');
+});
+
+test('single Archive and bulk share metadata-only placement updates with permission checks', async () => {
+  const subject = doc('message', { ownerId: viewer.id, thingtime: ['chat-message'], targetId: 'private-chat', crystal: { text: 'PRIVATE' } });
+  rows.push(subject);
+  const writes: any[] = [];
+  const fake = async () => ({ ...collection, updateOne: async (query: any, update: any) => { writes.push({ query, update }); return { matchedCount: matches(subject, query) ? 1 : 0 }; } }) as any;
+  assert.equal((await getLibraryArchiveAction(viewer.id, 'message', fake)).ok, true);
+  assert.deepEqual(await setLibraryArchive(viewer.id, 'message', 'archive', fake), { ok: true, id: 'message', ownerId: viewer.id, libraryArchived: true });
+  assert.deepEqual(writes[0].update, { $set: { libraryArchived: true } });
+  assert.equal(subject.crystal.text, 'PRIVATE'); assert.equal(subject.targetId, 'private-chat');
+  assert.equal((await setLibraryArchive('foreign', 'message', 'archive', fake)).ok, false);
+  assert.equal(writes.length, 1);
+  const bulk = await bulkThings(viewer, { op: 'archive', ids: ['message'] }, { collection: fake }, { libraryOwnerId: viewer.id });
+  assert.equal(bulk.ok, true); if (bulk.ok) assert.equal(bulk.succeeded, 1);
+  assert.deepEqual(writes[1].update, writes[0].update);
+});
+
+test('structured archive search cannot match protected bodies through result existence', async () => {
+  rows.push(doc('message', { ownerId: viewer.id, thingtime: ['chat-message'], libraryArchived: true, crystal: { text: 'PRIVATE BODY' } }));
+  const result = await searchThings(viewer, { libraryArchive: 'archived', conditions: [{ field: 'text', op: 'contains', value: 'PRIVATE' }] });
+  assert.equal(result.ok, true); if (result.ok) assert.deepEqual(result.things, []);
 });

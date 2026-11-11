@@ -75,6 +75,8 @@ export const createFilesHandlers = (
 				const result = mutation
 					? body?.kind === 'folder'
 						? await deps.folders.create(user.id, body)
+						: body?.kind === 'terminal-no-effect'
+						? await deps.service.fence(user.id, body)
 						: await deps.service.commit(user.id, body)
 					: await deps.service.read(user.id, url.searchParams.get('id'), url.searchParams.get('operationId') ?? undefined, url.searchParams.get('kind') === 'retained-version');
 				return result.ok === false ? json({ ok: false, error: result.error, ...('code' in result ? { code: result.code } : {}) }, { status: result.status }) : json(result);

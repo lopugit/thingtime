@@ -12,7 +12,7 @@ const { stageRangeMetadata } = require('./folder-stream.cjs');
 const { normalizeEndpointUrl } = require('./desktop-settings.cjs');
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
-const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'observe-path', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
+const ACTIONS = new Set(['validate-folder-batch', 'upload-batch', 'upload-single', 'resources', 'context', 'upload-part', 'list', 'choose', 'conditions', 'remove', 'scan', 'scan-stream', 'scan-stream-finish', 'scan-changes', 'scan-capture', 'scan-status', 'scan-cancel', 'scan-skips', 'scan-page', 'scan-discard', 'inspect', 'inspect-stamp', 'observe-path', 'read', 'read-range', 'stage-begin', 'stage-download', 'stage-append', 'stage-range', 'stage-finish', 'write-approve', 'write-check', 'publication-lookup', 'publish', 'trash', 'trash-lookup', 'trash-expected', 'trash-inspect', 'trash-restore', 'trash-list', 'trash-restore-reviewed', 'suspend']);
 const supportsBatchPages = version => {
     const parts = typeof version === 'string' && version.length <= 32 && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(version);
     return !!parts && parts[1] === '1' && Number.isSafeInteger(Number(parts[2])) && Number.isSafeInteger(Number(parts[3])) && Number(parts[2]) >= 10;
@@ -23,6 +23,7 @@ const unavailable = () => new Error('Folder access changed. Reopen this device w
 const verificationRetry = () => new Error('[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.');
 const shutdownWait = () => new Error('[folder_sync_shutdown] Thingtime is closing. Saved sync work can resume when reopened.');
 const transportRetry = () => new Error('[folder_transport_retry] Folder service is temporarily unavailable. Retry after reconnecting.');
+const observationDeadline = () => new Error('[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.');
 const nativeFailureCodes = new Set(['node_timeout', 'node_unavailable', 'node_protocol_error', 'folder_unavailable', 'folder_identity_retry', 'folder_volume_retry', 'cancelled', 'unsupported_feature']);
 const requestFailureCode = error => error?.name === 'ThingtimeNodeBridgeError' && nativeFailureCodes.has(error.code) ? error.code :
     error?.message === verificationRetry().message ? 'folder_identity_retry' : error?.message === unavailable().message ? 'host-refused' : 'unclassified';
@@ -334,7 +335,8 @@ class DesktopFolderSync {
         const governedPayload = policy && ((['upload-part', 'upload-batch', 'upload-single'].includes(input.action) && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
             (input.action === 'stage-download' && (policy.downloadBytesPerSecond || policy.cpuPercent)) ||
             (['stage-finish', 'publish'].includes(input.action) && policy.cpuPercent));
-        const timer = governedPayload ? null : setTimeout(() => this.cancel(state), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
+        const deadlineReason = input.action === 'observe-path' ? observationDeadline() : undefined;
+        const timer = governedPayload ? null : setTimeout(() => this.cancel(state, deadlineReason), state.folderDeadline === null ? this.timeoutMs : Math.min(this.timeoutMs, input.remainingMs)); timer?.unref?.();
         const verify = async (externalSignal) => {
             const previousPhase = state.phase;
             state.phase = 'account-verification';
@@ -462,6 +464,22 @@ class DesktopFolderSync {
             if (input.action === 'upload-batch') timing.recordBatch(value.uploadedBatch);
             outcome = 'ok'; return value;
         } catch (error) {
+            if (deadlineReason && state.abort.signal.reason === deadlineReason &&
+                (error === deadlineReason || error?.name === 'AbortError' ||
+                    (error?.name === 'ThingtimeNodeBridgeError' && error.code === 'cancelled'))) {
+                // Only our elapsed timer may defer an incomplete point hash.
+                // Recheck account and renderer authority independently of the
+                // cancelled request before returning the typed fallback.
+                const stillCurrent = () => {
+                    const current = this.capture(context.event, state.input);
+                    if (current.generation !== context.generation || current.window !== context.window ||
+                        current.apiOrigin !== context.apiOrigin || current.appOrigin !== context.appOrigin) throw unavailable();
+                };
+                stillCurrent();
+                await this.verifyAccount(context, AbortSignal.timeout(20_000));
+                stillCurrent();
+                throw deadlineReason;
+            }
             if (!state.abort.signal.aborted) {
                 try { this.assertCurrent(state); }
                 catch (authorityError) { this.reportFailure(input.action, 'reply-verification', authorityError); throw authorityError; }

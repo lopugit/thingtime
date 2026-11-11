@@ -21,6 +21,15 @@ client requirement maps must stay aligned. Attachment upload deduplication and
 its activation/consolidation migrations use the canonical attachment lifecycle;
 see [device sync configs](../device-sync-configs.md) for rollout and deletion
 invariants, and the `TESTING.md` checklist for real API acceptance.
+`api.files` 1.13.0 adds a terminal no-effect response to the existing Files
+operation lookup and a same-route POST fence for the original file upload ID.
+The canonical Timeline event identity resolves races against late commits;
+complete-first returns the immutable original receipt. `cloudTransport.ts`
+negotiates 1.13.0 only for this recovery action, and `pagedRunJournal.ts`
+requires the exact receipt before retiring a dispatched row. A null lookup
+alone is never proof that an old write cannot still commit. Run the focused
+file sync tests and `test-cloud-inventory-pages.mjs --empty-files` for its
+real-route replica-set race.
 
 `api.agent-overview` 2.1.0 adds optional multi-select task level, status and
 project filters to `GET /api/v1/agent-overview`. The read adapter applies them
@@ -976,6 +985,28 @@ records retain their original Claude Code runtime; Console keys never infer
 subscription access or fall back to platform billing. Both manifests derive
 these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
 
+## Shared owner-library Archive actions
+
+`api.things-actions` 1.1.0 adds same-origin full-user-session GET availability
+and POST Archive/Restore at `/api/v1/things/actions`. The existing Nitro
+`actionDataRoutes` registration serves both methods. The canonical helper in
+`api/utils/things/things.ts` and the pure `libraryArchiveEligibility.ts`
+predicate serve single actions, bulk placement and archived lists. Dedicated
+message/community/subspace content uses static private library descriptors;
+source bodies, participants, media bindings and credential/control Things stay
+behind their own APIs. Full-content inherited Things retain the canonical
+ancestor ACL check. Versions Things 1.63.0, Things search 1.7.0 and Things bulk
+1.9.0 advertise the expanded placement and safe projection contracts. The
+Archive read minimum is 1.63, while upstream Component argument bindings keep
+their 1.62 floor; `libraryArchiveCapabilities.client.ts` composes canonical
+origin and active-API checks to prevent mixed-deployment false positives.
+Run the Things actions, owner-library predicate, comment projection and both
+capability suites, plus the real API/Chrome library Archive acceptance script.
+
+Protected metadata cards are discoverable through the owner Archived list and
+kind filters. Generic structured search retains normal content authority and
+excludes these metadata-only kinds, so body predicates cannot reveal private
+message text through result existence.
 
 ## Google service actions on named grants
 

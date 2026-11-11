@@ -12,6 +12,7 @@ import { parsePagedRunReview, parseReviewedConflict, resolveReviewedPage, type P
 import { parseFileSyncConfiguration, type FileSyncConfiguration } from './configuration';
 import { parseCloudInventoryRoot, type CloudInventoryRoot, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudWrite } from './cloudWrite';
+import { parseCloudFileNoEffectFence, type CloudFileNoEffectFence } from './cloudFile';
 import { prepareCloudOperationBinding, type CloudOperationBinding } from './cloudBinding';
 import { parseLocalTrashContext } from './localTrash';
 import { PAGED_CHECKPOINT_HEADS, validatePagedCheckpointHead } from './checkpoint';
@@ -35,6 +36,8 @@ export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as 
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; backgroundPhotoPublication?: true; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals; photoSourceChanged?: true };
+export type ReservedSyncPublication = { operationId: string; direction: 'upload' | 'download'; kind: 'file' | 'folder' | 'trash';
+	canonicalDispatched: boolean | null; receiptPresent: boolean; confirmed: boolean; fileId?: string };
 const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
@@ -944,6 +947,26 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	return {
 		get scope() { return structuredClone(scope); },
 		begin, step, read, beginCloud, stepCloud, backfillDirections,
+		/** Exact, owner-scoped identity for reconciling a stopped publication. This
+		 * read never advances the scheduler or exposes source paths or bytes. */
+		reservedPublication: (value: PagedRunSpec) => {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<ReservedSyncPublication | null>(spec, 'readonly', (h, tx, done, fail) => {
+				const id = h.scheduling?.reserved;
+				if (!id) { done(null); return; }
+				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const r = row(get.result, spec), m = r.operation.mutation;
+					if (r.operation.id !== id) throw Error('Reserved operation identity changed.');
+					const write = r.cloud ? rebindWrite(r, spec) : undefined;
+					const direction = m.kind === 'copy' ? m.from === 'local' ? 'upload' : 'download' : m.side === 'remote' ? 'upload' : 'download';
+					const kind = m.kind === 'trash' ? 'trash' : m.source.kind;
+					done({ operationId: id, direction, kind, canonicalDispatched: r.canonicalDispatched ?? null,
+						receiptPresent: r.receipt !== null, confirmed: r.operation.confirmed,
+						...(direction === 'upload' && kind === 'file' && write ? { fileId: write.before?.id ?? id } : {}) });
+				} catch (error) { fail(error); } };
+			});
+		},
 		/** Upgrade only structural initial uploads that could never execute.
 		 * Retire metadata atomically; large operation rows are collected later. */
 		async retireUnstartedInitialUpload(value: PagedRunSpec, expected: FileSyncConfiguration): Promise<boolean> {
@@ -1196,20 +1219,27 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 
 		/** Only for an executor's preflight failure AFTER receipt lookup returned
 		 * missing. Pending/uncertain publications must retain the original ID. */
-		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false, firstPlacementDispatchExcluded = false) {
-			const spec = parsePagedRunSpec(value);
+		async skipUnpublishedStreamOperation(value: PagedRunSpec, operationId: string, conflict: boolean, firstGuardedDispatchRejected = false, firstPlacementDispatchExcluded = false, terminalFence?: CloudFileNoEffectFence) {
+			const spec = parsePagedRunSpec(value), terminal = terminalFence && parseCloudFileNoEffectFence(terminalFence);
 			return withHeader<PagedRunProgress>(spec, 'readwrite', (h, tx, done, fail) => {
 				if (!h.stream || h.scheduling?.reserved !== operationId) throw Error('Only the reserved unpublished streaming operation can be superseded.');
 				const ops = tx.objectStore(PAGED_RUN_STORES[1]), get = ops.index('operation').get([key, operationId]);
 				get.onsuccess = () => { try { check(); const r = row(get.result, spec);
+					if (terminal) {
+						const mutation = r.operation.mutation, write = r.cloud && rebindWrite(r, spec);
+						if (!write || mutation.kind !== 'copy' || mutation.from !== 'local' || mutation.source.kind !== 'file' ||
+							write.operation.id !== operationId || terminal.operationId !== operationId ||
+							terminal.id !== (write.before?.id ?? operationId) || terminal.expectedRevision !== (write.before?.revision ?? null))
+							throw Error('Terminal receipt does not bind the original file upload.');
+					}
 					if (r.operation.confirmed || r.receipt !== null ||
-						(r.canonicalDispatched === true && !firstPlacementDispatchExcluded && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
+						(r.canonicalDispatched !== false && !terminal && !firstPlacementDispatchExcluded && !(firstGuardedDispatchRejected && spec.streaming?.source === 'both' && r.cloud?.write.guardDestination)))
 						throw Error('Preserve the published or uncertain revision receipt.');
 					if (h.scheduling?.batch) throw Error('Recover the reserved batch before replanning a member.');
 					const retire = () => {
 					if (!conflict && r.canonicalDispatched === false && r.cloud && eligibleFolderBatchWrite(r.cloud.write, scope))
 						tx.objectStore(REVIEW_STORE).add({ scope: key, run: spec.id, instance: h.instance, operation: r.operation, cause: 'source-supersession' }, [key, spec.id, 'folder-supersession', operationId]);
-					tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict }, [key, spec.id, 'history', operationId]);
+						tx.objectStore(REVIEW_STORE).add({ ...r, unpublished: true, conflict, ...(terminal ? { terminal } : {}) }, [key, spec.id, 'history', operationId]);
 					ops.delete([key, spec.id, ...orderKey(r.operation, spec)]);
 					tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]); tx.objectStore(REVIEW_STORE).delete([key, spec.id, 'pending-path', r.path]); if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation); h.operations--; h.cloud!.prepared--; if (!h.operations) h.cloud!.after = null;
 					h.scheduling!.reserved = null; h.scheduling!.canonical = false; h.confirmedThrough = null; if (conflict) h.stream.conflicts++;
@@ -1227,8 +1257,9 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							check(); const m = get.result;
 							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.operationId !== operationId || m.ordinal !== p.ordinal || m.batchId !== recovery.id || m.confirmed || m.retired)
 								throw Error('Unpublished member recovery evidence changed.');
-							if (m.canonicalDispatched) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
-							r.canonicalDispatched = false; m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
+						if (m.canonicalDispatched && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
+						if (!terminal) r.canonicalDispatched = false;
+						m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
 							if (!recovery.remaining) {
 								review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]); delete h.scheduling!.recovery;
 							}
