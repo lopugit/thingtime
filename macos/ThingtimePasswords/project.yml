@@ -9,8 +9,8 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     ENABLE_DEBUG_DYLIB: false
-    MARKETING_VERSION: "1.0.9"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "1.0.10"
+    CURRENT_PROJECT_VERSION: "11"
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: true
     THINGTIME_PASSWORD_HOST_BUNDLE_ID: com.thingtime.passwords
@@ -25,6 +25,7 @@ targets:
       - PasswordApp.swift
       - PasswordSetupEditor.swift
       - path: ../../apple/Passwords/Host/AuthenticatorSetupBridge.swift
+      - path: ../../apple/Passwords/Host/PasswordApplicationMenu.swift
       - path: Resources
         excludes: ["*.plist", "*.entitlements", "Thingtime.icns"]
         buildPhase: resources

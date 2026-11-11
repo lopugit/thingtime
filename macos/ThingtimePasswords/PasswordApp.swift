@@ -69,7 +69,11 @@ import ThingtimePasswordCore
         self.editor = editor; self.window = window; NSApp.activate(ignoringOtherApps: true)
         return editor
     }
-    func applicationDidFinishLaunching(_ notification: Notification) { LSRegisterURL(Bundle.main.bundleURL as CFURL, true); _ = showEditor() }
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = PasswordApplicationMenu.make()
+        LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
+        _ = showEditor()
+    }
     func application(_ application: NSApplication, open urls: [URL]) {
         let editor = showEditor()
         for url in urls { editor.receive(url) }

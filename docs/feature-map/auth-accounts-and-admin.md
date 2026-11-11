@@ -122,6 +122,17 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+The macOS accessory companion installs `Host/PasswordApplicationMenu.swift`
+through `PasswordApp.swift`. Its standard nil-target Edit actions send keyboard
+shortcuts to the focused WebKit responder without credential/clipboard adapters.
+The Swift test target compiles that same host source and verifies selectors,
+modifiers and targets; the menu stays outside production core and iOS. The
+shared setup bridge keeps ordinary review instructions web-only, clears stale
+native copy to a neutral destination after verified readiness, and preserves
+native errors when the web surface cannot initialize. See the native
+keyboard editing section in `password-manager.md` and the signed acceptance
+checklist in `TESTING.md`.
+
 Native authenticator link intake: shared Swift `AuthenticatorSetup.swift` and
 `Host/AuthenticatorSetupBridge.swift`; macOS `PasswordSetupEditor.swift`; iOS
 `WebView.swift`. The narrow native bridge 1.0.0 requires compatible `api.passwords`
