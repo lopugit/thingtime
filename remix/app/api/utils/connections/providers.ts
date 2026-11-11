@@ -1,3 +1,4 @@
+import { safeProviderError } from './providerErrors';
 import { oauthClientConfig } from './oauthConfig';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -643,9 +644,16 @@ export const authedJson = async (
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})
     });
     if (!resp.ok) {
-      await resp.body?.cancel().catch(() => {});
+      let detail: string | null = null;
+      try {
+        // Error-parser resource bound only; never a user-content limit.
+        const text = await readBoundedBody(resp, 16 * 1024);
+        if (text !== null) detail = safeProviderError(url, resp.status, JSON.parse(text));
+      } catch {
+        // Malformed, interrupted and oversized errors retain generic copy.
+      }
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
-      return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
+      return fail(status, detail || (status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`));
     }
     const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
@@ -2050,6 +2058,10 @@ const youtubeAccountProvider: ConnectionProvider = {
         )
       )
     );
+    // A successful empty uploads playlist is valid. Total request failure is
+    // not: preserve a safe failure instead of stamping the account successful.
+    const failed = lists.find(({ result }) => result.ok === false);
+    if (lists.length && lists.every(({ result }) => result.ok === false) && failed?.result.ok === false) return failed.result;
     const items: ExternalFeedItem[] = [];
     for (const { channel, result } of lists) {
       if (result.ok === false) continue;
