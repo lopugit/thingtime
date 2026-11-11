@@ -48,7 +48,7 @@ export async function streamForegroundSync(
 		return;
 	const controller = new AbortController(),
 		signal = AbortSignal.any([outerSignal, controller.signal]);
-	const { check, authorize, runtime, readLocal, observeLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
+	const { check, authorize, runtime, readLocal, readLocalUploadSource, observeLocal, openSource, localTarget } = foregroundSyncContext(reviewed, scope, input, signal);
 	const access = { scope, currentScope: input.currentScope, signal, cleanup: 'foreground' as const };
 	const runs = input.journal.pagedRuns(access),
 		inventory = input.journal.inventory(access),
@@ -157,6 +157,7 @@ export async function streamForegroundSync(
 			localTarget,
 			beforeLocalPublication: markPublication,
 			readLocal,
+			readLocalUploadSource,
 			transfer: input.transfer,
 			openSource,
 			progress: (path, bytes, size, direction) => {
@@ -425,7 +426,8 @@ export async function streamForegroundSync(
 			const observations = observableBatchEntry(change.entry) ? await observeBatch(change) : undefined;
 			const provisional = observations?.has(change.entry.path) && observations.get(change.entry.path) === null;
 			const source = local
-				? provisional ? structuredClone(change.entry) : await readLocal(change.entry.path)
+				? provisional ? structuredClone(change.entry) : change.entry.kind === 'file'
+					? await readLocalUploadSource(change.entry) : await readLocal(change.entry.path)
 				: await readCloudPathEntry(runtime, scope, configuration.remoteFolderId, change.entry.path, signal);
 			check();
 			const event = { ...change, generation };
@@ -582,7 +584,8 @@ export async function streamForegroundSync(
 					} else if (rebind.recovery || !rebind.parentId) {
 						await runs.deferTargetRebind(spec, operation.id);
 					} else {
-						const source = await readLocal(operation.mutation.path);
+						const source = operation.mutation.kind === 'copy' && operation.mutation.source.kind === 'file'
+							? await readLocalUploadSource(operation.mutation.source) : await readLocal(operation.mutation.path);
 						check();
 						if (operation.mutation.kind !== 'copy' || !sameSyncStamp(source, operation.mutation.source)) throw new SyncObservationChangedError(true, false);
 						const parentPath = operation.mutation.path.split('/').slice(0, -1).join('/');
@@ -628,7 +631,8 @@ export async function streamForegroundSync(
 					const m = operation.mutation, targetSide = m.from === 'local' ? 'remote' : 'local';
 					let sourceChanged = false, targetChanged = false;
 					try {
-						sourceChanged = !sameSyncStamp(m.source, await port.read(m.from, m.path));
+						sourceChanged = !sameSyncStamp(m.source, m.from === 'local' && m.source.kind === 'file' && port.readLocalUploadSource
+							? await port.readLocalUploadSource(m.source) : await port.read(m.from, m.path));
 						targetChanged = !sameSyncStamp(m.expectedTarget, await port.read(targetSide, m.path));
 					} catch { check(); throw error; }
 					if (!sourceChanged && !targetChanged) throw error;

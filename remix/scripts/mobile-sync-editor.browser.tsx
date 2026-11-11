@@ -30,7 +30,7 @@ const partialQA = new URLSearchParams(location.search).has('partial');
 const homeQA = new URLSearchParams(location.search).has('home');
 const inspectionQA = new URLSearchParams(location.search).has('inspect');
 const inventoryQA = new URLSearchParams(location.search).has('inventory');
-const observations = { requests: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], ignorePolicies: [] as string[], scanPolicies: [] as string[][] };
+const observations = { requests: 0, lists: 0, mutations: 0, scans: 0, inspections: 0, captures: 0, pages: 0, discarded: 0, skipPages: [] as number[], ignorePolicies: [] as string[], scanPolicies: [] as string[][] };
 const nativeCaptures = new Map<string, { capture: { id: string; generation: string; totalEntries: number }; entries: typeof localEntries }>();
 const inventoryReply = (request: any) => {
 	if (request.action === 'scan-cancel') { nativeCaptures.delete(request.captureId); return { complete: false, cancelled: true, excludedPaths: request.excludedPaths ?? [] }; }
@@ -59,6 +59,8 @@ const inventoryReply = (request: any) => {
 };
 const observe = (request: any) => {
 	if (request.action !== 'suspend') observations.requests++;
+	if (request.action === 'list') { observations.lists++; if (coldActiveQA) captureRedraw(); }
+	if (['choose', 'scan', 'remove'].includes(request.action)) observations.mutations++;
 	if (request.action === 'scan') observations.scans++;
 	if (request.action === 'scan' || request.action === 'scan-capture') observations.scanPolicies.push(canonicalNativeScanExclusions(request.excludedPaths ?? []));
 	if (request.action === 'inspect') observations.inspections++;
@@ -71,6 +73,7 @@ const photoQA = new URLSearchParams(location.search).has('photos');
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
 const iosTaskQA = new URLSearchParams(location.search).get('platform') === 'ios' && new URLSearchParams(location.search).has('tasks');
 const taskQA = (desktop || iosTaskQA) && new URLSearchParams(location.search).has('tasks');
+const coldActiveQA = desktop && new URLSearchParams(location.search).has('cold-active');
 const historyQA = desktop && taskQA && new URLSearchParams(location.search).has('history');
 if (historyQA) Object.assign(window, { readSyncHistoryFixture: readDeviceSyncHistory });
 let taskHeld = false;
@@ -470,6 +473,7 @@ function Fixture() {
 					{desktop ? 'Desktop sync editor regression' : 'Mobile sync editor regression'}
 				</Text>
 				<Text fontSize="12px">Synthetic API and native grants. No real files are accessed or uploaded.</Text>
+				{coldActiveQA && <Text role="status">Cold-start task: {nativeSyncTasks.read()?.active ? 'active' : 'idle'} · Native list requests: {observations.lists} · Native mutations: {observations.mutations}</Text>}
 				{taskQA && <><Text role="status">App transfer lease: {taskHeld ? 'active' : 'idle'}</Text>
 					<Button onClick={() => setShowFolders(value => !value)}>{showFolders ? 'Leave Files screen' : 'Reopen Files screen'}</Button>
 					<Button onClick={() => { for (const release of heldScans.values()) release(); }}>Release scan</Button>
@@ -617,6 +621,13 @@ const initialRootData = { user: { id: ownerId, accountKind: 'user' }, dataPlane:
 const router = createMemoryRouter([
 	{ id: 'root', path: '/', loader: () => initialRootData, element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture> }
 ], { hydrationData: { loaderData: { root: initialRootData } } });
+if (coldActiveQA) {
+	// The native runner is already busy before a fresh renderer paints. Keep its
+	// synthetic task alive so the folder list must load without waiting for idle.
+	void nativeSyncTasks.start({ origin: canonicalOrigin, dataPlane: 'home', ownerId, deviceId,
+		rootId: '11111111-1111-4111-8111-111111111111' }, signal => new Promise<void>(resolve =>
+		signal.addEventListener('abort', () => resolve(), { once: true })));
+}
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<RouterProvider router={router} />

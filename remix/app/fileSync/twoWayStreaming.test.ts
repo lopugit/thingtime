@@ -18,6 +18,7 @@ import { NativeInventoryRetryWait } from './nativeInventory';
 import { readNativeIndexChanges, NativeStreamingIndexInterrupted } from './streamingIndex';
 import type { NativeIndexChangesPage } from './streamingIndex';
 import { SyncVolumeRemounted } from './syncConnectionWait';
+import { NativePathObservationUnavailable } from './nativePathObservation';
 
 const isPausedWait = (cause: unknown) => cause instanceof SyncConditionsWait && cause.reason === 'paused';
 const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
@@ -822,6 +823,24 @@ test('negotiated two-way preparation uses compound observations while later tran
   await x.run();
   assert.ok(compounds >= 2); assert.ok(scalarReads > 0);
   assert.equal(x.f.publications(), 1); assert.equal(x.receipts.size, 1);
+  assert.ok(await x.checkpoints().current());
+ } finally { x.f.journal().close(); }
+});
+test('expired early observation defers to sealed scan and uploads without hashing the same large source twice', { timeout: 10000 }, async () => {
+ const x = await fixture(), observed = deferred(); let fullPathHashes = 0, stampReads = 0;
+ const originalInspect = x.input.inspectLocal!;
+ x.input.nativeOperationGuards = true;
+ x.input.observeLocal = async () => { observed.resolve(); throw new NativePathObservationUnavailable(); };
+ x.input.inspectLocal = async path => { if (path === x.f.entry().path) { fullPathHashes++; throw Error('second full hash stalled'); }
+  return originalInspect(path); };
+ x.input.inspectLocalStamp = async path => { stampReads++; const entry = x.f.entry(); assert.equal(path, entry.path);
+  return { path: entry.path, id: entry.id, version: entry.version, kind: entry.kind, size: entry.size }; };
+ x.feeds([x.f.entry()], [], observed.promise);
+ try {
+  await x.run();
+  assert.ok(stampReads > 0); assert.equal(fullPathHashes, 0);
+  assert.equal(x.f.publications(), 1);
+  assert.deepEqual([...x.f.objects.values()], [new Uint8Array([1, 2, 3])]);
   assert.ok(await x.checkpoints().current());
  } finally { x.f.journal().close(); }
 });

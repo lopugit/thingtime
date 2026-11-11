@@ -35,6 +35,15 @@ public struct MobileFolderReader {
             try c.encodeIfPresent(symbolicLink, forKey: .symbolicLink)
         }
     }
+    /// Current exact-path metadata only. This carries no content digest and
+    /// cannot by itself establish that bytes match an earlier inventory row.
+    public struct Stamp: Codable, Equatable, Sendable {
+        public let path: String
+        public let id: String
+        public let version: String
+        public let kind: String
+        public let size: Int64
+    }
     public struct Chunk: Encodable, Sendable {
         public init(version: String, size: Int64, offset: Int64, data: String) { self.version = version; self.size = size; self.offset = offset; self.data = data }
         public let version: String; public let size: Int64; public let offset: Int64; public let data: String
@@ -214,14 +223,33 @@ public struct MobileFolderReader {
     /// a directory listing. Absence is distinct from permission/provider errors.
     /// Both traversals must resolve the same ancestors and the same final object.
     public static func inspect(bookmark: Data, path: String) throws -> Entry? {
-        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false)
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false) { fd, path in
+            let entry = try entry(fd, path: path)
+            return (entry, entry.version)
+        }
     }
     /// Metadata-only directory inspection: a file replacement must never enter
     /// the regular-file fingerprint path, including between the two resolves.
     public static func inspectFolder(bookmark: Data, path: String) throws -> Entry? {
-        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: true)
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: true) { fd, path in
+            let entry = try entry(fd, path: path)
+            return (entry, entry.version)
+        }
     }
-    private static func inspectEntry(bookmark: Data, path: String, directoryOnly: Bool) throws -> Entry? {
+    /// Reuses the full inspector's two descriptor-relative traversals, but
+    /// performs no file read or fingerprint. Final symlinks are refused.
+    public static func inspectStamp(bookmark: Data, path: String) throws -> Stamp? {
+        try inspectEntry(bookmark: bookmark, path: path, directoryOnly: false) { fd, path in
+            let before = try info(fd), type = before.st_mode & S_IFMT
+            guard type == S_IFREG || type == S_IFDIR, before.st_size >= 0,
+                  before.st_size <= 9_007_199_254_740_991 else { throw Failure.invalid }
+            let version = stamp(before)
+            return (Stamp(path: path, id: "\(before.st_dev):\(before.st_ino)", version: version,
+                          kind: type == S_IFDIR ? "folder" : "file", size: type == S_IFDIR ? 0 : before.st_size), version)
+        }
+    }
+    private static func inspectEntry<T>(bookmark: Data, path: String, directoryOnly: Bool,
+                                        inspect: (Int32, String) throws -> (T, String)) throws -> T? {
         let parts = try components(path)
         return try access(bookmark) { root in
             guard try !NativeSymbolicLinks.isWithinOwnedJournal(root, path: path) else { throw Failure.invalid }
@@ -250,14 +278,14 @@ public struct MobileFolderReader {
                 } catch { close(fd); throw error }
             }
             let first = try resolve(); defer { if let fd = first.fd { close(fd) } }
-            let value = try first.fd.map { try entry($0, path: path) }
+            let inspected = try first.fd.map { try inspect($0, path) }
             let second = try resolve(); defer { if let fd = second.fd { close(fd) } }
             guard first.ancestors == second.ancestors else { throw Failure.changed }
-            if let value, let original = first.fd, let current = second.fd {
-                guard try stamp(info(original)) == value.version, try stamp(info(current)) == value.version else { throw Failure.changed }
+            if let inspected, let original = first.fd, let current = second.fd {
+                guard try stamp(info(original)) == inspected.1, try stamp(info(current)) == inspected.1 else { throw Failure.changed }
             } else if first.fd != nil || second.fd != nil { throw Failure.changed }
             try Task.checkCancellation()
-            return value
+            return inspected?.0
         }
     }
     public static func scan(bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil) throws -> [Entry] {

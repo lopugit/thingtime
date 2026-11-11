@@ -31,6 +31,17 @@ need attention and cannot publish deletions. Missing folder access, revoked
 authorization, conflicts and an explicit pause remain distinct states. Hiding a
 Retry button does not repair those conditions.
 
+Mac file access 1.22.0 adds an exact-path, metadata-only `inspect-stamp` action
+for a captured local upload source. If the bounded early `observe-path` hash
+expires, that path waits for the sealed inventory; its transfer then compares
+the saved capture with a fresh authorized native path, inode, version, kind and
+size check. This avoids hashing the same large file again before upload. The
+saved fingerprint remains provisional: each uploaded part or whole-file result
+must match it, and a reused ready attachment must return the same verified
+content fingerprint before the original file publication. Older hosts, links,
+targets, downloads and deletion checks keep full inspection. A changed stamp,
+lost grant, explicit Stop or mismatched bytes cannot publish from that capture.
+
 Activity records belong to an exact device/config/account/origin/root scope.
 They retain measured start/end times and bytes sent and received in the existing
 device sync history store. Unknown measurements stay unknown. Payload bytes,

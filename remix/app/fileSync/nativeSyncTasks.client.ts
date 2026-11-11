@@ -33,7 +33,7 @@ import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import { createAutomaticStoragePlacement } from './automaticStoragePlacement';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativePathStamp, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
@@ -653,6 +653,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						observeLocal: nativePathObserver(host, binding.ownerId, signal),
 						...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 							{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
+						...(supportsNativePathStamp(capabilities) && reviewed.configuration.sourceKind !== 'photos' ? { inspectLocalStamp: async (path: string) => (await request(binding.ownerId,
+							{ action: 'inspect-stamp', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedStamp! } : {}),
 						inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
 						inventoryPages: (options?: { signal?: AbortSignal }) => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: options?.signal ?? signal }),
 						source: async entry => mobileFolderSource(binding.ownerId, reviewed.configuration.localRootId, entry, signal, request, capabilities, !resume, photoDownloadApproval()),

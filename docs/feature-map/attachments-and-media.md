@@ -23,6 +23,13 @@ expected revision, and retains the journal on missing, pending or refused
 responses. The fence is owner-authorized and accounted through the normal
 Timeline transaction; it does not bind staged bytes or create a file revision.
 Only an exact terminal or completed receipt permits the old row to advance.
+For Mac 1.22.0, `mobileFolders.client.ts` and `desktopFolders.client.ts` also
+negotiate a metadata-only `inspect-stamp` action through the existing Electron
+and Mac folder bridge. `foregroundSyncContext.ts` uses it solely for the
+captured source of a local file upload after fresh saved policy and native grant
+checks. `execute.ts` and `cloudSyncPort.client.ts` keep the captured fingerprint
+provisional until `cloudTransport.ts` checks uploaded byte digests or the
+canonical verified ready attachment. Other reads retain full inspection.
 
 **Image presentation.** The shared upload-first `ProfileMediaField` opens
 `ImagePresentationDialog` for profile avatar/banner and subspace icon/banner.

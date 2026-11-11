@@ -150,7 +150,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   through the accounted Files Timeline transaction (`api.files` 1.13.0), then
   require fresh sealed reconciliation before advancing. Release the native
   scanner lane on one-way failures, retain exact job enrollment, and remove
-  the 256-sync-config account ceiling while paging remains bounded.
+  the 256-sync-config account ceiling while paging remains bounded. Load the
+  read-only root list during an active native task, defer expired early path
+  observations to sealed indexing, and use Mac 1.22 exact source stamps to
+  avoid hashing a captured upload twice while retaining byte-digest proof.
   [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
 
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data

@@ -517,6 +517,30 @@ test('validated native parts retain initial, pre-complete and final source fence
  }
 });
 
+test('upload source stamp preflight skips a second full hash but bytes or ready content still prove the captured digest', async () => {
+ for (const scenario of ['part', 'wrong-part', 'ready', 'changed-stamp'] as const) {
+  const f = await fixture(), run = f.make(); let fullReads = 0, stampReads = 0, parts = 0, verifies = 0;
+  if (scenario === 'ready') f.hook((path) => path === '/api/v1/attachments/uploads'
+   ? Response.json({ ok: true, upload: { id: 'att1', partSizeBytes: f.entry.fingerprint!.partSizeBytes,
+    partCount: f.entry.fingerprint!.partCount, state: 'ready' } }) : null);
+  const native: FingerprintSource = { size: bytes.length, nativePartSourceChecks: true,
+   read: async () => { throw Error('Native source must own byte reads'); }, check: () => {}, verify: () => { verifies++; },
+   uploadPart: async () => { parts++; return { sha256: scenario === 'wrong-part' ? 'f'.repeat(64)
+    : Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex') }; } };
+  const port = createCloudSyncPort(run, { currentScope: () => scope, persist: async () => {},
+   readLocal: async () => { fullReads++; throw Error('Slow full-file hash was repeated'); },
+   readLocalUploadSource: async expected => { stampReads++; assert.deepEqual(expected, f.entry); return scenario === 'changed-stamp' ? null : expected; },
+   openSource: async () => native }, f.runtime);
+  if (scenario === 'wrong-part') await assert.rejects(executeSyncRun(run, port), /planned fingerprint/);
+  else if (scenario === 'changed-stamp') await assert.rejects(executeSyncRun(run, port), /file changed/i);
+  else assert.ok((await executeSyncRun(run, port)).operations.every(op => op.confirmed));
+  assert.equal(fullReads, 0); assert.equal(stampReads, 1);
+  assert.equal(parts, scenario === 'part' || scenario === 'wrong-part' ? 1 : 0);
+  assert.equal(f.counts().commits, scenario === 'part' || scenario === 'ready' ? 1 : 0);
+  if (scenario !== 'changed-stamp') assert.equal(verifies, scenario === 'wrong-part' ? 0 : 1);
+ }
+});
+
 test('an accepted commit from a checked native source reopens by its original receipt without another part or source session', async () => {
  const f = await fixture(), journal = await openSyncJournal(new IDBFactory()), run = f.make();
  let checks = 0, parts = 0, opens = 0;
