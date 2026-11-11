@@ -7,7 +7,7 @@ import ThingtimePasswordCore
 @MainActor final class PasswordSetupEditor: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private let setup = AuthenticatorSetupBridge()
     private var browser: WKWebView?
-    private let status = NSTextField(wrappingLabelWithString: "Sign in normally in this private window. Setup codes remain in memory until you review and save them.")
+    private let status = NSTextField(wrappingLabelWithString: "Loading the configured Thingtime destination.")
     private var origin: URL?
     private var owner: String?
     override func loadView() {
@@ -70,7 +70,7 @@ import ThingtimePasswordCore
             let web = replaceBrowser()
             origin = destination.origin; owner = destination.owner
             setup.configure(webView: web, origin: destination.origin, expectedOwner: destination.owner)
-            status.stringValue = "Destination: \(destination.origin.absoluteString). Sign in normally to review setup codes. Native AutoFill credentials are not reused in this window."
+            status.stringValue = "Destination: \(destination.origin.absoluteString)"
             web.load(URLRequest(url: destination.origin.appendingPathComponent("passwords")))
         } catch {
             if origin != nil {

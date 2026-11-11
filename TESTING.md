@@ -10949,6 +10949,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   imply credential rejection if the password field remained empty. Menu actions
   must use standard nil-target AppKit responder-chain selectors; no custom
   clipboard delivery. `PasswordApplicationMenuTests` checks the menu contract.
+  After normal sign-in, setup cancel, save and reload, the native header stays
+  a neutral destination label rather than stale sign-in/review instructions.
+  A native setup/authentication failure remains visible if the web surface
+  cannot initialize; successful verified readiness restores the neutral label.
+  `AuthenticatorSetupBridgeStatusTests` exercises the actual bridge callback.
 
 - [ ] Native authenticator links: cold and warm `otpauth://totp` intake reaches
   the configured signed companion/iOS destination, using normal sign-in.

@@ -149,7 +149,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   shortcuts so Command-V reaches focused web inputs. Keep credential delivery
   native, preserve identity/entitlements, and advance companion host/extension
   to 1.0.10/build 11. Menu contract tests pass; signed keyboard acceptance is
-  separate. **Codex (AI)**
+  separate. Keep the native destination header neutral after verified readiness
+  while retaining initialization errors. **Codex (AI)**
 
 - 2026-11-12: Reconcile native TOTP setup-link intake with the current password
   editor and account lifecycle. Keep one-use seeds transient, require editable

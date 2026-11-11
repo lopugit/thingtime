@@ -37,9 +37,15 @@ import ThingtimePasswordCore
     var onStatus: ((String) -> Void)?
     var destinationIsCurrent: (() -> Bool)?
     private var statusMessage: String?
-    private func report(_ message: String) {
-        statusMessage = message; onStatus?(message)
+    // The webpage owns review/save/cancel copy. Native chrome keeps a neutral
+    // destination label, while errors remain visible even before web startup.
+    func report(_ message: String, nativeNotice: Bool = true) {
+        statusMessage = message
+        if nativeNotice { onStatus?(message) }
         if let nonce = lastNonce, let owner = lastOwner { emit(kind: "status", nonce: nonce, owner: owner, message: message) }
+    }
+    func destinationVerified(_ root: URL) {
+        onStatus?("Destination: \(root.absoluteString)")
     }
 
     static func canonicalOrigin(_ value: URL) -> URL? {
@@ -71,7 +77,7 @@ import ThingtimePasswordCore
                 self.report("The pending setup expired. Open the setup code again when you are ready.")
             }
             guard origin != nil else { report("Setup is held only in memory while the configured destination is unavailable. Unlock this device and reactivate this window to retry."); return }
-            report("Sign in to the displayed Thingtime destination, then review the pending setup in Passwords.")
+            report("Sign in to the displayed Thingtime destination, then review the pending setup in Passwords.", nativeNotice: false)
             announce()
         } catch { report("This link is not a supported TOTP setup code. HOTP and migration links are not supported.") }
     }
@@ -115,6 +121,7 @@ import ThingtimePasswordCore
             do {
                 try await Self.verifySession(web: web, root: root, owner: owner)
                 guard !Task.isCancelled, self.destinationIsCurrent?() ?? true, AuthenticatorSetupDeliveryGate.permits(capturedGeneration: current, currentGeneration: self.generation, capturedDocument: documentNonce, currentDocument: self.lastDocumentNonce), self.validPage(web, root), self.lastNonce == nonce else { return }
+                self.destinationVerified(root)
                 let binding = AuthenticatorSetupInbox.Binding(owner: owner, nonce: nonce, generation: current)
                 if operation == "ready" {
                     if let id = self.inbox.bind(binding, expectedOwner: self.expectedOwner, dataPlane: "home") { self.emit(kind: "available", nonce: nonce, owner: owner, id: id) }
@@ -123,7 +130,7 @@ import ThingtimePasswordCore
                     if let setup = self.inbox.consume(id, binding: binding) {
                         self.expiry?.cancel(); self.expiry = nil
                         self.emit(kind: "setup", nonce: nonce, owner: owner, id: id, setup: setup.uri)
-                        self.report("Review the draft and select Save. Nothing has been saved automatically.")
+                        self.report("Review the draft and select Save. Nothing has been saved automatically.", nativeNotice: false)
                     } else {
                         self.emit(kind: "unavailable", nonce: nonce, owner: owner, id: id)
                     }

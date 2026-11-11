@@ -111,6 +111,10 @@ After signed installation, verify Command-V into a focused synthetic password
 field, Command-A, Cut/Copy and Undo/Redo in ordinary editable text, and normal
 sign-in using supported credential delivery. Never read or log the clipboard to
 test shortcut delivery. Context-menu Paste remains a supported normal fallback.
+The native header shows only the configured destination during normal use;
+verified readiness clears stale native sign-in copy. Web review/save/cancel
+messages stay in the web surface. Native setup or authentication errors remain
+visible when the webpage cannot initialize, until verification succeeds.
 
 ### Native authenticator setup links
 

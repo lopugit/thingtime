@@ -126,7 +126,10 @@ The macOS accessory companion installs `Host/PasswordApplicationMenu.swift`
 through `PasswordApp.swift`. Its standard nil-target Edit actions send keyboard
 shortcuts to the focused WebKit responder without credential/clipboard adapters.
 The Swift test target compiles that same host source and verifies selectors,
-modifiers and targets; production core and iOS remain unchanged. See the native
+modifiers and targets; the menu stays outside production core and iOS. The
+shared setup bridge keeps ordinary review instructions web-only, clears stale
+native copy to a neutral destination after verified readiness, and preserves
+native errors when the web surface cannot initialize. See the native
 keyboard editing section in `password-manager.md` and the signed acceptance
 checklist in `TESTING.md`.
 
