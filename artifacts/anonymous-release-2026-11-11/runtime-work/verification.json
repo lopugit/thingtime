@@ -1,0 +1,98 @@
+{
+  "observedAt": "2026-11-11T11:54:08.688531+00:00",
+  "parentHead": "b5b70e0c842d8308cefa4b2f4567157c4ebc0e23",
+  "main": "991a3d9d62ec06a050c078499e12ae4ca5cb7261",
+  "scope": "Partial shutdown foundations; no native local-mode activation enabled",
+  "checks": {
+    "gateway": {
+      "exitCode": 0,
+      "logSha256": "717d391360b23e4081969458a31e75ad0a437b4493c5549ced4f79fd83f469f6",
+      "passed": 18,
+      "skipped": 0
+    },
+    "detachedWork": {
+      "exitCode": 0,
+      "logSha256": "fa49cedd02889eb33225b66f4b8326a4d10d9c286a7086a73df96d6e49bcbdb9",
+      "passed": 38,
+      "skipped": 0
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "errors": 0
+    },
+    "ratchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "errors": 0
+    },
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "393d013986af1b6ff97d08522d3b9a012d88e8b5cf6baa62aefcd122d42a419d",
+      "errors": 0,
+      "warnings": 371
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "5e3bfd063a00cebb40f4d9d73d85586e800975c74f1d1b7e3dc28a7e5f7064e8"
+    },
+    "compiledHandler": {
+      "exitCode": 0,
+      "logSha256": "b16f9a317b5c99cfa8de0e974bef5fc4081786ec0e1a8e46a2b8a4757d3d20bf",
+      "contracts": 27,
+      "inProcessReservation": true,
+      "database": "synthetic unreachable; no persistence claim"
+    },
+    "plan": {
+      "exitCode": 0,
+      "logSha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73",
+      "widths": [
+        1440,
+        390,
+        320
+      ],
+      "cleanup": true
+    },
+    "changedSmokeLint": {
+      "exitCode": 0,
+      "logSha256": "549e544dadb621699769583f159b84b03d5d76a6e62a247aa5565587013e1e49"
+    }
+  },
+  "sourceSha256": {
+    "PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md": "74f7a2d2c98a1c7891788e1eb6d5a1a7c17378250e6642c6bcbd983c72d95402",
+    "TESTING.md": "3e1e58b9746705a6f5ca8f52154f8ba1eb589fcf4e602664514205d39da864ab",
+    "artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md": "ae754561981fb0065682aedcc7ba67e87bcdb4665284b1fb6a78cd9eccb4f712",
+    "docs/feature-map/api-endpoints-and-capabilities.md": "382f0a13cdb5a5a5eb8eb70c18ec33f5309a245312b53cf710c60c5db492db08",
+    "docs/native-web-bundles.md": "ce09b0819b8da9a4b7db19e890b0d91e34a1b8b0768252ad54a63a5919e3028c",
+    "docs/progress/anonymous-local-first.html": "fcc710419de19188cf4122e60e050a4f095108b9de1e60a5b47d1f4b258f38a0",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "5432aca347e22ac8191de7efc05ffdb743065317af7e60ae5bbf7354c08d571f",
+    "remix/CHANGELOG.md": "b8a90d1cdc35c9ff8d9b2f7525048393ec2dc47d1da11020d9f646e7818729fc",
+    "remix/app/api/utils/deployment/environmentGateway.ts": "90eb3798d40a58eb91b2b49d9722f3ef7ab8e8b277e6f27f27a1df918b83b9df",
+    "remix/app/api/utils/deployment/runtimeWork.test.ts": "3c99d90174fc94b73ecde2de081714ac8e33acda49fa959fc30c2d3ff2aff698",
+    "remix/app/api/utils/errors/errorLogs.test.mts": "dea3f4b8a0703d597c84f423dbe5e0ed8246228f61b9fd238753659fb59103dc",
+    "remix/app/api/utils/errors/errorLogs.ts": "e17b4bc2c93b7f27cd8e880fe3503cf54f7c2be27a8f2867652f231cf1620fe7",
+    "remix/app/api/utils/lopu/backgroundTasks.test.mts": "3c97c867e0eed8ab13b233e491323354b7987ee31248799cf71baca928def8cd",
+    "remix/app/api/utils/lopu/backgroundTasks.ts": "c172f9377b25d61d64b12eb223d5fe51e6c7b22c7f1c050f20ecc70a2b517209",
+    "remix/app/api/utils/messenger/detachedShutdown.test.ts": "71aecb40289632d15429581fc1b25d8c55a3481603b8c000d1c256746fba00fc",
+    "remix/app/api/utils/messenger/messenger.ts": "a097296a399a786e97e9ae66fe7aa2ec62f94fb7323394b15f4563aaafd42331",
+    "remix/app/routes/api/v1/deployment-links/_deployment-links.tsx": "c70d04c6113076bebb6b2f0747c506819b0604f3496cbac73eacb24368b23c6c",
+    "remix/package.json": "665b3f53e40eca2e1bda50c0d9fc32c17d901187d5c7c6c5676d1e8119865288",
+    "remix/scripts/smoke-built-content-execution.mjs": "fcad0f23e079c92ec42d578462ed2b9e871e562e444484b8adb5940aad85ed3a",
+    "remix/server/middleware/environment-gateway.ts": "3bad1ab54f05f1c3352f9cae0f603691d23be55a24e14209ed11596dbaf02f91",
+    "remix/server/plugins/runtime-work.ts": "224a8f658072ae34963f7d101eb5fa2b49c8f7c87cf70bad0c1439d097060f17"
+  },
+  "limitations": [
+    "Remaining detached producer audit and native host wiring",
+    "Automatic native replacement and post-restart data readback unverified",
+    "Connected-host render/export not activated",
+    "iOS transactional storage and app integration unfinished",
+    "Structural Graphify refresh only; semantic backend previously unavailable"
+  ],
+  "productionDiscovery": {
+    "origin": "https://thingtime.com",
+    "api.chatgpt-mcp": "2.2.0",
+    "chatgpt.mcp": "2.1.0",
+    "chatgpt.render-export": null,
+    "connectedRenderToolAvailable": false
+  }
+}

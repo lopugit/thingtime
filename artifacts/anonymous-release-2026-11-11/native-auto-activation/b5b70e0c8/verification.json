@@ -1,0 +1,20 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T11:39:22.227Z",
+  "finishedAt": "2026-11-11T11:40:15.136Z",
+  "phase": "publish-after-baseline-and-real-download",
+  "cleanupVerified": true,
+  "observations": [
+    {
+      "case": "signed-live-delivery",
+      "processUnchanged": true,
+      "releaseId": "ec3d9f7c4000b4b47f55439c776ac1bd93a170aadd216338f1c733f741f20911",
+      "pending": true
+    }
+  ],
+  "failure": {
+    "name": "Error",
+    "message": "agent-desktop failed: {\"version\":\"2.6\",\"ok\":false,\"command\":\"minimize\",\"error\":{\"code\":\"TIMEOUT\",\"message\":\"Accessibility surface read failed for AXMinimized\",\"suggestion\":\"Retry after the application finishes updating its accessibility surfaces\",\"details\":{\"attribute\":\"AXMinimized\",\"ax_error\":-25204,\"kind\":\"surface_read\",\"retryable\":true,\"steps\":[{\"label\":\"window_minimize\",\"mechanism\":\"semantic_api\",\"outcome\":\"succeed"
+  },
+  "retainedDiagnostics": "/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/thingtime-native-auto-KfuNiW"
+}

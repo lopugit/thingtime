@@ -1,0 +1,20 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+Error: Transform failed with 1 error:
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/api/utils/deployment/environmentGateway.ts:165:0: ERROR: Unexpected "export"
+    at failureErrorWithLog (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1748:15)
+    at /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:1017:50
+    at responseCallbacks.<computed> (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:884:9)
+    at handleIncomingPacket (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:939:12)
+    at Socket.readFromStdout (/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/node_modules/.pnpm/esbuild@0.28.1/node_modules/esbuild/lib/main.js:862:7)
+    at Socket.emit (node:events:509:28)
+    at addChunk (node:internal/streams/readable:563:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:514:3)
+    at Readable.push (node:internal/streams/readable:394:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23) {
+  name: 'TransformError'
+}
+
+Node.js v24.18.0

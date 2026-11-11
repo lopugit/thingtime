@@ -1,12 +1,17 @@
 import { defineMiddleware } from 'nitro/h3';
 
-import { beginGatewayWork, runAdmittedGatewayWork } from '../../app/api/utils/deployment/environmentGateway';
+import { beginGatewayWork, GatewayWorkUnavailable, runAdmittedGatewayWork } from '../../app/api/utils/deployment/environmentGateway';
 import { withIndexReadinessRequest } from '../../app/api/utils/mongodb/collections';
 import { environmentGatewayIngress, isGatewayDataPath } from '../utils/environmentGateway';
 
 export default defineMiddleware(async (event, next) => {
   const dataPath = isGatewayDataPath(new URL(event.req.url).pathname);
-  const end = beginGatewayWork();
+  let end: () => void;
+  try { end = beginGatewayWork(); }
+  catch (error) {
+    if (!(error instanceof GatewayWorkUnavailable)) throw error;
+    return Response.json({ ok: false, error: error.message }, { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '1' } });
+  }
   try {
     const result = dataPath ? await environmentGatewayIngress(event.req) : null;
     if (result instanceof Response) { end(); return result; }

@@ -496,3 +496,36 @@ for (const claimed of [false, true]) test(`gateway promotion reconciles expired 
     else { assert.equal(row.crystal.workflowStatus, 'needs-attention'); assert.equal(row.uniqueKeys, undefined); }
   } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 });
+
+test('terminal background save joins an already running heartbeat renewal', async t => {
+  const { isGatewayWorkIdle, reserveGatewayWorkShutdown } = await import('../deployment/environmentGateway');
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let finishReply!: () => void, replyStarted!: () => void, releaseRenewal!: () => void, renewalStarted!: () => void;
+  const replyReady = new Promise<void>(resolve => { replyStarted = resolve; });
+  const replyGate = new Promise<void>(resolve => { finishReply = resolve; });
+  const renewalReady = new Promise<void>(resolve => { renewalStarted = resolve; });
+  const renewalGate = new Promise<void>(resolve => { releaseRenewal = resolve; });
+  beforeUpdate = async update => {
+    if (Object.keys(update.$set || {}).length === 1 && update.$set.deadlineAt) { renewalStarted(); await renewalGate; }
+  };
+  try {
+    await startBackgroundTask(request('heartbeat-shutdown'), async () => {
+      replyStarted(); await replyGate;
+      return new Response('{"type":"done"}\n', { headers: { 'Content-Type': 'application/x-ndjson' } });
+    });
+    await replyReady;
+    t.mock.timers.tick(1500);
+    await renewalReady;
+    let settled = false;
+    const completion = Promise.all(pending).then(() => { settled = true; });
+    finishReply();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(settled, false);
+    assert.equal(rows[0].crystal.status, 'running', 'terminal save must follow the heartbeat');
+    assert.equal(isGatewayWorkIdle(), false);
+    assert.equal(reserveGatewayWorkShutdown(), null);
+    releaseRenewal(); await completion;
+    assert.equal(rows[0].crystal.status, 'completed');
+    assert.equal(isGatewayWorkIdle(), true);
+  } finally { finishReply(); releaseRenewal(); beforeUpdate = null; t.mock.timers.reset(); }
+});

@@ -1,7 +1,7 @@
 // Opt-in native acceptance. Uses the actual app/renderer and signed delivery;
 // remote bootstrap and GitHub publication are isolated synthetic fixtures.
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile, open, access } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile, open, access, readdir } from 'node:fs/promises';
 import { generateKeyPairSync, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync } from 'node:child_process';
@@ -15,13 +15,17 @@ const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const name = process.argv.find(arg => arg.startsWith('--workspace='))?.slice(12);
 const output = path.resolve(process.argv.find(arg => arg.startsWith('--output='))?.slice(9) || '');
 if (!name?.startsWith('native-bundle-qa-auto-') || !process.argv.some(arg => arg.startsWith('--output='))) throw Error('Require a dedicated native-bundle-qa-auto-* workspace and --output');
-const workspace = retainedWorkspace(name), appName = `Thingtime Dev ${name}`, require = createRequire(import.meta.url);
+const workspace = retainedWorkspace(name), require = createRequire(import.meta.url);
+const reusePrepared = process.argv.includes('--reuse-prepared');
+const previousReceiptPath = process.argv.find(arg => arg.startsWith('--previous-receipt='))?.slice(19);
 const puppeteer = require('puppeteer-core'), hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'thingtime-native-auto-'));
 await mkdir(output, { recursive: true });
 const log = await open(path.join(temporary, 'development.log'), 'w', 0o600);
 let phase = 'preflight', failure, cleanupFailure, receipt, launcher, api, browser, page, originalPolicy, createdWorkspace = false;
 const startedAt = new Date().toISOString(), observations = [];
+const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
+let preparedSourceHashes = {};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const enter = value => { phase = value; console.log(`Native auto QA: ${value}`); };
 async function until(check, ms, label) {
@@ -42,10 +46,30 @@ function command(executable, args, timeout = 30000) {
  if (result.status !== 0 || result.error) throw Error(`${path.basename(executable)} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(0, 400)}`);
  return result.stdout;
 }
-function desktop(action) {
- const observed = JSON.parse(command('agent-desktop', ['list-windows', '--app', workspace.identity], 15000)); assert.equal(observed.ok, true);
- const result = JSON.parse(command('agent-desktop', [action, '--app', workspace.identity], 15000));
- assert.equal(result.ok, true, JSON.stringify(result.error)); return result.data;
+async function desktop(action) {
+ const beforePid = await processId();
+ const executable = command('/bin/ps', ['-p', String(beforePid), '-o', 'comm=']).trim();
+ assert.equal(executable, path.join(workspace.runtime, 'Contents/MacOS/Electron'), 'Control only the verified task runtime');
+ if (action === 'minimize') {
+  const observed = JSON.parse(command('agent-desktop', ['list-windows', '--app', workspace.identity], 15000)); assert.equal(observed.ok, true);
+ }
+ const raw = spawnSync('agent-desktop', [action, '--app', workspace.identity], { env: developmentEnvironment(), encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
+ let result;
+ try { result = JSON.parse(raw.stdout); } catch { throw Error(`Native ${action} returned no inspectable result: ${raw.error?.message || raw.stderr || 'unknown'}`); }
+ observations.push({ case: 'native-control', action, beforePid, executable, result, repeated: false });
+ await writeFile(path.join(output, 'native-control.json'), JSON.stringify(observations.filter(item => item.case === 'native-control'), null, 2));
+ if (!result.ok && result.error?.code !== 'TIMEOUT') throw Error(`Native ${action} refused: ${JSON.stringify(result.error)}`);
+ // A semantic action may have landed even when AX post-read times out. Do not
+ // repeat it or fake focus: independently observe the actual owned page.
+ const post = await until(async () => {
+  assert.equal(await processId(), beforePid, 'Native process changed during window control');
+  const state = await page.evaluate(() => ({ focused: document.hasFocus(), visibility: document.visibilityState }));
+  const satisfied = action === 'minimize' ? !state.focused && state.visibility === 'hidden' : action === 'restore' ? state.visibility === 'visible' : state.focused;
+  return satisfied ? state : null;
+ }, 5000, `Native ${action} postcondition was not independently confirmed`);
+ observations.at(-1).postcondition = post;
+ await writeFile(path.join(output, 'native-control.json'), JSON.stringify(observations.filter(item => item.case === 'native-control'), null, 2));
+ return post;
 }
 async function processId() { return JSON.parse(await readFile(path.join(workspace.root, 'launcher.json'), 'utf8')).childPid; }
 async function connect() {
@@ -55,13 +79,40 @@ async function connect() {
  return page.evaluate(() => window.thingtimeDesktop?.getInfo());
 }
 try {
- await assert.rejects(access(workspace.root), { code: 'ENOENT' });
- await assert.rejects(access(workspace.app), { code: 'ENOENT' });
  const { assertFreePort } = require('../lib/local-runtime.cjs');
  for (const port of [28640, workspace.apiPort, workspace.databasePort, workspace.inspectorPort]) await assertFreePort(port);
- enter('prepare-isolated-snapshot');
- const releaseClaim = await claimWorkspace(workspace); createdWorkspace = true;
- try { await prepareWorkspace(workspace, electronDir, require('electron')); } finally { await releaseClaim(); }
+ if (reusePrepared) {
+  enter('verify-owned-prepared-snapshot');
+  assert.ok(previousReceiptPath, 'Reuse requires the previous task receipt');
+  const prior = JSON.parse(await readFile(path.resolve(previousReceiptPath), 'utf8'));
+  assert.equal(prior.cleanupVerified, true); assert.equal(prior.passed, false);
+  const delivered = prior.observations?.find(item => item.case === 'signed-live-delivery'); assert.ok(delivered?.releaseId);
+  const prepared = JSON.parse(await readFile(path.join(workspace.root, 'development.json'), 'utf8'));
+  assert.equal(prepared.source, electronDir); assert.equal(prepared.bundleIdentifier, workspace.identity);
+  await assert.rejects(access(path.join(workspace.root, 'launcher.json')), { code: 'ENOENT' });
+  const files = ['main.cjs','preload.cjs','lib/web-bundle-activation.cjs','lib/web-bundle-download.cjs','lib/web-bundle-updates.cjs','lib/renderer-server.cjs'];
+  for (const file of files) {
+   const expected = spawnSync('git', ['-C', repo, 'show', `b5b70e0c8:electron/${file}`], { maxBuffer: 8 * 1024 * 1024 });
+   assert.equal(expected.status, 0); const actual = await readFile(path.join(workspace.source, file)); assert.deepEqual(actual, expected.stdout);
+   preparedSourceHashes[file] = hash(actual);
+  }
+  const releaseClaim = await claimWorkspace(workspace); createdWorkspace = true;
+  try {
+   const metadata = JSON.parse(await readFile(path.join(workspace.source, 'dist/web/metadata.json'), 'utf8'));
+   const cache = path.join(workspace.profile, 'native-web-bundles', metadata.nativeBundle.runtime.nativeAbi, 'qa');
+   const state = JSON.parse(await readFile(path.join(cache, 'state.json'), 'utf8'));
+   assert.equal(state.active, null); assert.equal(state.previous, null); assert.equal(state.pending.releaseId, delivered.releaseId);
+   await rm(cache, { recursive: true });
+   const downloads = path.join(workspace.profile, 'native-web-downloads');
+   try { assert.ok((await readdir(downloads)).every(id => id === delivered.releaseId)); await rm(downloads, { recursive: true }); }
+   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  } finally { await releaseClaim(); }
+ } else {
+  await assert.rejects(access(workspace.root), { code: 'ENOENT' }); await assert.rejects(access(workspace.app), { code: 'ENOENT' });
+  enter('prepare-isolated-snapshot');
+  const releaseClaim = await claimWorkspace(workspace); createdWorkspace = true;
+  try { await prepareWorkspace(workspace, electronDir, require('electron')); } finally { await releaseClaim(); }
+ }
  const web = path.join(workspace.source, 'dist/web'), metadata = JSON.parse(await readFile(path.join(web, 'metadata.json'), 'utf8'));
  const built = metadata.nativeBundle;
  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -113,17 +164,18 @@ try {
  }, 180000, 'The real native downloader did not stage its signed publication');
  assert.equal(await processId(), baselinePid); assert.equal(staged.webBundle.source, 'bundled');
  observations.push({ case: 'signed-live-delivery', processUnchanged: true, releaseId: publication.releaseId, pending: true });
- desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not lose focus');
+ await desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not lose focus');
  enter('dirty-input-remains-pending');
  const dirtyStart = Date.now();
  while (Date.now() - dirtyStart < 70000) {
   assert.equal(await processId(), baselinePid, 'Dirty editor must retain the original process');
   const info = await page.evaluate(() => window.thingtimeDesktop.getInfo());
-  assert.equal(info.webBundle.update.status, 'pending'); assert.equal(info.webBundle.releaseId, null); await wait(1000);
+  assert.equal(info.webBundle.update.status, 'pending'); assert.equal(info.webBundle.releaseId, null);
+  assert.ok(await page.evaluate(expected => document.body.innerText.includes(expected), value), 'Dirty input remains present'); await wait(1000);
  }
  observations.push({ case: 'dirty-background', durationMs: Date.now() - dirtyStart, processUnchanged: true, pending: true,
   checkpointRequests: await page.evaluate(() => window.__nativeAutoQa.filter(event => event.type === 'prepare').length) });
- desktop('restore'); desktop('focus-window'); await editable.press('Tab');
+ await desktop('restore'); await desktop('focus-window'); await page.keyboard.press('Tab');
  enter('durable-save-and-readback');
  await page.goto(`${origin}/${fixturePath}`, { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(expected => document.body.innerText.includes(expected), {}, value);
@@ -131,7 +183,7 @@ try {
  await page.screenshot({ path: path.join(output, 'durable-reload.png') });
  await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(() => typeof window.getThingtime === 'function');
- desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not become quiescent');
+ await desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not become quiescent');
  enter('automatic-idle-process-replacement');
  const automaticStart = Date.now();
  await until(async () => { const pid = await processId(); return pid && pid !== baselinePid; }, 150000, 'Idle native process did not automatically replace itself');
@@ -188,7 +240,7 @@ finally {
  await log.close();
 }
 const result = { ...receipt, passed: Boolean(receipt && !failure && !cleanupFailure), startedAt, finishedAt: new Date().toISOString(), phase,
- cleanupVerified: !cleanupFailure, observations, failure: failure ? { name: failure.name, message: failure.message } : undefined,
+ cleanupVerified: !cleanupFailure, verifierSourceHashes, preparedSourceHashes, observations, failure: failure ? { name: failure.name, message: failure.message } : undefined,
  cleanupFailure: cleanupFailure ? { name: cleanupFailure.name, message: cleanupFailure.message } : undefined,
  ...(failure || cleanupFailure ? { retainedDiagnostics: temporary } : {}) };
 await writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2) + '\n');

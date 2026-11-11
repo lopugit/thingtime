@@ -57,6 +57,18 @@ if (process.argv[2] !== '--worker') {
 	};
 	const manifest = await readJson('/.well-known/thingtime-capabilities.json');
 	const registry = await readJson('/api/v1/capabilities');
+	const lifecycle = Reflect.get(global, Symbol.for('thingtime.runtime-work.lifecycle'));
+	assert.equal(lifecycle?.version, '1.0.0', 'Compiled Nitro must register its in-process work lifecycle');
+	const reservation = lifecycle.reserveShutdown();
+	assert.ok(reservation?.isCurrent(), 'Completed reads leave no active work');
+	try {
+		const response = await app.fetch(new Request('https://thingtime.test/api/v1/capabilities'));
+		assert.equal(response.status, 503);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.equal(response.headers.get('retry-after'), '1');
+		assert.equal((await response.json()).ok, false);
+	} finally { reservation.release(); }
+	assert.equal((await readJson('/api/v1/capabilities')).features['api.passwords'], '1.10.0');
 	assert.equal(manifest.origin, 'https://thingtime.test');
 	for (const [id, route, version, methods] of contracts) {
 		const feature = `api.${id}`;

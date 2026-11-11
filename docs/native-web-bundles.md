@@ -147,8 +147,13 @@ canonical restart/recovery. No renderer-supplied value grants shutdown authority
 
 Automatic activation remains pending in full local API mode. Its detached Lopu
 stream cleanup and notification/background tasks can outlive an HTTP response;
-a generic background-work admission contract is still needed before this mode
-can honestly certify idle. The remote-account desktop bridge awaits protected
+the in-process `thingtime.runtime-work.lifecycle` 1.0.0 contract now exposes
+synchronous idle/reservation checks over admitted work and pool cleanup. Messenger
+recent reactions, deployment-session revocation, underlying error-log persistence
+and background-task heartbeats retain admission until actual completion. This
+is a partial inventory: streamed producer cleanup, notification/email work,
+moderation and backup continuations still need coverage before the native host
+can use it to certify this mode idle. The remote-account desktop bridge awaits protected
 reply persistence within its request. Unknown/missing bridges also remain pending.
 Normal restart still selects a staged update through the verified boot path.
 

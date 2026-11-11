@@ -6,6 +6,15 @@ historical 1.62 variants are insufficient; sync and authoring clients negotiate
 the combined minimum before dependent writes. Dedicated Things update is 1.27.0
 and webpage resolve is 1.19.0.
 
+## Embedded runtime activity
+
+`server/plugins/runtime-work.ts` exposes an in-process-only lifecycle hook over
+`api/utils/deployment/environmentGateway.ts`. No HTTP operation or account
+authority is added. `test:environment-gateway` covers detached completion,
+reservation races and pool drains; the Messenger, error-log and background-task
+suites cover their own completion lifetimes. Full local-mode native activation
+remains disabled pending the remaining producer audit and actual app acceptance.
+
 ## Native web release catalogue and content
 
 GET `/api/v1/releases/native-web` and `/api/v1/releases/native-web/content`

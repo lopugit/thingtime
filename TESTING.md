@@ -19080,6 +19080,13 @@ never print the file-download JSON, encryption metadata or signed URL.
   delayed service teardown and verify no replacement window opens before restart.
 - Full local API mode remains pending until detached stream/background work has
   its own shutdown admission proof. An idle socket count is insufficient.
+- End the parent request while a detached save, session revocation, error-log
+  insert or heartbeat remains unresolved; shutdown must stay unavailable through
+  success/failure and final save. A timed-out logging response must not release
+  its still-running insert. Pool demotion must settle all closes before new work
+  or shutdown, even when one close throws. Run `test:environment-gateway`,
+  `test:messenger`, `test:error-logs` and the background-task regression file.
+  These fixtures do not enable or prove full local-mode automatic activation.
 
 ### Combined offline password-file contract
 

@@ -2,6 +2,27 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Shutdown foundation checkpoint — 11 November 2026
+
+Freshly fetched main remains `991a3d9d6`, already included by merge `b5b70e0c8`.
+The latter passed Web CI build/typecheck/unit, API suite and native compile;
+its preview is reachable. CodeQL and repository controller checks are separate.
+
+The in-process runtime activity hook now reserves shutdown admission and waits
+for pool cleanup. Four previously detached paths retain their real completion:
+Messenger recent reactions, deployment-login revocation, error-log persistence
+beyond response timeout, and background-task heartbeats. Focused regressions
+cover their ordering; this does not yet connect or enable full local-mode
+automatic activation. Remaining producer coverage includes notification/email,
+moderation, backups and streamed/timeout cleanup.
+
+The final automatic-update fixture attempt stopped before app launch because a
+concurrent gateway edit had a syntax error. That error is repaired and the
+focused regressions pass; the native fixture has not been rerun. Actual automatic
+replacement and retained-data readback remain unverified. Preserve this failure
+separately from the earlier successful signed download/staging.
+[Current receipt](../artifacts/anonymous-release-2026-11-11/runtime-work/README.md).
+
 ## Latest main and capability checkpoint — 11 November 2026
 
 Merge freshly fetched `main` at `991a3d9d62ec06a050c078499e12ae4ca5cb7261`

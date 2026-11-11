@@ -19,3 +19,15 @@ listeners were cleaned up. The stopped task-only workspace remains available.
 
 Earlier failure receipts are retained. No manual restart is presented as an
 automatic update, and successful staging is not production-release acceptance.
+
+## Later b5b70e0c8 checkpoint
+
+The exact bundle lookup succeeded, but native minimize returned an AX timeout.
+The verifier now checks actual task-page focus/visibility and unchanged native
+process identity before deciding whether an uncertain action took effect; it
+does not repeat minimize. Its final bounded attempt stopped before app launch
+on a concurrent gateway source syntax error. That source error was repaired
+separately; this native recovery path has not been exercised. Cleanup found no
+remaining task claim or renderer/inspector listeners.
+
+[Final attempt and source hashes](b5b70e0c8/final-recovery/source-and-evidence.json).

@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add an in-process shutdown reservation foundation and retain detached
+  reaction/session cleanup, error-log writes and task heartbeats through their
+  actual completion. Full local-mode automatic updates remain disabled pending
+  the remaining producer audit and installed acceptance. [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-11-11: Merge main AppID compatibility into PR #1000 with a distinct
   passwords 1.10 contract for the combined cancellation-receipt behavior. Verify
   actual hosted native-renderer artifacts and correct the iOS Fetch probe's
