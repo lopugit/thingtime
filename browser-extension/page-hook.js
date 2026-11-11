@@ -60,7 +60,14 @@
     if (key.hints?.length) return 5;
     const extensions = key.extensions;
     if (extensions !== undefined && (!extensions || typeof extensions !== 'object' || Array.isArray(extensions)
-      || Object.entries(extensions).some(([name, value]) => type !== 'create' || name !== 'credProps' || value !== true))) return 6;
+      || Object.entries(extensions).some(([name, value]) => {
+        if (type === 'create') return name !== 'credProps' || value !== true;
+        if (name !== 'appid' || typeof value !== 'string') return true;
+        if (value === '') return false;
+        if (value.trim() !== value || value.includes('\\')) return true;
+        try { const app = new URL(value); return app.protocol !== 'https:' || app.origin !== window.location.origin || !!app.username || !!app.password || !!app.hash; }
+        catch { return true; }
+      }))) return 6;
     if (type === 'create') {
       if (!Array.isArray(key.pubKeyCredParams) || !key.pubKeyCredParams.every(item => item?.type === 'public-key' && Number.isInteger(item.alg))
         || !key.pubKeyCredParams.some(item => item.alg === -7)) return 7;

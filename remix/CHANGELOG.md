@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add narrow browser assertion AppID compatibility with truthful
+  appid:false results, unchanged RP/allowlist verification, same-origin capability
+  negotiation and native fallback for unsupported authorization. Adapter 0.5.0,
+  passwords API 1.9.0; no AppID fetching or legacy key retargeting. **Codex (AI)**
+
 - 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
   unsupported-parameter responses into fixed safe chat diagnostics. Unknown
   responses retain status-only messages; upstream text and credential/request
