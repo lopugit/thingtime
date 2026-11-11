@@ -72,3 +72,18 @@ test('automatic Website help upgrades only the shipped copy and preserves author
  const authored=[{...old,text:'My custom icon help'}];assert.strictEqual(migratePasswordIconBranding(authored),authored);
  const deleted:any[]=[];assert.strictEqual(migratePasswordIconBranding(deleted),deleted);
 });
+
+test('native icon picker sizing repair retains authored styles and converges after migration', () => {
+ const authored = [{ id: 'icon-upload', type: 'element', tag: 'input', props: { type: 'file', 'aria-label': 'My icon picker' }, css: { width: '80%', 'max-width': '50%', 'box-sizing': 'content-box', color: 'rebeccapurple' } }] as any;
+ const migrated = migratePasswordIconBranding(authored);
+ assert.equal(migrated[0].css?.width, '80%');
+ assert.equal(migrated[0].css?.color, 'rebeccapurple');
+ assert.equal(migrated[0].props?.['aria-label'], 'My icon picker');
+ assert.equal(migrated[0].css?.['min-width'], '0');
+ assert.equal(migrated[0].css?.['max-width'], '50%');
+ assert.equal(migrated[0].css?.['box-sizing'], 'content-box');
+ assert.equal(authored[0].css['min-width'], undefined);
+ assert.strictEqual(migratePasswordIconBranding(migrated), migrated);
+ const explicitMinimum = [{ ...authored[0], css: { ...authored[0].css, 'min-width': '120px' } }];
+ assert.strictEqual(migratePasswordIconBranding(explicitMinimum), explicitMinimum);
+});

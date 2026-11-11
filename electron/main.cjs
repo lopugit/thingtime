@@ -29,6 +29,8 @@ const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { startRendererServer } = require('./lib/renderer-server.cjs');
 const { createWebBundleStore } = require('./lib/web-bundle-store.cjs');
 const { createWebBundleLaunch } = require('./lib/web-bundle-launch.cjs');
+const { createWebBundleDownload } = require('./lib/web-bundle-download.cjs');
+const { createWebBundleUpdates } = require('./lib/web-bundle-updates.cjs');
 const { validateTrustPolicy, createElectronBundleHost, assertElectronBundleMetadata } = require('../native-bundles/host.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
@@ -98,6 +100,7 @@ let activeContentOrigin = null;
 let webBuildMetadata = null;
 let selectedWebBundle = null;
 let webBundleLaunch = null;
+let webBundleUpdates = null;
 let mainWindow = null;
 let sessionHash = null;
 let aiConnectorsPromise = null;
@@ -113,6 +116,7 @@ function invalidateDesktopProviderAuthority() {
 }
 async function closeDesktopServices() {
  const tasks = [];
+ if (webBundleUpdates) tasks.push(webBundleUpdates.close());
  if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
  if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
  if (localRuntime) tasks.push((async () => {
@@ -125,7 +129,7 @@ async function closeDesktopServices() {
 attachQuitSignals(app);
 app.on('before-quit', (event) => {
  webBundleLaunch?.close();
- if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && process.platform === 'darwin')) return;
+ if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && !webBundleUpdates && process.platform === 'darwin')) return;
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
@@ -272,6 +276,12 @@ async function initializeWebBundleLaunch() {
   assertElectronBundleMetadata(JSON.parse(fs.readFileSync(path.join(bundledDirectory, 'metadata.json'), 'utf8')), host);
   const store = await createWebBundleStore({ bundledDirectory, trustedKeys: policy.trustedKeys, host,
     cacheDirectory: path.join(app.getPath('userData'), 'native-web-bundles', host.nativeAbi, host.channel) });
+  if (policy.trustedKeys.some(key => key.channels.includes(host.channel) && key.platforms.includes(host.platform) && key.runtimes.includes(host.runtimeId))) {
+    const origin = new URL(desktopSettings.snapshot().selectedEndpoint.url).origin;
+    const downloader = createWebBundleDownload({ origin, host, trustedKeys: policy.trustedKeys,
+      downloadDirectory: path.join(app.getPath('userData'), 'native-web-downloads') });
+    webBundleUpdates = createWebBundleUpdates({ store, downloader });
+  }
   webBundleLaunch = createWebBundleLaunch({ store, onFailure: async () => {
     if (desktopServicesClosing || desktopServicesClosed) return;
     // Nitro is imported into this process. Never import a second server over a
@@ -1794,7 +1804,8 @@ function getDesktopInfo() {
   const buildMetadata = readWebBuildMetadata();
   return {
     appVersion: getCurrentAppVersion(),
-    webBundle: { source: selectedWebBundle?.source || 'bundled', releaseId: selectedWebBundle?.releaseId || null },
+    webBundle: { source: selectedWebBundle?.source || 'bundled', releaseId: selectedWebBundle?.releaseId || null,
+      update: webBundleUpdates?.snapshot() || { status: 'unconfigured' } },
     buildIdentity: {
       gitBranch: typeof buildMetadata.gitBranch === 'string' ? buildMetadata.gitBranch : null,
       gitCommit: typeof buildMetadata.gitCommit === 'string' && /^[0-9a-f]{7,40}$/u.test(buildMetadata.gitCommit)
@@ -2109,7 +2120,9 @@ ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControl
 ipcMain.handle('thingtime-desktop:renderer-ready', async (event) => {
   requireLocalRuntimeSender(event);
   if (desktopServicesClosing || desktopServicesClosed) return false;
-  return await webBundleLaunch?.rendererReady() || false;
+  const confirmed = await webBundleLaunch?.rendererReady() || false;
+  if (!desktopServicesClosing && !desktopServicesClosed) void webBundleUpdates?.checkAndStage();
+  return confirmed;
 });
 ipcMain.handle('thingtime-desktop:node-location', (event, request) => nodeLocationRequest(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));

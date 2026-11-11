@@ -1,5 +1,29 @@
 # Editable Builder definitions and browser Actions
 
+Saved Component instances can bind scalar arguments from their parent data
+scope with an explicit `argBindings` map. For example,
+`{ type: 'component', component: 'record-editor', argBindings: { recordId: '{item.id}' } }`
+passes the current collection row ID into that Component's source and controls.
+An exact token preserves strings, booleans and finite numbers. Missing or
+non-scalar values become an empty string and replace the preceding row value.
+Interpolated text remains text, and inserted values are never reinterpreted
+as template syntax.
+
+Literal `args`, saved arguments and defaults keep their existing behavior.
+Bindings merge after those literal values. The argument inspector exposes
+**Use parent data** for each declared argument. Expanding a Component into
+editable blocks carries its literal arguments and binding map separately.
+Each nested live Component owns its Actions, local field changes and Enter
+submissions, including when a parent source surrounds it.
+Changing a Component's bound identity retires its earlier Action completion and
+pending state, so an older save cannot close or overwrite the new row's editor.
+
+Create/update clients require `api.things` 1.62.0 or
+`api.things-update` 1.27.0, and resolve/preview clients require
+`api.webpages-resolve` 1.19.0. Bindings supply data and never establish access
+to an Action, Component, attachment or other dependency. Stored references and
+the normal viewer authorization remain authoritative.
+
 Components, pages and Actions remain ordinary Things. Owners can use **Edit
 definition** in a Component/page menu or the Action inspector to edit every
 stored definition field. Fields mode supports nested objects and arrays,

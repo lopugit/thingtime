@@ -21,12 +21,12 @@ if (process.argv[2] !== '--worker') {
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = [
-		['things', 'things', '1.62.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+		['things', 'things', '1.63.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
 		['things-search', 'things/search', '1.7.0', ['GET', 'POST']],
-		['things-update', 'things/update', '1.26.0', ['POST']],
+		['things-update', 'things/update', '1.27.0', ['POST']],
 		['actions-run', 'actions/run', '1.46.0', ['POST']],
 		['components-browse', 'components/browse', '1.1.0', ['GET']],
-		['webpages-resolve', 'webpages/resolve', '1.18.0', ['GET', 'POST']],
+		['webpages-resolve', 'webpages/resolve', '1.19.0', ['GET', 'POST']],
 		['files', 'files', '1.12.2', ['GET', 'POST']],
 		['things-bulk', 'things/bulk', '1.8.0', ['POST']],
 		['things-delete', 'things/delete', '1.1.1', ['POST']],
@@ -41,9 +41,11 @@ if (process.argv[2] !== '--worker') {
 		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']],
 		['lopu-vault', 'lopu/vault', '1.5.0', ['GET', 'POST']],
 		['ai-models', 'ai/models', '1.9.0', ['GET']],
-		['lopu-chats-reply', 'lopu/chats/reply', '1.23.0', ['POST']],
+		['lopu-chats-reply', 'lopu/chats/reply', '1.23.1', ['POST']],
 		['lopu-voice-reply', 'lopu/voice/reply', '1.5.0', ['POST']],
-		['ai-complete', 'ai/complete', '1.3.0', ['POST']]
+		['ai-complete', 'ai/complete', '1.3.0', ['POST']],
+		['releases-native-web', 'releases/native-web', '1.0.0', ['GET']],
+		['releases-native-web-content', 'releases/native-web/content', '1.0.0', ['GET']]
 	];
 	const readJson = async path => {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });

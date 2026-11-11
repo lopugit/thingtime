@@ -1,3 +1,19 @@
+## Main integration compatibility — 2026-11-11
+
+- When independent branches extend the same semantic API version differently,
+  publish a combined higher version and update every affected client requirement.
+  For `api.things` 1.63, refuse historical 1.62 origins before receipt-aware
+  deletion, atomic attachment PATCH or queued Component argument-binding writes.
+  Test compatible retry and preserve the immutable queued payload.
+- At 320px, verify native file chooser inputs cannot expand the password editor.
+  Legacy default-input migration must preserve explicit authored width, max-width,
+  min-width and box-sizing; apply missing defaults without overwriting custom CSS.
+- Combine editable password controls with the explicit `PasswordStorage` adapter.
+  Check anonymous/account-local attachment status, unavailable offline downloads,
+  upload/retry/delete, vault lock and account/data-plane change, alongside nested
+  field editing and saved layouts. Do not restore remote-only requests merely to
+  retain the incoming editable presentation.
+
 ## Native web release integrity and recovery — 2026-11-11
 
 - Run `node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
@@ -31,6 +47,23 @@
 - Supervised-child fixtures must atomically publish complete proof files and
   compare both to an independent expected digest. File existence does not prove
   a completed write; report the failing phase without secret environment values.
+- Run release service/HTTP and capability tests for the signed catalogue and
+  exact-range content routes; smoke both built manifests and route registration.
+  Verify wrong origins/keys/ABI, fixed publication identity, metadata budgets,
+  cancellation/deadlines, quoted SHA If-Match, malformed/truncated/encoded ranges
+  and refusal of non-206 upstream bodies. Exercise streaming stored ZIP/ZIP64
+  publication against the same layout used for per-file API offsets.
+- Run Electron download/updater tests: 2 MiB windows with write backpressure,
+  durable partial resume, complete-file revalidation, final signed hashes,
+  transient failure/retry, shutdown cancellation, independently staged bytes
+  and removal of temporary copies. Verify staging follows healthy startup and
+  only activates at the next normal start; keep unsaved live editors mounted.
+- The opt-in iOS probe is `iOS/scripts/native-runtime-probe/run.py`; read its
+  README before execution. Hash/input/refusal validation does not rerun the
+  original native experiment. Retained receipts show Node 24 plus real bcrypt
+  succeeds in a task-owned simulator, then actual Nitro import fails at sharp.
+  No API/storage/physical-device acceptance is implied. Preserve source pins,
+  explicit prerelease opt-in, separate data and exact simulator cleanup.
 - Real API downloads, unsaved work, filesystem power-loss, external frozen-process
   recovery and physical iOS behavior retain separate acceptance gates.
 
@@ -8766,6 +8799,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       that prefixes another never cross-matches).
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- In two collection rows, bind the same saved Component using
+  `argBindings: { recordId: '{item.id}' }`. Confirm each source reads its own
+  ID and each nested expand button, local field change, Enter submission and
+  save runs once in its own Component. Check literal braces in default/saved/
+  instance args, missing links, delayed A read/save responses after selecting B, and
+  account/navigation changes. Expand the Component into editable blocks, save,
+  reload and confirm the binding and literal values survive.
+- In the argument inspector, toggle **Use parent data**, edit the binding,
+  and restore the literal argument by disabling it. Check mouse, keyboard,
+  touch, desktop and mobile widths. Run
+  `node remix/scripts/component-arguments.browser.mjs` for the synthetic browser
+  regression, and shared-composition tests to confirm binding values add no grants.
 
 ### Nested insertion, ancestry and structure (2026-10-29)
 
@@ -17675,6 +17721,12 @@ removing provenance or widening ACLs is not a workaround.
   Verify the name and access blocks can be selected separately in Builder.
   Keep provider consent and installed native acceptance separate.
 
+- Reconnect a named grant without retyping its prefilled name. Verify the same
+  grant ID, provider, account, scopes and allowed operations are retained. A new
+  grant starts unnamed with identity-only defaults. Submit a blank name or no
+  allowed operations and verify actionable inline feedback with no OAuth request,
+  preserving typed input and customized Builder labels at desktop/phone widths.
+
 - Run `test:connections:oauth-tab` in isolated Chromium on desktop and phone
   viewports. The fixture renders the real Connections page with synthetic
   transport. Verify the original URL and page remain in place, the provider has
@@ -18858,3 +18910,71 @@ private readback while an unrelated Home fixture remains paused.
 - Exercise the editor at desktop, 390px and 320px widths. Keep actual Console
   inference, account entitlement and installed-native acceptance separate from
   synthetic transport and browser-layout checks.
+
+### Google saved-service actions
+
+Use the focused `googleServiceRequests.test.ts` and `namedServiceActions.test.mts`
+suites, then Connections, capability, and compiled manifest smoke checks. In a
+task-owned isolated browser, verify editable resource-ID controls, complete
+results, next-page behavior and clearing across connection/account changes at
+desktop and mobile sizes. Real acceptance separately uses each service's
+selected Google grant: Drive/Gmail/Calendar/Contacts first and next pages; Docs
+and Sheets known IDs. Verify a foreign ID, missing scope, consent cancellation,
+expired-token refresh and removal/reconnect isolation without changing siblings.
+Enable the service API in the authorized Google Cloud project before calling it.
+
+
+Google service compatibility regression: serve a newer frontend manifest and an
+older proxied `/api/v1/capabilities` at the same selected origin. Named service
+actions must stay unavailable, without following foreign authority URLs. After
+coherent API contracts are served, resource reads and opaque next-page actions
+must work. Also reject a metadata-only Connections 2.2 server for service
+projection, which requires 2.3. Retain both actual preview manifests separately.
+### Password workspace and imported field editor
+
+- Run `pnpm --dir remix test:passwords` for typed property round trips, preservation,
+  numeric precision/duplicate-key fallback and private display projections.
+- Run `pnpm --dir remix test:passwords:editor-ui -- <evidence-dir>` with an installed
+  Playwright module/browser selected through `THINGTIME_TEST_PLAYWRIGHT_MODULE`
+  and `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. Check desktop and phone save/readback,
+  ordering, private source/attachment relationships, nested Builder text selection,
+  layout save/reload, overflow and zero generic Action calls. Fixtures use synthetic
+  route-backed storage only. Do not report this as production-vault acceptance.
+- On the intended deployed account separately verify imported source data and real
+  attachments through encrypted save/export/reimport; preserve the original vault
+  until checked. Native passkeys and provider sign-in retain their own acceptance.
+### Facebook saved-grant diagnostics (11 November 2026)
+
+- Negotiate `api.connections-diagnostics` 1.0.0 and `api.connections` 2.2.0 on
+  the intended origin. In the exact owner's browser, navigate the documented
+  diagnostic GET with its connection ID and expected owner. Verify a private
+  no-store JSON response, actual grants or explicit unknown, minimal posts and
+  individual optional-field statuses. Named identity-only and default account-only
+  connections must make no posts requests even with user_posts on the saved
+  token; retain actual permission metadata and mark content checks skipped.
+  Compare successful posts with the normal
+  selected feed; an empty successful probe is access evidence only.
+- Verify default and named callback grants independently: declined user_posts
+  is absent; failed/malformed permission verification stays unknown. Legacy
+  hardcoded scopes never count as granted. Preserve content and existing grants.
+- Wrong owner, service principal, wrong origin/environment, expired grant and
+  removal/reconnect during inspection must fail closed. Inspection must never
+  refresh/migrate credentials, sync content, follow provider pagination or emit
+  tokens, raw errors or post content. Run Connections and capability suites and
+  the compiled Connections manifest smoke after the canonical build.
+### Personal Claude saved-model effort
+
+- The Console SDK streaming fixture must run a saved `claude-haiku-4-5` connection
+  with inherited High effort and assert the actual HTTP request omits effort and
+  thinking fields, keeps the exact model and credential, completes one response
+  and never reads the shared-provider waterfall. Verify a supported Opus effort
+  remains unchanged and custom-model tuning is preserved.
+- Negotiate reply 1.23.1, then repeat the authorized minimal live Haiku prompt on
+  the selected personal connection. Verify a real reply and BYO attribution;
+  synthetic SSE acceptance does not establish live provider acceptance.
+
+Personal provider reply negotiation regression: a newer frontend advertising
+reply 1.23.1 with an older same-origin active API 1.23.0 must refuse omitted or
+explicit personal providers before POST. After active API 1.23.1 is available,
+retry must send exactly the selected provider. Preserve separate credits,
+device and ChatGPT-plan requirements.

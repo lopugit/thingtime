@@ -85,47 +85,66 @@ rollback run](../artifacts/anonymous-release-2026-11-11/native-startup-recovery/
 passes in the installed isolated development app. Reuse neither a screenshot alone
 nor a missing receipt as successful acceptance.
 
-## Planned API delivery using existing publication primitives
+## Implemented API delivery and native download path
 
-Keep the canonical GitHub Release catalogue and add a signed release envelope
-plus a deterministic stored ZIP of the declared payload. Reuse the existing
-`thingTransfer/storedZip.ts` ZIP64 layout planner/writer rather than introducing
-a second archive format or extracting arbitrary archive paths. A release API
-can derive each declared file's byte range from that signed layout, resolve
-only approved canonical repository assets and stream bounded exact ranges.
-Native clients negotiate the catalogue/content capabilities at the selected
-origin, verify the envelope against shipped trust, then stage verified file
-bytes. This API and transport are not implemented by the startup integration.
+The source now exposes GET `/api/v1/releases/native-web` and
+`/api/v1/releases/native-web/content`, independently negotiated through
+`api.releases-native-web` and `api.releases-native-web-content` 1.0.0 at the
+selected origin. The catalogue returns `{ok:true,release:envelope|null}` after
+signature, target/runtime, channel, shell-range and sequence checks. The service
+resolves only approved assets from the canonical GitHub Release catalogue;
+callers cannot supply publication URLs, repositories or credentials.
 
-Before implementation, prove upstream range support and the exact public/private
-repository credential boundary. Private upstream grants use the supported
-server-vault workflow; the anonymous caller cannot supply URLs, credentials or
-publication identity. Extend the protected existing release publisher, both
-capability manifests and compiled route coverage. Production trust provisioning,
-actual API download and unsaved-work-aware activation remain required.
+`native-bundles/archive.mjs` streams a deterministic stored ZIP/ZIP64 using the
+shared `thingTransfer/storedZipCore.mjs` layout. The packager emits signed JSON
+and archive assets named by release ID alongside its verified payload. The API
+derives each signed file's archive offset from that layout and serves exact
+HTTP 206 windows of at most 2 MiB. Content requests require the quoted signed
+file SHA-256 in `If-Match`; changed identity/ranges fail closed. Metadata/body
+processing has explicit budgets, deadlines and cancellation. These are bounded
+processing windows, not a maximum bundle size.
+
+`electron/lib/web-bundle-download.cjs` negotiates the selected origin, omits
+credentials, refuses API redirects/encoding changes, and checks exact range,
+length, ETag and final signed file hash. It writes with backpressure, retains
+durable partial bytes for resume and rechecks complete files before reuse.
+`web-bundle-updates.cjs` starts checks after healthy renderer startup, stages an
+independent verified copy and removes the temporary download copy after staging.
+Cancellation preserves resumable bytes; a subsequent check can retry. A staged
+release activates on the next normal process start. It never reloads a live
+editor; explicit unsaved-work-aware reload remains future work.
+
+These source implementations and local fixtures do not establish a signed
+production publication, configured trust, reachable deployed release routes or
+a complete installed download/update journey. The shipped policy still has no
+production keys, so background download is disabled until supported trust
+provisioning. The existing whole-app updater remains responsible for shell and
+native ABI changes. Keep deployed-origin discovery, actual API download and
+installed acceptance distinct from the recorded startup/rollback receipt.
 
 ## Remaining integration and acceptance
 
-1. **P0 — release API and trust provisioning.** Register an origin-scoped semantic
-   capability, negotiate it in native clients, and expose only approved released
-   descriptors and immutable bytes. Choose and provision actual public trust
-   keys through the supported release process. Synthetic test keys do not grant
-   production authority. No release HTTP endpoint has been added in this batch.
-2. **P0 — transport and Electron startup.** Stream permitted release bytes into
-   private staging, enforce cancellation and transport resource budgets, complete actual download acceptance. Startup selection and real server/renderer
-   acknowledgment are implemented separately above.
-   Retain the stable renderer origin and profile. Defer reload while work is
-   unsaved; preserve the existing whole-native-app updater for shell/ABI changes.
-3. **P1 — iOS runtime.** Establish a maintained compatible embedded Node build,
-   statically linked native modules, a local storage/API adapter, stable local
-   origin and lifecycle handling. Build and run the actual Nitro payload before
-   wiring automatic selection. Do not lower the web runtime requirement or call
-   a static page shell the complete offline API.
-4. **P1 — installed verification.** On the separate development app and an iOS
-   simulator/device, verify cold offline startup, data/edit persistence, real
-   compatible update, interrupted download, failed startup rollback, incompatible
-   shell refusal and restart. Test identity boundaries and recovery after an
-   update. Stable distribution and production activation remain separate gates.
+1. **P0 — publication, trust and deployed acceptance.** Provision real public
+   trust through the supported native release process, publish a compatible
+   signed envelope/archive, verify both deployed capability manifests and run
+   the complete installed API download/stage/restart journey. Synthetic keys
+   do not grant production authority. Private repository grants, if needed,
+   require the supported server-vault path; no caller credential input exists.
+2. **P0 — interruption and editor safety.** Verify resumable network interruption,
+   cancellation, retry and independent staging against the actual selected API.
+   Preserve origin/profile and unsaved work. Next-normal-start activation is
+   implemented; safe live-editor reload and external frozen-process recovery
+   remain open.
+3. **P1 — iOS runtime and storage.** Continue from the actual simulator result:
+   Node 24 and genuine bcrypt work, but canonical Nitro import fails at sharp.
+   Resolve compatible image processing, then prove the full API and in-process
+   transactional storage, stable local origin and lifecycle. Do not substitute
+   a static shell or weaken the Node/transaction contract.
+4. **P1 — complete platform acceptance.** Verify cold offline startup, durable
+   data/edit recovery, compatible updates, incompatible-shell refusal and
+   identity boundaries in every intended app/device. Existing isolated Mac
+   startup/rollback evidence is scoped; physical iOS and stable distribution
+   remain separate gates.
 
 Contract/store unit tests exercise synthetic payloads. They do not prove power
 loss durability on every filesystem, actual native module compatibility, API
@@ -156,16 +175,26 @@ advertises a full arm64 device/simulator XCFramework in
 [prerelease 24.22.1-0](https://github.com/fogtape/nodejs-mobile/releases/tag/v24.22.1-0).
 Its [runtime constraints](https://github.com/fogtape/nodejs-mobile/blob/recipe/docs/FAQ.md)
 describe jitless V8, a JavaScript WebAssembly implementation for fetch/Undici,
-no child processes and sandboxed writable paths. The artifact has not yet been
-downloaded, provenance-verified or built into Thingtime; this is a candidate,
-not runtime acceptance. A separate simulator target should first import the
-actual canonical Nitro payload and render its real web application.
+no child processes and sandboxed writable paths. A disposable simulator harness
+now runs this checksum-pinned runtime and imports the actual canonical Nitro
+entry. The first attempt failed at bcrypt; cross-compiling the genuine bcrypt
+6.0.0 N-API addon made cost-10 hashing and positive/negative comparisons pass.
+The identical Nitro import then failed at sharp 0.35.5's missing `ios-arm64`
+implementation/libvips >=8.18.7. The API never started and storage was not tested.
+Both task-owned simulators were deleted. The reusable
+[probe lane](../iOS/scripts/native-runtime-probe/README.md) and
+[sanitized original receipts](../artifacts/anonymous-release-2026-11-11/ios-native-runtime/README.md)
+retain source hashes, commands and limits. The reusable runner itself has only
+syntax/input/refusal validation; it has not been rerun end to end. Distribution
+integrity matches the published SHA-256, while source-to-binary reproducibility
+is unproven. Simulator dynamic addon success does not establish physical-device
+linking, production target integration or App Store distribution acceptance.
 
 The largest independent gap is persistence: desktop starts `mongod`, while the
 API relies on Mongo collections and transactions. iOS needs an in-process device
 storage boundary preserving identities, authorization, uniqueness, atomic
-mutations/accounting and recovery. Native bcrypt and sharp also need compatible
-linked builds or equivalent reusable adapters. A static shell or a mock database
+mutations/accounting and recovery. The tested simulator bcrypt addon does not remove the need for physical-device
+linking; sharp still needs a compatible build or equivalent reusable adapter. A static shell or a mock database
 would not establish the requested offline API capabilities.
 
 Apple's [current review guidelines](https://developer.apple.com/app-store/review/guidelines/#software-requirements)

@@ -860,6 +860,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Private account settings without passwords.', body: { ok: true, records: [], nextCursor: null, configured: true } }]
   }),
   endpoint({
+    id: 'releases-native-web', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'releases',
+    title: 'Discover a signed native web bundle', endpoint: '/api/v1/releases/native-web', methods: ['GET'],
+    summary: 'Select an explicitly trusted released renderer and local Nitro payload for an exact native host.',
+    detail: 'Anonymous fixed-repository release discovery. Require exactly platform, arch, runtimeId, nativeAbi, shellVersion, channel and minimumSequence. Return the highest compatible published signed envelope or null. Only paired native-web-<releaseId>.json/.zip assets from released non-draft lopugit/thingtime GitHub Releases are considered. Shipped public trust policy verifies Ed25519 signature, release digest, channel, native ABI and inclusive SemVer shell range; native clients independently verify their shipped trust policy. Empty trusted keys returns null without upstream access. No account, provider credentials, caller URLs or selected-origin fallback is accepted. Catalogue cache refresh is five minutes; failed refresh returns unavailable rather than an empty success. Metadata processing admits at most 8 MiB per GitHub page and 16 MiB per signed envelope, with a 30-second aggregate request deadline, a 30-second shared pagination lifetime and 20-second shared envelope lifetime. These processing budgets fail unavailable rather than truncating release history. Caller cancellation releases its wait without cancelling shared work for another caller. GitHub prerelease publications are never promoted into the stable channel.',
+    auth: { mode: 'none', description: 'Public signed release projection only; existing configured-origin and anonymous read admission apply.' },
+    steps: ['Negotiate api.releases-native-web and api.releases-native-web-content 1.0.0 on the selected API origin.', 'Send exact actual native host identity and persisted minimum sequence.', 'Verify the returned envelope with the native shell public trust policy before downloading declared files.'],
+    requestExamples: [{ name: 'Compatible release', description: 'Exact Electron runtime identity; no account credentials required.', method: 'GET', query: { platform: 'darwin', arch: 'arm64', runtimeId: 'electron-node-middleware-v1', nativeAbi: 'electron-43.1.0-node-24.18.0-modules-148', shellVersion: '0.1.2', channel: 'stable', minimumSequence: 0 } }],
+    responseExamples: [{ status: 200, description: 'No trusted compatible release has been published.', body: { ok: true, release: null } }, { status: 503, description: 'Public release source is unavailable.', body: { ok: false, code: 'release_unavailable', error: 'Native release publication is temporarily unavailable.' } }]
+  }),
+  endpoint({
+    id: 'releases-native-web-content', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'releases',
+    title: 'Read a declared native web bundle file', endpoint: '/api/v1/releases/native-web/content', methods: ['GET'],
+    summary: 'Read one exact bounded file window from a verified signed release through canonical publication storage.',
+    detail: 'Require exactly releaseId and path. If-Match must be the quoted signed file SHA-256. Range must be a single explicit bytes=start-end window, at most 2 MiB per request; repeated windows support larger files without a product size ceiling. Resolve only a declared regular file from an independently verified envelope and the paired fixed GitHub release asset. Deterministic stored ZIP64 offsets locate bytes without extracting archives or fetching caller URLs. Return 206 with file-relative Content-Range, exact Content-Length and hash ETag. Clients verify full file hashes and complete inventory before atomic activation. Empty files require no content requests. Missing If-Match is 428, mismatch 412, missing Range 400, invalid or out-of-bounds window 416, unknown/untrusted file 404, invalid upstream range 502. Upstream URLs and credentials never appear in responses. Existing configured-origin, expected-actor/data-plane guards and public read admission remain in force.',
+    auth: { mode: 'none', description: 'Public declared release bytes only; no private attachment authority is borrowed.' },
+    steps: ['Verify the catalogue envelope against shipped native trust.', 'Read each declared file using explicit bounded ranges and its quoted SHA-256.', 'Verify each complete file and signed inventory before activating; retain the current bundle on failure.'],
+    requestExamples: [{ name: 'File window', description: 'The hash and path come from the verified signed envelope.', method: 'GET', query: { releaseId: '<64-lowercase-hex-release-id>', path: '.output/public/index.html' }, headers: { Range: 'bytes=0-15', 'If-Match': '"<64-lowercase-hex-file-sha256>"' } }],
+    responseExamples: [{ status: 206, description: 'Exactly the requested declared file window.', headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': '16', 'Content-Range': 'bytes 0-15/1024', ETag: '"<signed-file-sha256>"' } }, { status: 416, description: 'Window is outside the declared file.', body: { ok: false, code: 'range_invalid', error: 'The byte range is outside the declared file or processing window.' } }]
+  }),
+  endpoint({
     id: 'integration-ios-release', group: 'integrations', title: 'Deliver iOS release credentials',
     endpoint: '/api/v1/integrations/ios-release', featureVersion: '1.0.0',
     summary: 'Purpose-scoped TestFlight credential delivery using a short-lived GitHub identity.',
@@ -5099,10 +5119,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.23.0',
-    featureVersion: '1.23.0',
+    contractVersion: '1.23.1',
+    featureVersion: '1.23.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
-    detail: 'Version 1.23.0 supports the explicit anthropic-api-key saved-provider kind for Console-billed native Anthropic Messages requests; existing anthropic connections retain their Claude Code OAuth mode. No implicit mode or billing fallback. ' +
+    detail: 'Version 1.23.1 normalizes personal-provider effort against the actual resolved saved model: known models omit unsupported effort, unknown custom models retain explicit tuning, and supported effort, credentials and billing remain unchanged. ' +
+      'Version 1.23.0 supports the explicit anthropic-api-key saved-provider kind for Console-billed native Anthropic Messages requests; existing anthropic connections retain their Claude Code OAuth mode. No implicit mode or billing fallback. ' +
       'Version 1.21.1 keeps personal-plan turns on their persistent runtime with client management, including older clients requesting server management, and allows follow-up turns to retain the same verified provider. Completed Responses output items are reconciled before tool execution, including terminal frames with empty output; conflicting or unfinished items fail closed. Version 1.21.0 admits text turns on a live owner/origin-bound ChatGPT plan without admin verification, using a full account session and no Character override header. Scoped credentials, ordinary BYO, catalog and voice retain existing policy; unavailable plans never fall back to API billing. Version 1.20.0 accepts local ChatGPT plan provider IDs with fail-closed account resolution, streaming Responses and existing tool permissions. Plan failure never switches billing. Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
       'Version 1.19.2 restores up to eight completed tool results (64 KiB) from the exact interrupted private background task on a verified continuation. Current account, conversation, deployment, retention and completed-boundary checks apply. No Action is replayed and no result is added to public message history. Expired task output stops refetching until the account or deployment changes. ' +
       'Version 1.19.1 repairs split JSON-labelled tool fences, retries printed tool requests with bounded corrective hops, and preserves private read locators across checkpoints. Restored get_thing pages reauthorize the viewer and require the same revision; results and grants are never persisted as history. Action failure recovery data reaches the next provider hop. ' +
@@ -9804,8 +9825,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.53.0: optional v4 Photos automation policy on private File Sync configurations.
     // 1.54.0: protected derived metadata references reauthorize and measure their source on exact reads.
     // 1.59.0: explicit owner-library archive filtering and owner-only placement projection.
-    featureVersion: '1.62.0',
-    contractVersion: '1.62.0',
+    featureVersion: '1.63.0',
+    contractVersion: '1.63.0',
 
 
     group: 'things',
@@ -9815,7 +9836,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.62 combines version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.61 authored content contract. ' +
+      'Version 1.63 combines version-checked DELETE with retainAttachmentReceipts and atomically binds PATCH attachmentIds with the content write, alongside the 1.61 authored content contract. ' +
+      'Editable blocks also preserve explicit scalar argBindings. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.60 preserves saved Component and Webpage source input references {ttArg, fallback?}. They read scalar values from the bound scope, using the optional fallback path only if the primary path is absent. ' +
       'First-party owners browsing their home library may supply libraryArchive=active or archived to filter before pagination or count. Omitting it keeps existing list behavior. Archived rows expose libraryArchived: true only to the owner in first-party reads; direct links and audiences are unaffected. ' +
       'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
@@ -11944,8 +11966,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.19.0: preserve Data text without a product string-length ceiling.
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.26.0',
-    contractVersion: '1.26.0',
+    featureVersion: '1.27.0',
+    contractVersion: '1.27.0',
 
     group: 'things',
     title: 'Update thing',
@@ -11954,6 +11976,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Version 1.21.0 validates and preserves optional v4 Photos upload pacing, hourly budget and notification cadence on private File Sync configurations.', 'Version 1.20.0 removes the application JSON body-size ceiling for authenticated shared-content writes after authorization and rate admission.', "Version1.19 accepts the same new authored intrinsic boundaries and expanded typed input descriptors through normal CAS/ACL validation. Rich-text latest-save capture and menu actions use existing authorized Action execution.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
 
     detail:
+      'Version 1.27 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Existing avatar projections may include optional avatarPresentation for a styled source. ' +
       'Version 1.26 accepts expanded Webpage CSS and HTML authoring under the same validation as api.things 1.61.0 and existing revision checks. ' +
       'Version 1.25 preserves and validates saved Component and Webpage source input references under the same revision checks. ' +
@@ -13838,14 +13861,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.18.0',
-    featureVersion: '1.18.0',
+    contractVersion: '1.19.0',
+    featureVersion: '1.19.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     notes: ["Version1.12 resolves individually editable tt-rich-text and context-enabled tt-menu children through the canonical Component/dependency renderer. Inert previews never activate editors or Actions.", 'Saved tt-mapbox element children form an editable marker template, including ordinary saved Component references resolved through the canonical ACL-checked composition. Each marker receives point and item data scopes. data-tt-reveal on an authored element reveals its own container when the bound value changes.'],
     detail:
+      'Version 1.19 preserves explicit scalar argBindings on editable blocks. Bindings read the parent data scope, merge after literal args, and grant no dependency access. ' +
       'Version 1.18 accepts expanded Webpage CSS and HTML in authorized block draft preview requests within the existing preview transport budget. Access and runtime rendering boundaries remain. ' +
       'Version 1.17 resolves saved Component and Webpage source input references through the canonical composition. References bind scalar data and grant no additional access. ' +
       'Version 1.16 resolves named passive cursor-backed collections alongside authored selection and keyed repetition. ' +
@@ -14696,7 +14720,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections', contractVersion: '2.1.0', featureVersion: '2.1.0',
+    id: 'connections', contractVersion: '2.3.0', featureVersion: '2.3.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
@@ -14705,7 +14729,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
       'channel, a Mastodon account, …). Public sources are shared many-to-many. Authenticated identities and encrypted credentials are owner-scoped; the same third-party identity ' +
       'can be linked independently from several Thingtime accounts without sharing credentials. Legacy shared grants require reconnect; relinking preserves the caller’s existing connection ID. Once linked, the feed is ' +
-      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
+      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top. GET includeNamed=1 includes named grants. Add includeServiceOperations=1 after negotiating api.connections 2.3.0 to expose the expanded Google operation IDs; original clients receive only identity/profile/email operation IDs to preserve their exhaustive label maps.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14862,19 +14886,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-named', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    id: 'connections-diagnostics', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    group: 'connections', title: 'Inspect connection access',
+    endpoint: '/api/v1/connections/diagnostics', methods: ['GET'],
+    summary: 'Read-only exact-owner inspection of a saved provider authorization.',
+    detail: 'Negotiate api.connections-diagnostics 1.0.0 on this origin first. Requires connectionId and matching expectedOwnerId. Uses only fixed adapter probes; accepts no URLs, fields or provider operations. Currently Facebook checks actual catalogued Facebook grants. Only default posts connections probe minimal posts and individual optional engagement fields; named and account-only connections return permission metadata with all content checks skipped regardless of provider consent. Returns grant names or null (unknown), closed check statuses and observation time; never credentials, post content or raw provider errors. Does not refresh, rewrite or revoke credentials, sync content or update saved scope metadata. Expired, wrong-origin or changed credentials fail closed. Facebook connection projections additionally expose authorization.requestedScopes and authorization.grantedScopes, with null for legacy/unverified evidence; legacy scopes are not confirmed grants.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the exact owning account; service accounts are refused.' },
+    steps: ['Negotiate the origin capability.', 'Select the exact connection ID and owning account.', 'Inspect the private no-store diagnostic response.'],
+    requestExamples: [{ name: 'Inspect saved access', description: 'Use the signed-in owner.', method: 'GET',
+      query: { connectionId: 'ext-link-example', expectedOwnerId: 'owner-id' } }],
+    responseExamples: [{ status: 200, description: 'Current provider evidence without content.',
+      body: { ok: true, connectionId: 'ext-link-example', provider: 'facebook', observedAt: '2026-11-11T00:00:00.000Z', grantedScopes: ['public_profile'], checks: [{ name: 'posts', status: 'permission-denied' }, { name: 'shares', status: 'skipped' }, { name: 'likes', status: 'skipped' }, { name: 'comments', status: 'skipped' }] } }]
+  }),
+  endpoint({
+    id: 'connections-named', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'connections', title: 'Use a named connection',
     endpoint: '/api/v1/connections/named', methods: ['POST'],
     summary: 'Runs one allowlisted operation using an exact owner-private named connection.',
-    detail: 'The owner, selected origin, connection ID and allowed operation are checked. Provider credentials are never returned. Use GET /api/v1/connections?includeNamed=1 to list profiles. Provide named: { requestId, name, requestedScopes, allowedOperations, reconnectId? } to OAuth begin or credential connect. A new request ID creates a separate credential; reconnectId binds the existing connection and external subject.',
+    detail: 'The owner, selected origin, connection ID and allowed operation are checked before and after provider reads. Google service operations add optional resourceId (Docs/Sheets) and opaque pageToken (list operations). Results preserve complete JSON and nextPageToken without application byte limits, with credential fields and exact known secrets redacted. Endpoints and methods are fixed; arbitrary URLs and unregistered operations are rejected. Provider credentials are never returned. Use GET /api/v1/connections?includeNamed=1 to list profiles. Provide named: { requestId, name, requestedScopes, allowedOperations, reconnectId? } to OAuth begin or credential connect. A new request ID creates a separate credential; reconnectId binds the existing connection and external subject.',
     auth: { mode: 'session-or-bearer', description: 'Requires the connection owner and matching expectedOwnerId.' },
     steps: ['Select an exact named connection ID.', 'Choose one of its allowlisted operations.', 'Read only the returned operation result.'],
     requestExamples: [{ name: 'Read saved account identity', description: 'Use a single named profile.', method: 'POST',
-      body: { id: 'ext-auth-…', operation: 'account.identity', expectedOwnerId: 'owner-id' } }],
+      body: { id: 'ext-auth-…', operation: 'account.identity', expectedOwnerId: 'owner-id' } },
+      { name: 'Read a Drive page', description: 'Use an explicitly allowed Drive grant; omit pageToken for the first page.', method: 'POST',
+        body: { id: 'ext-auth-…', operation: 'drive.list-files', pageToken: 'opaque-provider-cursor', expectedOwnerId: 'owner-id' } },
+      { name: 'Read a selected document', description: 'Use the document ID, not its URL.', method: 'POST',
+        body: { id: 'ext-auth-…', operation: 'docs.get-document', resourceId: 'document_123', expectedOwnerId: 'owner-id' } }],
     responseExamples: [{ status: 200, description: 'Allowlisted operation result.', body: { ok: true, result: { provider: 'google', accountId: 'ext-account-…' } } }]
   }),
   endpoint({
-    id: 'connections-oauth-begin', contractVersion: '2.1.0', featureVersion: '2.1.0',
+    id: 'connections-oauth-begin', contractVersion: '2.2.0', featureVersion: '2.2.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
@@ -14918,7 +14959,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-oauth-callback', contractVersion: '2.1.0', featureVersion: '2.1.0',
+    id: 'connections-oauth-callback', contractVersion: '2.2.0', featureVersion: '2.2.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',

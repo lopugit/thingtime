@@ -145,6 +145,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Implement signed native web-release catalogue/exact-range delivery,
+  streaming canonical ZIP/ZIP64 publication and resumable native download/staging
+  after healthy Electron startup, activating on the next normal restart.
+  Preserve live editors; production trust/publication and deployed delivery are
+  unverified. Retain the actual iOS Node 24/bcrypt simulator proof and sharp
+  import failure with a reusable probe lane; full offline API/storage remains
+  open. Merge current main with combined Things 1.63 capability negotiation and
+  preserve local password controls, fixing the narrow icon chooser without
+  overwriting custom sizing. [Delivery boundaries](../docs/native-web-bundles.md).
+  **Codex (AI)**
+
 - 2026-11-11: Wire native bundle selection to real Nitro/React startup and
   fresh-process rollback. Preserve ordinary account-change password retirement;
   early failed-bundle recovery no longer needs an initialized page/provider.
@@ -165,6 +176,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and the remaining native web-bundle update/iOS runtime work.
   [Integration and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
+
+- 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
+  grant diagnostics and Claude effort corrections into one release; negotiate
+  personal replies against the active same-origin API before sending. **Codex (AI)**
+
+- 2026-11-11: Bind saved Component instance arguments explicitly to parent rows,
+  preserve bindings through editable expansion, and keep nested Component
+  Actions and field submissions on their own live surface. See [PR 1465 evidence](../PRs/1465-codex-component-row-argument-bindings-reusable-component-arguments.md). **Codex (AI)**
+
+- 2026-11-11: Require both frontend and same-origin active API capabilities for
+  named Google actions; keep newer previews unavailable against older shared
+  handlers, and distinguish service projection 2.3 from Facebook metadata 2.2.
+  **Codex (AI)**
+
+- 2026-11-11: Add explicitly scoped Google service reads to named connections,
+  with document IDs, opaque pagination, complete redacted JSON, editable action
+  controls and compatible older-client projections. Real provider acceptance
+  remains separate; see [PR 1464 evidence](../PRs/1464-codex-google-service-actions-current-add-scoped-google-service-actions-to-saved-authorizations.md). **Codex (AI)**
+- 2026-11-11: Make password workspace controls, structured imported fields, source
+  history and attachments individually editable with private transient values.
+  Preserve current verification, branding, generator and passkey flows. See
+  [PR 1468 evidence](../PRs/1468-codex-password-editor-current-editable-password-workspace.md). **Codex (AI)**
+- 2026-11-11: Verify actual Facebook grants for default and named OAuth; expose
+  requested/confirmed permissions separately and add exact-owner, read-only
+  Connections access diagnostics for basic posts and optional engagement fields.
+  Saved content and credentials remain untouched by inspection. **Codex (AI)**
+- 2026-11-11: Normalize personal-provider chat effort against the resolved saved
+  model catalog, preventing unsupported High effort on Claude Haiku 4.5 while
+  preserving supported tuning, the selected key and BYO billing. Advertise reply
+  PATCH 1.23.1 and require it for personal-provider chat clients. **Codex (AI)**
+
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
   settings. Add the explicit canonical background-file transfer contract,
   preserve automatic recovery after system interruption and saved-settings

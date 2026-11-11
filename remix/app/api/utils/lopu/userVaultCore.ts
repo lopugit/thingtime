@@ -1,5 +1,5 @@
 import { BlockList, isIP } from 'node:net';
-import { normalizeLopuProviderEndpointSyntax } from './userVaultModel';
+import { normalizeLopuProviderEndpointSyntax, providerModelFor, type LopuProviderKind, type LopuProviderEffort } from './userVaultModel';
 export * from './userVaultModel';
 
 const blockedIpv4 = new BlockList();
@@ -56,4 +56,10 @@ export const isBlockedLopuProviderHostname = (hostname: string): boolean => {
 export const normalizeLopuProviderEndpoint = (value: unknown): string | null => {
  const endpoint = normalizeLopuProviderEndpointSyntax(value);
  return endpoint && !isBlockedLopuProviderHostname(new URL(endpoint).hostname) ? endpoint : null;
+};
+
+/** Resolve per-turn tuning without changing the saved preference. */
+export const normalizeVaultProviderEffort = (provider: LopuProviderKind, modelId: string, effort: LopuProviderEffort | null): LopuProviderEffort | null => {
+  const model = providerModelFor(provider, modelId);
+  return effort && (!model || model.efforts.includes(effort)) ? effort : null;
 };

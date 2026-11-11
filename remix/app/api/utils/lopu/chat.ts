@@ -1,3 +1,4 @@
+import { normalizeVaultProviderEffort } from './userVaultCore';
 import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
@@ -1247,7 +1248,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       model,
       label: `${entry.name} · ${model}`,
       provider: vaultProviderTransport(entry.provider),
-      effort: entry.effort ?? null,
+      effort: normalizeVaultProviderEffort(entry.provider, model, entry.effort ?? null),
       speed: 'normal'
     });
     const state = newState();

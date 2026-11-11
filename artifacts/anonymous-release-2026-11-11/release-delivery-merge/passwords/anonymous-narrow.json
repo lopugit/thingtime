@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "actualIndexedDbVault": true,
+  "kind": "anonymous",
+  "width": 320,
+  "nestedEditSaveAndColdReload": true,
+  "actualLocalFileStorage": true,
+  "localIconFallbackWithoutAccountFetch": true,
+  "localIconReceiptMappingAccepted": false,
+  "exactDownloadBytes": true,
+  "unavailableFileRefusal": false,
+  "lockAndIdentityFence": true,
+  "accountOperations": [
+    "verification-settings",
+    "verification-settings",
+    "verification-settings"
+  ],
+  "pageErrors": []
+}

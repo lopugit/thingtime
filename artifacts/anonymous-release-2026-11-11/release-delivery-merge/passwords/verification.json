@@ -1,0 +1,122 @@
+{
+  "passed": true,
+  "observedAt": "2026-11-11T09:06:58.948463+00:00",
+  "sourceHead": "9f97d4739a0755f23ad3b4b3e0745410ab8ec6c3",
+  "sourceState": "owned password changes uncommitted on recorded base",
+  "sourceSha256": {
+    "remix/app/components/Passwords/PasswordManager.tsx": "afc58558ab9cfe4af093ad97140e8d9771c7fbd4d0d25a53acc686b735170b54",
+    "remix/app/components/Passwords/PasswordAttachments.tsx": "87fa6f1e386b6bc6a92191de032f99d4ca999ebfca745b361ba1ebae87d172ba",
+    "remix/app/components/Passwords/PasswordWorkspaceControls.tsx": "728b170a73f71b27047540115225c8d7a6378d4e2af98ec6d4b03a8da6700bef",
+    "remix/app/components/Passwords/passwordPanelBlocks.ts": "6c96d2423587600ff1452d2d6d8434e51e373954d589b461aae9d1ebd22eab22",
+    "remix/app/components/Passwords/passwordIconBlocks.ts": "795eb3db884e6638c4c64918096ab65689cd9541baa731aedb278d15de5ce6ed",
+    "remix/app/passwords/icons.test.ts": "f5711c705caf7905f683f0d4b6abbe341e3c873bb189788d152aa2777b5a17ea",
+    "remix/scripts/password-editor.browser.tsx": "ab894a1aa0e7bb107bc59b66da278e50e48bf0e6c553432d262004b94457e2f0",
+    "remix/scripts/test-password-editor.mjs": "7da82b2ece71557289d914a540294045c44daee02b46025ee193c1bc254b7ad9"
+  },
+  "cases": [
+    {
+      "kind": "mocked account transport",
+      "receipt": "desktop.json",
+      "width": 1440
+    },
+    {
+      "kind": "mocked account transport",
+      "receipt": "phone.json",
+      "width": 390
+    },
+    {
+      "kind": "mocked account transport",
+      "receipt": "narrow.json",
+      "width": 320
+    },
+    {
+      "kind": "anonymous actual device vault",
+      "receipt": "anonymous-desktop.json",
+      "width": 1440,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    },
+    {
+      "kind": "anonymous actual device vault",
+      "receipt": "anonymous-phone.json",
+      "width": 390,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    },
+    {
+      "kind": "anonymous actual device vault",
+      "receipt": "anonymous-narrow.json",
+      "width": 320,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    },
+    {
+      "kind": "account actual device vault",
+      "receipt": "account-desktop.json",
+      "width": 1440,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    },
+    {
+      "kind": "account actual device vault",
+      "receipt": "account-phone.json",
+      "width": 390,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    },
+    {
+      "kind": "account actual device vault",
+      "receipt": "account-narrow.json",
+      "width": 320,
+      "accountPreferenceRequests": [
+        "verification-settings",
+        "verification-settings",
+        "verification-settings"
+      ]
+    }
+  ],
+  "finalRunOneOwnedChromiumProcess": true,
+  "contextsIsolated": true,
+  "noUserAccountsOrProfiles": true,
+  "fixtureNetworkOnly": true,
+  "originalAccountEditorNestedBuilderSaveReload": true,
+  "actualDeviceVaultCryptoAndFiles": true,
+  "deviceLockColdReloadIdentityRetirement": true,
+  "accountOfflineFileStatusAndDisabledDownload": true,
+  "finalViewportOverflow": false,
+  "iconInputOverflowFixed": true,
+  "migrationPreservesExplicitCustomConstraints": true,
+  "iconUnitTests": {
+    "passed": 7,
+    "failed": 0
+  },
+  "scopedLintErrors": 0,
+  "screenshotsInspected": [
+    "desktop.png",
+    "phone.png",
+    "account-narrow.png",
+    "narrow.png"
+  ],
+  "knownLimitations": [
+    "Device icon receipt/upload mapping remains unavailable; valid stored reference falls back locally without account icon fetch.",
+    "Inherited global verification-preference reads are still account API calls; device CRUD and files are local.",
+    "Account transport service is synthetic route-backed; no production vault/provider/native passkey acceptance.",
+    "Device fixture seeds through actual vault APIs and renders ManagerScope/DeviceVaultGate; this is not full deployed routing or cross-device sync acceptance."
+  ],
+  "cleanup": "Final browser, contexts, private profile and loopback fixture server closed by runner finally."
+}

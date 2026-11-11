@@ -27,6 +27,7 @@ const source = path.join(workspace.source, 'dist/web');
 const preparation = JSON.parse(await readFile(path.join(workspace.root, 'development.json'), 'utf8'));
 assert.equal(preparation.source, electronDir); assert.equal(preparation.bundleIdentifier, workspace.identity);
 const checkedFiles = ['main.cjs', 'preload.cjs', 'lib/web-bundle-store.cjs', 'lib/web-bundle-launch.cjs',
+  'lib/web-bundle-download.cjs', 'lib/web-bundle-updates.cjs',
   '../native-bundles/host.cjs', '../native-bundles/release.cjs', '../native-bundles/inventory.cjs'];
 const implementation = {};
 for (const file of checkedFiles) {

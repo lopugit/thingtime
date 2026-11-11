@@ -5,7 +5,7 @@ import { authoredHtmlPropValue } from '../Kinds/htmlRenderPolicy';
 import { collectionSource, indexCollectionRows } from './collectionSource';
 import { PAGE_COLLECTION_REQUIREMENTS } from '~/schemas/authoredControls';
 import { useFormatClock } from './useFormatClock';
-import { resolveBlockProps } from './templateBlocks';
+import { resolveBlockArguments, resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
@@ -741,9 +741,7 @@ const ComponentBlockView = ({
 	const inheritedScope = React.useContext(ComponentDataScope);
 	const markerInstance = React.useContext(ComponentInstanceIdentity);
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
-	const boundArgs = markerInstance
-		? resolveTemplate(block.args || {}, inheritedScope) as Record<string, unknown>
-		: block.args || {};
+	const boundArgs = resolveBlockArguments(block, inheritedScope, !!markerInstance);
 	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: boundArgs });
 	const argValues = React.useMemo(
 		() => ({
@@ -821,6 +819,7 @@ const ComponentBlockView = ({
 
 	return (
 		<LiveTemplate
+			argumentKey={JSON.stringify(Object.keys(block.argBindings || {}).map(name => [name, boundArgs[name]]))}
 			executionHeld={held}
 			render={resolved}
 			scope={{ ...(markerInstance ? inheritedScope : {}), ...argValues, ...source.scope, ...(inheritedScope.page ? { page: inheritedScope.page } : {}) }}
@@ -911,9 +910,10 @@ export type WebpageBlocksRendererProps = {
 
 const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
  const inheritedScope = React.useContext(ComponentDataScope);
- const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
- const block = { ...props.block, source: undefined, args: undefined };
- const scope = { ...props.block.args, ...source.scope };
+ const args = resolveBlockArguments(props.block, inheritedScope);
+ const source = useBlockSource(props.block, args, !!props.interactive);
+ const block = { ...props.block, source: undefined, args: undefined, argBindings: undefined };
+ const scope = { ...args, ...source.scope };
  const binding = props.block.source?.collection;
  const data = React.useMemo(() => binding && Array.isArray(source.scope.result) ? indexCollectionRows(source.scope.result, binding.groupBy) : undefined, [binding, source.scope.result]);
  const parentPage = inheritedScope.page as { collections?: Record<string, unknown> } | undefined;
@@ -924,6 +924,7 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
   </ComponentDataScope.Provider>
  );
  return <LiveTemplate render={{ tag: 'span' }} scope={scope}
+  argumentKey={JSON.stringify(Object.keys(props.block.argBindings || {}).map(name => [name, args[name]]))}
   interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
   confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
   <BlockView {...props} block={block} />
@@ -1064,7 +1065,7 @@ const BlockView = (
 		[cssTypo]
 	);
 
-	if ((block.source || block.args) && block.type !== 'component') return <SourceBlock {...props} />;
+	if ((block.source || block.args || block.argBindings) && block.type !== 'component') return <SourceBlock {...props} />;
 	if (['element', 'collection', 'condition'].includes(block.type)) return <AuthoredBlock {...props} />;
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {

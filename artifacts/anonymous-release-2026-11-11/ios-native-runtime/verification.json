@@ -1,0 +1,40 @@
+{
+  "observedDate": "2026-11-11",
+  "runtime": "NodeMobile24.22.1-0",
+  "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+  "distributionIntegrityVerified": true,
+  "sourceToBinaryReproducibility": "unproven",
+  "tagVerification": "unsigned",
+  "exactPublicArtifactAttestationStatus": 404,
+  "sourceRecipeCommit": "d4aedf536d035bf4eeab7a7a6e18b73d154d0ea5",
+  "materializedSourceCommit": "b5bcc8d8e70f055333cd5efc317e3eb55bf0c9a5",
+  "simulatorRuntime": "iOS26.5 arm64",
+  "bcryptVersion": "6.0.0",
+  "nodeAddonApiVersion": "8.9.2",
+  "pinnedSourceAndHeadersSha256": {
+    "bcrypt": {
+      "src/blowfish.cc": "ae054436efc92bb17a69832fa2e04823375765a10aa726dcfd1f0e42a3a76858",
+      "src/bcrypt.cc": "cf1f9a181571653ff8a6089cf54bad4d354e1b3cc68c8d4c319d42338db52f2f",
+      "src/bcrypt_node.cc": "816139374a489becd768564177bf57198c9b12eb83f14476272d9cd690053d87",
+      "src/node_blf.h": "3ade3327092d38ff15af128831ed262f1c8659a91554700c88a7b51e9741fe2f"
+    },
+    "addon_api": {
+      "napi.h": "5e0eff20229ba021fa7c5ff6f62dfecc36f8c29f2da365b25cde3d6489d8b924",
+      "napi-inl.h": "83f7520e9028cee918ca876def8cd982ee67906f2b587c60a9d8d79183b881eb",
+      "napi-inl.deprecated.h": "b66ed1e565e735bbfabcc2f72d466ab7c5414d3ef8851d1af440b81be7f2375c"
+    }
+  },
+  "rawReceiptSha256": {
+    "initial-nitro-import.json": "88b5fdfcc902f1f75eb5c62db41a73fa1a77a4689832568fffea3d51f528240b",
+    "bcrypt-nitro-import.json": "9664a7352f3cca8e744f15bd7c34d7eafcc19c43dcb6d72399735d27491e2849"
+  },
+  "bothTaskSimulatorsDeleted": true,
+  "actualNitroEntrySha256": "2c0bab9c081214a3f7e5772c5da4025d44f73ba0b5f7f5ac6b67dcc7740c027a",
+  "bcryptActualCost10HashAndCompare": true,
+  "nitroImported": false,
+  "apiStarted": false,
+  "storageTested": false,
+  "nextBlocker": "sharp0.35.5 cannot load ios-arm64; no substitute installed",
+  "productionTargetModified": false,
+  "physicalDeviceAcceptance": false
+}

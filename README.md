@@ -1455,8 +1455,14 @@ Native web-release signing, compatibility and local trial/rollback primitives
 are described in [native web bundles](docs/native-web-bundles.md). The release
 packager needs an explicitly selected public trust policy and a protected signer
 pipe; no production private key is bundled or required for ordinary builds.
-Release API discovery, updater startup wiring and iOS runtime acceptance remain
-in progress. The existing signed whole-app updater is unchanged.
+The source now includes a signed release catalogue/exact-range API and a resumable
+native downloader. Healthy Electron startup can stage verified bytes for the
+next normal restart; it does not auto-reload a live editor. Real startup/failed
+trial rollback passed in an isolated installed development app. Production trust
+keys/publication, deployed download acceptance and safe reload remain open.
+The isolated iOS Node 24 probe passed genuine bcrypt but canonical Nitro import
+failed at sharp; complete offline API/storage and device acceptance are still
+unverified. The existing signed whole-app updater is unchanged.
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
 with Electron. It builds the Vite client and Nitro server with
@@ -7649,9 +7655,10 @@ retires only that local credential. It does not call provider revocation.
 The card separates the scopes requested from the provider, scopes the provider
 explicitly reported, and operations Thingtime permits. Choose provider
 permissions separately from allowed operations. Google account offers verified
-profile and email reads. Google Workspace service cards and Facebook can save
-explicitly selected provider permissions for future supported use. Their only
-executable operation here is saved account identity. Providers with no
+profile and email reads. Google Workspace service cards additionally expose
+explicitly allowed Drive file lists, Gmail message-ID lists, calendar lists,
+Contacts lists, Docs reads and Sheets reads. Facebook supports saved account
+identity here; feed permissions remain separate. Providers with no
 configurable permission catalog use their standard consent. See the official
 [Google scope catalog](https://developers.google.com/identity/protocols/oauth2/scopes),
 [Calendar permissions](https://developers.google.com/workspace/calendar/api/auth),
@@ -7664,10 +7671,21 @@ can affect other grants in the same project. These are provider behaviors and
 do not limit how many named connections Thingtime saves.
 
 The **Use a saved connection** picker calls a fixed server operation using
-the selected ID. API clients negotiate `api.connections-named` 1.0 and
-Connections management 2.1 before using named features. Credentials and
+the selected ID. Current API clients negotiate `api.connections-named` 1.1,
+Connections management 2.3, and OAuth begin/callback 2.2 before using expanded
+Google actions. They explicitly request `includeServiceOperations=1` when
+listing named grants; older clients retain their original operation-ID projection. Credentials and
 arbitrary provider requests are never returned or accepted by that contract.
 Existing feed connections are separate and keep their existing behavior.
+
+For a fork, enable the **Drive API**, **Gmail API**, **Google Calendar API**,
+**Google Docs API**, **Google Sheets API**, and **People API** in the Google Cloud
+project that owns the configured OAuth client. Configure the exact callback and
+consent/test-user access normally. API enablement does not create user grants:
+select each service operation and complete Google consent for its required scope.
+Use a document/spreadsheet ID for resource reads and the returned opaque token
+for subsequent list pages. See [Google service actions](docs/google-service-actions.md)
+for scopes, contracts, pagination, security and live-acceptance requirements.
 
 ### Social OAuth platform vault setup
 
@@ -7696,6 +7714,26 @@ Facebook account linking requests public_profile only; the posts provider is a
 separate user_posts grant. Provider testing mode, eligible test accounts, app
 review and publication remain provider prerequisites. A configured card only
 proves valid vault configuration, not real provider consent or API permission.
+
+For saved Facebook grants, negotiate `api.connections-diagnostics` **1.0.0**
+on the selected origin, then open
+`/api/v1/connections/diagnostics?connectionId=<exact-id>&expectedOwnerId=<owner-id>`
+in that owner's authenticated browser. This read-only operation checks the exact
+saved grant and origin/environment binding without refreshing, rewriting or
+revoking it. It returns actual supported grant names (`null` means unknown or incomplete) and
+fixed statuses for minimal posts, shares, likes and comments. Named grants and
+account-only connections inspect permission metadata only; all content probes are
+skipped even if Meta granted broader access. Default Facebook posts connections
+can probe content; optional probes
+are skipped when minimal posts fail. No token, provider error body or post content
+is returned. Successful empty posts still establish endpoint access, not the
+presence of content. Expired grants require normal reconnect. Diagnostic results
+do not rewrite historical connection metadata. Connections **2.2.0** adds
+`authorization.requestedScopes` and `authorization.grantedScopes`; `null` means
+unverified/legacy. Facebook `scopes` now reflects confirmed evidence only. Both
+default and named Facebook callbacks read `/me/permissions`; requesting access
+alone is not proof that Meta granted it. No extra permissions are requested and
+the adapter remains on Graph v23.0. Confirm live posts before claiming acceptance.
 
 For YouTube subscriptions, select the Google Cloud project that owns the
 configured OAuth client, then open **APIs & Services → Library → YouTube Data

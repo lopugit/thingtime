@@ -370,8 +370,8 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       }
     }
     if (vaultProvider) {
-      // the chat's effort travels to the user's provider (the decorated → bare
-      // retry ladder covers an endpoint that rejects it); the model is the
+      // Keep the chat preference; the provider boundary normalizes effective
+      // effort against the resolved saved model's catalog. The model is the
       // connection's own, or the requested one for a connection saved without
       vaultProvider.effort = isAiModelEffort(requested.effort) ? requested.effort : (choice?.effort ?? null);
       vaultProvider.requestedModel = requested.model;

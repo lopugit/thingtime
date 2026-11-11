@@ -1,5 +1,33 @@
 # API endpoints and capabilities
 
+The merged Things contract is `api.things` 1.63.0: it combines retained attachment
+receipts/atomic generic PATCH with parent Component argument bindings. Both
+historical 1.62 variants are insufficient; sync and authoring clients negotiate
+the combined minimum before dependent writes. Dedicated Things update is 1.27.0
+and webpage resolve is 1.19.0.
+
+## Native web release catalogue and content
+
+GET `/api/v1/releases/native-web` and `/api/v1/releases/native-web/content`
+register `api.releases-native-web` and `api.releases-native-web-content` 1.0.0.
+Routes delegate to `api/utils/releases/nativeWebHttp.ts` and `nativeWeb.ts`;
+both manifest generators derive their entries from the canonical docs registry.
+Reads use fail-closed `releases.read` admission, private/no-store responses and
+fixed canonical GitHub publication assets, never caller URLs/credentials.
+The catalogue returns `{ok:true,release:envelope|null}` after signature/scope/
+compatibility/sequence selection. Content requires release ID, signed path,
+exact `Range` (at most 2 MiB) and quoted SHA-256 `If-Match`; it derives the
+canonical stored-ZIP offset and refuses changed upstream windows. Metadata and
+body work have bounded budgets, deadlines and cancellation.
+
+The native client omits credentials, rejects API redirects and verifies exact
+206 range/length/ETag plus final file hashes before independent staging.
+Run release service/HTTP tests, both API capability suites and compiled-route
+smokes, native archive/contract tests and Electron download/updater tests.
+Synthetic fixtures do not establish deployed routes, real signed publication,
+production trust or the installed API delivery journey. See
+[native bundle delivery](../native-web-bundles.md#implemented-api-delivery-and-native-download-path).
+
 ## Hosted anonymous draft render and export
 
 The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
@@ -1158,3 +1186,20 @@ The merged vault version also preserves encrypted offline workspaces and exact
 write acknowledgments from 1.4.0. Local and remote writers require a fresh token
 when switching between OAuth and Console modes; an existing saved credential
 cannot silently change meaning.
+
+## Google service actions on named grants
+
+The existing Connections list contract is 2.3.0, named-action contract 1.1.0,
+and OAuth begin/callback 2.2.0. Current clients negotiate the selected origin and
+request `includeNamed=1&includeServiceOperations=1`; original clients receive
+only original named-operation IDs. POST named accepts typed `resourceId` and
+opaque `pageToken` for fixed allowlisted Google operations. Routes remain in the
+canonical registry/import map; both manifests derive from their explicit
+versions. Run Connections and capability tests, the compiled Connections
+manifest smoke, and the isolated desktop/mobile OAuth-tab fixture. See
+[service actions](../google-service-actions.md) for the exact operations/scopes.
+
+The canonical client checker also exposes the fixed same-origin `active-api`
+source. Connections requires modern and active API capability maps; an older
+shared API behind a newer frontend cannot enable service actions. Neither
+manifest-supplied foreign URLs nor frontend-only versions establish support.

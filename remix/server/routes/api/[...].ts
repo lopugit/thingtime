@@ -89,6 +89,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
+  'v1/releases/native-web': () => import('../../../app/routes/api/v1/releases/native-web/_native-web'),
+  'v1/releases/native-web/content': () => import('../../../app/routes/api/v1/releases/native-web/content/_content'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
   'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
@@ -225,6 +227,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/connections/oauth/callback': () => import('../../../app/routes/api/v1/connections/oauth/callback/_callback'),
   'v1/connections/provider-icon': () => import('../../../app/routes/api/v1/connections/provider-icon/_provider-icon'),
   'v1/connections/providers': () => import('../../../app/routes/api/v1/connections/providers/_providers'),
+  'v1/connections/diagnostics': () => import('../../../app/routes/api/v1/connections/diagnostics/_diagnostics'),
   'v1/connections/named': () => import('../../../app/routes/api/v1/connections/named/_named'),
   'v1/connections/unlink': () => import('../../../app/routes/api/v1/connections/unlink/_unlink'),
   'v1/connections/youtube/channels': () => import('../../../app/routes/api/v1/connections/youtube/channels/_channels'),
@@ -458,6 +461,7 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/releases/native-web' || path === 'v1/releases/native-web/content') return jsonResponse({ ok: false, code: 'release_origin_unavailable', error: 'Native releases require this configured API origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/lopu/chats/reply' && event.req.headers.get('X-Thingtime-Device-Inference') === '1') {
       const origin = getApiFallbackOrigin();
       if (!origin) return unavailableLocalApiResponse();

@@ -128,7 +128,8 @@ test('profile exports negotiate their exact history decoders while ordinary expo
 test('owned-plan clients negotiate each new operation and reject pre-admission or breaking origins', async (t) => {
   for (const [feature, minimum, old] of [
     ['api.ai-models', '1.8.0', '1.7.0'], ['api.lopu-chats', '1.7.0', '1.6.0'],
-    ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0']
+    ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0'],
+    ['api.lopu-chats-reply', '1.23.1', '1.23.0']
   ]) {
     for (const version of [undefined, old, '2.0.0', minimum, '1.99.0']) {
       const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { [feature]: { version } } : {} }));
@@ -300,5 +301,43 @@ test('manifest body transport remains transient while malformed complete bodies 
       return true;
     });
     fetchMock.mock.restore();
+  }
+});
+
+
+test('active API capability source refuses an older proxy despite a newer frontend manifest', async t => {
+  let current = '2.2.0';
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push(String(url));
+    if (String(url).endsWith('/api/v1/capabilities')) {
+      assert.equal(init?.credentials, 'omit'); assert.equal(init?.redirect, 'error'); assert.equal(init?.cache, 'no-store');
+      return Response.json({ ok: true, schemaVersion: 1, features: { 'api.connections': current },
+        dataEnvironment: { authorityOrigin: 'https://must-not-be-followed.example' } });
+    }
+    return Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.connections': { version: '2.3.0' } } });
+  });
+  const frontend = createThingtimeCapabilityChecker();
+  const active = createThingtimeCapabilityChecker({ source: 'active-api' });
+  await frontend('api.connections', '2.3.0');
+  await assert.rejects(active('api.connections', '2.3.0'), /incompatible/);
+  current = '2.3.1'; await active('api.connections', '2.3.0');
+  assert.ok(calls.every(url => url === THINGTIME_CAPABILITY_MANIFEST_PATH || url === 'https://thingtime.test/api/v1/capabilities'));
+});
+
+test('active API source keeps explicit origin, schema and response endpoint fences', async t => {
+  let body: unknown = null, responseUrl = '';
+  t.mock.method(globalThis, 'fetch', async () => { const response = Response.json(body); if (responseUrl) Object.defineProperty(response, 'url', { value: responseUrl }); return response; });
+  const active = createThingtimeCapabilityChecker({ source: 'active-api' });
+  for (const invalid of [null, { ok: true, schemaVersion: 2, features: {} },
+    { ok: true, schemaVersion: 1, origin: 'https://foreign.test', features: { 'api.connections': '2.3.0' } },
+    { ok: true, schemaVersion: 1, features: [] }, { ok: false, schemaVersion: 1, features: { 'api.connections': '2.3.0' } }]) {
+    body = invalid; await assert.rejects(active('api.connections', '2.3.0'), /incompatible/);
+  }
+  body = { ok: true, schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.connections': '2.3.0' } };
+  await active('api.connections', '2.3.0');
+  for (const url of ['https://foreign.test/api/v1/capabilities', 'https://thingtime.test/other']) {
+    responseUrl = url;
+    await assert.rejects(createThingtimeCapabilityChecker({ source: 'active-api' })('api.connections', '2.3.0'), /changed origin or endpoint/);
   }
 });

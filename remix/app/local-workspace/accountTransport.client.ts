@@ -2,7 +2,7 @@ import { actionActivationWriteMinimum } from '../schemas/webpageActivation';
 import { isBuilderThing, BUILDER_THING_REQUIREMENTS } from '../schemas/builderThing';
 import { REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
 import { CONTENT_EXECUTION_READ_REQUIREMENTS } from '../backups/contentCreation';
-import { AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '../schemas/authoredControls';
+import { COMPONENT_ARGUMENT_BINDING_REQUIREMENTS, usesComponentArgumentBindings, AUTHORED_CONTROL_REQUIREMENTS, MAP_POINTS_SOURCE_REQUIREMENTS, PASSIVE_SOURCE_REQUIREMENTS, usesAuthoredControls, usesMapPointsSource, usesPassiveSource } from '../schemas/authoredControls';
 import { requiresCollectionPagingContract } from '../components/Builder/savedCollectionContract';
 import { hasLiveSourceBinding } from '../schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
@@ -104,6 +104,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			const crystal = args.crystal as { blocks?: WebpageBlock[] } | undefined;
 			const blocks = crystal?.blocks;
 			const feature = method === 'PATCH' ? 'api.things-update' : 'api.things';
+			if (usesComponentArgumentBindings(crystal)) await requireThingtimeCapability(feature, COMPONENT_ARGUMENT_BINDING_REQUIREMENTS[feature]);
 			const activationMinimum = usesPassiveSource(crystal) ? PASSIVE_SOURCE_REQUIREMENTS[feature] : actionActivationWriteMinimum(crystal, feature);
 			if (activationMinimum) await requireThingtimeCapability(feature, activationMinimum);
 			if (usesMapPointsSource(crystal))
@@ -122,7 +123,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 				await requireThingtimeCapability('api.things', '1.36.0');
 		}
 		if (endpoint === 'things' && ((method === 'DELETE' && args.retainAttachmentReceipts === true) || (method === 'PATCH' && args.attachmentIds !== undefined)))
-			await requireThingtimeCapability('api.things', '1.62.0');
+			await requireThingtimeCapability('api.things', '1.63.0');
 		if (endpoint === 'attachments/link' && args.requestId !== undefined) await requireThingtimeCapability('api.attachment-link', '1.3.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');

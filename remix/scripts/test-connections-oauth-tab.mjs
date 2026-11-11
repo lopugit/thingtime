@@ -21,6 +21,7 @@ try {
   await mkdir(evidence, { recursive: true });
   await esbuild.build({
     entryPoints: [join(root, 'scripts/connections-oauth-tab.browser.tsx')], bundle: true, format: 'esm',
+    nodePaths: process.env.THINGTIME_TEST_NODE_MODULES ? [process.env.THINGTIME_TEST_NODE_MODULES] : [],
     platform: 'browser', target: 'esnext', outfile: join(work, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error'
   });
@@ -35,7 +36,7 @@ try {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+  browser = await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 
   for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]]) {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
@@ -51,6 +52,8 @@ try {
     let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, pendingNamed;
     const savedLayouts = new Map();
     const namedRows = [];
+    let activeCapabilitiesOld = true;
+    const namedBegins = [];
     const account = (name, id) => ({ id: id + '-link', provider: 'facebook-account', providerName: 'Facebook', contentVisibility: 'personal', account: { id, displayName: name, handle: id } });
     const pageErrors = [];
     context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -63,16 +66,20 @@ try {
           body: `<a href="${origin}${callbackPath}?code=fixture-code">Continue</a> <a href="${origin}${callbackPath}?error=access_denied">Decline</a>`
         });
       }
-      if (url.origin !== origin) return route.abort();
-      if (url.pathname.endsWith('thingtime-capabilities.json')) {
+      if (url.origin !== origin && !(url.origin === selectedOrigin && (url.pathname.endsWith('thingtime-capabilities.json') || url.pathname === '/api/v1/capabilities'))) return route.abort();
+      if (url.pathname.endsWith('thingtime-capabilities.json') || url.pathname === '/api/v1/capabilities') {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
-          'api.connections': { version: '2.1.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.1.0' },
-          'api.connections-oauth-callback': { version: '2.1.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.0.0' },
+          'api.connections': { version: '2.3.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.2.0' },
+          'api.connections-oauth-callback': { version: '2.2.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.1.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
-        return json(route, { schemaVersion: 1, origin, features });
+        if (url.pathname === '/api/v1/capabilities') return json(route, { ok: true, schemaVersion: 1, features: {
+          ...Object.fromEntries(Object.entries(features).map(([id, feature]) => [id, feature.version])),
+          ...(activeCapabilitiesOld ? { 'api.connections': '2.2.0', 'api.connections-named': '1.0.0' } : {})
+        } });
+        return json(route, { schemaVersion: 1, origin: url.origin, features });
       }
       if (url.pathname === '/connection-provider-fallback.svg') return route.fulfill({ path: join(root, 'public/connection-provider-fallback.svg'), contentType: 'image/svg+xml' });
       if (url.pathname === '/fixture-brand-override.png') {
@@ -134,6 +141,7 @@ try {
           assert.equal(body.provider, 'google');
           assert.ok(body.named.allowedOperations.includes('google.profile'));
           assert.deepEqual(body.named.requestedScopes, ['profile']);
+          namedBegins.push(body.named);
           pendingNamed = body.named;
         } else assert.deepEqual(body, { provider: 'facebook-account', expectedOwnerId: 'oauth-tab-fixture-owner' });
         begins++;
@@ -142,9 +150,12 @@ try {
       if (url.pathname === callbackPath) {
         callbacks++;
         if (pendingNamed && !url.searchParams.has('error')) {
-          namedRows.push({ ...account('Named provider identity', 'same-google-subject'), id: 'named-' + namedRows.length,
+          const reconnectIndex = pendingNamed.reconnectId ? namedRows.findIndex(row => row.id === pendingNamed.reconnectId) : -1;
+          assert.ok(!pendingNamed.reconnectId || reconnectIndex >= 0);
+          const saved = { ...account('Named provider identity', 'same-google-subject'), id: reconnectIndex >= 0 ? pendingNamed.reconnectId : 'named-' + namedRows.length,
             provider: 'google', providerName: 'Google account', named: { name: pendingNamed.name, requestedScopes: ['openid', 'profile'],
-              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } });
+              grantedScopes: ['openid', 'profile'], allowedOperations: pendingNamed.allowedOperations } };
+          if (reconnectIndex >= 0) namedRows[reconnectIndex] = saved; else namedRows.push(saved);
           pendingNamed = undefined;
           return route.fulfill({ status: 302, headers: { location: origin + '/connections?connected=google' } });
         }
@@ -159,6 +170,16 @@ try {
       }
       if (url.pathname === endpoint + '/named') {
         const body = route.request().postDataJSON();
+        if (body.id === 'service-docs') {
+          assert.deepEqual(body, { id: 'service-docs', operation: 'docs.get-document', resourceId: 'doc_fixture-123', expectedOwnerId: firstOwner });
+          return json(route, { ok: true, result: { documentId: 'doc_fixture-123', title: 'Known fixture document', tabs: [{ text: 'Full fixture content' }] } });
+        }
+        if (body.id === 'service-drive') {
+          assert.equal(body.operation, 'drive.list-files'); assert.equal(body.expectedOwnerId, firstOwner);
+          assert.ok(body.pageToken === undefined || body.pageToken === 'opaque/next+page');
+          return json(route, { ok: true, result: { files: [{ id: body.pageToken ? 'second' : 'first', name: 'A long Drive filename '.repeat(30) }],
+            ...(body.pageToken ? {} : { nextPageToken: 'opaque/next+page' }) } });
+        }
         assert.deepEqual(body, { id: 'named-1', operation: 'google.profile', expectedOwnerId: firstOwner });
         return json(route, { ok: true, result: { name: 'Named profile result' } });
       }
@@ -170,9 +191,20 @@ try {
       const page = await context.newPage();
       page.setDefaultTimeout(12000);
       const initial = origin + '/connections?keep=1';
+      const olderProxyList = page.waitForResponse(response => new URL(response.url()).pathname === endpoint && !new URL(response.url()).searchParams.has('includeNamed'));
       await page.goto(initial);
+      await olderProxyList;
+      assert.equal(await page.locator('[data-settings-document="named-auth-connections"]').count(), 0, 'A newer frontend must not enable named actions against an older API proxy');
+      await page.screenshot({ path: join(evidence, label + '-older-proxy-unavailable.png'), fullPage: true });
+      activeCapabilitiesOld = false;
+      await page.reload();
+      await page.getByRole('button', { name: 'Add named connection', exact: true }).waitFor();
       const signIn = page.getByRole('button', { name: /Default sign-in with Facebook/ });
-      await signIn.waitFor();
+      await signIn.waitFor().catch(async error => {
+        await writeFile(join(evidence, label + '-initial-failure.json'), JSON.stringify({ pageErrors, text: await page.locator('body').innerText() }));
+        await page.screenshot({ path: join(evidence, label + '-initial-failure.png'), fullPage: true });
+        throw error;
+      });
       const catalogHost = page.locator('[data-settings-document="connections-provider-catalog"]');
       const logo = '[data-block-id="connections-provider-logo"]';
       const facebookCard = signIn.locator('..');
@@ -192,6 +224,7 @@ try {
       await page.screenshot({ path: join(evidence, `provider-icons-${label}.png`), fullPage: true });
       await page.evaluate(() => window.scrollTo(0, 0));
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         await catalogHost.getByRole('button', { name: 'Edit provider cards', exact: true }).click();
         await catalogHost.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
         const drawer = page.getByTestId('builder-drawer');
@@ -217,6 +250,7 @@ try {
       const pendingCopy = label === 'desktop' ? 'Complete Facebook sign-in in your new tab.' : 'Finish signing in to Facebook in the new tab.';
       const stopCopy = label === 'desktop' ? 'End sign-in wait' : 'Stop waiting';
       if (label === 'desktop') {
+        await enableCurrentPageBuilder(page);
         const host = page.locator('[data-settings-document="connections-oauth-pending"]');
         await host.getByRole('button', { name: 'Edit sign-in status', exact: true }).click();
         await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
@@ -236,7 +270,7 @@ try {
       }
       await page.evaluate(() => { window.__oauthFixtureOpen = window.open; window.open = () => null; });
       await signIn.click();
-      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').waitFor();
+      await page.getByText('Allow pop-ups for Thingtime, then try signing in again').first().waitFor();
       assert.equal(begins, 0);
       assert.equal(page.url(), initial);
       await page.evaluate(() => { window.open = window.__oauthFixtureOpen; });
@@ -256,7 +290,7 @@ try {
       await page.screenshot({ path: join(evidence, label + '-pending.png'), fullPage: true });
       const declineClosed = declined.waitForEvent('close', { timeout: 5000 });
       await declined.getByRole('link', { name: 'Decline' }).click();
-      await page.getByText('That sign-in was declined', { exact: false }).waitFor();
+      await page.getByText('That sign-in was declined', { exact: false }).first().waitFor();
       await declineClosed;
       assert.equal(await signIn.isEnabled(), true);
       assert.equal(linked, false);
@@ -399,7 +433,75 @@ try {
       await namedHost.getByText('name: Named profile result').waitFor();
       await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
       assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
+      const reconnectName = 'Second profile with a long descriptive name for research notes';
+      assert.equal(await namedHost.getByRole('textbox', { name: 'Connection name' }).inputValue(), reconnectName,
+        'Reconnect must prefill its saved name without requiring the user to type it again');
+      assert.equal(await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).isDisabled(), true);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).isChecked(), true);
+      const reconnectPage = context.waitForEvent('page');
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      const reconnectAuthorization = await reconnectPage;
+      const reconnectClosed = reconnectAuthorization.waitForEvent('close', { timeout: 5000 });
+      await reconnectAuthorization.getByRole('link', { name: 'Continue' }).click();
+      await reconnectClosed;
+      await second.getByRole('button', { name: 'Reconnect', exact: true }).waitFor();
+      assert.equal(namedRows.length, 2, 'Reconnect replaces only the intended grant');
+      assert.deepEqual(namedBegins.at(-1), { ...namedBegins[1], requestId: namedBegins.at(-1).requestId, reconnectId: 'named-1' });
+      assert.equal(namedRows[1].named.name, reconnectName);
+      assert.deepEqual(namedRows[1].named.requestedScopes, ['openid', 'profile']);
+      await namedHost.getByRole('button', { name: 'Add named connection' }).click();
+      await namedHost.getByRole('combobox', { name: 'Provider', exact: true }).selectOption('google');
+      const nameField = namedHost.getByRole('textbox', { name: 'Connection name' });
+      assert.equal(await nameField.inputValue(), '', 'A new grant must not inherit the reconnect name');
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Profile name and photo', exact: true }).isChecked(), false);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Email address', exact: true }).isChecked(), false);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Saved account identity', exact: true }).isChecked(), true);
+      assert.equal(await namedHost.getByRole('checkbox', { name: 'Google profile name and photo', exact: true }).isChecked(), false);
+      const beginsBeforeInvalid = begins;
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      await namedHost.getByRole('alert').filter({ hasText: 'Enter a connection name to continue.' }).waitFor();
+      assert.equal(await nameField.getAttribute('aria-invalid'), 'true');
+      assert.equal(await nameField.getAttribute('aria-describedby'), 'named-form-error');
+      await page.screenshot({ path: join(evidence, label + '-named-validation.png'), fullPage: true });
+      await nameField.fill('New identity fixture');
+      await namedHost.getByRole('checkbox', { name: 'Saved account identity', exact: true }).uncheck();
+      await namedHost.getByRole('button', { name: 'Continue to sign in' }).click();
+      await namedHost.getByRole('alert').filter({ hasText: 'Choose at least one allowed operation to continue.' }).waitFor();
+      assert.equal(await nameField.inputValue(), 'New identity fixture', 'Validation preserves entered text');
+      assert.equal(begins, beginsBeforeInvalid, 'Invalid forms never start provider authorization');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
       await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
+      // Exercise real rendered service controls with independent synthetic grant rows.
+      for (const [id, provider, operation, scope] of [
+        ['service-drive', 'google-drive', 'drive.list-files', 'drive.metadata.readonly'],
+        ['service-docs', 'google-docs', 'docs.get-document', 'documents.readonly']
+      ]) namedRows.push({ ...account(id, id), id, provider, providerName: provider,
+        named: { name: id, requestedScopes: ['https://www.googleapis.com/auth/' + scope], grantedScopes: ['https://www.googleapis.com/auth/' + scope], allowedOperations: [operation] } });
+      await refreshWithoutRemount();
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('service-docs');
+      const documentId = namedHost.getByRole('textbox', { name: 'Document ID', exact: true });
+      await documentId.fill('doc_fixture-123');
+      await namedHost.getByRole('button', { name: 'Read a Google Doc', exact: true }).click();
+      const payload = namedHost.locator('[data-block-id="named-result"]');
+      await payload.filter({ hasText: 'Known fixture document' }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).tabs[0].text, 'Full fixture content');
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('service-drive');
+      assert.equal(await payload.textContent(), '', 'Changing grants clears prior document content');
+      assert.equal(await documentId.count(), 0);
+      await namedHost.getByRole('button', { name: 'List Drive files', exact: true }).click();
+      await namedHost.getByRole('button', { name: 'Read next page', exact: true }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).files[0].id, 'first');
+      const serviceOverflow = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(el => el.getBoundingClientRect().right > innerWidth + 1).slice(-15).map(el => ({ tag: el.tagName, id: el.getAttribute('data-block-id'), width: el.getBoundingClientRect().width, css: el.getAttribute('style') })));
+      await writeFile(join(evidence, label + '-service-overflow.json'), JSON.stringify(serviceOverflow));
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, label + '-google-service-actions.png'), fullPage: true });
+      await namedHost.getByRole('button', { name: 'Read next page', exact: true }).click();
+      await payload.filter({ hasText: 'second' }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).files[0].id, 'second');
+      assert.equal(await namedHost.getByRole('button', { name: 'Read next page', exact: true }).count(), 0);
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-1');
+      assert.equal(await payload.textContent(), '');
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();

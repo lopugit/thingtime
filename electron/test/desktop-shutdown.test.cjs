@@ -13,7 +13,7 @@ test('immediate service cleanup retries Quit after the native quit dispatch unwi
  vm.runInNewContext(listener, {
   app: { on: (_name, fn) => { beforeQuit = fn; }, quit: () => { if (!nativeDispatch) completed++; } },
   desktopServicesClosed: false, desktopServicesClosing: false,
-  localRuntime: {}, agentBrowsersPromise: undefined,
+  localRuntime: {}, agentBrowsersPromise: undefined, webBundleUpdates: null,
   webBundleLaunch: { close: () => { launchClosed = true; } },
   closeDesktopServices: () => Promise.resolve(), setImmediate
  });
@@ -44,7 +44,7 @@ test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo 
   agentBrowsersPromise: Promise.resolve({close:async()=>{calls.push('browser'); await browser.promise;}}),
   globalThis:{[Symbol.for('thingtime.chatgpt-plan.close')]:async()=>{calls.push('oauth'); await oauth.promise;}},
   localRuntime:{stop:async()=>{calls.push('database'); await database.promise;}},
-  console, Symbol
+  console, Symbol, webBundleUpdates: null
  });
  let done=false; pending.then(()=>{done=true;});
  await new Promise(resolve=>setImmediate(resolve));
@@ -61,7 +61,7 @@ test('quit waits for password bridge, browser cleanup, OAuth shutdown and Mongo 
 test('browser cleanup failure still waits for local database cleanup', async () => {
  const database=gate(); let warned=false;
  const pending=vm.runInNewContext(closeServices+'; closeDesktopServices()', {
-  process: {platform: 'darwin'},
+  process: {platform: 'darwin'}, webBundleUpdates: null,
   agentBrowsersPromise:Promise.resolve({close:async()=>{throw new Error('fixture');}}),
   globalThis:{},Symbol,localRuntime:{stop:()=>database.promise},console:{warn:()=>{warned=true;}}
  });

@@ -1,8 +1,10 @@
 # Native web bundle release contract
 
 This foundation describes, signs and verifies complete renderer/local Nitro
-payloads. It does not publish an API, fetch URLs, install a native shell, supply
-production trust keys, or establish installed updater acceptance. Native shell
+payloads. The shared contract/packager does not fetch URLs or install a native
+shell. The application now provides a signed catalogue and exact-range API,
+with a resumable native downloader; production trust/publication and complete
+installed delivery acceptance remain separate. Native shell
 updates and changes to the Node runtime/native ABI remain separately distributed.
 
 `release.cjs` implements the version 1 JSON contract; `inventory.cjs` verifies
@@ -97,11 +99,16 @@ node native-bundles/package-release.mjs --source electron/dist/web \
 ```
 
 The displayed command requires a protected signer pipe; it fails closed without
-one. Output is `<releaseId>/release.json` plus `<releaseId>/payload/`. Packaging
-uses a private staging directory, verifies copied bytes against the descriptor,
-then renames the complete release. Repeating identical inputs produces the same
+one. Output is `<releaseId>/release.json`, `<releaseId>/payload/`, and publication
+assets `native-web-<releaseId>.json` / `native-web-<releaseId>.zip`.
+`archive.mjs` streams the shared canonical stored ZIP/ZIP64 layout from verified
+file-backed payloads, without buffering a complete bundle. Packaging uses a
+private staging directory, verifies bytes, then renames the complete release. Repeating identical inputs produces the same
 signed bytes and validates an existing immutable destination before reuse.
-No archive unpacker or arbitrary URL fetching is provided.
+No archive unpacker or arbitrary URL fetching is provided by this packager.
+The registered API derives per-file offsets from the same signed layout and
+serves exact 2 MiB-or-smaller windows. See [API delivery, native resume and
+remaining acceptance](../docs/native-web-bundles.md#implemented-api-delivery-and-native-download-path).
 
 Run `node --test native-bundles/*.test.cjs` (also Electron `test:web-bundles`).
 Fixtures generate synthetic Ed25519 keys in memory and use temporary files only.

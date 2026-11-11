@@ -1,0 +1,16 @@
+{
+  "node": "v24.22.1",
+  "mobile": "24.22.1-0",
+  "platform": "ios",
+  "arch": "arm64",
+  "attempted": "canonical .output/server/index.mjs",
+  "sourceSha256": "2c0bab9c081214a3f7e5772c5da4025d44f73ba0b5f7f5ac6b67dcc7740c027a",
+  "imported": false,
+  "error": {
+    "name": "Error",
+    "code": null,
+    "message": "No native build was found for platform=ios arch=arm64 runtime=node abi=137 uv=1 armv=8 libc=glibc node=24.22.1\n    loaded from: <APP_BUNDLE>/.output/server/node_modules/bcrypt\n",
+    "stack": "Error: No native build was found for platform=ios arch=arm64 runtime=node abi=137 uv=1 armv=8 libc=glibc node=24.22.1\n    loaded from: <APP_BUNDLE>/.output/server/node_modules/bcrypt\n\n    at load.resolve.load.path (<APP_BUNDLE>/.output/server/node_modules/node-gyp-build/node-gyp-build.js:60:9)\n    at load (<APP_BUNDLE>/.output/server/node_modules/node-gyp-build/node-gyp-build.js:22:30)\n    at Object.<anonymous> (<APP_BUNDLE>/.output/server/node_modules/bcrypt/bcrypt.js:2:43)\n    at Module._compile (node:internal/modules/cjs/loader:1929:14)\n    at Module._extensions..js (node:internal/modules/cjs/loader:2060:10)\n    at Module.load (node:internal/modules/cjs/loader:1651:32)\n    at Module._load (node:internal/modules/cjs/loader:1443:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:372:15)\n    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:244:9)"
+  },
+  "publicationRedaction": "Application bundle/container path and simulator identifier removed; observed result unchanged."
+}

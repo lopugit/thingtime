@@ -58,7 +58,7 @@ test('transport pins account and database on reads and writes and retires mismat
   result = Response.json({ ok: true });
   const deletion = { id: 'thing', operationId: 'delete', version: 1, method: 'delete' as const, body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } };
   await assert.rejects(transport.remove!(deletion, new AbortController().signal), /incompatible/);
-  thingVersion = '1.62.0';
+  thingVersion = '1.63.0';
   await transport.remove!(deletion, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
   assert.equal(JSON.parse(calls.at(-1).init.body).retainAttachmentReceipts,true);
@@ -272,11 +272,11 @@ test('parent deletion refuses an origin without durable cascade receipts and per
   // The checker first rejects any cached manifest from another origin.
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
-  for (const older of ['1.42.0', '1.56.0', '1.57.0', '2.0.0']) {
+  for (const older of ['1.42.0', '1.56.0', '1.57.0', '1.62.0', '2.0.0']) {
    version=older; await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
    assert.deepEqual(mutations,[]);
   }
-  version='1.62.0';await transport.remove!(op,new AbortController().signal);
+  version='1.63.0';await transport.remove!(op,new AbortController().signal);
   assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
  }finally{Object.assign(globalThis,saved);}
 });
@@ -322,14 +322,45 @@ test('atomic attachment edits require generic PATCH support before transport', a
   const op={id:'post',operationId:'binding',version:1,method:'update' as const,body:{id:'post',attachmentIds:['file'],expectedUpdatedAt:'2026-10-17T00:00:00.000Z'}};
   // First refusal also discards a cached manifest belonging to another origin.
   await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);
-  for(const older of ['1.42.0','1.56.0','1.57.0','2.0.0']){
+  for(const older of ['1.42.0','1.56.0','1.57.0','1.62.0','2.0.0']){
    version=older;await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
   }
-  version='1.62.0';await transport.write(op,new AbortController().signal);
+  version='1.63.0';await transport.write(op,new AbortController().signal);
   const writes=mutations.filter(init=>init.method==='PATCH');
   assert.equal(writes.length,1);assert.equal(mutations.length,2);
   assert.deepEqual(JSON.parse(writes[0].body),op.body);
  }finally{Object.assign(globalThis,saved);}
+});
+
+for (const method of ['create', 'update'] as const) test(`queued ${method} with Component argument bindings negotiates the combined contract`, async () => {
+ const saved = { window: globalThis.window, fetch: globalThis.fetch };
+ const origin = `https://component-argument-${method}.test`, scope = { kind: 'account' as const, origin, ownerId: 'owner', dataPlane: 'home' };
+ let version = method === 'create' ? '1.62.0' : '1.26.0';
+ const writes: RequestInit[] = [];
+ Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, fetch: async (url: string, init: RequestInit) => {
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: {
+   'api.things': { version: method === 'create' ? version : '1.63.0' },
+   'api.things-update': { version: method === 'update' ? version : '1.27.0' },
+   'api.mongodb-endpoint': { version: '1.1.0' }
+  } });
+  if (init.method !== 'GET') writes.push(init);
+  return Response.json({ ok: true, thing: { id: 'page' } });
+ } });
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, { assertCurrent() {}, onInvalidate: () => () => {} });
+  const operation = { id: 'page', operationId: 'component-bindings', version: 1, method, body: {
+   id: 'page', thingtime: ['webpage'], crystal: { blocks: [{ id: 'row', type: 'component', componentId: 'component', argBindings: { title: '{item.title}' } }] }
+  } };
+  // A prior origin's cached manifest is rejected before a fresh negotiation.
+  await assert.rejects(transport.write(operation, new AbortController().signal), /incompatible/);
+  await assert.rejects(transport.write(operation, new AbortController().signal), /incompatible/);
+  assert.equal(writes.length, 0);
+  version = method === 'create' ? '1.63.0' : '1.27.0';
+  await transport.write(operation, new AbortController().signal);
+  assert.equal(writes.length, 1);
+  assert.deepEqual(JSON.parse(writes[0].body as string).crystal, operation.body.crystal);
+ } finally { Object.assign(globalThis, saved); }
 });
 
 test('Builder sync requires the provenance capability before sending saved definitions', async () => {

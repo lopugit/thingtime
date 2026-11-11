@@ -2,6 +2,53 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Release delivery and current main integration — 11 November 2026
+
+Current integration target is freshly fetched main
+`b3374a16d23994dd3c1c355d75d3fe730321a284`. It adds Component argument
+bindings, named Google service Actions and editable connection/password controls.
+Merge resolutions retain their behavior together with this branch's local
+storage, identity fencing and device-only operation. The combined Things contract
+is 1.63.0; both older 1.62 variants are refused before dependent operations.
+The dated checkpoints below remain historical evidence.
+
+The native update source now includes origin-negotiated signed release discovery
+and exact-range content APIs, bounded metadata/deadlines/cancellation, the shared
+canonical streaming ZIP writer, resumable hash-verified downloads, rate-limit
+backoff and transport cleanup. Healthy Electron startup stages a candidate for
+the next normal restart. Automatic reload that preserves unsaved edits, actual
+production signing trust/publication and deployed native-update acceptance remain
+open. The real API/downloader loopback integration passes with a synthetic signed
+publication; that is not a released production bundle.
+
+A real disposable iOS simulator ran Node 24 and upstream bcrypt. Importing the
+canonical Nitro payload then failed at missing `sharp`/libvips support. The API
+did not start and transactional storage remains untested. The reusable probe is
+authored; its final runner has not itself been rerun end to end.
+[Evidence and limits](../artifacts/anonymous-release-2026-11-11/ios-native-runtime/README.md).
+
+The final built no-login runner passes fresh clean-browser acceptance at desktop,
+390px, 320px and card crop sizes with exact editable JSON/text/dependencies,
+invalid-input/refusal/reload handling and zero account traffic. The rebuilt
+isolated native app passes real Nitro/React startup and fresh-process rollback
+with cleanup verified. TypeScript, zero-error ratchet, full lint (0 errors / 371
+warnings), web/native builds and all 25 compiled manifest contracts pass.
+[Current evidence](../artifacts/anonymous-release-2026-11-11/release-delivery-merge/README.md).
+Independent posting/draft completion retains its earlier accepted foundation.
+Nine final password browser cases pass across account/anonymous/account-scoped
+vaults and desktop/390px/320px; encrypted files, nested edits/save/reload and
+identity boundaries are covered. The icon chooser no longer overflows at320px
+and preserves custom sizing. Progress-plan filters/search/navigation and full-page
+layout also pass at all three widths.
+Local vault icon upload/receipt mapping and fully local global verification
+preferences remain incomplete; those limits are distinct from the isolated draft
+renderer, which makes no account requests. The canonical connected chat still exposes no render/export
+tool, so real hosted artifact delivery is incomplete. Also retain the unresolved
+concurrent workspace retention timeout as an undiagnosed test follow-up; the
+current sequential aggregate passes 956 checks with 113 explicit opt-in skips.
+Final-head CI/preview and full native offline/device acceptance remain open. No stable app replacement or primary
+branch merge is included in this checkpoint.
+
 ## Real native startup and failed-update recovery — 2026-11-11
 
 The preserved startup batch is now integrated. Electron selects a verified bundle

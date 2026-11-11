@@ -3,11 +3,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import contract from './release.cjs';
 import inventory from './inventory.cjs';
+import { releaseAssetNames, writeReleaseArchive, fileDigest } from './archive.mjs';
 const { canonical, releaseId, signDescriptor, verifyEnvelope } = contract;
 const { inventoryDirectory, verifyDirectory } = inventory;
 
-// There is no network or archive extraction in the packager. Input is the
-// completed staged web directory; output is immutable content-addressed bytes.
+// No network or archive extraction. The verified immutable output includes a
+// deterministic stored ZIP for the canonical release publisher and API ranges.
 export async function packageRelease({ source, output, metadata, keyId, privateKey, trustedKeys }) {
   source = path.resolve(source); output = path.resolve(output);
   const relative = path.relative(source, output);
@@ -32,6 +33,9 @@ export async function packageRelease({ source, output, metadata, keyId, privateK
     // This rejects mutations or link substitutions between inventory and copy.
     await verifyDirectory(path.join(staging, 'payload'), descriptor);
     await writeFile(path.join(staging, 'release.json'), canonical(envelope) + '\n', { mode: 0o444 });
+    const assets = releaseAssetNames(envelope.releaseId);
+    await writeFile(path.join(staging, assets.envelope), canonical(envelope) + '\n', { mode: 0o444 });
+    const archive = await writeReleaseArchive(path.join(staging, 'payload'), descriptor, path.join(staging, assets.archive));
     const destination = path.join(output, releaseId(descriptor));
     try { await rename(staging, destination); }
     catch (error) {
@@ -39,8 +43,11 @@ export async function packageRelease({ source, output, metadata, keyId, privateK
       const existing = JSON.parse(await readFile(path.join(destination, 'release.json'), 'utf8'));
       if (canonical(existing) !== canonical(envelope)) throw new Error('Conflicting immutable release');
       await verifyDirectory(path.join(destination, 'payload'), descriptor);
+      if (await readFile(path.join(destination, assets.envelope), 'utf8') !== canonical(envelope) + '\n') throw new Error('Conflicting published envelope');
+      const previousArchive = await fileDigest(path.join(destination, assets.archive));
+      if (previousArchive.bytes !== archive.bytes || previousArchive.sha256 !== archive.sha256) throw new Error('Conflicting published archive');
     }
-    return { releaseId: envelope.releaseId, directory: destination, files: files.length };
+    return { releaseId: envelope.releaseId, directory: destination, files: files.length, assets, archive };
   } finally { await rm(staging, { force: true, recursive: true }); }
 }
 async function main() {

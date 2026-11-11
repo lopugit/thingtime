@@ -14,8 +14,20 @@ for the remaining API and iOS work. `electron/lib/web-bundle-launch.cjs`,
 renderer startup. `verify-web-bundle-startup.mjs` exercises the installed isolated
 development app, including early-import failure and fresh-process rollback;
 its React-boundary fixture uses a separate Chromium process. Run launch/host,
-renderer-readiness and desktop-shutdown tests with the store checks. No new HTTP
-route is registered yet.
+renderer-readiness and desktop-shutdown tests with the store checks.
+`archive.mjs` streams the shared stored ZIP/ZIP64 format; the registered catalogue
+and exact-range content routes are mapped in [API capabilities](api-endpoints-and-capabilities.md#native-web-release-catalogue-and-content).
+`web-bundle-download.cjs` negotiates them, resumes exact 2 MiB windows and checks
+signed file hashes; `web-bundle-updates.cjs` stages after healthy startup for the
+next normal process start, without live-editor reload. Cover both modules' tests
+with cancellation/retry/cleanup and keep real selected-origin downloads distinct
+from synthetic transport fixtures. Empty shipped trust disables production
+background download until supported provisioning.
+
+`iOS/scripts/native-runtime-probe/` preserves the isolated actual Node 24/Nitro
+experiment: genuine simulator bcrypt passes, then sharp fails to load; no API or
+storage acceptance follows. Its reusable runner has syntax/input/refusal checks,
+not an end-to-end rerun. See the [probe runbook](../../iOS/scripts/native-runtime-probe/README.md).
 
 ## Agent browser runtime
 
