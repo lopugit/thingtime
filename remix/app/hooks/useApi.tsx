@@ -539,7 +539,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           } catch { /* Keep the ordinary model catalogue usable during device loss. */ }
         }
         if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
-          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          try { await requireThingtimeCapability('api.ai-models', '1.9.0'); }
           catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
         }
         return result;

@@ -4,24 +4,30 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Latest main integration and capability audit — 2026-11-11
 
-Resolved the integration of fetched main `1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5` into the
-feature branch. This brings 64 main-side commits since the prior common base,
-including Builder collections/selection, library archive, image presentation,
-attachment deduplication, reporting scope upgrades and iOS Photos recovery.
+Integrated freshly fetched main through
+`0d8cf373344434d8341882db9a681ded3807c81e` into the feature branch. The first
+64-commit integration of `1f5c09c` is merge commit `de28a6d9a`; a subsequent
+fetch included the Anthropic Console connection PR that landed during validation.
+Together these updates bring Builder collections/selection, library archive,
+image presentation, attachment deduplication, reporting scope upgrades, iOS Photos
+recovery and explicit Console connections.
 Conflict resolution preserves both feature and main behavior. Combined contracts
 use Things 1.62, search 1.7, attachment content 1.20, delete 1.9, upload abort 1.4
-and hosted MCP 2.3 so either parent alone cannot claim the merged behavior.
+hosted MCP 2.3 and vault 1.5 so either parent alone cannot claim the merged
+behavior. Console mode requires a fresh credential in both local and remote
+vaults; ordinary sync retains its compatible 1.4 floor.
 
 Fresh local browser acceptance passes the actual Render and Download controls,
 canonical JSON, dependency closure, exact text and all four PNGs. The final canonical full-build
-runner is `64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5`;
+runner is `c1415d5d0945826eed52817fb5e915450335cab73568e7ca7cbc0279fef5d3d1`;
 its output JSON and PNGs match the previous fixture byte for byte. Invalid input,
 opaque storage denial, reload clearing and zero API traffic pass.
 [Fresh renderer evidence](../artifacts/anonymous-release-2026-11-11/main-integration-preview/README.md).
 MCP unit checks pass 63 with three explicit opt-in skips in the sequential run.
 An initial concurrent run timed out one Node-wire timing test; that exact test
 passed alone and the full sequential run passed without source changes.
-The canonical client/server build, full lint (zero errors, 368 warnings), raw
+The first integration passed the canonical build, full lint (zero errors,
+368 warnings), raw
 TypeScript and zero-error ratchet pass. Built-manifest smoke checks pass all
 18 contracts. The settled-source workspace suite finished with 951 passes, one
 failure and 113 opt-in skips: the bounded 70 MiB Blob retention test timed out
@@ -39,7 +45,22 @@ complete signed application; it is not independent API-delivered web-bundle
 updates. iOS still opens the selected hosted URL and has no bundled Node/Nitro
 runtime or web-bundle build phase in the inspected target.
 
-Remaining priorities are merged-tree validation, matching hosted renderer
+Final integration validation passes the canonical build, full lint (zero errors,
+369 warnings), raw TypeScript and 23 compiled contract checks. The zero-error TypeScript ratchet also passes.
+Focused checks pass 192 API capability tests, six API-key/vault routing tests and
+the routing self-test, 70 core/completion/voice checks, 87 chat-streaming checks
+and 23 local vault/transport checks. Instruction and identity regressions pass.
+The actual encrypted Secure Vault UI passes desktop, 390px and 320px checks,
+offline save/cold unlock, token clearing and invalid-token refusal; two synthetic
+remote cases prove Console negotiation refuses 1.4 before POST and permits 1.5.
+[Vault UI evidence](../artifacts/anonymous-release-2026-11-11/console-vault-ui/verification.json).
+These tests do not establish real provider authentication or billing. The latest
+full-build renderer was independently rerun; prior runner hashes remain historical.
+The portable map is refreshed structurally; prior bounded semantic attempts timed
+out, and no new semantic documentation coverage or shared-proxy change is claimed.
+
+Remaining priorities are new-head CI/preview verification, follow-up of the
+aggregate retention timeout, matching hosted renderer
 activation and real connected-host downloads, then the versioned native
 web-bundle update/rollback contract and iOS offline runtime/startup. Stable
 installed and physical-device acceptance, actual origin migration and live

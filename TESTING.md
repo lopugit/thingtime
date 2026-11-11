@@ -18748,3 +18748,16 @@ private readback while an unrelated Home fixture remains paused.
 - Confirm portable exports omit `libraryArchived` and `libraryArchiveEligible`.
   Archive/restore mutations require the normal online authorized endpoint;
   explicit local Home must not negotiate account archive capabilities.
+
+### Explicit Console mode and offline vault merge regression
+
+- Switch an existing OAuth connection to Anthropic Console mode and back in
+  the normal Secure Vault editor. Unsaved token input must clear on a mode
+  change, and local and remote writers must reject reuse of the saved token.
+- Verify encrypted local save, reload and synchronization with a synthetic
+  Console credential; preserve scoped metadata and exact write acknowledgments.
+  Console sync requires `api.lopu-vault` 1.5.0, while ordinary metadata and
+  existing-mode synchronization retain their compatible 1.4.0 requirement.
+- Exercise the editor at desktop, 390px and 320px widths. Keep actual Console
+  inference, account entitlement and installed-native acceptance separate from
+  synthetic transport and browser-layout checks.

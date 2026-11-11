@@ -19,3 +19,13 @@ test('syntax validation is data authoring only; server network restrictions rema
  assert.throws(()=>normalizeUserVaultProvider({name:'Local',provider:'compatible',endpoint:local,token:'synthetic'},normalizeLopuProviderEndpoint),/HTTPS endpoint/);
  for(const endpoint of ['http://example.com','https://name:secret@example.com','https://example.com?token=secret','https://example.com#fragment'])assert.equal(normalizeLopuProviderEndpointSyntax(endpoint),null);
 });
+
+test('portable Console provider validation preserves explicit auth mode and canonical endpoint', () => {
+ const base = {name: 'Console', provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', token: 'synthetic-console-key'};
+ assert.equal(normalizeUserVaultProvider(base).provider, 'anthropic-api-key');
+ assert.equal(normalizeUserVaultProvider({...base, token: ''}).token, null);
+ assert.throws(() => normalizeUserVaultProvider({...base, endpoint: 'https://another.example'}), /require https/);
+ for (const token of ['sk-ant-oat-synthetic', ' synthetic-key', 'synthetic-key\n'])
+  assert.throws(() => normalizeUserVaultProvider({...base, token}), /Console API key/);
+ assert.equal(normalizeUserVaultProvider({...base, provider: 'anthropic', token: 'sk-ant-oat-synthetic'}).provider, 'anthropic');
+});

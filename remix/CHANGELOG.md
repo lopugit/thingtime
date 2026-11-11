@@ -146,7 +146,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-11-11: Integrate current main into the anonymous/local-first feature
-  branch, preserving new archive, Builder and attachment behavior. Record the
+  branch, preserving new archive, Builder and attachment behavior, plus explicit
+  Anthropic Console mode across local and remote vaults. Record the
   distinction between existing desktop bundled Nitro, hosted render activation
   and the remaining native web-bundle update/iOS runtime work.
   [Integration and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).

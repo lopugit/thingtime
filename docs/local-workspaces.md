@@ -7,9 +7,10 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
 
 ## Current integration checkpoint — 2026-11-11
 
-Fetched main `1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5` is reconciled into
-PR #1000's working tree, preserving newer Builder/archive/attachment behavior
-alongside local-first content and recovery. The canonical client/server build,
+Freshly fetched main through `0d8cf373344434d8341882db9a681ded3807c81e` is
+reconciled into PR #1000, including explicit Console connections alongside newer
+Builder/archive/attachment behavior and local-first recovery. The first
+integration of `1f5c09c` passed the canonical client/server build,
 full lint (zero errors, 368 warnings), raw TypeScript and zero-error ratchet pass.
 Built-manifest smoke checks pass 18 contracts. MCP checks pass 63 with three
 explicit opt-in skips; an initial parallel Node-wire timing failure passed in
@@ -26,11 +27,18 @@ Fresh sandboxed Chrome acceptance against the completed full-build draft bundle
 passes actual Render/Download controls, exact text and dependency-complete JSON,
 1440/390/320px captures and a 400×560 card crop, invalid JSON handling, opaque
 storage denial, reload clearing and zero API traffic. The final runner SHA-256
-is `64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5`.
+is `c1415d5d0945826eed52817fb5e915450335cab73568e7ca7cbc0279fef5d3d1`.
 The canonical JSON and all four PNGs match the earlier fixture byte for byte.
 [Current renderer evidence](../artifacts/anonymous-release-2026-11-11/main-integration-preview/README.md) ·
 [Detailed integration note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-Prior passes below remain scoped to their original source checkpoints.
+The final integration also passes build, full lint (zero errors, 369 warnings),
+raw TypeScript and 23 compiled contract checks. The zero-error TypeScript ratchet also passes.
+Focused API, transport, chat and encrypted vault regressions pass. The actual
+Secure Vault UI passed 1440/390/320px offline save, cold unlock, token-mode
+clearing and two synthetic remote capability checks.
+[Vault UI evidence](../artifacts/anonymous-release-2026-11-11/console-vault-ui/verification.json).
+Real provider authentication is separate. Prior passes below remain scoped to
+their original source checkpoints.
 
 The canonical hosted connection still has no render/export tool; fresh production
 discovery advertises `api.chatgpt-mcp` 2.2.0 without a rendering feature. Matching

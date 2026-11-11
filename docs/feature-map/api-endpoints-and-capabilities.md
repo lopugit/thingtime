@@ -1141,3 +1141,17 @@ selection and keeps preview/edit/shared execution inert. The account-local
 viewer accepts activation only for a freshly verified, synced page revision,
 and always dispatches automatic runs through the saved-account server route. See
 [Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
+
+## Anthropic Console API-key mode
+
+The additive saved-provider kind `anthropic-api-key` is published by
+`api.lopu-vault` 1.5.0 and `api.ai-models` 1.9.0, and consumed by
+`api.lopu-chats-reply` 1.23.0, `api.lopu-voice-reply` 1.5.0 and
+`api.ai-complete` 1.3.0. No route or permission was added. Existing `anthropic`
+records retain their original Claude Code runtime; Console keys never infer
+subscription access or fall back to platform billing. Both manifests derive
+these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
+The merged vault version also preserves encrypted offline workspaces and exact
+write acknowledgments from 1.4.0. Local and remote writers require a fresh token
+when switching between OAuth and Console modes; an existing saved credential
+cannot silently change meaning.

@@ -246,3 +246,25 @@ tabs and release only the task's own browser claims when finished.
 The web/Node transfer contract is portable. That is not evidence of an installed
 native provider, extension, OS clipboard or live third-party consent flow on
 every operating system. Record those platform/provider checks separately.
+
+## Anthropic Console API keys
+
+For personal Lopu access, select Settings → Secure Vault → AI provider connection
+→ **Anthropic Console API key**. Save an origin/account-matched Console key via
+the protected password input; never put it in an ordinary Thing or agent notes.
+The selected provider uses the official Anthropic Messages API at
+`https://api.anthropic.com`, with separate Console billing. Choose a model the
+Console account can use; the template catalog does not prove account entitlement.
+Select that saved connection in Lopu, verify a real reply, reload, and separately
+verify independent removal when testing multiple keys. Existing Claude Code
+OAuth records retain their original mode and cannot be reinterpreted as API keys.
+This path does not configure the shared administrator Claude runtime, enroll
+Claude.ai subscription access, or implement recording-analysis selection.
+
+The source contract is based on Anthropic's official
+[authentication](https://platform.claude.com/docs/en/manage-claude/authentication)
+and [TypeScript SDK](https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/typescript)
+documentation. The server SDK supplies Messages authentication/version headers;
+Thingtime disables environment auth, redirects and automatic SDK retries. Use a
+workspace-scoped Console key: non-workspace-scoped keys that require an
+`anthropic-workspace-id` header are outside this mode.

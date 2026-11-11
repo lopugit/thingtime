@@ -38,7 +38,12 @@ if (process.argv[2] !== '--worker') {
 		['attachment-upload-abort', 'attachments/uploads/abort', '1.4.0', ['POST']],
 		['attachment-annotate', 'attachments/annotate', '1.4.0', ['POST']],
 		['attachment-delete', 'attachments/delete', '1.9.0', ['POST']],
-		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']]
+		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']],
+		['lopu-vault', 'lopu/vault', '1.5.0', ['GET', 'POST']],
+		['ai-models', 'ai/models', '1.9.0', ['GET']],
+		['lopu-chats-reply', 'lopu/chats/reply', '1.23.0', ['POST']],
+		['lopu-voice-reply', 'lopu/voice/reply', '1.5.0', ['POST']],
+		['ai-complete', 'ai/complete', '1.3.0', ['POST']]
 	];
 	const readJson = async path => {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });

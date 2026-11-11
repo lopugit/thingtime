@@ -11,7 +11,7 @@ import type { ProviderVaultMetadataTransport } from './providerVault';
 /** Direct, same-origin vault requests: no diagnostics/history, origin fallback,
  * stored credential or inferred authority from the encrypted device copy. */
 export function accountProviderTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): ProviderVaultMetadataTransport & { write(command: UserVaultWrite, signal: AbortSignal): Promise<ReturnType<typeof parseUserVaultWriteAcknowledgment>> } {
- const request = async (body: Record<string, unknown>, signal: AbortSignal, minimumVersion = '1.3.0') => {
+ const request = async (body: Record<string, unknown>, signal: AbortSignal, minimumVersion = '1.4.0') => {
   lease.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
   const controller = new AbortController(), off = remote.onInvalidate(() => controller.abort());
   const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20_000)]);
@@ -37,7 +37,11 @@ export function accountProviderTransport(scope: Extract<WorkspaceScope, { kind: 
   } finally { off(); }
  };
  return { metadata: (signal) => request({ action: 'sync-metadata' }, signal),
-  write: async (command, signal) => parseUserVaultWriteAcknowledgment((await request({ action: 'sync-write', command: parseUserVaultWrite(command) }, signal, '1.4.0')).acknowledgment) };
+  write: async (command, signal) => {
+   const parsed = parseUserVaultWrite(command);
+   const minimum = parsed.action === 'save-provider' && parsed.provider === 'anthropic-api-key' ? '1.5.0' : '1.4.0';
+   return parseUserVaultWriteAcknowledgment((await request({ action: 'sync-write', command: parsed }, signal, minimum)).acknowledgment);
+  } };
 }
 
 // Existing metadata callers retain their public entry point.

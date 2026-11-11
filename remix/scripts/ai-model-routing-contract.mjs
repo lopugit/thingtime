@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
+  ['app/api/utils/ai/anthropicApiKey.ts', 'app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -141,3 +141,12 @@ assert.match(localGraphify, /OPENAI_BASE_URL=http:\/\/127\.0\.0\.1:4768\/v1/);
 assert.match(localGraphify, /GRAPHIFY_OPENAI_MODEL=codex-default/);
 
 console.log('application AI model routing contract: self-test OK');
+
+// Personal Console keys are a distinct owner-selected native transport, not
+// an alternate credential source for the platform/admin waterfall.
+const consoleClient = readFileSync(join(remixRoot, 'app/api/utils/ai/anthropicApiKey.ts'), 'utf8');
+assert.match(consoleClient, /validateAnthropicApiKey/);
+assert.match(consoleClient, /authToken: null/);
+assert.match(consoleClient, /maxRetries: 0/);
+assert.match(consoleClient, /logLevel: 'off'/);
+assert.doesNotMatch(consoleClient, /process\.env/);

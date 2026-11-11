@@ -2,7 +2,7 @@ export const LOPU_USER_VAULT_SYSTEM_TYPE = 'tt.lopuUserVault';
 export const LOPU_TRANSCRIPT_SYSTEM_TYPE = 'tt.lopuTranscriptPage';
 export const LOPU_USER_VAULT_SCHEMA_VERSION = 1;
 
-export type LopuProviderKind = 'anthropic' | 'openai' | 'google' | 'xai' | 'openrouter' | 'mistral' | 'deepseek' | 'groq' | 'cohere' | 'compatible';
+export type LopuProviderKind = 'anthropic' | 'anthropic-api-key' | 'openai' | 'google' | 'xai' | 'openrouter' | 'mistral' | 'deepseek' | 'groq' | 'cohere' | 'compatible';
 
 export type LopuProviderEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 export type LopuProviderSpeed = 'normal' | 'fast';
@@ -33,7 +33,7 @@ const CLAUDE_REASONING = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 const GOOGLE_REASONING = ['minimal', 'low', 'medium', 'high'] as const;
 const XAI_REASONING = ['low', 'medium', 'high', 'xhigh'] as const;
 
-export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
+const PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	{
 		id: 'openai',
 		label: 'OpenAI / Codex',
@@ -53,7 +53,7 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	},
 	{
 		id: 'anthropic',
-		label: 'Anthropic / Claude',
+		label: 'Claude Code OAuth (existing runtime)',
 		endpoint: 'https://api.anthropic.com',
 		tokenLabel: 'Claude Code OAuth token',
 		models: [
@@ -151,6 +151,18 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 	}
 ] as const;
 
+// Authentication mode is explicit saved data; never infer it from a token.
+export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = PROVIDER_TEMPLATES.flatMap((template) =>
+ template.id === 'anthropic' ? [{ ...template, id: 'anthropic-api-key' as const,
+  label: 'Anthropic Console API key', tokenLabel: 'Anthropic Console API key' }, template] : [template]
+);
+
+export const validateAnthropicApiKey = (value: string): string => {
+ if (!value.trim() || value !== value.trim() || /[\r\n]/.test(value) || value.startsWith('sk-ant-oat'))
+  throw new TypeError('Use an Anthropic Console API key for this connection, not a Claude Code setup token.');
+ return value;
+};
+
 const SAFE_ID = /^[A-Za-z0-9_-]{8,120}$/;
 
 export const boundedVaultText = (value: unknown, max: number): string | null => {
@@ -166,6 +178,7 @@ export const safeVaultId = (value: unknown): string | null => {
 
 export const normalizeLopuProviderKind = (value: unknown): LopuProviderKind | null =>
 	value === 'anthropic' ||
+	value === 'anthropic-api-key' ||
 	value === 'openai' ||
 	value === 'google' ||
 	value === 'xai' ||
@@ -257,6 +270,10 @@ export const normalizeUserVaultProvider = (
 ): UserVaultProviderFields => {
  const name = boundedVaultText(input.name, 120), provider = normalizeLopuProviderKind(input.provider), endpoint = endpointValidator(input.endpoint), token = validUserVaultValue(input.token);
  if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
+ if (provider === 'anthropic-api-key') {
+  if (endpoint !== 'https://api.anthropic.com') throw new Error('Anthropic Console connections require https://api.anthropic.com.');
+  if (token) validateAnthropicApiKey(token);
+ }
  if (input.token !== undefined && input.token !== null && input.token !== '' && !token) throw new Error('Provider token must be a bounded string.');
  const modelGiven = typeof input.model === 'string' && input.model.trim() !== '', model = modelGiven ? safeVaultModelId(input.model) : null;
  if (modelGiven && !model) throw new Error('Model id must be at most 200 characters of letters, digits, . _ : / @ or -.');

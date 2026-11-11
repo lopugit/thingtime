@@ -11,7 +11,7 @@ test('provider metadata sync uses direct bounded credential requests with exact 
  const previous = { window: globalThis.window, fetch: globalThis.fetch }, calls: { url: string; init: RequestInit }[] = [], events: string[] = [];
  let response = Response.json({ ok: true, ownerId: scope.ownerId, entries: [], nextCursor: null }), after: (() => void) | undefined;
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent: (event: Event) => { events.push(event.type); return true; } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-vault': { version: '1.3.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-vault': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); after?.(); return response;
  } });
  const bind = (confirmed = true) => { rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope, confirmed); return accountProviderMetadataTransport(scope, accountWorkspaceLease(scope)); };
@@ -53,4 +53,22 @@ test('provider writes negotiate their own contract and send immutable commands o
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { action:'sync-write',command,expectedOwnerId:scope.ownerId });
   assert.equal((calls[0].init.headers as Record<string,string>)['X-Thingtime-Expected-Data-Plane'],'home');
  } finally { Object.assign(globalThis, previous); rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(true, rootIdentity.read().generation); }
+});
+
+test('Console sync writes reject pre-composition vault contracts before sending credentials', async () => {
+ const previous = {window: globalThis.window, fetch: globalThis.fetch};
+ const writeOrigin = 'https://console-provider-transport.example', writeScope = {...scope, origin: writeOrigin};
+ const command = {action: 'save-provider' as const, id: 'fixture-provider', writeId: 'fixture-console-write', expectedVersion: null, name: 'Console', provider: 'anthropic-api-key' as const, endpoint: 'https://api.anthropic.com', token: 'synthetic-console-key', groupId: null};
+ const acknowledgment = {action: command.action, id: command.id, writeId: command.writeId, expectedVersion: null, resultVersion: 'vault-state-v1:'+'a'.repeat(64)};
+ let capability = '1.4.0', writes = 0;
+ Object.assign(globalThis, {window: {location: {origin: writeOrigin}, dispatchEvent: () => true}, fetch: async (url: string) => {
+  if (url.includes('capabilities')) return Response.json({schemaVersion: 1, origin: writeOrigin, features: {'api.lopu-vault': {version: capability}, 'api.mongodb-endpoint': {version: '1.1.0'}}});
+  writes++; return Response.json({ok: true, ownerId: scope.ownerId, acknowledgment});
+ }});
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, writeScope, true);
+  const transport = accountProviderMetadataTransport(writeScope, accountWorkspaceLease(writeScope));
+  await assert.rejects(transport.write(command, signal()), /incompatible/); assert.equal(writes, 0);
+  capability = '1.5.0'; assert.deepEqual(await transport.write(command, signal()), acknowledgment); assert.equal(writes, 1);
+ } finally {Object.assign(globalThis, previous); rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(true, rootIdentity.read().generation);}
 });

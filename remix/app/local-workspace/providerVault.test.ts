@@ -233,3 +233,19 @@ test('anonymous provider vaults can save and reopen more than 500 encrypted entr
   assert.deepEqual(await reopened.syncStatus(),[]);assert.deepEqual((await raw(f)).commands,[]);
  }finally{reopened?.dispose();await f.close();}
 });
+
+test('local Console mode changes require a fresh key and preserve encrypted OAuth state on refusal', async () => {
+ const f = await fixture();
+ try {
+  const saved = command('save-provider', {name: 'Claude', provider: 'anthropic', endpoint: 'https://api.anthropic.com', token: 'sk-ant-oat-synthetic'});
+  await f.vault.mutate(saved);
+  const before = await raw(f);
+  await assert.rejects(f.vault.mutate(command('save-provider', {name: 'Console', provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com'}, saved.id, 1)), /Supply a Console API key/);
+  assert.deepEqual(await raw(f), before);
+  await f.vault.mutate(command('save-provider', {name: 'Console', provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', token: 'synthetic-console-key'}, saved.id, 1));
+  const revealed = await f.vault.reveal(saved.id);
+  assert.equal((await f.vault.list()).entries.find(entry => entry.id === saved.id)?.provider, 'anthropic-api-key');
+  assert.equal(revealed.value, 'synthetic-console-key');
+  assert.doesNotMatch(JSON.stringify(await raw(f)), /synthetic-console-key|sk-ant-oat-synthetic/);
+ } finally { await f.close(); }
+});

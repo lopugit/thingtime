@@ -139,7 +139,10 @@ export class LocalProviderVault extends DeviceVaultSession {
    next = { kind: 'secret', ...normalizeUserVaultSecret(command) };
   } else if (command.action === 'save-provider') {
    if (current && current.kind !== 'provider') return fail('VAULT_KIND', 'Select a provider entry.', 400);
-   const normalized = normalizeUserVaultProvider(command), token = normalized.token ?? (current?.kind === 'provider' && !remoteOnly(current) ? current.token : null);
+   const normalized = normalizeUserVaultProvider(command);
+   if (normalized.provider === 'anthropic-api-key' && !normalized.token && current?.kind === 'provider' && current.provider !== normalized.provider)
+    return fail('VAULT_INPUT', 'Supply a Console API key when changing the connection type.', 400);
+   const token = normalized.token ?? (current?.kind === 'provider' && !remoteOnly(current) ? current.token : null);
    if (!token && current?.kind === 'provider' && remoteOnly(current)) {
     const { token: _token, ...metadata } = normalized;
     next = { kind: 'provider', remoteOnly: true, ...metadata };

@@ -1,8 +1,8 @@
 {
-  "observedAt": "2026-11-11T03:57:42.098Z",
+  "observedAt": "2026-11-11T04:21:56.661Z",
   "scope": "local merged-tree static native draft renderer; no hosted MCP or production activation",
   "chromiumSandbox": true,
-  "runnerSha256": "64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5",
+  "runnerSha256": "c1415d5d0945826eed52817fb5e915450335cab73568e7ca7cbc0279fef5d3d1",
   "policy": "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads",
   "viewports": [
     {
@@ -114,9 +114,9 @@
     }
   ],
   "sourceAssociation": {
-    "head": "8a454a0cadf6921ffa526aff5341d682cefcb94c",
-    "mergedMain": "1f5c09c08ae660ac0a1ce4e45bc4553860fc1cb5",
-    "state": "resolved integration working tree before merge commit; actual completed canonical full-build draft assets, no acceptance rebuild",
+    "head": "de28a6d9ac280efd69ad5d5b0eab70b3742697a7",
+    "mergedMain": "0d8cf373344434d8341882db9a681ded3807c81e",
+    "state": "second resolved integration working tree before merge commit; completed canonical full-build draft assets accepted without rebuilding",
     "files": {
       "remix/app/components/Kinds/HtmlThingRenderer.tsx": "fde2722e52d22460e1a53a3aa208463d7aecb8fe649758a868ce197126577bda",
       "remix/app/components/Builder/WebpageBlocksRenderer.tsx": "90ab6d6af957d42e248a62fb2005a2d732be67492b6c40d64c4a4d5658f0e218",
@@ -125,12 +125,19 @@
       "remix/vite.draft.config.ts": "add86e141fb94b50da86e62f9f4346aa576039c9c41ab93e0d0eed56ca207092"
     }
   },
-  "priorLocalAcceptance": {
-    "runnerSha256": "7bc124e916f882183bca7b6b8a6572c1e1aa4ceb5c94e000b0b3dd80fc031584",
-    "build": "standalone build:draft before full canonical build",
-    "ok": true
-  },
-  "outputComparison": "Canonical JSON and all four final PNGs byte-identical to previously visually inspected captures and final-preview reference.",
+  "priorLocalAcceptance": [
+    {
+      "runnerSha256": "7bc124e916f882183bca7b6b8a6572c1e1aa4ceb5c94e000b0b3dd80fc031584",
+      "build": "standalone build:draft before first canonical build",
+      "ok": true
+    },
+    {
+      "runnerSha256": "64f6dce473d4c38ee8750536ce985e28f718a1bab8f1d4601ed0d13adbb606b5",
+      "build": "first canonical full-build with main1f5c09c before merge commit de28a6d9a",
+      "ok": true
+    }
+  ],
+  "outputComparison": "Canonical JSON and all four final PNGs byte-identical to both prior 11-Nov runs and retained final-preview reference.",
   "visualInspection": {
     "desktop": true,
     "mobile390": true,
