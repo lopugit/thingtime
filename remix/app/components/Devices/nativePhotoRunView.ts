@@ -164,7 +164,7 @@ const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string
 export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['backgroundRequest'], reason?: NativePhotoRunActivity['reason']) {
 	switch (status) {
 		case 'active': return 'Background processing requested for this backup.';
-		case 'declined': return 'iOS didn’t start background processing. You can keep Thingtime open or try again.';
+		case 'declined': return 'iOS didn’t start continued processing. Automatic backup will retry when iOS allows.';
 		case 'waiting': return reason === 'interrupted' ? 'iOS ended this background session. Automatic backup will retry.' :
 			'This backup is waiting for its saved transfer conditions.';
 		case 'complete': return 'This backup check has finished.';
@@ -179,24 +179,29 @@ const captureTime = new Intl.DateTimeFormat(undefined, { timeStyle: 'medium' });
 const discoveryLabel = (item: NonNullable<NativePhotoRunActivity['latestFound']>, index?: number) =>
 	`Found ${index === undefined ? 'a ' + item.kind : index === 1 ? '1 ' + item.kind : item.kind + ' ' + index.toLocaleString()}${item.capturedAt ? ` taken at ${captureTime.format(new Date(item.capturedAt))}` : ''}`;
 
-export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false) {
+export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = false, reserve = false) {
 	const activity = view?.progress?.activity;
-	if (!view?.progress || !activity || view.previousRevision) return undefined;
+	if (!view?.progress || !activity || view.previousRevision) return reserve ? {
+		phase: paused ? 'Paused' : nativePhotoRunLabel(view), reason: 'No additional details reported.', indexed: 'Not reported yet', indexing: 'Index progress not reported yet',
+		latestFound: 'Latest discovery not reported yet', prepared: 'Not reported yet', backlog: 'Not reported yet',
+		downloadLabel: 'iCloud download progress not reported', downloadPercent: undefined, events: []
+	} : undefined;
 	const { continuation } = view.progress;
 	const phase = paused ? 'Paused' : continuation === 'held' ? 'Background processing stopped' : phaseLabels[activity.phase];
 	const { indexed, indexing, latestFound, prepared, backlogOriginals: backlog } = activity;
 	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction ?? activity.cloudPreparationFraction : undefined;
 	return {
 		phase: view.stale ? `Last reported · ${phase}` : phase,
-		reason: activity.reason ? reasonLabels[activity.reason] : '',
-		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : '',
+		reason: activity.reason ? reasonLabels[activity.reason] : 'No additional details reported.',
+		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : 'Not reported yet',
 		indexing: !paused && !view.stale && activity.phase === 'indexing' && indexing ?
-			`${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : '',
+			`${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : 'Index progress not reported for this phase',
 		latestFound: !paused && !view.stale && activity.phase === 'indexing' && latestFound ?
-			discoveryLabel(latestFound, indexed?.[latestFound.kind === 'photo' ? 'photos' : 'videos']) : '',
-		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : '',
-		backlog: backlog === undefined ? '' : count(backlog, 'original'),
+			discoveryLabel(latestFound, indexed?.[latestFound.kind === 'photo' ? 'photos' : 'videos']) : 'Latest discovery not reported for this phase',
+		prepared: prepared ? `${prepared.completed.toLocaleString()} of ${prepared.total.toLocaleString()}` : 'Not reported yet',
+		backlog: backlog === undefined ? 'Not reported yet' : count(backlog, 'original'),
 		downloadPercent: fraction === undefined ? undefined : Math.floor(fraction * 100),
+		downloadLabel: fraction === undefined ? 'iCloud download progress not reported' : `Current iCloud download · ${Math.floor(fraction * 100)}%`,
 		events: activity.events?.map(({ phase, at, item, discovered }, index) => ({
 			id: `${at}:${phase}:${index}`, label: item && discovered ? `${discoveryLabel(item)} · item ${discovered.toLocaleString()}` : phaseLabels[phase],
 			at, time: eventTime.format(new Date(at))
@@ -212,14 +217,15 @@ export function nativePhotoRunGlance(view?: NativePhotoRunView) {
 	const uploading = progress?.stage === 'uploading' && (!progress.activity || progress.activity.phase === 'uploading');
 	const rate = view?.stale || progress?.uploadBytesPerSecond === undefined || !uploading || progress.continuation === 'held' ? 'Upload speed unavailable' :
 		`${(progress.uploadBytesPerSecond / 125_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} Mbps live`;
-	if (!confirmed) return { ...base, upload: { ...base.upload, rate, progress: 'Progress unavailable' } };
+	if (!confirmed) return { ...base, upload: { ...base.upload, rate, progress: 'Progress unavailable',
+		bytes: 'Transfer traffic not reported', remaining: 'Network totals not reported', operations: 'Confirmed counts not reported' } };
 	const { photos, videos, other, wifiBytes, mobileBytes, unknownBytes } = confirmed;
 	const totalBytes = BigInt(wifiBytes) + BigInt(mobileBytes) + BigInt(unknownBytes);
 	const file = !progress.activity || uploading ? progress.currentFile : undefined;
 	return { ...base, upload: {
 		...base.upload,
 		rate,
-		progress: file ? `Current original: ${bytes(file.sentBytes)} of ${bytes(file.totalBytes)} sent` : '',
+		progress: file ? `Current original: ${bytes(file.sentBytes)} of ${bytes(file.totalBytes)} sent` : 'Current original not reported',
 		bytes: `${formatSyncBytes(String(totalBytes))} transfer traffic`,
 		remaining: `Wi-Fi ${bytes(wifiBytes)} · Mobile data ${bytes(mobileBytes)}${unknownBytes ? ` · Network unknown ${bytes(unknownBytes)}` : ''}`,
 		operations: `${photos.toLocaleString()} ${photos === 1 ? 'photo' : 'photos'} · ${videos.toLocaleString()} ${videos === 1 ? 'video' : 'videos'}${other ? ` · ${other.toLocaleString()} other` : ''} confirmed`
