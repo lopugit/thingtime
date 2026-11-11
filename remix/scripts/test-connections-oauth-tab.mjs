@@ -52,6 +52,7 @@ try {
     let begins = 0, callbacks = 0, linked = false, holdList, listStarted, listFinished, pendingNamed;
     const savedLayouts = new Map();
     const namedRows = [];
+    let activeCapabilitiesOld = true;
     const account = (name, id) => ({ id: id + '-link', provider: 'facebook-account', providerName: 'Facebook', contentVisibility: 'personal', account: { id, displayName: name, handle: id } });
     const pageErrors = [];
     context.on('page', page => page.on('pageerror', error => pageErrors.push(error.message)));
@@ -64,15 +65,19 @@ try {
           body: `<a href="${origin}${callbackPath}?code=fixture-code">Continue</a> <a href="${origin}${callbackPath}?error=access_denied">Decline</a>`
         });
       }
-      if (url.origin !== origin && !(url.origin === selectedOrigin && url.pathname.endsWith('thingtime-capabilities.json'))) return route.abort();
-      if (url.pathname.endsWith('thingtime-capabilities.json')) {
+      if (url.origin !== origin && !(url.origin === selectedOrigin && (url.pathname.endsWith('thingtime-capabilities.json') || url.pathname === '/api/v1/capabilities'))) return route.abort();
+      if (url.pathname.endsWith('thingtime-capabilities.json') || url.pathname === '/api/v1/capabilities') {
         const features = Object.fromEntries(['connections', 'connections-providers', 'connections-filters', 'connections-oauth-begin'].map(name => ['api.' + name, { version: '2.0.0' }]));
         Object.assign(features, {
-          'api.connections': { version: '2.2.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.2.0' },
+          'api.connections': { version: '2.3.0' }, 'api.connections-unlink': { version: '2.1.0' }, 'api.connections-oauth-begin': { version: '2.2.0' },
           'api.connections-oauth-callback': { version: '2.2.0' }, 'api.connections-provider-icon': { version: '1.0.0' }, 'api.connections-named': { version: '1.1.0' },
           'api.mongodb-endpoint': { version: '1.1.0' }, 'api.webpages-resolve': { version: '1.6.0' },
           'api.actions-run': { version: '1.7.0' }, 'api.things': { version: '1.36.0' }
         });
+        if (url.pathname === '/api/v1/capabilities') return json(route, { ok: true, schemaVersion: 1, features: {
+          ...Object.fromEntries(Object.entries(features).map(([id, feature]) => [id, feature.version])),
+          ...(activeCapabilitiesOld ? { 'api.connections': '2.2.0', 'api.connections-named': '1.0.0' } : {})
+        } });
         return json(route, { schemaVersion: 1, origin: url.origin, features });
       }
       if (url.pathname === '/connection-provider-fallback.svg') return route.fulfill({ path: join(root, 'public/connection-provider-fallback.svg'), contentType: 'image/svg+xml' });
@@ -181,7 +186,14 @@ try {
       const page = await context.newPage();
       page.setDefaultTimeout(12000);
       const initial = origin + '/connections?keep=1';
+      const olderProxyList = page.waitForResponse(response => new URL(response.url()).pathname === endpoint && !new URL(response.url()).searchParams.has('includeNamed'));
       await page.goto(initial);
+      await olderProxyList;
+      assert.equal(await page.locator('[data-settings-document="named-auth-connections"]').count(), 0, 'A newer frontend must not enable named actions against an older API proxy');
+      await page.screenshot({ path: join(evidence, label + '-older-proxy-unavailable.png'), fullPage: true });
+      activeCapabilitiesOld = false;
+      await page.reload();
+      await page.getByRole('button', { name: 'Add named connection', exact: true }).waitFor();
       const signIn = page.getByRole('button', { name: /Default sign-in with Facebook/ });
       await signIn.waitFor().catch(async error => {
         await writeFile(join(evidence, label + '-initial-failure.json'), JSON.stringify({ pageErrors, text: await page.locator('body').innerText() }));

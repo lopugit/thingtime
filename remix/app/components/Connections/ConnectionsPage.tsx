@@ -16,8 +16,8 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { ConnectionProviderIcon } from './ConnectionProviderIcon';
 import { connectionIconUrl, CONNECTION_ICON_FEATURE, CONNECTION_ICON_VERSION } from '~/connections/providerIcons';
 import { NamedConnectionPanel } from './NamedConnectionPanel';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
-import { NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, type NamedConnectionInput } from '~/connections/namedAccess';
+import { requireActiveThingtimeCapability, requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { NAMED_CONNECTION_REQUIREMENTS, type NamedConnectionInput } from '~/connections/namedAccess';
 import { linkedConnectionBlocks, providerCatalogBlocks } from './providerCatalogBlocks';
 import { oauthPendingBlocks } from './oauthPendingBlocks';
 import { notifyConnectionOAuthReturn, openConnectionOAuthTab } from './oauthTab.client';
@@ -173,7 +173,9 @@ function ConnectionsSession({ origin, apiOrigin, native, ownerId, dataPlane, sco
     ];
     if (ownerId) {
       const options = { signal, expectedActor: ownerId, expectedApiOrigin: apiOrigin, expectedDataPlane: dataPlane };
-      pending.push(requireThingtimeCapability(NAMED_CONNECTION_FEATURE, NAMED_CONNECTION_VERSION, apiOrigin)
+      pending.push(Promise.all(Object.entries(NAMED_CONNECTION_REQUIREMENTS).flatMap(([feature, version]) => [
+        requireThingtimeCapability(feature, version, apiOrigin), requireActiveThingtimeCapability(feature, version, apiOrigin)
+      ]))
         .then(() => true, () => false).then(includeNamed => {
           if (!active()) return null;
           setNamedAvailable(includeNamed);

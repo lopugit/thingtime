@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Require both frontend and same-origin active API capabilities for
+  named Google actions; keep newer previews unavailable against older shared
+  handlers, and distinguish service projection 2.3 from Facebook metadata 2.2.
+  **Codex (AI)**
+
 - 2026-11-11: Add explicitly scoped Google service reads to named connections,
   with document IDs, opaque pagination, complete redacted JSON, editable action
   controls and compatible older-client projections. Real provider acceptance

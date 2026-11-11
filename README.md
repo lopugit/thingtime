@@ -7030,7 +7030,7 @@ do not limit how many named connections Thingtime saves.
 
 The **Use a saved connection** picker calls a fixed server operation using
 the selected ID. Current API clients negotiate `api.connections-named` 1.1,
-Connections management 2.2, and OAuth begin/callback 2.2 before using expanded
+Connections management 2.3, and OAuth begin/callback 2.2 before using expanded
 Google actions. They explicitly request `includeServiceOperations=1` when
 listing named grants; older clients retain their original operation-ID projection. Credentials and
 arbitrary provider requests are never returned or accepted by that contract.

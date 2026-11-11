@@ -1120,7 +1120,7 @@ test('private MongoDB connection inventory is registered with matching independe
 test('owner-private connections publish their breaking vault contract on both manifests and all active routes', () => {
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const manifest = thingtimeCapabilityManifest('https://connections.example');
-  const versions = { connections: '2.2.0', 'connections-providers': '2.0.0', 'connections-unlink': '2.1.0',
+  const versions = { connections: '2.3.0', 'connections-providers': '2.0.0', 'connections-unlink': '2.1.0',
     'connections-feed': '2.0.1', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.2.0',
     'connections-oauth-callback': '2.2.0', 'connections-named': '1.1.0' };
   for (const [id, version] of Object.entries(versions)) {
@@ -1224,7 +1224,7 @@ test('Console API-key mode is independently negotiated on both origin manifests'
 test('Google service clients require the additive named-action and consent contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://connections.example');
   for (const [feature, version, previous] of [
-    ['api.connections', '2.2.0', '2.1.0'],
+    ['api.connections', '2.3.0', '2.2.0'],
     ['api.connections-named', '1.1.0', '1.0.0'],
     ['api.connections-oauth-begin', '2.2.0', '2.1.0'],
     ['api.connections-oauth-callback', '2.2.0', '2.1.0']

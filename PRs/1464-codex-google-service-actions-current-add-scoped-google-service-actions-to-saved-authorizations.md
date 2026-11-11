@@ -37,3 +37,13 @@ did not produce a current snapshot on the overloaded host; source/docs semantic
 freshness is not claimed. Parent owns real Google consent/action acceptance and
 private lifecycle reporting because the gateway cannot adopt the legacy task
 binding without duplicates.
+
+
+Compatibility correction: the actual immutable Vercel preview now exists, but its
+modern and gateway-routed API manifests disagree. It is not accepted as a
+working service backend. The client now requires the actual same-origin API
+contract as well as the modern manifest. The fixed active-API checker refuses
+the real named 1.1/frontend versus named 1.0/API mismatch. Connections service
+projection requires 2.3, distinct from PR #1470's Facebook metadata 2.2. Unit/manifest
+batch: 110 passing; desktop/phone mismatch/coherent fixture passed. Required
+checks and final integration still apply to the new pushed source.

@@ -15856,3 +15856,11 @@ selected Google grant: Drive/Gmail/Calendar/Contacts first and next pages; Docs
 and Sheets known IDs. Verify a foreign ID, missing scope, consent cancellation,
 expired-token refresh and removal/reconnect isolation without changing siblings.
 Enable the service API in the authorized Google Cloud project before calling it.
+
+
+Google service compatibility regression: serve a newer frontend manifest and an
+older proxied `/api/v1/capabilities` at the same selected origin. Named service
+actions must stay unavailable, without following foreign authority URLs. After
+coherent API contracts are served, resource reads and opaque next-page actions
+must work. Also reject a metadata-only Connections 2.2 server for service
+projection, which requires 2.3. Retain both actual preview manifests separately.

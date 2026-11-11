@@ -7,7 +7,7 @@ connection under “Use a saved connection”. Existing authorizations do not ga
 new operations automatically: reconnect the same external identity and explicitly
 allow the operation. Removing one authorization preserves its siblings.
 
-The client requires selected-origin `api.connections` 2.2.0 and `api.connections-named` 1.1.0 and compatible
+The client requires selected-origin `api.connections` 2.3.0 and `api.connections-named` 1.1.0 and compatible
 `api.connections-oauth-begin` / `api.connections-oauth-callback` 2.2.0 before
 starting the expanded flow. Both capability manifests derive these versions
 from the canonical endpoint registry in `apiDocs.ts`.
@@ -87,7 +87,35 @@ acceptance independently.
 
 
 Compatibility: current clients explicitly request `includeServiceOperations=1`
-with `includeNamed=1` after negotiating Connections 2.2.0. Older named clients
+with `includeNamed=1` after negotiating Connections 2.3.0. Older named clients
 receive only original identity/profile/email operation IDs, avoiding crashes in
 their exhaustive label maps. This is a read projection; stored grant permissions
 and exact-action authorization remain unchanged.
+
+
+## Active API compatibility
+
+The shared bounded capability checker has a fixed `active-api` source that reads
+`/api/v1/capabilities` at the same selected origin used by API calls. Connections
+requires both the modern origin manifest and this active API contract before
+showing named service actions. Requests omit credentials, reject redirects and
+contradictory origins/endpoints, and keep the canonical timeout, cache/retry and
+selected-transport fences. No manifest-provided authority URL is fetched.
+
+The registered API capability contract has a flat feature-version map. Its
+legacy schema binds to the fixed request URL/transport; an optional explicit
+origin must agree. A newer frontend with an older proxied API remains unavailable.
+Connections 2.3.0 specifically guarantees service-operation projection; the
+independent Facebook metadata addition at 2.2.0 does not satisfy it.
+
+Concrete preview regression: immutable deployment
+https://thingtime-dq1cf6p3i-lopugits-projects.vercel.app advertised modern
+Connections 2.2 / named 1.1 / OAuth 2.2, while its active API manifest returned
+Connections 2.1 / named 1.0 / OAuth 2.1 from the configured development authority.
+The new checker was exercised against this actual mismatch at
+2026-11-11T06:19:52Z: modern named 1.1 passed and active named 1.0 was refused.
+Raw manifests and the refusal receipt are retained under
+`/Users/lopu/.codex-2/artifacts/oauth-release-batch/`. This is fail-closed
+compatibility evidence, not successful Google provider acceptance. The isolated
+fixture separately verifies mismatch refusal and a coherent API at desktop and
+phone sizes, followed by normal service operations.
