@@ -11,6 +11,9 @@
   390px: typed save/readback, invalid-input refusal, order, nested field and toolbar
   edits, saved layout reload, search focus, source/history reveal/hide, attachment
   rows, zero generic Action calls/page errors and no horizontal overflow.
+  Additional actual-component checks verify blur/focus masking, lock cleanup,
+  account-switch clearing and refusal of stale positional bindings after a JSON
+  key reorder; the whole structured value remains unchanged by the stale edit.
 - 60 focused regressions passed; 31 final layout/renderer/settings regressions
   passed. Typecheck ratchet zero errors. Full Remix lint zero errors, 452 warnings.
 - Evidence: `/Users/lopu/.codex-2/artifacts/password-editor-current`.
@@ -20,5 +23,6 @@
   remain separate from the route-backed synthetic browser fixture.
 - Graph hooks and union driver were verified. A 60-second single-worker wrapper
   update reached 200/4626 uncached AST files before bounded cancellation on the
-  overloaded host. Prior immutable snapshots were preserved; docs were not newly
-  semantically indexed. No ongoing graph process or duplicate chat was created.
+  overloaded host. A review query subsequently completed a structural snapshot
+  for reviewed source; final snapshot status is included in PR validation. Docs
+  were not newly semantically indexed. No duplicate chat was created.

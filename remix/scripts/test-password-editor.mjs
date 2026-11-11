@@ -28,7 +28,7 @@ try {
   for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]]) {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
     const layouts = new Map(), errors = [], genericActions = [];
-    let entry = structuredClone(original), revision = 1, saves = 0;
+    let entry = structuredClone(original), revision = 1, saves = 0, currentOwner = ownerId;
     const metadata = () => ({ id, revision, title: entry.title, passwordType: entry.passwordType, updatedAt: '2026-11-11T00:00:00Z' });
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
@@ -45,7 +45,8 @@ try {
       }
       if (url.pathname === '/api/v1/passwords') {
         const body = route.request().method() === 'POST' ? route.request().postDataJSON() : undefined;
-        if (!body) return route.fulfill({ json: { ok: true, ownerId, configured: true, entries: [metadata()], nextCursor: null } });
+        if (!body) return route.fulfill({ json: { ok: true, ownerId: currentOwner, configured: true, entries: currentOwner === ownerId ? [metadata()] : [], nextCursor: null } });
+        if (currentOwner !== ownerId) return route.fulfill({ json: { ok: true, ownerId: currentOwner, files: [], settings: { window: '5-minutes', revision: 1, reuseRecentDeviceVerification: false } } });
         assert.equal(body.expectedOwnerId, ownerId);
         if (body.operation === 'read') return route.fulfill({ json: { ok: true, ownerId, id, revision, entry } });
         if (body.operation === 'save') { entry = body.entry; revision++; saves++; return route.fulfill({ json: { ok: true, ownerId, record: metadata() } }); }
@@ -119,11 +120,46 @@ try {
       assert.equal(await source.getByLabel('Previous password', { exact: true }).inputValue(), 'synthetic-history-only');
       await source.getByRole('button', { name: 'Hide previous password', exact: true }).click();
       await page.locator('[data-settings-document="password-attachments"]').getByText('fixture-document.txt', { exact: true }).waitFor();
+      const password = editor.getByLabel('Password', { exact: true });
+      await editor.getByRole('button', { name: 'Show Password', exact: true }).click();
+      assert.equal(await password.getAttribute('type'), 'text');
+      await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+      assert.equal(await password.getAttribute('type'), 'password'); assert.equal(await password.inputValue(), '');
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      assert.equal(await password.inputValue(), 'synthetic-fixture-only');
+      // An old positional property binding must not edit a reshaped JSON draft.
+      const city = editor.getByLabel('Property: City', { exact: true });
+      const staleBinding = await city.getAttribute('data-tt-action-inputs');
+      await editor.getByRole('button', { name: 'Edit JSON', exact: true }).click();
+      await editor.getByLabel('Address', { exact: true }).fill(JSON.stringify({ country: 'AU', city: 'New town', unknown: { enabled: true, count: 7.5 }, list: ['one', 'two'] }));
+      await editor.getByRole('button', { name: 'Edit individual properties', exact: true }).click();
+      const freshBinding = await city.getAttribute('data-tt-action-inputs');
+      assert.notEqual(staleBinding, freshBinding);
+      await city.evaluate((el, binding) => el.setAttribute('data-tt-action-inputs', binding), staleBinding);
+      await city.fill('stale-binding-must-not-apply');
+      await page.getByRole('button', { name: 'Save entry', exact: true }).click();
+      await page.waitForTimeout(100);
+      assert.deepEqual(JSON.parse(entry.fields.find(field => field.id === 'address').value), { country: 'AU', city: 'New town', unknown: { enabled: true, count: 7.5 }, list: ['one', 'two'] });
+      await city.evaluate((el, binding) => el.setAttribute('data-tt-action-inputs', binding), freshBinding);
+      await city.fill('New town');
+      await page.evaluate(() => window.dispatchEvent(new Event('thingtime:hide-vault-values')));
+      await editor.waitFor({ state: 'hidden' });
+      assert.equal(await page.locator('[data-tt-private-control]').count(), 0);
+      await page.getByRole('button', { name: /Imported fixture/ }).click();
+      await editor.getByLabel('Password', { exact: true }).waitFor();
+      currentOwner = 'password-editor-other-fixture';
+      await page.evaluate(owner => window.changeFixturePasswordOwner(owner), currentOwner);
+      await editor.waitFor({ state: 'hidden' });
+      assert.equal(await page.locator('[data-tt-private-control]').count(), 0);
+      currentOwner = ownerId;
+      await page.evaluate(owner => window.changeFixturePasswordOwner(owner), currentOwner);
+      await page.getByRole('button', { name: /Imported fixture/ }).click();
+      await editor.getByLabel('Password', { exact: true }).waitFor();
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
       await page.screenshot({ path: join(evidence, label + '.png'), fullPage: true });
       assert.equal(genericActions.length, 0); assert.deepEqual(errors, []);
-      await writeFile(join(evidence, label + '.json'), JSON.stringify({ saves, layoutKeys: [...layouts.keys()], genericActions: 0, pageErrors: errors, sourceAndAttachmentsPreserved: true, width }, null, 2));
+      await writeFile(join(evidence, label + '.json'), JSON.stringify({ saves, layoutKeys: [...layouts.keys()], genericActions: 0, pageErrors: errors, sourceAndAttachmentsPreserved: true, blurLockAccountSwitchAndStaleBindings: true, width }, null, 2));
       console.log(label + ': structured save/readback, order, nested Builder persistence and privacy passed');
     } catch (error) { await writeFile(join(evidence, label + '-failure.txt'), await page.locator('body').innerText()); await page.screenshot({ path: join(evidence, label + '-failure.png'), fullPage: true }); console.error('Page errors', errors); throw error; } finally { await context.close(); }
   }
