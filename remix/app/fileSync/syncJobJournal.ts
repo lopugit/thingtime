@@ -9,6 +9,8 @@ import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
 import { syncScopeKey, type SyncScope } from './reconcile';
 import { INVENTORY_PIN_STORE, inventoryIdentity, type InventoryIdentity } from './inventoryJournal';
+import { DEVICE_SYNC_HISTORY_STORE } from './deviceSyncHistoryJournal';
+import { EMPTY_SETUP_EXECUTION_STORES, confirmEmptySetupExecution, recoverableEmptyBackupSetup, setupRecoveryHistoryKey, type FolderSetupRecoveryReceipt } from './folderSetupRecovery';
 
 const STORE = 'sync-admitted-jobs';
 export const SYNC_JOB_PAGE_SIZE = 32;
@@ -161,6 +163,17 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		}).then(value => value ? changed(value) : value);
 	return {
 		read,
+		setupRecovery: (id: string, revision: number) => bound.transaction<FolderSetupRecoveryReceipt | null>([DEVICE_SYNC_HISTORY_STORE], 'readonly', (tx, done, fail) => {
+			const request = tx.objectStore(DEVICE_SYNC_HISTORY_STORE).get(setupRecoveryHistoryKey(bound.key, id, revision));
+			request.onsuccess = () => { try {
+				const row = request.result as FolderSetupRecoveryReceipt | undefined;
+				if (!row) { done(null); return; }
+				const previous = validate(row.previous), replacement = canonical(row.replacement, bound.scope);
+				if (row.version !== 1 || previous.key !== bound.key || previous.id !== id || previous.revision !== revision || !Number.isSafeInteger(row.at) || row.at < 0)
+					throw Error('Saved setup recovery evidence changed.');
+				done({ version: 1, previous, replacement, at: row.at });
+			} catch (cause) { fail(cause); } };
+		}),
 		/** This attempt may defer only its own unchanged runnable admission. Stop,
 		 * reapproval and a newer attempt all win through the existing revision CAS. */
 		defer: (expected: SyncJob, now: number, delay = SYNC_RETRY_DELAY_MS, wait?: { reason: SyncWaitReason; retryAt?: number; minimumPartBytes?: number }, automaticPhoto = false) => change(expected, current => {
@@ -236,8 +249,9 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			};
 		}),
 		admit: (saved: SavedFileSyncConfiguration, id: string, intervalMs?: number,
-			photoSettings?: { previous: SyncJob | null; transfers: PreviousPhotoSettings }, automatic?: { previous: SyncJob | null }, enrollment?: { previous: SyncJob | null; pendingFolderValidation?: true }) =>
-			bound.transaction<SyncJob>([STORE, INVENTORY_PIN_STORE, ...(photoSettings ? PHOTO_SETTINGS_STORES : [])], 'readwrite', (tx, done, fail) => {
+			photoSettings?: { previous: SyncJob | null; transfers: PreviousPhotoSettings }, automatic?: { previous: SyncJob | null }, enrollment?: { previous: SyncJob | null; pendingFolderValidation?: true; recoverEmptyBackupSetup?: true }) =>
+			bound.transaction<SyncJob>([...new Set([STORE, INVENTORY_PIN_STORE, ...(photoSettings ? PHOTO_SETTINGS_STORES : []),
+				...(enrollment?.recoverEmptyBackupSetup ? [DEVICE_SYNC_HISTORY_STORE, ...EMPTY_SETUP_EXECUTION_STORES] : [])])], 'readwrite', (tx, done, fail) => {
 				const reviewed = canonical(saved, bound.scope), store = tx.objectStore(STORE), request = store.get(bound.key);
 				request.onsuccess = () => {
 					try {
@@ -250,13 +264,16 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 						const unfinished = previous && previous.state !== 'complete' && !previous.folderSetupPaused && previous.nextRunAt === undefined;
 						const policyChanged = !!unfinished && JSON.stringify(previous.reviewed.configuration) !== JSON.stringify(reviewed.configuration);
 						const replacingPhotos = !!photoSettings && !!previous && backupSettingsChanged(previous.reviewed, reviewed);
+						const recoveringSetup = enrollment?.recoverEmptyBackupSetup === true;
+						if (recoveringSetup && (!recoverableEmptyBackupSetup(previous, reviewed, bound.scope, intervalMs) || photoSettings || automatic))
+							throw new SyncJobConfigurationChanged();
 						if (photoSettings && !replacingPhotos && !Object.values(photoSettings.transfers).some(transfer => transfer.park))
 							throw new SyncJobConfigurationChanged();
-						if (policyChanged && previous.state !== 'paused' && !replacingPhotos) throw new SyncJobConfigurationChanged();
+						if (policyChanged && previous.state !== 'paused' && !replacingPhotos && !recoveringSetup) throw new SyncJobConfigurationChanged();
 						const resume = unfinished && !policyChanged && !photoSettings;
 						const sameReviewed = resume && JSON.stringify(previous.reviewed) === JSON.stringify(reviewed);
 						const repeat = intervalMs ?? (previous && (syncJobEnabled(previous) || previous.state === 'attention') ? previous.intervalMs : undefined);
-						const job = validate({ version: 1, key: bound.key, id: resume ? previous.id : id,
+						const job = validate({ version: 1, key: bound.key, id: resume || recoveringSetup ? previous!.id : id,
 							revision: (previous?.revision ?? 0) + 1, scope: bound.scope, reviewed, state: 'runnable',
 							...(repeat === undefined ? {} : { intervalMs: repeat }),
 								...(enrollment?.pendingFolderValidation ? { pendingFolderValidation: true as const } : {}),
@@ -264,7 +281,13 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 							...(sameReviewed && previous.localImport ? { localImport: previous.localImport } : {}),
 							...(sameReviewed && previous.nativeCaptureId ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
 						const commit = () => { bound.check(); pinImport(tx, previous, job); store.put(job); done(job); };
-						if (photoSettings) parkPhotoSettings(tx, bound.scope, bound.key, reviewed.configuration, photoSettings.transfers, replacingPhotos, commit, fail);
+						if (recoveringSetup) confirmEmptySetupExecution(tx, bound.key, ranges, () => {
+							bound.check();
+							const receipt: FolderSetupRecoveryReceipt = { version: 1, previous: structuredClone(previous!), replacement: reviewed, at: Date.now() };
+							tx.objectStore(DEVICE_SYNC_HISTORY_STORE).add(receipt, setupRecoveryHistoryKey(bound.key, previous!.id, previous!.revision));
+							commit();
+						}, fail);
+						else if (photoSettings) parkPhotoSettings(tx, bound.scope, bound.key, reviewed.configuration, photoSettings.transfers, replacingPhotos, commit, fail);
 						else commit();
 					} catch (error) { fail(error); }
 				};

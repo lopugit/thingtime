@@ -8,19 +8,31 @@ final class MobileDeviceRedirectPolicy: NSObject, URLSessionTaskDelegate {
 
 @MainActor
 final class MobileDeviceBridge {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.devicePairingVersion = '1.1.0';",
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.devicePairingVersion = '1.2.0';",
                                      injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var requestId: String?
     private var requestScope: MobileDevicePairing.Scope?
     private var cancellationReply: (() -> Void)?
+    private struct PendingStatus {
+        let id: String
+        let scope: MobileDevicePairing.Scope
+        let start: () -> Void
+        let cancel: () -> Void
+    }
+    private var pendingStatuses: [PendingStatus] = []
     private var observer: NSObjectProtocol?
     private let session: URLSession
     private let location: MobileDeviceLocation
+    private let engineFactory: ((@escaping () throws -> Void) -> MobileDevicePairing)?
+    private let foreground: () -> Bool
     convenience init() { self.init(location: .shared) }
-    init(location: MobileDeviceLocation) {
+    init(location: MobileDeviceLocation,
+         engineFactory: ((@escaping () throws -> Void) -> MobileDevicePairing)? = nil,
+         foreground: @escaping () -> Bool = { UIApplication.shared.applicationState == .active }) {
         self.location = location
+        self.engineFactory = engineFactory; self.foreground = foreground
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil; configuration.urlCredentialStorage = nil; configuration.httpShouldSetCookies = false
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
@@ -31,8 +43,10 @@ final class MobileDeviceBridge {
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; session.invalidateAndCancel(); task?.cancel() }
     func suspend() {
         let reply = cancellationReply; cancellationReply = nil
+        let waiting = pendingStatuses; pendingStatuses.removeAll()
         generation = UUID(); task?.cancel(); task = nil; requestId = nil; requestScope = nil
         reply?()
+        waiting.forEach { $0.cancel() }
     }
 
     func handle(_ body: [String: Any], webView: WKWebView, root: URL,
@@ -55,9 +69,37 @@ final class MobileDeviceBridge {
                 return
             }
         }
-        if action == "suspend" { if requestId == id { suspend() }; return }
+        if action == "suspend" {
+            if let index = pendingStatuses.firstIndex(where: { $0.id == id && $0.scope == scope }) {
+                pendingStatuses.remove(at: index).cancel()
+            } else if requestId == id && requestScope == scope {
+                let cancelled = cancellationReply; cancellationReply = nil
+                generation = UUID(); task?.cancel(); task = nil; requestId = nil; requestScope = nil
+                cancelled?()
+                startNextStatus()
+            }
+            return
+        }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
-        guard task == nil else { reply("mobile-device-result", base.merging(["error": "Another device request is still running. Try again shortly."]) { _, new in new }); return }
+        if task != nil {
+            // A status must make its own fresh authority check after the
+            // current operation. Never share a result, replay a mutation, or
+            // let one waiting caller cancel the active pairing/presence.
+            if action == "status", requestScope == scope {
+                guard requestId != id, !pendingStatuses.contains(where: { $0.id == id }) else { return }
+                let cancel = { [weak webView] in
+                    guard let current = webView?.url, currentRoot() == root, LopuVoiceContract.sameOrigin(current, root) else { return }
+                    reply("mobile-device-result", base.merging(["error": "Device connection paused. Retry when the app is active."]) { _, new in new })
+                }
+                pendingStatuses.append(PendingStatus(id: id, scope: scope, start: { [weak self, weak webView] in
+                    guard let self, let webView, self.foreground(), currentRoot() == root,
+                          let current = webView.url, LopuVoiceContract.sameOrigin(current, root) else { cancel(); return }
+                    self.handle(body, webView: webView, root: root, currentRoot: currentRoot, cookies: cookies, reply: reply)
+                }, cancel: cancel))
+                return
+            }
+            reply("mobile-device-result", base.merging(["error": "Another device request is still running. Try again shortly."]) { _, new in new }); return
+        }
         let operation = UUID(); generation = operation; requestId = id; requestScope = scope
         cancellationReply = { [weak webView] in
             guard let current = webView?.url, currentRoot() == root, LopuVoiceContract.sameOrigin(current, root) else { return }
@@ -66,11 +108,16 @@ final class MobileDeviceBridge {
         let check = { [weak self, weak webView] in
             guard self?.generation == operation, let webView, currentRoot() == root,
                   let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
-                  UIApplication.shared.applicationState == .active else { throw CancellationError() }
+                  self?.foreground() == true else { throw CancellationError() }
         }
         let engine = makeEngine(webView: webView, cookies: cookies, check: check)
         task = Task { [weak self] in
-            defer { if self?.generation == operation { self?.task = nil; self?.requestId = nil; self?.requestScope = nil; self?.cancellationReply = nil } }
+            defer {
+                if self?.generation == operation {
+                    self?.task = nil; self?.requestId = nil; self?.requestScope = nil; self?.cancellationReply = nil
+                    self?.startNextStatus()
+                }
+            }
             do {
                 let result: MobileDevicePairing.Status
                 if action == "pair" {
@@ -107,6 +154,9 @@ final class MobileDeviceBridge {
             }
         }
     }
+    private func startNextStatus() {
+        while task == nil, !pendingStatuses.isEmpty { pendingStatuses.removeFirst().start() }
+    }
     func verifyOwner(_ scope: MobileDevicePairing.Scope, webView: WKWebView,
                      cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie], check: @escaping () throws -> Void) async throws {
         try await makeEngine(webView: webView, cookies: cookies, check: check).verifyIdentity(scope)
@@ -126,6 +176,7 @@ final class MobileDeviceBridge {
     }
     private func makeEngine(webView: WKWebView, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
                             check: @escaping () throws -> Void) -> MobileDevicePairing {
+        if let engineFactory { return engineFactory(check) }
         return MobileDevicePairing(load: MobileDeviceKeychain.load, save: MobileDeviceKeychain.save,
             transport: { [session] request in
                 let (bytes, response) = try await session.bytes(for: request)

@@ -1,7 +1,7 @@
 import XCTest
 import UIKit
 import BackgroundTasks
-import AppleFileSync
+@testable import AppleFileSync
 @testable import Thingtime
 
 @MainActor
