@@ -1367,34 +1367,13 @@ jobs:
                 rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
               fi
-              # An exhausted PRIMARY API budget answers HTTP 403 carrying
-              # "API rate limit exceeded", not 429, so status-only matching
-              # classified the most self-healing condition the API has as
-              # "no recoverable transient response" and failed the scan. The
-              # published reset can be most of an hour away, so the backoff
-              # below cannot clear it, and a bare 403 (a real permission
-              # failure) must still fail fast — hence status AND message, the
-              # same pairing the 422 slow-diff case already uses. Record the
-              # exhaustion for this step's deferral trap: one shared
-              # installation budget is never a defect in any PR.
-              #
-              # Two wordings reach this helper and the first fixed-string
-              # pairing matched neither of them:
-              #   * the REST wrapper also says "API rate limit ALREADY
-              #     exceeded for site ID installation", so `grep -F 'API rate
-              #     limit exceeded'` missed it and job 119869167700 printed
-              #     "no recoverable transient response" over a budget reset;
-              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
-              #     all — "GraphQL: API rate limit already exceeded for site ID
-              #     installation." — so pairing on a status could never match,
-              #     and job 119869167555 died on it with the sentinel unwritten.
-              # Accept the `GraphQL:` prefix in place of a status: it means gh
-              # decoded a GraphQL error document rather than an HTTP rejection,
-              # and no permission error is spelled that way. This is the same
-              # classification `GH_BUDGET_EXHAUSTED` in
-              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
-              # A secondary limit deliberately stays on the transient path
-              # below: unlike a primary reset, it clears within the backoff.
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
               if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
                  && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
                       || grep -Fq 'GraphQL: ' "$errors"; }; then
@@ -3156,32 +3135,13 @@ jobs:
                 rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
               fi
-              # An exhausted PRIMARY API budget answers HTTP 403 carrying
-              # "API rate limit exceeded", not 429, so status-only matching
-              # made the most self-healing condition the API has fatal. The
-              # published reset can be most of an hour away, so the backoff
-              # below cannot clear it, and a bare 403 (a real permission
-              # failure) must still fail fast — hence status AND message.
-              # Record it for this step's deferral trap: one shared
-              # installation budget is never a defect in any PR.
-              #
-              # Two wordings reach this helper and the first fixed-string
-              # pairing matched neither of them:
-              #   * the REST wrapper also says "API rate limit ALREADY
-              #     exceeded for site ID installation", so `grep -F 'API rate
-              #     limit exceeded'` missed it and job 119869167700 printed
-              #     "no recoverable transient response" over a budget reset;
-              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
-              #     all — "GraphQL: API rate limit already exceeded for site ID
-              #     installation." — so pairing on a status could never match,
-              #     and job 119869167555 died on it with the sentinel unwritten.
-              # Accept the `GraphQL:` prefix in place of a status: it means gh
-              # decoded a GraphQL error document rather than an HTTP rejection,
-              # and no permission error is spelled that way. This is the same
-              # classification `GH_BUDGET_EXHAUSTED` in
-              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
-              # A secondary limit deliberately stays on the transient path
-              # below: unlike a primary reset, it clears within the backoff.
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
               if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
                  && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
                       || grep -Fq 'GraphQL: ' "$errors"; }; then
@@ -4296,32 +4256,13 @@ jobs:
                 rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
               fi
-              # An exhausted PRIMARY API budget answers HTTP 403 carrying
-              # "API rate limit exceeded", not 429, so status-only matching
-              # made the most self-healing condition the API has fatal. The
-              # published reset can be most of an hour away, so the backoff
-              # below cannot clear it, and a bare 403 (a real permission
-              # failure) must still fail fast — hence status AND message.
-              # Record it for this step's deferral trap: one shared
-              # installation budget is never a defect in any PR.
-              #
-              # Two wordings reach this helper and the first fixed-string
-              # pairing matched neither of them:
-              #   * the REST wrapper also says "API rate limit ALREADY
-              #     exceeded for site ID installation", so `grep -F 'API rate
-              #     limit exceeded'` missed it and job 119869167700 printed
-              #     "no recoverable transient response" over a budget reset;
-              #   * the GraphQL wrapper (`gh pr list`) prints NO status line at
-              #     all — "GraphQL: API rate limit already exceeded for site ID
-              #     installation." — so pairing on a status could never match,
-              #     and job 119869167555 died on it with the sentinel unwritten.
-              # Accept the `GraphQL:` prefix in place of a status: it means gh
-              # decoded a GraphQL error document rather than an HTTP rejection,
-              # and no permission error is spelled that way. This is the same
-              # classification `GH_BUDGET_EXHAUSTED` in
-              # .github/scripts/codeql-open-pr-backfill.mjs already applies.
-              # A secondary limit deliberately stays on the transient path
-              # below: unlike a primary reset, it clears within the backoff.
+              # One shared installation budget is never any PR's defect and its
+              # reset outlasts the backoff, so defer the scan: message AND
+              # status-or-`GraphQL:` (a bare 403 stays fatal, secondary limits
+              # stay transient), sentinel for this step's deferral trap. Shared
+              # with GH_BUDGET_EXHAUSTED in codeql-open-pr-backfill.mjs; both
+              # ends and every live wording are pinned by
+              # .github/scripts/control-plane-budget-classifier.test.mjs.
               if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
                  && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
                       || grep -Fq 'GraphQL: ' "$errors"; }; then
