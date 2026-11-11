@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## One user-visible chat per task
+
+Original request (verbatim, 11 November 2026):
+
+> Can you find out which chat made all of these ??? :O And tell it not to and just use 1 chat for whatever it was doing? And to add this same instruction and example to AI_ALL.md please
+
+- Keep one existing user-visible chat for each task, including retries, recovery, release checks and completion monitoring. Resume that chat through supported continuation; never create or fork replacement chats, per-run chats or sidebar chats unless the user explicitly requests them. Retain and reuse the stable chat/task IDs. If creation has an uncertain outcome, inspect current state before retrying rather than creating a duplicate.
+- Bounded internal subagents may handle distinct work within the same chat when delegation is authorized; they must not create additional user-visible sidebar chats. Internal delegation does not reset retry budgets or task ownership.
+- This rule takes precedence over older five-minute retry and `/loop` defaults. Check whether the scheduler creates a new user-visible chat on each run before using it. If it cannot continue the existing chat, do not use it for task retries or monitoring. Where the runtime prohibits automations that track a specific task to completion, continue permitted work in the current chat; never substitute another scheduler or workaround.
+- If duplicates already exist, stop their duplicate work, preserve useful evidence and consolidate continuation into the original chat. Do not delete chat history or archive chats without authorization.
+- Example (11 November 2026): the “Add dismiss option to draft dialog” chat created the five-minute `finish-ios-draft-dismiss-release` automation, which produced repeated “Finish iOS draft dismiss release” chats; the user's screenshot showed eleven same-titled entries. The correct recovery is to stop the duplicate-producing automation and continue the release task in its original chat, preserving the existing history.
+
 ## Get it done; report decisions after completion
 
 Original request (verbatim):
