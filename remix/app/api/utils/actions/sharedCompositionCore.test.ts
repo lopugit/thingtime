@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compositionReferences, sharedOperationAllowed } from './sharedCompositionCore';
+import { rewriteComposition } from './forkCompositionCore';
+
+test('instance argument bindings never turn parent row data into stored dependency grants', () => {
+	const blocks = [{ id: 'row', type: 'collection', props: { itemsPath: 'result.rows' }, children: [
+		{ id: 'child', type: 'component', component: 'saved-child', args: { label: 'Literal' },
+			argBindings: { action: '{item.action}', component: 'unrelated-component', media: '/api/v1/attachments/content?id=unrelated' } },
+		{ id: 'expanded', type: 'container', args: { label: 'Literal' }, argBindings: { action: '{item.action}' },
+			children: [{ id: 'action', type: 'element', tag: 'button', props: { 'data-tt-action': '{action}' } }] }
+	] }];
+	assert.deepEqual(compositionReferences(['webpage'], { blocks }), [
+		{ kind: 'component', ref: 'saved-child', args: { label: 'Literal' } }
+	]);
+	const copy = rewriteComposition(['webpage'], { blocks }, (_kind, ref) => 'copy-' + ref);
+	assert.equal(copy.blocks[0].children[0].component, 'copy-saved-child');
+	assert.deepEqual(copy.blocks[0].children[0].argBindings, blocks[0].children[0].argBindings);
+});
 
 test('saved action references use defaults, saved args and every persisted page instance', () => {
 	const crystal = {
