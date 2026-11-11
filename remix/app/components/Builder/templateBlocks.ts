@@ -63,8 +63,18 @@ export function expandedComponentBlock(entry: WebpageBlock, componentCrystal: Re
   ...(entry.css ? { css: entry.css } : {}),
   ...(source ? { source } : {}),
   args: Object.fromEntries(Object.entries(args).filter(([, value]) => value !== undefined)) as WebpageBlock['args'],
+  ...(entry.argBindings ? { argBindings: entry.argBindings } : {}),
   children
  };
+}
+
+/** Instance bindings read parent data once; literal/default arguments stay data. */
+export function resolveBlockArguments(block: WebpageBlock, scope: Record<string, unknown>, markerInstance = false): Record<string, unknown> {
+ const args = markerInstance ? resolveTemplate(block.args || {}, scope) as Record<string, unknown> : block.args || {};
+ const resolved = resolveBlockProps(block.argBindings || {}, scope);
+ const bindings = Object.fromEntries(Object.entries(resolved).map(([key, value]) => [key,
+  typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? value : '']));
+ return { ...args, ...bindings };
 }
 
 /** DOM properties preserve scalar types for exact bindings; interpolated text stays text. */

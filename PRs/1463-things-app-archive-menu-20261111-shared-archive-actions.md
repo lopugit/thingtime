@@ -80,3 +80,32 @@ actions 1.0 after the shared contract moved to 1.1. Its valid fixture now uses
 1.1, restoring positive/cancellation/account-change coverage. Separate old,
 missing, prerelease and breaking action-contract cases verify refusal before
 consent reads, confirmation or writes; a compatible newer minor remains accepted.
+
+## Distinct Archive read contract after current main integration
+
+Main now publishes api.things 1.62 for Component row argument bindings. Archive's
+extended owner-library projections therefore deliberately move to api.things
+1.63; the Component client floor remains 1.62 (update 1.27, resolve 1.19).
+Archive actions/search/bulk retain 1.1/1.7/1.9. Both manifests derive these
+versions from the merged canonical registry.
+
+Archive clients compose the existing origin and active-API checkers through a
+small shared helper before dependent reads/actions. A frontend advertising 1.63
+cannot enable extended queries against an active 1.62 API. Regressions cover
+that mixed deployment, missing/breaking versions, and a fresh compatible retry.
+The real built-server/Builder contract fixture checks refusal before any
+libraryArchive query, then the compatible Archive/Restore path at desktop/mobile.
+
+Combined validation on merged main b3374a16: full CI unit command passed; both
+capability generators/checkers passed 178 tests; typecheck passed with zero
+errors. Embed remains within the unchanged gzip budget (691,529 / 716,800 bytes).
+The rebuilt Nitro API and isolated Chrome contract fixture passed at 1440px and
+375px, including active-API 1.62 refusal before a query and compatible recovery.
+Focused lint reports zero errors (98 existing hook warnings). Evidence is retained
+in the task's `version-163` artifacts. Previously documented standalone embed
+router limitation remains unchanged; no new standalone live acceptance is claimed.
+
+Graphify: scoped semantic extraction of the four changed Markdown documents
+was bounded at 60 seconds while the healthy local proxy was occupied; it did
+not complete. The final structural snapshot is refreshed, but this round does
+not claim new semantic indexing of those documents.

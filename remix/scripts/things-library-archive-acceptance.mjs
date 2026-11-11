@@ -71,7 +71,10 @@ try {
   await waitFor(async () => (await fetch(origin + manifestPath, { signal: AbortSignal.timeout(1000) })).ok, 'built Nitro', nitro);
   const manifest = (await api(manifestPath)).data;
   assert.equal(manifest.origin, origin);
-  for (const [key, version] of [['api.things', '1.62.0'], ['api.things-search', '1.7.0'], ['api.things-bulk', '1.9.0'], ['api.things-actions', '1.1.0']]) assert.equal(manifest.features[key].version, version);
+  for (const [key, version] of [['api.things', '1.63.0'], ['api.things-search', '1.7.0'], ['api.things-bulk', '1.9.0'], ['api.things-actions', '1.1.0']]) assert.equal(manifest.features[key].version, version);
+  const activeCapabilities = (await api('/api/v1/capabilities')).data;
+  assert.equal(activeCapabilities.ok, true);
+  assert.equal(activeCapabilities.features['api.things'], '1.63.0');
   const { cookie } = await register('archiveowner');
   const { cookie: other } = await register('archiveother');
   assert(cookie && other);
@@ -276,6 +279,19 @@ try {
       if (size.width < 500) await command.tap();
       else await command.press('Enter');
     };
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'contract') {
+      const extendedQueries = [];
+      page.on('request', request => {
+        const url = new URL(request.url());
+        if (url.pathname === '/api/v1/things' && url.searchParams.has('libraryArchive')) extendedQueries.push(url.pathname);
+      });
+      const older = route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...activeCapabilities, features: { ...activeCapabilities.features, 'api.things': '1.62.0' } }) });
+      await page.route('**/api/v1/capabilities', older);
+      await page.goto(webOrigin + '/builder?libraryArchive=1&view=grid', { waitUntil: 'domcontentloaded' });
+      await page.getByText('The archive is unavailable for this library.', { exact: true }).waitFor({ timeout: 180000 });
+      assert.equal(extendedQueries.length, 0, 'Frontend1.63 cannot query extended Archive projections against active1.62');
+      await page.unroute('**/api/v1/capabilities', older);
+    }
     await page.goto(webOrigin + '/builder?view=grid', { waitUntil: 'domcontentloaded' });
     await appCard().waitFor({ timeout: 180000 });
     await appCard().getByRole('link', { name: 'Browse', exact: true }).waitFor();
@@ -325,6 +341,7 @@ try {
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Builder app contents width at bottom');
     console.log(`Chrome ${size.width}px: Builder app card Archive, reload, archived search, Restore and preserved app child passed.`);
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'contract') { await context.close(); continue; }
     await page.goto(webOrigin + '/post/' + published.id, { waitUntil: 'domcontentloaded' });
     const postTrigger = page.getByRole('button', { name: 'Post options', exact: true }).first();
     await postTrigger.waitFor({ timeout: 180000 });

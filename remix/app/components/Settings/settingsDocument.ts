@@ -32,7 +32,7 @@ export function settingsDocumentBlocks(value: unknown): WebpageBlock[] {
         (typeof block.html === 'string' && /<\s*tt-/i.test(block.html)) ||
         (props && ['source', 'itemTemplate', 'render', 'template'].some(key => props[key] !== undefined)))
         throw new Error('Use intrinsic blocks and public display bindings inside settings.');
-      if (block.tag === 'input' && props && ['password', 'file'].includes(String(props.type)) &&
+      if (props && ((block.tag === 'input' && ['password', 'file'].includes(String(props.type))) || props['data-tt-private-control'] !== undefined) &&
         ['value', 'defaultValue', 'default-value'].some(key => props[key] !== undefined))
         throw new Error('Private input values cannot be saved in a settings layout.');
       if (block.children !== undefined) visit(block.children);

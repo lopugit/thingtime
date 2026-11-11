@@ -3,7 +3,7 @@ import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
-import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 
 import { RichTextModal } from './RichTextModal';
 
@@ -677,8 +677,21 @@ const BlockInspector = ({
 						<Flex flexDirection="column" rowGap={2}>
 							<Eyebrow>Args</Eyebrow>
 							{specs.map((spec) => (
-								<ArgField
-									key={spec.name}
+								<Flex key={spec.name} direction="column" gap={1}>
+									<Checkbox size="sm" minHeight="44px"
+										isChecked={Object.prototype.hasOwnProperty.call(block.argBindings || {}, spec.name)}
+										onChange={(event) => {
+											const argBindings = { ...block.argBindings };
+											if (event.target.checked) argBindings[spec.name] = '';
+											else delete argBindings[spec.name];
+											patch({ argBindings });
+										}}
+									>Use parent data for {spec.label || spec.name}</Checkbox>
+								{Object.prototype.hasOwnProperty.call(block.argBindings || {}, spec.name) ? (
+									<Input {...inputStyles} aria-label={`Parent data binding for ${spec.label || spec.name}`}
+										placeholder="{item.id}" value={String(block.argBindings?.[spec.name] ?? '')}
+										onChange={(event) => patch({ argBindings: { ...block.argBindings, [spec.name]: event.target.value } })} />
+								) : <ArgField
 									spec={spec}
 									value={block.args?.[spec.name] ?? (component?.crystal?.savedArgs || {})[spec.name]}
 									onChange={(next) => {
@@ -687,7 +700,8 @@ const BlockInspector = ({
 										else args[spec.name] = next;
 										patch({ args });
 									}}
-								/>
+								/>}
+								</Flex>
 							))}
 						</Flex>
 					) : (

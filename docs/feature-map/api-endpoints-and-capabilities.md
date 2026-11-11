@@ -973,8 +973,11 @@ predicate serve single actions, bulk placement and archived lists. Dedicated
 message/community/subspace content uses static private library descriptors;
 source bodies, participants, media bindings and credential/control Things stay
 behind their own APIs. Full-content inherited Things retain the canonical
-ancestor ACL check. Versions Things 1.62.0, Things search 1.7.0 and Things bulk
-1.9.0 advertise the expanded placement and safe projection contracts.
+ancestor ACL check. Versions Things 1.63.0, Things search 1.7.0 and Things bulk
+1.9.0 advertise the expanded placement and safe projection contracts. The
+Archive read minimum is 1.63, while upstream Component argument bindings keep
+their 1.62 floor; `libraryArchiveCapabilities.client.ts` composes canonical
+origin and active-API checks to prevent mixed-deployment false positives.
 Run the Things actions, owner-library predicate, comment projection and both
 capability suites, plus the real API/Chrome library Archive acceptance script.
 
@@ -982,3 +985,20 @@ Protected metadata cards are discoverable through the owner Archived list and
 kind filters. Generic structured search retains normal content authority and
 excludes these metadata-only kinds, so body predicates cannot reveal private
 message text through result existence.
+
+## Google service actions on named grants
+
+The existing Connections list contract is 2.3.0, named-action contract 1.1.0,
+and OAuth begin/callback 2.2.0. Current clients negotiate the selected origin and
+request `includeNamed=1&includeServiceOperations=1`; original clients receive
+only original named-operation IDs. POST named accepts typed `resourceId` and
+opaque `pageToken` for fixed allowlisted Google operations. Routes remain in the
+canonical registry/import map; both manifests derive from their explicit
+versions. Run Connections and capability tests, the compiled Connections
+manifest smoke, and the isolated desktop/mobile OAuth-tab fixture. See
+[service actions](../google-service-actions.md) for the exact operations/scopes.
+
+The canonical client checker also exposes the fixed same-origin `active-api`
+source. Connections requires modern and active API capability maps; an older
+shared API behind a newer frontend cannot enable service actions. Neither
+manifest-supplied foreign URLs nor frontend-only versions establish support.

@@ -4,6 +4,10 @@ Archive and Restore use the shared Thing action registry, `PersistedThingContext
 and exact-subject `/things/actions` availability/mutation contract. The canonical
 server predicate owns authorization; a page, content kind or stale parent projection
 must not independently decide permission. Batch library operations reuse that predicate.
+Extended reads require `LIBRARY_ARCHIVE_READ_REQUIREMENTS` (`api.things` 1.63),
+independent of Component argument bindings at 1.62. The shared Archive checker
+negotiates both the origin manifest and fixed active API source; action/search/
+bulk gates retain their own 1.1/1.7/1.9 contracts.
 This is private owner library placement, not unpublishing: original content, links,
 folder relationships and audiences remain unchanged. Explicit list filters apply before
 pagination. The Archived view can restore across folders, including static metadata

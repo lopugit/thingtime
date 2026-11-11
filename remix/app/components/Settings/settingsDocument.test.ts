@@ -43,6 +43,8 @@ test('sensitive layouts refuse autoloads, native slots, opaque markup and persis
     { id: 'x', type: 'text', html: '<tt-service-workspace />' },
     { id: 'x', type: 'collection', props: { source: { action: 'secret' } } },
     { id: 'x', type: 'element', tag: 'input', props: { type: 'password', value: 'synthetic-only' } },
+    { id: 'private-text', type: 'element', tag: 'input', props: { 'data-tt-private-control': '', value: 'synthetic-only' } },
+    { id: 'private-area', type: 'element', tag: 'textarea', props: { 'data-tt-private-control': '', defaultValue: 'synthetic-only' } },
     { id: 'x', type: 'element', tag: 'input', props: { type: 'file', defaultValue: 'synthetic-only' } }
   ];
   for (const block of unsafe) assert.throws(() => settingsDocumentBlocks([{ id: 'outer', type: 'container', children: [block] }]));

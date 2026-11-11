@@ -1,3 +1,4 @@
+import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useMountedRef } from '~/hooks/useMountedRef';
 import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
@@ -208,9 +209,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     let current = true;
     const origin = window.location.origin;
     void Promise.all([
-      requireThingtimeCapability('api.things', '1.62.0', origin),
-      requireThingtimeCapability('api.things-search', '1.7.0', origin),
-      requireThingtimeCapability('api.things-bulk', '1.9.0', origin)
+      requireLibraryArchiveRead(origin),
+      requireLibraryArchiveCapability('api.things-search', '1.7.0', origin),
+      requireLibraryArchiveCapability('api.things-bulk', '1.9.0', origin)
     ]).then(
       () => { if (current) setArchiveSupport({ owner: archiveScope, supported: true }); },
       () => { if (current) setArchiveSupport({ owner: archiveScope, supported: false }); }
