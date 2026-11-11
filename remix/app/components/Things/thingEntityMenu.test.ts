@@ -30,6 +30,8 @@ test('entity schemas inherit canonical verbs while extending their own sections'
     rename: true,
     edit: true,
     share: true,
+    archive: true,
+    restore: true,
     delete: true,
     'send-to-lopu': true
   } satisfies Record<ThingActionId, true>;
@@ -70,10 +72,10 @@ test('Thing actions are origin-scoped and deliberately negotiated', () => {
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(supportsThingActions(manifest, origin), true);
   assert.equal(supportsThingActions(manifest, 'https://other.test'), false);
-  for (const version of [undefined, '0.9.0', '2.0.0', '1.0.0-beta']) {
+  for (const version of [undefined, '0.9.0', '2.0.0', '1.0.0-beta', '1.0.0', '1.0.1']) {
     assert.equal(supportsThingActions({ origin, features: { 'api.things-actions': { version } } }, origin), false);
   }
-  for (const version of ['1.0.0', '1.1.0', '1.0.1'])
+  for (const version of ['1.1.0', '1.1.1', '1.2.0'])
     assert.equal(supportsThingActions({ origin, features: { 'api.things-actions': { version } } }, origin), true);
 });
 

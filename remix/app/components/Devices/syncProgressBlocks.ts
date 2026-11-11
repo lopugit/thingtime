@@ -12,6 +12,17 @@ const button = (id: string, text: string, operation: string, inputs: Record<stri
 	element(id, 'button', text, { type: 'button', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs }, ...props },
 		{ 'min-height': '40px', padding: '6px 10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%' });
 
+/** Separate editable details keep operation IDs out of the ordinary status. */
+export const syncRecoveryBlocks: WebpageBlock[] = [{ id: 'sync-recovery', type: 'element', tag: 'section',
+	props: { 'aria-label': 'Sync recovery details' }, css: { 'min-width': '0', 'overflow-wrap': 'anywhere' }, children: [
+		element('sync-recovery-status', 'p', '{sync.recoveryStatus}', {}, { 'font-size': '12px' }),
+		when('sync-recovery-reserved', 'sync.hasReservation', [
+			element('sync-recovery-operation', 'p', 'Operation: {sync.operationId}', {}, { 'font-size': '12px' }),
+			when('sync-recovery-file', 'sync.hasFileId', [element('sync-recovery-binding', 'p', 'File: {sync.fileId}', {}, { 'font-size': '12px' })]),
+			element('sync-recovery-effect', 'p', '{sync.effect}', {}, { 'font-size': '12px' })
+		])
+	] }];
+
 /** Every label, count, progress bar, control and repeated row field remains
  * an ordinary selectable Builder block. The document stores no runtime paths. */
 export const syncProgressBlocks: WebpageBlock[] = [{ id: 'sync-progress', type: 'element', tag: 'section',

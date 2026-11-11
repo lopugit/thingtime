@@ -7,7 +7,7 @@ import type { ThingsThing } from '../Things/thingsCore';
 const recording = { id: 'audio-qa', author: { id: 'owner' }, thingtime: ['attachment'], acl: ['tt:user'],
 	targetId: null, crystal: { mediaKind: 'audio' }, tags: [] } as unknown as ThingsThing;
 const origin = 'https://thingtime.test';
-function fixture({ version = '1.5.0', enabled = true, confirm = true, responseOwner = 'owner' } = {}) {
+function fixture({ version = '1.5.0', actionsVersion = '1.1.0', omitActions = false, enabled = true, confirm = true, responseOwner = 'owner' } = {}) {
 	let active = 'owner';
 	const calls: Array<{ path: string; init?: RequestInit }> = [];
 	let confirmations = 0;
@@ -18,7 +18,7 @@ function fixture({ version = '1.5.0', enabled = true, confirm = true, responseOw
 			fetch: (async (path: string, init?: RequestInit) => {
 				calls.push({ path, init });
 				assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-store');
-				return Response.json(path.includes('capabilities') ? { origin, features: { 'api.lopu-recordings': { version }, 'api.things-actions': { version: '1.0.0' } } } :
+				return Response.json(path.includes('capabilities') ? { origin, features: { 'api.lopu-recordings': { version }, ...(!omitActions ? { 'api.things-actions': { version: actionsVersion } } : {}) } } :
 					{ ok: true, ownerId: responseOwner, settings: { enabled } });
 			}) as typeof fetch }
 	};
@@ -66,4 +66,17 @@ test('account changes during confirmation stop before mutation', async () => {
 	f.options.confirm = () => { f.setOwner('other'); return true; };
 	await assert.rejects(sendRecordingThingToLopu(recording, 'owner', f.options), /account changed/);
 	assert.equal(f.calls.length, 2);
+});
+
+
+test('handoff rejects old, missing and breaking Thing action contracts before consent or writes', async () => {
+  for (const settings of [{ actionsVersion: '1.0.0' }, { actionsVersion: '2.0.0' }, { actionsVersion: '1.1.0-beta' }, { omitActions: true }]) {
+    const f = fixture(settings);
+    await assert.rejects(sendRecordingThingToLopu(recording, 'owner', f.options), /Thing actions are not available/);
+    assert.equal(f.calls.length, 1, 'a refused manifest cannot read consent or submit a recording');
+    assert.equal(f.confirmations(), 0);
+    assert.ok(f.calls.every(call => !call.init?.method));
+  }
+  const compatible = fixture({ actionsVersion: '1.2.0' });
+  assert.equal(await sendRecordingThingToLopu(recording, 'owner', compatible.options), true);
 });

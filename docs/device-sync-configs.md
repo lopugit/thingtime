@@ -16,6 +16,12 @@ before enrollment and again before effects. If the app leaves the editor after
 the save, root discovery recovers the same confirmed config and cadence from
 its scoped setup intent. Recovery queues without replaying the cloud write or
 opening a permission dialog; it respects a saved Pause.
+When a matching saved job needs attention, queued recovery keeps that job's ID
+and requires the worker's fresh config, grant and write-approval checks. A
+different policy, a paused job or an unfinished strict scanner is not silently
+replaced. Streaming operations keep their original receipt ID across restarts;
+the journal records a publication fence immediately before the actual native
+or cloud publication, after staging and source checks have passed.
 
 ## Background recovery and activity
 
@@ -24,6 +30,17 @@ strict inventory gets one fresh verification attempt; repeated incomplete scans
 need attention and cannot publish deletions. Missing folder access, revoked
 authorization, conflicts and an explicit pause remain distinct states. Hiding a
 Retry button does not repair those conditions.
+
+Mac file access 1.22.0 adds an exact-path, metadata-only `inspect-stamp` action
+for a captured local upload source. If the bounded early `observe-path` hash
+expires, that path waits for the sealed inventory; its transfer then compares
+the saved capture with a fresh authorized native path, inode, version, kind and
+size check. This avoids hashing the same large file again before upload. The
+saved fingerprint remains provisional: each uploaded part or whole-file result
+must match it, and a reused ready attachment must return the same verified
+content fingerprint before the original file publication. Older hosts, links,
+targets, downloads and deletion checks keep full inspection. A changed stamp,
+lost grant, explicit Stop or mismatched bytes cannot publish from that capture.
 
 Activity records belong to an exact device/config/account/origin/root scope.
 They retain measured start/end times and bytes sent and received in the existing
@@ -62,3 +79,4 @@ See the [acceptance checklist](../TESTING.md#unified-folder-sync-configs-and-ded
 and [mobile sync contracts](mobile-file-sync.md). Release evidence must distinguish
 local tests, deployed API behavior, signed Mac acceptance and physical mobile
 acceptance.
+- A stopped local run's expanded Progress panel includes read-only Recovery details for its reserved operation: original operation ID, file binding ID when applicable, direction, kind, and saved dispatch/receipt flags. The journal read is scoped to the selected owner, device, root, and run; it never clears or advances a reservation and omits local paths and bytes. A missing receipt is not proof that an older request cannot still commit.

@@ -628,3 +628,47 @@ test('archive-aware account reads retain device filtering and cache-first search
   if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });
+
+test('restored folder membership reaches a recreated cache-first facade after an archived empty page', { timeout: 5000 }, async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, keyRange: globalThis.IDBKeyRange, fetch: globalThis.fetch, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://restore-membership.thingtime.example', ownerId: 'restore-owner', dataPlane: 'home' } as const;
+ const row: AccountThing = { id: 'restored-nested', folderId: 'original-folder', author: { id: scope.ownerId }, thingtime: ['data'], crystal: { name: 'Restored nested row' }, createdAt: '2026-11-11T00:00:00Z', updatedAt: '2026-11-11T00:00:00Z', revision: 1, acl: ['tt:user'], visibility: 'private', libraryArchived: true, libraryArchiveEligible: true };
+ let archived = true, reads = 0, release!: () => void, started!: () => void;
+ const readStarted = new Promise<void>(resolve => { started = resolve; });
+ const wait = new Promise<void>(resolve => { release = resolve; });
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async (input: string, init?: RequestInit) => {
+  const url = new URL(input, scope.origin);
+  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.64.0' }, 'api.things-update': { version: '1.27.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Actor'), scope.ownerId);
+  assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Data-Plane'), 'home');
+  assert.equal(url.searchParams.get('folder'), row.folderId); assert.equal(url.searchParams.get('libraryArchive'), 'active');
+  if (++reads > 1) { started(); await wait; }
+  return Response.json({ ok: true, things: archived ? [] : [{ ...row, libraryArchived: undefined }], nextCursor: null });
+ } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  await accountWorkspaceWorker(scope).sync.remember(row);
+  const remote = { things: { bulk: async (input: { op: string; ids: string[] }) => {
+    assert.equal(input.op, 'restore'); assert.deepEqual(input.ids, [row.id]); archived = false;
+    return { ok: true, results: [{ id: row.id, ok: true }] };
+  } } };
+  const api: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  const query = { folder: row.folderId, libraryArchive: 'active', limit: 50 };
+  assert.deepEqual((await api.things.list(query)).things, [], 'the authorized active page is retained empty while its child is archived');
+  await api.things.bulk({ op: 'restore', ids: [row.id] });
+  assert.equal((await accountWorkspaceWorker(scope).sync.view(row.id))?.libraryArchived, false);
+  const reopened: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  let refreshed!: (result: any) => void; const received = new Promise<any>(resolve => { refreshed = resolve; });
+  const cached = await reopened.things.list(query, { onRefresh: refreshed });
+  assert.deepEqual(cached.things, [], 'cached membership stays authoritative until the fresh server page arrives');
+  assert.equal(cached.refreshing, true);
+  await readStarted; release();
+  const fresh = await received;
+  assert.deepEqual(fresh.things.map((thing: any) => [thing.id, thing.folderId, thing.libraryArchived]), [[row.id, row.folderId, false]]);
+  assert.equal(reads, 2, 'one explicit background refresh updates the visible page without a refresh loop');
+ } finally {
+  release(); rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB, IDBKeyRange: saved.keyRange, fetch: saved.fetch });
+  if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});

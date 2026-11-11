@@ -11,6 +11,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import { useDataPlane } from '~/hooks/useDataPlane';
+import { useLocalApiView } from '~/local-workspace/LocalApiView';
 import { thingStorageHref } from '../../Things/thingStorageNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { canOfferRecordingHandoff, sendRecordingThingToLopu, type RecordingThingIdentity } from '~/components/Lopu/recordingThingHandoff';
@@ -41,6 +42,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const user = localIdentity ? workspace : accountUser;
   const scope = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
   const dataPlane = useDataPlane();
+  const localView = useLocalApiView();
   const navigate = useNavigate();
   const lopu = useLopu();
   const identity = `${scope}:${user?.id || ''}:${id}`;
@@ -95,7 +97,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!scope && !!user?.id && thing?.author?.id === user.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, download: true, 'share-preview': !localIdentity, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, accountUser?.id) ? { disabled: sending || handoffDisabled } : false,
     'storage-placement': !!user?.id && !user.temporary && !workspace?.localOnly && !workspace?.offline && thing?.author?.id === user.id && { href: storageHref }
-  }, [...builderNavigation, ...extensions]);
+  }, [...builderNavigation, ...extensions], !localIdentity && !localView.localPlane && scope ? id : undefined);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
       if (currentIdentity.current !== identity) return;

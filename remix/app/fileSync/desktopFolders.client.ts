@@ -1,5 +1,6 @@
 import { syncRequestHasPacing } from './resourceGovernor';
 import { SyncConnectionWait, SyncVolumeRemounted } from './syncConnectionWait';
+import { NativePathObservationUnavailable } from './nativePathObservation';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import type { ThingtimeDesktopBridge } from '../utils/electronBridge';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
@@ -10,7 +11,7 @@ import {
 	supportsFolderAccess,
 	supportsNativeResourceLimits,
 	supportsNativeAuthorizationContext,
-	supportsNativePathInspection, supportsNativePathObservation,
+	supportsNativePathInspection, supportsNativePathObservation, supportsNativePathStamp,
 	supportsNativeInventoryPages,
 	supportsNativeUploadBatches,
 	supportsNativeFolderBatches,
@@ -111,6 +112,11 @@ export async function createDesktopFolderHost(input: {
 						// Electron wraps rejected IPC messages and discards custom error
 						// fields. Only recognize fixed host compatibility/retry messages;
 						// never display arbitrary native errors, paths or transport details.
+						const observationDeadline = '[folder_observation_deadline] Bounded path observation did not finish. Saved sync will reconcile its source.';
+						if (request.action === 'observe-path' && error instanceof Error &&
+							(error.message === observationDeadline ||
+								error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${observationDeadline}`))
+							throw new NativePathObservationUnavailable();
 						const retry = '[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.';
 						const volumeOffline = '[folder_volume_offline] The granted volume is offline. Saved sync will retry.';
 						const volumeRemounted = '[folder_volume_remounted] The granted volume returned. Reconcile its saved transfer before continuing.';
@@ -237,6 +243,7 @@ export async function createDesktopFolderHost(input: {
 			if (request.action === 'validate-folder-batch' && (!supportsNativeFolderBatches(context.capabilities) || !capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.1.0'))) throw Error('Folder metadata batches require a compatible native host and server.');
 			if (request.action === 'observe-path' && !supportsNativePathObservation(context.capabilities)) throw Error('Update Thingtime Desktop for compound path observations.');
 			if (request.action === 'inspect' && !supportsNativePathInspection(context.capabilities)) throw Error('Update Thingtime Desktop to inspect individual sync paths.');
+			if (request.action === 'inspect-stamp' && !supportsNativePathStamp(context.capabilities)) throw Error('Update Thingtime Desktop to inspect current file stamps.');
 			if (request.action === 'upload-batch' && (!supportsNativeUploadBatches(context.capabilities) ||
 				!capabilitySatisfies(context.apiCapabilities.features['api.file-sync-batches']?.version, '1.0.0')))
 				throw Error('Native upload batches require a compatible desktop host and selected server.');

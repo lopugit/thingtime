@@ -4,6 +4,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
 import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { requireLibraryArchiveRead, requireLibraryArchiveCapability } from '~/utils/libraryArchiveCapabilities.client';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useMountedRef } from '~/hooks/useMountedRef';
 import { MobileDeviceSetupEntry, MobileDeviceSetupPage } from '../Devices/MobileDeviceSetupEntry';
@@ -46,7 +47,7 @@ import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/
 import { useDeviceStore } from '~/components/Devices/useDeviceStore';
 import { useLocalThingtimeNode } from '~/components/Devices/useLocalThingtimeNode';
 import { mayReadLocalBattery, useLocalDeviceBattery } from '~/components/Devices/useLocalDeviceBattery';
-import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
+import { PersistedThingContextMenu as ThingContextMenu, THING_ARCHIVE_CHANGED, type ThingArchiveChanged } from '~/components/Thingtime/ContextMenu/PersistedThingContextMenu';
 import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -221,8 +222,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const navigate = useNavigate();
   const isMobile = useIsMobileViewport();
   const [searchParams, setSearchParams] = useSearchParams();
-  const archiveOnly = !locationPicker && !builderMode && searchParams.get('libraryArchive') === '1';
-  const archiveScope = !locationPicker && !builderMode && !homeView && canUseAccountLinks && dataPlane === 'home' && user?.accountKind === 'user' && !user.temporary && !user.localOnly ? user.id : null;
+  const archiveOnly = !locationPicker && searchParams.get('libraryArchive') === '1';
+  const archiveScope = !locationPicker && !homeView && canUseAccountLinks && dataPlane === 'home' && user?.accountKind === 'user' && !user.temporary && !user.localOnly ? user.id : null;
   const [archiveSupport, setArchiveSupport] = useState<{ owner: string; supported: boolean } | null>(null);
   const archiveReady = !!archiveScope && archiveSupport?.owner === archiveScope && archiveSupport.supported;
   const archivePending = !!archiveScope && archiveSupport?.owner !== archiveScope;
@@ -231,9 +232,9 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     let current = true;
     const origin = window.location.origin;
     void Promise.all([
-      requireThingtimeCapability('api.things', '1.59.0', origin),
-      requireThingtimeCapability('api.things-search', '1.5.0', origin),
-      requireThingtimeCapability('api.things-bulk', '1.8.0', origin)
+      requireLibraryArchiveRead(origin),
+      requireLibraryArchiveCapability('api.things-search', '1.8.0', origin),
+      requireLibraryArchiveCapability('api.things-bulk', '1.9.0', origin)
     ]).then(
       () => { if (current) setArchiveSupport({ owner: archiveScope, supported: true }); },
       () => { if (current) setArchiveSupport({ owner: archiveScope, supported: false }); }
@@ -457,6 +458,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   }, []);
 
   const fetchSeqRef = useRef<Record<string, number>>({});
+  const activeFolderKey = useRef(currentKey); activeFolderKey.current = currentKey;
 
   const fetchFolder = useCallback(
     async (targetFolderId: string | null, cursor?: string | null) => {
@@ -464,38 +466,42 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       const key = folderKeyOf(targetFolderId);
       const seq = (fetchSeqRef.current[key] = (fetchSeqRef.current[key] || 0) + 1);
       setLoadingKeys((prev) => new Set(prev).add(key));
+      let refreshed = false, refreshFailed = false;
+      const current = () => mounted.current && fetchSeqRef.current[key] === seq;
+      const finish = () => {
+        if (!current()) return;
+        setLoadingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+      };
+      const accept = (resp: any) => {
+        if (!current()) return;
+        if (resp?.ok === false) throw new Error(resp.error || 'Could not load your Things.');
+        const incoming: ThingsThing[] = resp?.things || [];
+        setFolderPages((prev) => ({ ...prev, [key]: cursor ? dedupeById([...(prev[key] || []), ...incoming]) : incoming }));
+        setCursors((prev) => ({ ...prev, [key]: resp?.nextCursor || null }));
+        rememberFolderMeta(incoming);
+        if (!resp?.refreshing) finish();
+      };
+      const failed = (err: any) => {
+        if (current() && key === activeFolderKey.current) {
+          lopuRef.current({ title: 'Couldn’t load things 😔', description: err?.error || err?.message || undefined, status: 'error' });
+        }
+        finish();
+      };
       try {
         const resp = await apiRef.current.v1.things.list({
           libraryArchive: archiveReady ? archiveOnly ? 'archived' : 'active' : undefined,
-          folder: archiveOnly ? undefined : targetFolderId || (builderMode && kindFilter !== 'apps' ? undefined : 'root'),
+          folder: archiveOnly ? builderMode && kindFilter === 'apps' ? 'root' : undefined : targetFolderId || (builderMode && kindFilter !== 'apps' ? undefined : 'root'),
           ...(!targetFolderId && kindFilter === 'apps' ? { builderApp: true } : {}),
           ...(builderMode && !targetFolderId && kindFilter !== 'apps' && kindFilter !== 'all' ? { thingtime: kindFilter } : {}),
           cursor: cursor || undefined,
           limit: PAGE_SIZE
-        });
-        if (fetchSeqRef.current[key] !== seq) return;
-        const incoming: ThingsThing[] = resp?.things || [];
-        setFolderPages((prev) => ({
-          ...prev,
-          [key]: cursor ? dedupeById([...(prev[key] || []), ...incoming]) : incoming
-        }));
-        setCursors((prev) => ({ ...prev, [key]: resp?.nextCursor || null }));
-        rememberFolderMeta(incoming);
-      } catch (err: any) {
-        if (fetchSeqRef.current[key] === seq && folderKeyOf(targetFolderId) === folderKeyOf(searchParams.get('folder') || null)) {
-          lopuRef.current({ title: 'Couldn’t load things 😔', description: err?.error || undefined, status: 'error' });
-        }
-      } finally {
-        setLoadingKeys((prev) => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-      }
+        }, { onRefresh: (page: any) => { refreshed = true; accept(page); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
+        // A fast fresh page may arrive before the cached read resolves. Never
+        // replace that fresh membership with the older optimistic seed.
+        if (!refreshed) accept(refreshFailed ? { ...resp, refreshing: false } : resp);
+      } catch (err: any) { failed(err); }
     },
-    // searchParams identity changes per navigation; the guard only reads it
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rememberFolderMeta, builderMode, kindFilter, archiveOnly, archiveReady, archivePending]
+    [rememberFolderMeta, builderMode, kindFilter, archiveOnly, archiveReady, archivePending, mounted]
   );
 
   const ensureLoaded = useCallback(
@@ -705,7 +711,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
       const page = folderPages[folderKeyOf(targetFolderId)];
       if (!page || (archiveOnly && !archiveReady)) return undefined;
       return sortThings(
-        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived && (builderMode || targetFolderId !== null || isTopLevelLibraryThing(thing)))),
+        page.filter((thing) => (archiveOnly || !HIDDEN_KINDS.has(primaryKindOf(thing))) && (archiveOnly ? thing.libraryArchived === true : (!archiveReady || !thing.libraryArchived) && (builderMode || targetFolderId !== null || isTopLevelLibraryThing(thing)))),
         sort
       );
     },
@@ -745,7 +751,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const displayItems = useMemo(() => {
     const rows = searchMode
-      ? (searchResults || []).filter(thing => archiveOnly ? thing.libraryArchived === true : !thing.libraryArchived)
+      ? (searchResults || []).filter(thing => archiveOnly ? thing.libraryArchived === true : !archiveReady || !thing.libraryArchived)
       : browseItems;
     if (searchMode || folderId || locationPicker || !visibleDevices.length) return rows;
     const represented = new Map(visibleDevices.map(device => [device.deviceId, device.summary?.rootFolderId]));
@@ -789,7 +795,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     const count = selection.has(thing.id) ? Math.max(1, selection.size) : 1;
     const group = count > 1 ? selectedThings : [thing];
     const archived = thing.libraryArchived === true;
-    if (group.length !== count || group.some(entry => entry.author?.id !== archiveScope || entry.libraryArchiveEligible !== true ||
+    if (group.length !== count || group.some(entry => entry.libraryArchiveEligible !== true ||
         entry.inode || entry.executionHeld || (entry.creationProgress && entry.creationProgress.phase !== 'complete') ||
         entry.id.startsWith('timeline-folder-') || (entry.libraryArchived === true) !== archived)) return;
     return archived ? 'restore' as const : 'archive' as const;
@@ -893,6 +899,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
+      if (thing.libraryArchivePresentation === 'metadata') return;
       if (locationPicker) {
         if (isFolder(thing)) navigateToFolder(thing.id);
         else setPreviewThing(thing);
@@ -1313,6 +1320,25 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
     } finally { recordingHandoffBusy.current = false; }
   }, [homeView, selectedPlane]);
 
+  useEffect(() => {
+    const onArchived = (event: Event) => {
+      const detail = (event as CustomEvent<ThingArchiveChanged>).detail;
+      if (!detail || detail.origin !== window.location.origin || detail.ownerId !== user?.id ||
+          detail.dataPlane !== dataPlane || !Array.isArray(detail.ids)) return;
+      const ids = new Set(detail.ids);
+      if (detail.archived !== archiveOnly) {
+        setFolderPages(previous => Object.fromEntries(Object.entries(previous).map(([key, entries]) =>
+          [key, entries.filter(entry => !ids.has(entry.id))])));
+        setSearchResults(previous => previous?.filter(entry => !ids.has(entry.id)) || null);
+        setSelection(previous => new Set([...previous].filter(id => !ids.has(id))));
+      }
+      refreshAfterMutation(sourceKeysOf(detail.ids));
+      setSearchSeq(previous => previous + 1);
+    };
+    window.addEventListener(THING_ARCHIVE_CHANGED, onArchived);
+    return () => window.removeEventListener(THING_ARCHIVE_CHANGED, onArchived);
+  }, [user?.id, dataPlane, archiveOnly, refreshAfterMutation, sourceKeysOf]);
+
   const libraryArchiveBusy = useRef(false);
   const changeLibraryArchive = useCallback(async (group: ThingsThing[], action: 'archive' | 'restore') => {
     if (!archiveScope || libraryArchiveBusy.current) return;
@@ -1352,8 +1378,13 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
         if (stillInScope() && (!focused || focused === document.body)) libraryHeadingRef.current?.focus();
       });
     }
-    refreshAfterMutation([...sourceKeysOf(ids), ...group.map(thing => thing.folderId)]);
-    setSearchSeq(previous => previous + 1);
+    if (!completed.size) {
+      refreshAfterMutation([...sourceKeysOf(ids), ...group.map(thing => thing.folderId)]);
+      setSearchSeq(previous => previous + 1);
+    }
+    if (completed.size) window.dispatchEvent(new CustomEvent<ThingArchiveChanged>(THING_ARCHIVE_CHANGED, {
+      detail: { origin: scope.expectedApiOrigin, ownerId: archiveScope, dataPlane: 'home', ids: [...completed], archived: action === 'archive' }
+    }));
     const verb = action === 'archive' ? 'Archived' : 'Restored';
     if (failure || skipped) {
       lopuRef.current({ title: completed.size ? `${verb} ${completed.size} of ${ids.length}` : action === 'archive' ? 'Could not archive' : 'Could not restore',
@@ -1544,10 +1575,15 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
 
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
 
+  // The shared lazy controller is an account API adapter. Device-only menus
+  // keep their existing local/bulk handlers and never acquire remote actions.
+  const scopeItemMenu = useCallback((model: ReturnType<typeof buildThingsItemMenu>) =>
+    homeView || !canUseAccountLinks ? { ...model, subjectId: undefined } : model, [homeView, canUseAccountLinks]);
+
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(menuThing) }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane, canUseAccountLinks, archiveOnly, libraryActionFor]
+			menuThing ? scopeItemMenu(buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(menuThing) })) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode, dataPlane, canUseAccountLinks, archiveOnly, libraryActionFor, scopeItemMenu]
   );
 
   const onItemMenuAction = useCallback(
@@ -1773,8 +1809,8 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
   const eventlessItemContextMenu: ThingsItemHandlers['onItemContextMenu'] = (_thing, event) => { event.preventDefault(); event.stopPropagation(); };
   const itemHandlers: ThingsItemHandlers = {
     builderMode,
-    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) }) }),
-    itemHref: (thing: ThingsThing) => locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
+    ...(locationPicker ? { itemMenuFor: () => ({ sections: [] }) } : { itemMenuFor: (thing: ThingsThing) => scopeItemMenu(buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode, dataPlane, canUseAccountLinks, allowCreation: !archiveOnly, libraryAction: libraryActionFor(thing) })) }),
+    itemHref: (thing: ThingsThing) => thing.libraryArchivePresentation === 'metadata' ? undefined : locationPicker ? (isFolder(thing) ? `?${new URLSearchParams({ ...Object.fromEntries(searchParams), folder: thing.id })}` : undefined) : (builderMode ? builderAppLaunchHref(thing) : null) || thingBrowseHref(thing, searchParams.toString(), user?.id),
 
     locationSearch: searchParams.toString(),
     clipboardCount: clipboard?.ids.length || 0,
@@ -1894,7 +1930,7 @@ const ThingsLibraryPage = ({ builderMode = false, locationPicker }: ThingsPagePr
               animation: 'moving-rainbow 12s linear infinite'
             }}
           >
-            {builderMode ? 'Builder' : archiveOnly ? 'Archived Things' : 'Things'}
+            {archiveOnly ? builderMode ? 'Archived Builder Things' : 'Archived Things' : builderMode ? 'Builder' : 'Things'}
           </Text>
           <Box flex={1} />
           {(archiveReady || archiveOnly) && <Button {...pillProps(archiveOnly)} leftIcon={<Package size={14} />}

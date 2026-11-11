@@ -1139,7 +1139,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			return result;
 		},
-		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
+		list: async (args: any = {}, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
 			facadeLease.assertCurrent();
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
 			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device', 'builderApp', 'libraryArchive'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
@@ -1180,9 +1180,14 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			};
 			const page = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ ids: string[]; nextCursor: string | null }>('thing-pages', key));
 			if (!page) return readPage();
-			if (navigator.onLine) void readPage().catch(() => {});
+			if (navigator.onLine) void readPage().then(result => {
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); options?.onRefresh?.(result);
+			}).catch(error => {
+				try { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); options?.onError?.(error); } catch { /* retired view */ }
+			});
 			const things = await overlay((await sync.views(page.ids)).map(project));
-			return { ok: true, things, nextCursor: page.nextCursor, localWorkspace: true };
+			return { ok: true, things, nextCursor: page.nextCursor, localWorkspace: true,
+				...(navigator.onLine && options?.onRefresh ? { refreshing: true } : {}) };
 		}
 	} } as T;
 }

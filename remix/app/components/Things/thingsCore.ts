@@ -34,6 +34,7 @@ export type ThingsThing = {
   timelineHeadId?: string;
   libraryArchived?: true;
   libraryArchiveEligible?: true;
+  libraryArchivePresentation?: 'metadata';
   creationProgress?: { phase: 'planning' | 'restoring' | 'complete' };
   crystal: Record<string, any>;
   extended: unknown | null;

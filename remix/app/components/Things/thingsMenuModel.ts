@@ -51,6 +51,9 @@ export type ThingsItemMenuArgs = {
 
 export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode, dataPlane, canUseAccountLinks = true, libraryAction, allowCreation = true }: ThingsItemMenuArgs): ThingContextMenuModel => {
   if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
+  if (thing.libraryArchivePresentation === 'metadata') return buildThingEntityMenu(
+    libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: 'Private library placement; content stays in its original conversation or audience' } } : {},
+    [], actCount === 1 ? thing.id : undefined);
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
   const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
@@ -65,6 +68,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },
+    ...(libraryAction ? { [libraryAction]: { label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount), hint: bulkHint } } : {}),
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
     ...builderThingMenuSections(thing, ownerId, actCount),
@@ -75,11 +79,6 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
     ...(files ? [files] : []),
     { id: 'organise', label: 'Organise', actions: [
       { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' },
-      ...(libraryAction && !!ownerId && thing.author?.id === ownerId ? [{
-        id: libraryAction, command: libraryAction, label: countLabel(libraryAction === 'archive' ? 'Archive' : 'Restore', actCount),
-        icon: libraryAction === 'archive' ? '📦' : '↩️', lucide: libraryAction === 'archive' ? 'package' : 'package-open',
-        hint: libraryAction === 'archive' ? 'Find it in Archived' : 'Show in Things again'
-      }] : [])
     ] },
     { id: 'clipboard', label: 'Clipboard', actions: [
       { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
@@ -93,7 +92,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
       ...(folder && allowCreation ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
         icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
     ] }
-  ]);
+  ], actCount === 1 ? thing.id : undefined);
 };
 
 export type ThingsBackgroundMenuArgs = {

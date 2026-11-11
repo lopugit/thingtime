@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Reconcile shared Archive/Restore and sync receipt recovery from
+  main `eab815805` with anonymous/local workspaces. Separate the combined Things
+  1.64/search 1.8 contracts from both older variants. Reconcile background folder
+  membership after Restore without discarding cached paint; retain feature and native
+  follow-up acceptance boundaries in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-11: Implement signed native web-release catalogue/exact-range delivery,
   streaming canonical ZIP/ZIP64 publication and resumable native download/staging
   after healthy Electron startup, activating on the next normal restart.
@@ -177,6 +184,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [Integration and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
 
+- 2026-11-11: Keep the shared authenticated menu controller outside the single-file
+  embed dependency graph, preserving the unchanged bundle budget and first-open
+  menu focus through lazy permission loading. See [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
+
+- 2026-11-11: Make Archive/Restore shared persisted Thing actions across Builder
+  apps, posts, comments, messages and library menus. Preserve public audiences
+  and provide protected metadata-only restoration; verify exact app-card paths
+  and stale-menu races through isolated real API/Chrome checks. See
+  [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
+- 2026-11-11: Recover saved folder-sync work after a legacy uncertain file
+  publication or cancelled native scan. Fence the original upload identity
+  through the accounted Files Timeline transaction (`api.files` 1.13.0), then
+  require fresh sealed reconciliation before advancing. Release the native
+  scanner lane on one-way failures, retain exact job enrollment, and remove
+  the 256-sync-config account ceiling while paging remains bounded. Load the
+  read-only root list during an active native task, defer expired early path
+  observations to sealed indexing, and use Mac 1.22 exact source stamps to
+  avoid hashing a captured upload twice while retaining byte-digest proof.
+  [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
 - 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
   unsupported-parameter responses into fixed safe chat diagnostics. Unknown
   responses retain status-only messages; upstream text and credential/request

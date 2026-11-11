@@ -21,14 +21,15 @@ if (process.argv[2] !== '--worker') {
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
 	const contracts = [
-		['things', 'things', '1.63.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
-		['things-search', 'things/search', '1.7.0', ['GET', 'POST']],
+		['things', 'things', '1.64.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+		['things-search', 'things/search', '1.8.0', ['GET', 'POST']],
+		['things-actions', 'things/actions', '1.1.0', ['GET', 'POST']],
 		['things-update', 'things/update', '1.27.0', ['POST']],
 		['actions-run', 'actions/run', '1.46.0', ['POST']],
 		['components-browse', 'components/browse', '1.1.0', ['GET']],
 		['webpages-resolve', 'webpages/resolve', '1.19.0', ['GET', 'POST']],
-		['files', 'files', '1.12.2', ['GET', 'POST']],
-		['things-bulk', 'things/bulk', '1.8.0', ['POST']],
+		['files', 'files', '1.13.0', ['GET', 'POST']],
+		['things-bulk', 'things/bulk', '1.9.0', ['POST']],
 		['things-delete', 'things/delete', '1.1.1', ['POST']],
 		['timeline', 'timeline', '1.23.0', ['GET', 'POST']],
 		['things-export', 'things/export', '1.18.0', ['POST']],

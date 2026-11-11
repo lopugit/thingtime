@@ -123,7 +123,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 				await requireThingtimeCapability('api.things', '1.36.0');
 		}
 		if (endpoint === 'things' && ((method === 'DELETE' && args.retainAttachmentReceipts === true) || (method === 'PATCH' && args.attachmentIds !== undefined)))
-			await requireThingtimeCapability('api.things', '1.63.0');
+			await requireThingtimeCapability('api.things', '1.64.0');
 		if (endpoint === 'attachments/link' && args.requestId !== undefined) await requireThingtimeCapability('api.attachment-link', '1.3.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');

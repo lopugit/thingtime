@@ -78,7 +78,7 @@ const ThingPreviewBox = ({
   fallback: React.ReactNode;
   schemaRender?: Record<string, unknown> | null;
 }) => {
-  if (isFolder(thing)) return <>{fallback}</>;
+  if (isFolder(thing) || thing.libraryArchivePresentation === 'metadata') return <>{fallback}</>;
   let body: React.ReactNode;
   if (schemaRender) {
     body = <SchemaTemplateRender crystal={thing.crystal || {}} template={schemaRender} />;
@@ -243,7 +243,9 @@ const TitleLink = ({
   thing: ThingsThing;
   handlers: ThingsItemHandlers;
   onOpen?: () => void;
-} & TextProps) => (
+} & TextProps) => thing.libraryArchivePresentation === 'metadata' ? (
+  <Text {...textProps}>{thingDisplayName(thing)}</Text>
+) : (
   <Text
     as={Link}
     _focusVisible={{ outline: '2px solid var(--tt-accent, #f472b6)', outlineOffset: '2px', borderRadius: '4px' }}

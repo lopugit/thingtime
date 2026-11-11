@@ -135,6 +135,24 @@ test('explicit native enrollment proves exact saved settings, private destinatio
   assert.equal(calls.filter(action => action === 'write-approve').length, beforeWriteApproval, 'background preflight never opens an approval prompt');
   assert.deepEqual(calls.slice(-5), ['list', 'private-read', 'folder-read', 'list', 'write-check']);
 
+  // A durable setup intent can outlive a failed background preflight. The
+  // queue must resume the identical saved job without a new operation ID or
+  // an approval dialog, while retaining the worker's later validation gate.
+  rejectWriteCheck = false;
+  const attention = (await queuedJobs.read())!;
+  const callsBeforeResume = calls.length;
+  const resumedQueue = await enrollNativeFolderSync(queuedConfig, queuedScope, 0, undefined, undefined, { queue: true, respectPause: true });
+  assert.equal(resumedQueue.id, attention.id);
+  assert.equal(resumedQueue.state, 'runnable');
+  assert.equal(resumedQueue.pendingFolderValidation, true);
+  assert.equal(calls.length, callsBeforeResume, 'queued recovery does not use native consent or perform an effect');
+  const admittedQueue = (await queuedJobs.begin(resumedQueue, Date.now(), crypto.randomUUID()))!;
+  const scheduledQueue = (await queuedJobs.finish(admittedQueue, Date.now()))!;
+  const scheduledAttention = (await queuedJobs.attention(scheduledQueue))!;
+  await assert.rejects(enrollNativeFolderSync(queuedConfig, queuedScope, 0, undefined, undefined, { queue: true, respectPause: true }), /saved work/);
+  assert.equal((await queuedJobs.read())?.id, scheduledAttention.id,
+   'a later scheduled attempt cannot be silently given a new operation ID by queued recovery');
+
   const paused = (await jobs.pause(recovered))!;
   let enteredApproval!: () => void, finishApproval!: () => void;
   const entered = new Promise<void>(resolve => { enteredApproval = resolve; });

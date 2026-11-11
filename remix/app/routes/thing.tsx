@@ -878,7 +878,7 @@ function GenericThingPage() {
 				<SchemaTemplateLive interactive={schemaVerified && !previewHeld} template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} id={thing.id} />
 			</Box>
 		) : (
-			<ThingView thing={thing.crystal} />
+			<ThingView subjectId={thing.id} thing={thing.crystal} />
 		)
 	) : null;
 

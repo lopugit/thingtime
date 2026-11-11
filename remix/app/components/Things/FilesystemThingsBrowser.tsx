@@ -16,7 +16,7 @@ import { isFolder, thingDisplayName, type ThingsThing } from './thingsCore';
 import { fileRequest, filesystemClipboard, remoteEntryThing, remoteFileCommand, readRemoteFile, writeRemoteFile, requireFilesystemCapabilities, type FileApproval, type FileLocation } from './filesystemClient';
 import { filesystemName, itemLocation, transferFilesystem } from './filesystemTransfer';
 import { bundleFromPlan } from '~/utils/thingTransfer/browser';
-import { ThingContextMenu } from '../Thingtime/ContextMenu/ThingContextMenu';
+import { PersistedThingContextMenu as ThingContextMenu } from '../Thingtime/ContextMenu/PersistedThingContextMenu';
 import { useThingContextMenu } from '../Thingtime/ContextMenu/useThingContextMenu';
 import { thingStorageHref } from './thingStorageNavigation';
 import { THING_ACTIONS } from '~/schemas/thingActions';
@@ -360,7 +360,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     onItemAction: action, onItemContextMenu: (item, event) => { setContextItem(item); contextMenu.openAtPointer(event); },
     onItemDragStart: (_item, event) => event.preventDefault(), onItemDragEnd: () => {}, dropTargetId: undefined,
     onFolderDragOver: () => {}, onFolderDragLeave: () => {}, onFolderDrop: () => {},
-    itemMenuFor: item => ({ sections: [{ id: 'files', actions: [
+    itemMenuFor: item => ({ subjectId: item.inode ? undefined : item.id, sections: [{ id: 'files', actions: [
       { id: 'open', command: 'open', label: isFolder(item) ? 'Open folder' : 'Download', icon: isFolder(item) ? '📁' : '📥', disabled: busy || (!!item.inode && !['folder', 'file'].includes(item.inode.type)) },
       ...(canManageStorage(item) ? [{ ...THING_ACTIONS['storage-placement'],
         href: thingStorageHref(item.id, { dataPlane: 'home', fromThings: true }), disabled: busy }] : []),

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { openSyncJournal } from './journal.client';
-import { MAX_SYNC_JOBS_PER_ACCOUNT, SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
+import { SYNC_JOB_PAGE_SIZE, pauseSyncJobAdmission, retireStrictCapture, syncJobCanPause, syncJobDue } from './syncJobJournal';
 import { newFileSyncConfiguration } from './configuration';
 import type { SyncScope } from './reconcile';
 const scope: SyncScope = { origin: 'https://sync.example', ownerId: 'owner', dataPlane: 'home', deviceId: 'device', rootId: 'connection' };
@@ -69,14 +69,37 @@ test('identity changes and cancellation fence admission and discovery', async ()
  assert.throws(() => jobs.read(), { name: 'AbortError' }); journal.close();
 });
 
-test('concurrent admissions enforce the account cap without blocking existing connections', async () => {
- const journal = await open();
- const results = await Promise.allSettled(Array.from({ length: MAX_SYNC_JOBS_PER_ACCOUNT + 1 }, (_, i) => {
+test('more than 256 independent configs admit, pause, and remain discoverable across reopen', async () => {
+ const factory = new IDBFactory(); const journal = await open(factory);
+ const results = await Promise.allSettled(Array.from({ length: 257 }, (_, i) => {
   const binding = { ...scope, rootId: 'connection-' + i }; return jobsFor(journal, binding).admit(saved(binding), 'job-' + i);
  }));
- assert.equal(results.filter(result => result.status === 'fulfilled').length, MAX_SYNC_JOBS_PER_ACCOUNT);
- assert.equal(results.filter(result => result.status === 'rejected').length, 1);
- const binding = { ...scope, rootId: 'connection-0' }; assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0'); journal.close();
+ assert.equal(results.filter(result => result.status === 'fulfilled').length, 257);
+ const folder = { ...scope, rootId: 'paused-folder' };
+ assert.equal((await jobsFor(journal, folder).pauseFolderSetup(saved(folder), 'folder-denial'))?.state, 'paused');
+ const photo = { ...scope, rootId: 'paused-photo' };
+ const photoSaved = { ...saved(photo), configuration: { ...saved(photo).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, photo).pausePhoto(photoSaved, 'photo-denial')).state, 'paused');
+ const automatic = { ...scope, rootId: 'automatic-photo' };
+ const automaticSaved = { ...saved(automatic), configuration: { ...saved(automatic).configuration, sourceKind: 'photos' as const, mode: 'backup' as const } };
+ assert.equal((await jobsFor(journal, automatic).admit(automaticSaved, 'auto', 300_000, undefined, { previous: null })).id, 'auto');
+ const binding = { ...scope, rootId: 'connection-0' };
+ assert.equal((await jobsFor(journal, binding).admit(saved(binding), 'new')).id, 'job-0');
+ journal.close();
+ const reopened = await open(factory);
+ try {
+  const jobs = jobsFor(reopened); let after: string | undefined; const keys = new Set<string>();
+  do {
+   const page = await jobs.list(after);
+   assert.ok(page.jobs.length <= SYNC_JOB_PAGE_SIZE);
+   for (const job of page.jobs) keys.add(job.key);
+   after = page.next;
+  } while (after);
+  assert.equal(keys.size, 260);
+  assert.equal((await jobsFor(reopened, folder).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, photo).read())?.state, 'paused');
+  assert.equal((await jobsFor(reopened, automatic).read())?.id, 'auto');
+ } finally { reopened.close(); }
 });
 
 test('version-10 upgrade preserves existing records and admits no jobs', async () => {

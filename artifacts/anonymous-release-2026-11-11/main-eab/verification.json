@@ -1,0 +1,120 @@
+{
+  "observedAt": "2026-11-11T10:24:34.760086+00:00",
+  "featureParent": "bab94d1d974b981600d86d6c3211e8b8a19c35e8",
+  "mergedMain": "eab8158055d8f9f9dabe22eafeac7f051a5ab901",
+  "scope": "combined merge tree before commit; later local WIP excluded",
+  "checks": {
+    "focused": {
+      "exitCode": 0,
+      "logSha256": "98b7215f54ec58f014fd60b259443ff8e9c1f5d9b46a4f70f1f594446ed63814",
+      "tests": 170,
+      "pass": 170,
+      "fail": 0,
+      "skipped": 0
+    },
+    "native-sync": {
+      "exitCode": 0,
+      "logSha256": "80aa321a572d6c9583094668422bd72a653e01bfb9145620772ab0a76b38c725",
+      "tests": 47,
+      "pass": 47,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa"
+    },
+    "ratchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9"
+    },
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "7af406a0d4aa5f03477917ac99e1051abd36cb5378049855adaa26443a56d63f",
+      "errors": 0,
+      "warnings": 370
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "e5592563b38fb3408ed69bac5f2306f624b171d5c1972e0f164917b294f2a893"
+    },
+    "node-server": {
+      "exitCode": 0,
+      "logSha256": "f3a6d17b3dc886631526382c5ecc63773c66e1b55829453abceca68dfd354de6"
+    },
+    "no-login": {
+      "exitCode": 0,
+      "logSha256": "a9b53e200590fc63670b85ad33bcb59bd2a89c49c63932f1afbe7c81fdd5387a"
+    },
+    "plan": {
+      "exitCode": 0,
+      "logSha256": "7a8e2ea50d6905421ffcbb06b9a0ab235e38b131702c8deac405bdb16d970a15"
+    },
+    "capabilities": {
+      "exitCode": 0,
+      "logSha256": "5d263b86fa07a1e33f43e68ce75aa7a0aa71af4db0c39c1a9f657fbc451db887",
+      "tests": 204,
+      "pass": 204,
+      "fail": 0,
+      "skipped": 0
+    },
+    "built-manifest": {
+      "exitCode": 0,
+      "logSha256": "155150fab4d9334a9826f9acb8651f83cb7592f64b38e4e765256b6413dfbea6"
+    },
+    "archive-browser": {
+      "exitCode": 0,
+      "logSha256": "57fca45aa2dfea77d38919506d4f103c9346786c187bd895f9cc89d67b49b72e"
+    },
+    "embed-source-map": {
+      "exitCode": 0,
+      "logSha256": "2d5c7aea84fe33f74a737a56c8e5bc6e2cd5075885c9656581144e5abe605788",
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "skipped": 0
+    }
+  },
+  "noLogin": "browser/verification.json",
+  "progressPlan": "plan/verification.json",
+  "productionObservation": {
+    "origin": "https://thingtime.com",
+    "api.chatgpt-mcp": "2.2.0",
+    "renderExportToolExposedInThisChat": false,
+    "nativeReleaseFeaturesPresent": false
+  },
+  "verificationBoundaries": [
+    "No main PR merge or production activation",
+    "No production signing trust",
+    "No stable app replacement",
+    "iOS image experiment and automatic activation remain separate local WIP",
+    "Local fixture evidence is not connected-host delivery"
+  ],
+  "priorHeadCI": {
+    "head": "bab94d1d974b981600d86d6c3211e8b8a19c35e8",
+    "codeql": "failed: GitHub installation API rate limit",
+    "preview": "https://thingtime-ej1lh1gxt-lopugits-projects.vercel.app"
+  },
+  "archiveBrowser": {
+    "viewports": [
+      1440,
+      375
+    ],
+    "result": "Passed full unchanged scenario after cache repair; Builder apps, public posts, comments, private message metadata, ordinary nested Things, reload, Restore/original-folder membership, same-Thing delayed response, permission refusal, failed availability/retry, scoped synthetic real API",
+    "log": "archive/acceptance.log"
+  },
+  "initialFailures": [
+    "Stale version assertions were corrected to new canonical contracts.",
+    "Archive browser fixture used its documented explicit PLAYWRIGHT_MODULE after default package resolution failed.",
+    "Actual Archive/Restore browser regression: cached empty folder remained empty. Controlled failing test and list reconciliation fix; unchanged actual browser scenario now passes."
+  ],
+  "sourceSha256": {
+    "remix/app/docs/apiDocs.ts": "f6be85b160dfc530aeadd19b8e54313348fa0de448e1dc880b42b5dd6f431977",
+    "remix/app/local-workspace/accountApi.client.ts": "a021e3cbe6e3fe0d4836cdddfb4a87bbeb635b83211f27db9ba5ace80873ca44",
+    "remix/app/local-workspace/accountApi.test.ts": "00c42cde5e6dc853c51fe199a49f7121da51da23ddc886e7b19cfc492cc91e89",
+    "remix/app/components/Things/ThingsPage.tsx": "39bb9f6329188bbfce90779239c6285706cafa3003181807580f337c9a050518",
+    "remix/app/hooks/useApi.tsx": "2cd7c54978cb22fdfc24a96d2238822db2186fb03baa7a60cfa7ceb31bdbc590",
+    "remix/app/entry.client.tsx": "1e5f9b04aa9dc61f49165bd7202b40bfa12cb2c5e69ad8e170a9c2975fceb134",
+    "remix/scripts/things-library-archive-acceptance.mjs": "1e7f89781bc2bc25e9030942ef281709ffbcf16bfd1b8579abf3c0ede303c074"
+  }
+}

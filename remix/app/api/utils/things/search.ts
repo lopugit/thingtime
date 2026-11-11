@@ -1,4 +1,6 @@
 import { buildGroup, csvList, parseDate, parseCount, searchOwnerScope, textLengthExpr, MAX_TEXT_QUERY_CHARS, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_RANKED_OFFSET, ENGAGEMENT_CANDIDATE_WINDOW, MAX_AUTHOR_CHARS, GENERIC_SEARCH_EXCLUDED_THINGTIME, type SearchQuery } from './searchGrammar';
+import { contentExecutionHeld } from './contentExecutionGate';
+import { LIBRARY_ARCHIVE_PRESENTATION_KINDS, eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { findUserByUsername } from '../auth/users';
@@ -78,7 +80,7 @@ export type SearchResult = {
 const projectVisiblePage = async (
   page: ThingDoc[],
   viewer: Viewer,
-  app: AppLens = null
+  app: AppLens = null, archiveOnly = false
 ): Promise<{ things: Array<PublicThing & { rankScore?: number }>; posts: Record<string, PublicPost> }> => {
   // App lens: namespace verdict + author-liveness batch replace the acl walk,
   // authors/acl are consent-shaped, and the PublicPost projection (scope-blind
@@ -95,9 +97,18 @@ const projectVisiblePage = async (
   // doc. Unbatched, a 50-result page of depth-1 comments issued 50 findOnes
   // against a 10-connection pool, draining as 5 serial pool waves.
   const lookup = batchedThingLookup();
-  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
+  const verdicts = await Promise.all(page.map(async doc => {
+    if (archiveOnly && (!eligibleLibraryArchive(doc) || await contentExecutionHeld(doc))) return false;
+    return canViewInherited(doc, viewer, lookup);
+  }));
   const visible = page.filter((_, index) => verdicts[index]);
-  const things = await toPublicThings(visible, viewer, false, true);
+  const minimalIds = new Set(archiveOnly ? visible.filter(libraryArchiveNeedsMinimalPresentation).map(doc => doc.shareId) : []);
+  const content = await toPublicThings(visible.filter(doc => !minimalIds.has(doc.shareId)), viewer, false, true);
+  const byId = new Map(content.map(thing => [thing.id, thing]));
+  const things = visible.map(doc => minimalIds.has(doc.shareId)
+    ? minimalLibraryArchivePresentation({ id: doc.shareId, thingtime: doc.thingtime, author: null,
+      createdAt: new Date(doc.createdAt).toISOString(), updatedAt: new Date(doc.updatedAt).toISOString() })
+    : byId.get(doc.shareId)!);
   const postDocs = visible.filter((doc) => isPostThing(doc));
   const reactionTargets = await Promise.all(
     visible.map(async (doc) =>
@@ -142,7 +153,7 @@ export const searchThings = async (
   if (query.libraryArchive !== undefined) {
     if (query.libraryArchive !== 'active' && query.libraryArchive !== 'archived') return fail(400, 'Invalid owner library archive filter');
     if (!viewer?.id || viewer.pat || app || isCustomMongoEndpointActive()) return fail(403, 'The library archive filter requires the owner in their home Things library');
-    clauses.push({ ownerId: viewer.id, ...(query.libraryArchive === 'archived' ? { appId: null, libraryArchived: true } : { libraryArchived: { $ne: true } }) });
+    clauses.push(query.libraryArchive === 'archived' ? withMatch(libraryArchiveMatch(viewer.id), { libraryArchived: true, thingtime: { $nin: [...LIBRARY_ARCHIVE_PRESENTATION_KINDS] } }) : { ownerId: viewer.id, libraryArchived: { $ne: true } });
   }
   if (query.near !== undefined) {
     const point = parseGeo(query.near);
@@ -399,7 +410,7 @@ export const searchThings = async (
       })
       .filter(Boolean) as ThingDoc[];
 
-    const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
+    const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app, query.libraryArchive === 'archived');
 
     return {
       ok: true,
@@ -455,7 +466,7 @@ export const searchThings = async (
 
   // exact acl evaluation — the DB match is only a superset; the cursor advances
   // over the raw page so filtered docs are skipped, not resurfaced.
-  const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app);
+  const { things: publicThings, posts } = await projectVisiblePage(page, viewer, app, query.libraryArchive === 'archived');
 
   return { ok: true, things: publicThings, posts, nextCursor, total, totalCapped, ranked };
 };

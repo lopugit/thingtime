@@ -2,6 +2,34 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main sync — 11 November 2026
+
+Integration target: freshly fetched main `eab8158055d8f9f9dabe22eafeac7f051a5ab901`.
+PR #1463 supplies shared Archive/Restore, including lazy authenticated menus;
+PR #1471 supplies sync publication/scan receipt recovery. Preserve both with the
+anonymous/account-local workspace paths. Independent Things 1.63 and search 1.7
+variants require combined Things 1.64/search 1.8 contracts and client negotiation.
+This checkpoint does not merge the feature PR into main or activate production.
+
+Real browser integration exposed a cached empty folder staying empty after
+Restore. The account list facade now delivers background membership to the
+existing sequenced UI reconciliation, with a controlled before/after regression;
+no server authorization or archive semantics are changed.
+
+Combined-source checks pass: TypeScript/ratchet zero errors, lint zero errors
+(370 warnings), canonical web and node-server builds, 204 capability tests,
+170 focused integration tests, 47 native folder-sync tests and 26 compiled
+manifest contracts. Fresh clean-context native-renderer captures pass at
+1440×1000, 390×844 and 320px, including editable canonical JSON and the card crop.
+[Latest integration receipt](../artifacts/anonymous-release-2026-11-11/main-eab/README.md).
+
+The subsequent automatic desktop activation source and iOS image experiment are
+preserved separately as local work in progress. The desktop batch has 85 focused
+passes but still needs embedded runtime activity fencing, lifecycle guards and
+actual app acceptance. Genuine iOS Sharp/libvips image operations and canonical
+Nitro import now pass in a disposable simulator; API startup, transactional storage
+and device integration remain unverified. These are not delivered release claims.
+
 ## Final main refresh — 11 November 2026
 
 Main advanced during acceptance to `5809d02e9e5a6e2530696ac1103946b2b03f68b9`

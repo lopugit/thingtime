@@ -73,6 +73,13 @@
 - [ ] Add a task-owned folder, save its automatically prepared config, and reload. Confirm one source and one config with a valid cloud destination. Add a second config with a different direction/destination; edit, pause and remove each independently. Existing Downloads grants and older config labels must group under the actual source without duplicate grants/configs.
 - [ ] Inspect local and remote editors at desktop/mobile widths, scroll to the bottom, and open nested config controls. Select/edit representative nested text, controls and activity fields through Builder, save and reload. Confirm keyboard focus, no clipping/overflow and one inline busy indicator per operation.
 - [ ] Save & sync while another config runs, restart the worker, and verify durable enrollment. Exercise offline recovery, bounded interrupted strict-scan recovery, denied native writes, revoked folder access, explicit pause and account/origin changes. Never turn a refused or incomplete scan into successful sync or propagated deletion.
+- [ ] Start the Desktop renderer with an empty in-process folder cache while a native sync task is active. The read-only grant list must load existing roots and saved config controls without waiting for the transfer to stop; choosing, scanning and removing roots remain disabled during that task. Repeat after a foreground wake, and verify an owner/origin change cannot show the previous account's roots.
+- [ ] On a two-way Mac job with a large file, let the 30-second early `observe-path` deadline expire. Confirm the saved job waits for a complete strict scan, then transfers without a second full-file source hash on Mac file access 1.22.0. Verify its current native stamp, uploaded part/whole-file digest, or already verified ready attachment matches the captured fingerprint before publication. A changed stamp, altered bytes, revoked grant, Stop, incompatible host, download or deletion must refuse or use the original full guard; preserve confirmed receipts and the scanner lane for another config.
+- [ ] Repeat Save & sync with an exact saved config in attention while another job owns the native lane. Verify queued recovery keeps the same job ID, does not open consent or publish bytes, and requires fresh worker validation. A paused job or unfinished strict scanner must retain its prior work.
+- [ ] Interrupt a streaming download after staging and before native publication, then change the source or placement policy. Verify no premature publication fence is saved and the original operation is safely superseded. Interrupt after publication and verify the same receipt ID is recovered without publishing again.
+- [ ] Resume a two-way Desktop job whose native streaming capture was cancelled after confirmed work. Verify the old feed drains under its original receipt IDs, a fresh full local scan and complete cloud scan seal before checkpoint, and no upload repeats. After a temporary connection/indexing wait, another config must be able to use the native scanner lane. Explicit Pause remains stopped until Resume. Revoked authority or an incomplete fresh scan must retain the saved work without a checkpoint or propagated deletion.
+- [ ] Resume a one-way upload with a legacy saved dispatch marker and a changed local source. A null receipt lookup must retain the row until the owner-authenticated Files terminal fence occupies the original Timeline operation ID, or the original commit wins and replays. Check a late original POST cannot publish after the terminal fence, a refused/timeout fence leaves the row intact, and a fresh authorized scan then uploads the current source once.
+- [ ] Interrupt an approved native Photos upload after its direct publication request but before the native reply or final source check. Confirm the original dispatch marker is already durable, the receipt replays under the same ID after restart, and neither a new byte transfer nor a second file revision occurs.
 - [ ] Interrupt navigation or reload after the config save and before enrollment. Recover only the exact saved revision automatically, without duplicate configs or background permission prompts. Test a busy native Photos lane, cancellation of a prior backup scanner, and remote Pause while enrollment awaits write approval.
 - [ ] Compare config last activity and sent/received history with real transfer receipts before/after reload and remote reads. A reused content blob sends zero payload bytes; unavailable measurements remain unknown. Activity from another config/account/device must not appear.
 - [ ] Through the real API and disposable data, upload identical bytes from independent sync sources, including concurrent starts. Verify one physical object generation, separate logical files, one unique-byte charge, authorized download of both and no cross-account reuse. Test different bytes, zero bytes, interrupted upload and digest mismatch.
@@ -4943,6 +4950,46 @@ email whose link points at the attacker.
       (`inline` mode).
 
 ## Things library archive
+
+- On combined anonymous/local-workspace builds, negotiate Things 1.64 and search
+  1.8 before expanded Archive reads; reject the colliding older 1.63/1.7 variants.
+  Opening a device-only menu must not attach a remote action subject or borrow
+  account authority. Preserve normal local download/history and account archive cache updates.
+
+- [ ] With the frontend manifest at api.things 1.63 and active API at 1.62,
+  Archived must report unsupported before sending a libraryArchive query.
+  Missing/breaking active contracts also refuse. After compatible active 1.63
+  negotiation, verify real app-card Archive/Restore and archived search.
+  `THINGTIME_ARCHIVE_SCOPE=contract` exercises this mixed-deployment boundary.
+
+- [ ] Build the embed with `pnpm --dir remix run build:embed`; keep the existing
+  single-file/raw/gzip budgets. Closed persisted menus must not download the
+  authenticated controller. Delay its first module request, focus an existing
+  base command or open a submenu, then resolve it: the same menu/focus/scroll
+  remains usable. A failed module request offers working Retry without exposing
+  unverified Archive. Account/plane/subject changes clear the old menu state.
+  `THINGTIME_ARCHIVE_SCOPE=lazy` exercises the real first-open module boundary;
+  `THINGTIME_ARCHIVE_SCOPE=embed` checks the compiled popup's local JSON menu
+  without privileged Thing action requests. The PR 1463 comparison currently
+  records a preexisting bridge/router startup failure on both main and the fix;
+  do not count that blocked popup check as a pass.
+
+- [ ] In **Builder → Apps**, use the actual app card (Browse/Edit app), not the
+  folder tree. Archive from ellipsis/touch and context menu; reload the active
+  app index, open Archived, search, Restore and check the original app children.
+  Repeat in a Builder library folder. Archived Apps stays root/app-only.
+- [ ] From a post permalink/feed and a message's actions, Archive then Restore.
+  The same canonical action is available for comments, linked Things, detail
+  menus and filesystem cloud roots. Posts keep their public audience and messages
+  stay in their conversation. In Archived Things, protected content has a static
+  label and Restore only, with no generic Open/Edit/Preview/content anchor.
+- [ ] A raw nested field says **Archive containing Thing** and acts only on its
+  explicitly saved root. Unsaved local data and remote inodes must not guess IDs.
+- [ ] Non-owner and protected subject refusal shows neither Archive nor Retry;
+  transient lookup failure shows one Retry and never stale Archive/Restore.
+  Delay an Archive response, close/reopen the same Thing menu, then release it:
+  the new visit stays open and resolves Restore. Retargeting another Thing or
+  changing owner/origin/data plane must not retain old content or busy state.
 
 - [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
   Its row leaves the active view, including search. The original link, sharing
@@ -18884,6 +18931,7 @@ private readback while an unrelated Home fixture remains paused.
   memory. Growth must remain bounded across the entire archive, with exact
   fingerprints and unchanged original bytes. Keep simulator/build evidence,
   a physical app exit, and an actual iOS crash/termination report distinct.
+- When a saved sync run stops with an uncertain publication, expand Progress → Recovery details and check the exact reserved operation/file identities and dispatch/receipt evidence. Verify the read leaves the journal reservation intact, exposes no source path or bytes, and is cleared when the account or run changes. A missing cloud receipt alone must not retire an in-flight operation.
 
 - [ ] After extracting or merging the shared Action interpreter, run `app/local-workspace/actions.test.ts`: an owned-folder `things.get` returns `ownedFolderVerified` only for the invoking owner and exact selected folder; a different folder or shared execution must refuse before returning data.
 
@@ -18990,3 +19038,8 @@ reply 1.23.1 with an older same-origin active API 1.23.0 must refuse omitted or
 explicit personal providers before POST. After active API 1.23.1 is available,
 retry must send exactly the selected provider. Preserve separate credits,
 device and ChatGPT-plan requirements.
+
+- Account library restore regression: cache an empty folder page, Archive then
+  Restore a child, return to that folder after reload and verify the fresh
+  background list repopulates it. Keep cached paint, reject stale/retired callbacks
+  and never replace a fast fresh response with the older cached result.
