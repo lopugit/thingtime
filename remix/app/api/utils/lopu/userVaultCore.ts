@@ -266,6 +266,14 @@ export const providerModelFor = (provider: LopuProviderKind, modelId: unknown): 
 	return providerTemplateFor(provider)?.models.find((model) => model.id === modelId.trim()) ?? null;
 };
 
+/** A saved provider's resolved model owns tuning support. Unknown custom models
+ * retain explicit tuning; known models never receive unsupported effort fields.
+ * This changes the effective turn only, not the user's saved preference. */
+export const normalizeVaultProviderEffort = (provider: LopuProviderKind, modelId: string, effort: LopuProviderEffort | null): LopuProviderEffort | null => {
+  const model = providerModelFor(provider, modelId);
+  return effort && (!model || model.efforts.includes(effort)) ? effort : null;
+};
+
 // A provider-native model id as the vault or a voice request may carry it
 // (`gpt-5.4`, `openai/gpt-oss-120b`, `grok-voice-latest`): bounded, no
 // whitespace or shell-ish characters, else null.
