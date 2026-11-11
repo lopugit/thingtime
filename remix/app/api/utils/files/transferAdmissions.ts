@@ -41,7 +41,9 @@ const sha256 = (value: unknown): value is string => typeof value === 'string' &&
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (status: number, error: string) => ({ ok: false as const, status, error });
 const missing = () => fail(404, 'Transfer admission not found');
-const changed = () => fail(409, 'Sync approval, configuration or destination changed');
+const changed = () => ({ ...fail(409, 'Sync approval, configuration or destination changed'), code: 'transfer_state_changed' });
+const configurationChanged = () => ({ ...fail(409, 'Saved sync configuration changed'), code: 'sync_configuration_changed' });
+const destinationChanged = () => ({ ...fail(409, 'Sync destination changed'), code: 'sync_destination_changed' });
 const expired = () => fail(410, 'Transfer admission expired or was revoked');
 const live = (session: SessionDoc, now: number) => !session.revokedAt && (session.expiresAt === null || session.expiresAt.getTime() > now);
 const browser = (session: SessionDoc) => session.purpose == null || session.purpose === 'browser';
@@ -318,7 +320,7 @@ export async function transferAdmission(input: {
 		try {
 			await withHomeMongoSnapshot(session => readCloudInventoryRoot(things, session, owner.userId, config.remoteFolderId, () => 5000, signal));
 		} catch (error) {
-			if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return changed();
+			if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return destinationChanged();
 			throw error;
 		}
 		const expiresAt = new Date(Math.min(owner.credentialExpiresAt, browserSession.expiresAt?.getTime() ?? Infinity, pairing.expiresAt!.getTime()));
@@ -371,12 +373,12 @@ export async function transferAdmission(input: {
 			paired(row.userId, binding.deviceId, binding.deviceSessionId), deviceThing(row.userId, binding.deviceId, true)
 		]);
 		if (!ownerSession || !pairing || !attached) return expired();
-		if (!config || digest(config) !== binding.configDigest || !isPhotoBackup(config) || config.resourceLimits || config.ignoreRules) return changed();
+		if (!config || digest(config) !== binding.configDigest || !isPhotoBackup(config) || config.resourceLimits || config.ignoreRules) return configurationChanged();
 		if (checking) {
 			try {
 				await withHomeMongoSnapshot(session => readCloudInventoryRoot(things, session, row.userId, binding.folderId, () => 5000, signal));
 			} catch (error) {
-				if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return changed();
+				if (error instanceof StorageMutationError && [404, 409].includes(error.status)) return destinationChanged();
 				throw error;
 			}
 			return (await liveRun(handle, row.userId, binding.deviceSessionId)) ? { ok: true } : expired();

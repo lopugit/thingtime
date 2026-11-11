@@ -10,6 +10,20 @@ private struct DeferredUploadTestScheduler: NativeDeferredUploadScheduling {
     func cancel() {}
 }
 
+private actor PhotoBatchTestGate {
+    private var opened = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func open() {
+        opened = true
+        let pending = waiters; waiters.removeAll()
+        for waiter in pending { waiter.resume() }
+    }
+}
+
 @MainActor
 final class NativeFileUploadJobTests: XCTestCase {
     private let root = "11111111-1111-4111-8111-111111111111"
@@ -56,6 +70,32 @@ final class NativeFileUploadJobTests: XCTestCase {
         }
     }
 
+    func testFreshAuthorizationClearsOnlyAuthorityRefusalAndKeepsQueueCheckpoint() throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory)
+        let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler())
+        worker.activate(foreground: false)
+        let auth = try authorization(sourceKind: "photos"), grant = String(repeating: "a", count: 64)
+        let expiry = Date(timeIntervalSinceNow: 3600)
+        for reason: NativePhotoRunActivity.Reason in [.savedSettings, .transferPermission, .transferExpired, .transferMissing, .transferState] {
+            var old = NativePhotoRunRecord(scope: scope, authorization: auth, grantRevision: grant, runId: "old", expiresAt: expiry)
+            old.captureId = UUID().uuidString.lowercased()
+            old.armed = false; old.stage = "needs-review"; old.retryAt = Date(timeIntervalSinceNow: 300)
+            old.activity = .init(phase: .waiting, reason: reason)
+            try store.write(old)
+            let renewed = NativePhotoRunRecord(scope: scope, authorization: auth, grantRevision: grant, runId: "fresh", expiresAt: expiry)
+            XCTAssertTrue(try worker.armPhotoRun(renewed))
+            let saved = try XCTUnwrap(store.lookup(renewed))
+            XCTAssertTrue(saved.armed); XCTAssertEqual(saved.stage, "ready")
+            XCTAssertLessThan(saved.retryAt, Date()); XCTAssertNil(saved.activity?.reason)
+            XCTAssertEqual(saved.epoch, old.epoch); XCTAssertEqual(saved.captureId, old.captureId)
+            var paused = old; paused.pauseByUser(); try store.write(paused)
+            XCTAssertThrowsError(try worker.armPhotoRun(renewed))
+        }
+    }
+
     func testInterruptedPhotosRemainArmedAndLegacyHoldRenewsAtExactCheckpoint() throws {
         let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -99,6 +139,146 @@ final class NativeFileUploadJobTests: XCTestCase {
         XCTAssertTrue(try worker.armPhotoRun(renewed, explicitResume: true))
         XCTAssertEqual(try store.lookup(renewed)?.armed, true)
         XCTAssertNil(try store.lookup(renewed)?.userPaused)
+    }
+
+    private func budgetWaitingRun(now: Date) throws -> NativePhotoRunRecord {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        var run = NativePhotoRunRecord(scope: scope, authorization: try authorization(sourceKind: "photos"),
+            grantRevision: String(repeating: "a", count: 64), runId: "run", expiresAt: now.addingTimeInterval(7200), foregroundOwner: true)
+        run.captureId = UUID().uuidString.lowercased(); run.stage = "uploading"
+        run.batch = try JSONDecoder().decode(PhotoBackupQueueBatch.self, from: JSONSerialization.data(withJSONObject: [
+            "epoch": run.epoch.uuidString, "id": UUID().uuidString, "assetKeys": ["first", "second"], "pending": 0, "unavailable": 0]))
+        run.activity = .init(phase: .uploading, backlogOriginals: 1, backgroundRequest: .active)
+        return run
+    }
+
+    func testOneBudgetWaitDrainsAllowedUploadAndRetryDoesNotReplayItsReceipt() async throws {
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let budget = NativePhotoUploadBudget(directory: directory), started = PhotoBatchTestGate(), waiting = PhotoBatchTestGate()
+        let now = Date(timeIntervalSince1970: 6000)
+        var receipts = Set<Int>(), uploads: [Int: Int] = [:], batchAcknowledged = false
+        let run = try budgetWaitingRun(now: now), store = NativePhotoRunStore(directory: directory)
+        try store.write(run)
+        var continuedSliceSucceeded = false
+        do {
+            try await NativeDeferredUpload.processPhotoOriginals([1, 2], concurrency: 2) { original in
+                if original == 2 { await started.wait() }
+                let lease: NativePhotoUploadBudget.Lease
+                do { lease = try budget.reserve(scope: scope, deviceId: "device", bytes: 80, cap: 100, now: now) }
+                catch let wait as NativePhotoUploadBudget.Wait {
+                    await waiting.open(); throw wait
+                }
+                uploads[original, default: 0] += 1
+                await started.open(); await waiting.wait()
+                try Task.checkCancellation()
+                try budget.finish(lease, observedBytes: 80, now: now)
+                receipts.insert(original)
+            }
+            batchAcknowledged = true
+            XCTFail("The incomplete batch must retain its queue checkpoint")
+        } catch let wait as NativePhotoUploadBudget.Wait {
+            XCTAssertNotNil(wait.retryAt)
+            let committed = try await NativeDeferredUpload.checkpointPhotoBudgetWait(run, wait: wait, now: { now }, check: {},
+                verifyAuthority: {}, read: { try store.lookup(run) }, write: { try store.update($0) })
+            continuedSliceSucceeded = true
+            XCTAssertEqual(try store.lookup(run), committed)
+            XCTAssertEqual(committed.stage, "waiting"); XCTAssertEqual(committed.syncWait, "data-budget")
+            XCTAssertEqual(committed.batch, run.batch); XCTAssertEqual(committed.captureId, run.captureId)
+            XCTAssertEqual(committed.activity?.backlogOriginals, 1); XCTAssertEqual(committed.activity?.backgroundRequest, .waiting)
+        }
+        XCTAssertTrue(continuedSliceSucceeded, "The durable incomplete slice can finish successfully without acknowledging the batch")
+        XCTAssertEqual(receipts, [1], "Waiting sibling cannot cancel the already admitted upload")
+        XCTAssertFalse(batchAcknowledged)
+        try await NativeDeferredUpload.processPhotoOriginals([1, 2], concurrency: 2) { original in
+            if receipts.contains(original) { return }
+            let later = now.addingTimeInterval(7200)
+            let lease = try budget.reserve(scope: scope, deviceId: "device", bytes: 80, cap: 100, now: later)
+            uploads[original, default: 0] += 1
+            try budget.finish(lease, observedBytes: 80, now: later)
+            receipts.insert(original)
+        }
+        batchAcknowledged = true
+        XCTAssertTrue(batchAcknowledged); XCTAssertEqual(receipts, [1, 2]); XCTAssertEqual(uploads, [1: 1, 2: 1])
+    }
+
+    func testKnownBudgetDeadlineSurvivesDurableCheckpointWithoutFiveMinuteInflation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory), now = Date(timeIntervalSince1970: 6000)
+        let cases: [(String, NativePhotoUploadBudget.Wait, Date)] = [
+            ("pacing", .init(retryAt: now.addingTimeInterval(13)), now.addingTimeInterval(13)),
+            ("hourly", .init(retryAt: now.addingTimeInterval(3600)), now.addingTimeInterval(3600)),
+            ("unknown", .init(retryAt: nil), now.addingTimeInterval(300)),
+            ("past", .init(retryAt: now.addingTimeInterval(-13)), now.addingTimeInterval(1))]
+        for (name, wait, expected) in cases {
+            var run = try budgetWaitingRun(now: now)
+            run.retryAt = now.addingTimeInterval(300) // Retained older-build backoff is superseded by a fresh known deadline.
+            try store.write(run)
+            let committed = try await NativeDeferredUpload.checkpointPhotoBudgetWait(run, wait: wait, now: { now },
+                check: {}, verifyAuthority: {}, read: { try store.lookup(run) }, write: { try store.update($0) })
+            XCTAssertEqual(committed.retryAt, expected, name)
+            XCTAssertEqual(try store.lookup(run)?.retryAt, expected, "Exact deadline must survive durable readback")
+            XCTAssertGreaterThan(committed.retryAt, now, "Even a stale pacing deadline must not busy-loop")
+            XCTAssertEqual(committed.batch, run.batch); XCTAssertEqual(committed.captureId, run.captureId)
+            XCTAssertEqual(committed.stage, "waiting"); XCTAssertTrue(committed.armed)
+        }
+        XCTAssertEqual(NativeDeferredUpload.budgetRetryDeadline(nil, now: now), now.addingTimeInterval(300), "Unclassified transient failures retain their backoff")
+    }
+
+    func testBudgetWaitCannotSettleOnAuthorityExpiryCancellationOrCheckpointFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NativePhotoRunStore(directory: directory), now = Date(timeIntervalSince1970: 6000)
+        let original = try budgetWaitingRun(now: now), wait = NativePhotoUploadBudget.Wait(retryAt: now.addingTimeInterval(600))
+        for scenario in ["authority", "network", "expired", "cancelled", "write", "readback", "paused"] {
+            try store.write(original)
+            var clock = now, wrote = false, settled = false
+            do {
+                _ = try await NativeDeferredUpload.checkpointPhotoBudgetWait(original, wait: wait, now: { clock }, check: {
+                    if scenario == "cancelled" { throw CancellationError() }
+                }, verifyAuthority: {
+                    if scenario == "authority" { throw NativeDeferredUploadClient.Failure.denied }
+                    if scenario == "network" { throw URLError(.notConnectedToInternet) }
+                    if scenario == "expired" { clock = original.expiresAt }
+                    if scenario == "paused" { var paused = original; paused.pauseByUser(); try store.write(paused) }
+                }, read: {
+                    var current = try store.lookup(original)
+                    if scenario == "readback", wrote { current?.stage = "uploading" }
+                    return current
+                }, write: {
+                    if scenario == "write" { throw CocoaError(.fileWriteNoPermission) }
+                    try store.update($0); wrote = true
+                })
+                settled = true
+            } catch {
+                if scenario == "authority" { XCTAssertEqual(NativeDeferredUploadClient.failure(error), .denied) }
+                if scenario == "network" { XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet) }
+                if scenario == "expired" { XCTAssertEqual(NativeDeferredUploadClient.failure(error), .expired) }
+                if ["paused", "cancelled"].contains(scenario) { XCTAssertTrue(error is CancellationError) }
+                if scenario == "readback" { XCTAssertEqual(NativeDeferredUploadClient.failure(error), .invalid) }
+            }
+            XCTAssertFalse(settled, "\(scenario) must never report a successful continued slice")
+            if scenario != "readback" { XCTAssertFalse(wrote) }
+        }
+    }
+
+    func testFatalPhotoAuthorityFailureStillCancelsAdmittedSibling() async throws {
+        let started = PhotoBatchTestGate()
+        var siblingCancelled = false
+        do {
+            try await NativeDeferredUpload.processPhotoOriginals([1, 2], concurrency: 2) { original in
+                if original == 2 {
+                    await started.wait(); throw NativeDeferredUploadClient.Failure.denied
+                }
+                await started.open()
+                do { try await Task.sleep(for: .seconds(60)) }
+                catch { siblingCancelled = Task.isCancelled; throw error }
+            }
+            XCTFail("A revoked authority must fail the batch")
+        } catch { XCTAssertEqual(NativeDeferredUploadClient.failure(error), .denied) }
+        XCTAssertTrue(siblingCancelled)
     }
 
     func testDeviceBudgetCountsPartialRetryAndRetainsUncertainBytesAcrossRelaunch() throws {

@@ -4,6 +4,7 @@ import Foundation
 /// A scoped, bounded explanation of measured native work. The capture can
 /// report off the main actor and never sends paths, identifiers or raw errors.
 final class NativePhotoRunActivity: @unchecked Sendable {
+    enum SourceFailure: Error { case grantChanged, photoAccess, queueChanged }
     enum Phase: String, Codable, Sendable {
         case verifying, indexing, checkingOriginals = "checking-originals", downloading
         case checkingCloud = "checking-cloud", uploading, publishing, waiting, complete
@@ -12,6 +13,8 @@ final class NativePhotoRunActivity: @unchecked Sendable {
         case interrupted, libraryChanged = "library-changed", photoAccess = "photo-access"
         case deviceStorage = "device-storage", photoRead = "photo-read", cloudRequest = "cloud-request"
         case savedSettings = "saved-settings", destinationReview = "destination-review", retry
+        case transferPermission = "transfer-permission", transferExpired = "transfer-expired"
+        case transferMissing = "transfer-missing", transferState = "transfer-state", grantChanged = "grant-changed", queueChanged = "queue-changed"
     }
     enum BackgroundRequest: String, Codable, Sendable { case active, declined, waiting, complete }
     struct Snapshot: Codable, Equatable, Sendable {
@@ -37,6 +40,7 @@ final class NativePhotoRunActivity: @unchecked Sendable {
         var downloadFraction: Double?
         var cloudPreparationFraction: Double?
         var reason: Reason?
+        var failureOperation: NativeDeferredUploadClient.Operation?
         var events: [Event] = []
         var backgroundRequest: BackgroundRequest?
     }
@@ -80,7 +84,11 @@ final class NativePhotoRunActivity: @unchecked Sendable {
 
     @discardableResult
     func phase(_ phase: Phase, reason: Reason? = nil) -> Bool {
-        update { setPhase(phase); value.reason = reason }
+        update { setPhase(phase); value.reason = reason; if phase != .waiting { value.failureOperation = nil } }
+    }
+
+    func failedOperation(_ operation: NativeDeferredUploadClient.Operation?) {
+        _ = update { value.failureOperation = operation }
     }
 
     func capture(_ progress: PhotoLibraryReader.CaptureProgress) -> Bool {
@@ -154,10 +162,21 @@ final class NativePhotoRunActivity: @unchecked Sendable {
         case .readFailed: return .photoRead
         case .cloudOriginal, nil: break
         }
-        if (error as? MobileFolderStore.Failure) == .changed { return .savedSettings }
-        switch error as? NativeDeferredUploadClient.Failure {
+        switch error as? SourceFailure {
+        case .grantChanged: return .grantChanged
+        case .photoAccess: return .photoAccess
+        case .queueChanged: return .queueChanged
+        case nil: break
+        }
+        if (error as? MobileFolderStore.Failure) == .changed { return .grantChanged }
+        switch NativeDeferredUploadClient.failure(error) {
         case .photoPathConflict: return .destinationReview
-        case .denied: return .savedSettings
+        case .denied: return .transferPermission
+        case .expired: return .transferExpired
+        case .missing: return .transferMissing
+        case .stateChanged: return .transferState
+        case .configurationChanged: return .savedSettings
+        case .destinationChanged: return .destinationReview
         case .invalid, .incompatible, .partsRetryable, .unavailable: return .cloudRequest
         case nil: return .retry
         }

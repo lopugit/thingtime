@@ -12468,6 +12468,58 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS deferred Photos transfers
 
+- [ ] Reserve five native Photos originals concurrently through the real HTTP
+  API. Exact-path snapshot work must queue in FIFO order with at most two
+  active observations; capacity alone must not return 503 or cancel admitted
+  siblings. Cancel a queued and a running request, revoke queued access, and
+  exhaust the original deadline; no database/scratch work or slot may leak.
+- [ ] Open the actual saved Photos cards with their details collapsed. At
+  desktop and phone widths, device, folder and config speed/hourly inputs must
+  remain visible. Save and reload all three scopes through their real adapters;
+  verify byte-unit conversion, inheritance, native acknowledgement, retained
+  unsaved inputs and account/origin changes. Older native builds show the fields
+  with an update explanation. A direct editor-only fixture is insufficient.
+- [ ] With two configs in one folder and another folder on the same device,
+  enforce aggregate device/folder allowances and independent config allowances.
+  Change limits during active uploads and reopen after an uncertain transfer;
+  usage must persist, exact settlement must count once, and old admitted work
+  must not grant a new over-budget upload. Preserve explicit user Pause. Check
+  legacy unscoped usage, an indivisible provider part, and average scheduling
+  independently from a strict instantaneous speed claim.
+- [ ] In a concurrent batch, make one original wait for its hourly allowance
+  while an admitted sibling finishes. Keep the sibling's durable receipt,
+  stop refilling the batch, and defer before acknowledging the queue. Retry
+  without uploading the completed original again; fatal authority/source
+  refusals must still cancel sibling work.
+- [ ] A saved upload-limit wait may finish the current iOS processing slice
+  successfully only after the exact armed run's waiting checkpoint is saved
+  and read back. Show that progress is saved and uploads are waiting for limits;
+  keep remaining originals pending. Cancellation, expired/revoked authority,
+  network failure and checkpoint-write failure must never claim success.
+- [ ] Preserve a known short pacing deadline through durable save/readback and
+  foreground wake-up instead of stretching it to five minutes. A fresh known
+  deadline supersedes an older retry delay; hourly waits retain their deadline,
+  unknown transient failures keep the five-minute backoff, and stale deadlines
+  have a one-second floor. Background scheduling remains controlled by iOS.
+- [ ] Bound both foreground and daemon admission by the actual signed-part
+  expiry. Queue five durable daemon jobs with future earliest-start dates so
+  paced transfers do not require an app wake-up between parts. Foreground work
+  must respect those shared slots. A start beyond the signed expiry must defer
+  without consuming another calendar slot; repeated retries must converge on
+  the original deadline. Exercise a
+  rate whose part duration exceeds the signer lifetime without switching off
+  background file transport or claiming a strict instantaneous wire cap.
+- [ ] On a fresh same-revision authorization after an authority refusal, retain
+  the exact native queue epoch/capture, clear the old attention stage/backoff,
+  and allow a new continuation request. User Pause and changed grants still
+  refuse automatic resume. Exercise expired/missing/permission and unknown
+  transfer conflicts with the normal bounded reauthorization cooldown.
+- [ ] Verify closed failure reason plus operation (permission check, reservation,
+  upload part, completion/publication, local grant, queue) in the exact native
+  journal/status. Only verified configuration refusals say saved settings;
+  permission, expiry and generic conflicts stay distinct. Raw server text,
+  handles, paths and credentials must never enter these diagnostics.
+
 - [ ] Run `node remix/scripts/test-photo-sync-stable-ui.mjs`. At desktop and
   mobile widths verify initial/unknown, indexing, iCloud retrieval, cloud checks,
   uploading, publishing and stale values keep the surrounding card stable.

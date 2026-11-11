@@ -387,6 +387,17 @@ final class NativeDeferredUpload {
             next.foregroundOwner = current.nativeOwnsRun || proposed.nativeOwnsRun
             next.activity = current.activity
         }
+        if let current, !current.armed, current.sameScope(proposed), current.authorization == proposed.authorization,
+           current.stage == "needs-review", current.activity?.reason.map({
+               [.savedSettings, .transferPermission, .transferExpired, .transferMissing, .transferState].contains($0)
+           }) == true {
+            // The caller just obtained fresh owner/device/server authorization.
+            // Retain the exact queue, but retire the old refusal and its backoff
+            // before the continuation request reads this newly armed run.
+            next.stage = "ready"; next.retryAt = .distantPast
+            next.syncWait = nil; next.minimumPartBytes = nil
+            next.activity?.reason = nil; next.activity?.failureOperation = nil; next.activity?.phase = .verifying
+        }
         if let current, current.sameScope(proposed), current.legacySystemInterruption || current.userPaused == true {
             next.stage = "ready"; next.retryAt = .distantPast
         } else if explicitResume && next.stage == "complete" {
@@ -860,13 +871,13 @@ final class NativeDeferredUpload {
                 } catch {
                     success = false
                     if var saved = try? self.store.lookup(current), saved.armed, !saved.ready {
-                        if (error as? NativeDeferredUploadClient.Failure)?.terminal == true ||
-                            (error as? MobileFolderStore.Failure) == .changed {
+                        if NativeDeferredUploadClient.failure(error)?.terminal == true ||
+                            ((error as? MobileFolderStore.Failure) == .changed || error is NativePhotoRunActivity.SourceFailure) {
                             saved.armed = false
                         } else {
                             // Back off on iOS expiry, Wi-Fi, power, or lost
                             // response. Foreground resume can bypass the delay.
-                            saved.retryAt = max(Date(timeIntervalSinceNow: 300), (error as? NativePhotoUploadBudget.Wait)?.retryAt ?? .distantPast)
+                            saved.retryAt = Self.budgetRetryDeadline(error as? NativePhotoUploadBudget.Wait)
                         }
                         try? self.store.update(saved)
                     }
@@ -884,26 +895,51 @@ final class NativeDeferredUpload {
                         settledSubtitle: deferred ? "Available originals saved · remaining originals will retry" : nil)
                 }
                 catch {
+                    var failure = error
+                    if let budget = error as? NativePhotoUploadBudget.Wait {
+                        do {
+                            let saved = try await Self.checkpointPhotoBudgetWait(run, wait: budget,
+                                activity: self.activity(for: run)?.snapshot(), check: {
+                                    try check()
+                                    guard !self.persistenceUncertain else { throw CancellationError() }
+                                    let grant = try self.grants.grant(run.scope, id: run.rootId)
+                                    guard grant.sourceKind == "photos", NativeUploadPartStaging.grantRevision(grant) == run.grantRevision else {
+                                        throw NativePhotoRunActivity.SourceFailure.grantChanged
+                                    }
+                                    guard self.photos.access() != "unavailable" else { throw NativePhotoRunActivity.SourceFailure.photoAccess }
+                                    try self.conditions.verify(run.authorization)
+                                }, verifyAuthority: {
+                                    _ = try await NativeDeferredUploadClient(photoRun: run).photoRunRequest([
+                                        "action": "check-photo-run", "runId": run.runId])
+                                }, read: { try self.photoRuns.lookup(run) }, write: { try self.photoRuns.update($0) })
+                            self.reportPhotoProgress(saved)
+                            self.finishContinuedRun(run, success: true,
+                                settledSubtitle: "Progress saved · waiting for upload limits")
+                            continue
+                        } catch { failure = error }
+                    }
+                    // Earlier failures keep the aggregate result unsuccessful.
                     success = false
                     self.finishContinuedRun(run, success: false)
                     if var saved = try? self.photoRuns.lookup(run), saved.sameRun(run), saved.armed {
                         if Task.isCancelled, saved.activity?.reason == .interrupted { continue }
-                        if (error as? PhotoLibraryReader.Failure) == .changed {
+                        if (failure as? PhotoLibraryReader.Failure) == .changed {
                             saved.captureId = nil; saved.batch = nil; saved.pendingOriginals = nil
                         }
-                        if (error as? NativeDeferredUploadClient.Failure)?.terminal == true || (error as? MobileFolderStore.Failure) == .changed {
+                        if NativeDeferredUploadClient.failure(failure)?.terminal == true || ((failure as? MobileFolderStore.Failure) == .changed || failure is NativePhotoRunActivity.SourceFailure) {
                             saved.armed = false
                             saved.stage = "needs-review"
                         } else {
-                            let budget = error as? NativePhotoUploadBudget.Wait
-                            let conditions = error as? NativeUploadAuthorization.Wait
-                            saved.retryAt = max(saved.retryAt, Date(timeIntervalSinceNow: 300), budget?.retryAt ?? .distantPast)
-                            saved.stage = (error as? NativeDeferredUploadClient.Failure) == .photoPathConflict ? "needs-review" : "waiting"
+                            let budget = failure as? NativePhotoUploadBudget.Wait
+                            let conditions = failure as? NativeUploadAuthorization.Wait
+                            saved.retryAt = budget == nil ? max(saved.retryAt, Self.budgetRetryDeadline(nil)) : Self.budgetRetryDeadline(budget)
+                            saved.stage = NativeDeferredUploadClient.failure(failure) == .photoPathConflict ? "needs-review" : "waiting"
                             saved.syncWait = budget == nil ? conditions?.rawValue : "data-budget"
                             saved.minimumPartBytes = budget?.minimumPartBytes
                         }
                         let observed = self.activity(for: run) ?? NativePhotoRunActivity(saved.activity)
-                        observed.phase(.waiting, reason: NativePhotoRunActivity.reason(for: error))
+                        observed.phase(.waiting, reason: NativePhotoRunActivity.reason(for: failure))
+                        observed.failedOperation(NativeDeferredUploadClient.operation(failure))
                         if observed.snapshot().backgroundRequest == .active { observed.background(.waiting) }
                         saved.activity = observed.snapshot()
                         try? self.photoRuns.update(saved)
@@ -978,11 +1014,11 @@ final class NativeDeferredUpload {
         }
         try validate(); photoPhase(.publishing)
         do { _ = try await client.request(action: "complete") }
-        catch NativeDeferredUploadClient.Failure.partsRetryable {
+        catch let error where NativeDeferredUploadClient.failure(error) == .partsRetryable {
             // The provider lost a previously acknowledged part. A later
             // bounded retry replays the exact bytes into the same reservation.
             try validate(); current.confirmedParts = 0; try store.update(current)
-            throw NativeDeferredUploadClient.Failure.partsRetryable
+            throw error
         }
         try validate()
         if proposed.request.publication != nil {
@@ -1010,6 +1046,79 @@ final class NativeDeferredUpload {
             fileWork[id] = value
         } else { return }
         currentFile = (run, fileWork.values.reduce(0) { $0 + $1.confirmed }, fileWork.values.reduce(0) { $0 + $1.sent }, fileWork.values.reduce(0) { $0 + $1.total })
+    }
+
+    /// A known policy deadline is authoritative, including a short pacing
+    /// slot. A one-second floor prevents a stale deadline from spinning;
+    /// unknown/transient waits retain the existing five-minute backoff.
+    static func budgetRetryDeadline(_ wait: NativePhotoUploadBudget.Wait?, now: Date = Date()) -> Date {
+        guard let deadline = wait?.retryAt else { return now.addingTimeInterval(300) }
+        return max(now.addingTimeInterval(1), deadline)
+    }
+
+    /// Successful completion means this bounded processing slice was saved,
+    /// not that its Photos batch or backup is complete. Only an expected budget
+    /// wait can enter here; authority and persistence failures propagate.
+    static func checkpointPhotoBudgetWait(_ proposed: NativePhotoRunRecord, wait: NativePhotoUploadBudget.Wait,
+        activity: NativePhotoRunActivity.Snapshot? = nil, now: () -> Date = Date.init,
+        check: () throws -> Void, verifyAuthority: () async throws -> Void,
+        read: () throws -> NativePhotoRunRecord?, write: (NativePhotoRunRecord) throws -> Void) async throws -> NativePhotoRunRecord {
+        func current() throws -> NativePhotoRunRecord {
+            try Task.checkCancellation(); try check()
+            guard let live = try read(), live.sameRun(proposed), live.epoch == proposed.epoch,
+                  live.armed, live.userPaused != true, live.captureId != nil, live.batch != nil else { throw CancellationError() }
+            guard live.expiresAt > now() else { throw NativeDeferredUploadClient.Failure.expired }
+            return live
+        }
+        _ = try current()
+        try await verifyAuthority()
+        var saved = try current()
+        saved.retryAt = budgetRetryDeadline(wait, now: now())
+        guard saved.retryAt < saved.expiresAt else { throw NativeDeferredUploadClient.Failure.expired }
+        saved.stage = "waiting"; saved.syncWait = "data-budget"; saved.minimumPartBytes = wait.minimumPartBytes
+        let observed = NativePhotoRunActivity(activity ?? saved.activity)
+        observed.phase(.waiting); observed.failedOperation(nil)
+        if observed.snapshot().backgroundRequest == .active { observed.background(.waiting) }
+        saved.activity = observed.snapshot()
+        try write(saved)
+        let committed = try current()
+        guard committed == saved else { throw NativeDeferredUploadClient.Failure.invalid }
+        return committed
+    }
+
+    /// A resource wait is local to one original. It cannot cancel a sibling
+    /// that already holds an allowance and may be about to save its receipt.
+    /// Stop refilling on the first wait, drain admitted work, then defer the
+    /// unchanged batch. Fatal authority/source errors still cancel immediately.
+    static func processPhotoOriginals<Original: Sendable>(_ originals: [Original], concurrency: Int = 5,
+        process: @escaping @MainActor (Original) async throws -> Void) async throws {
+        let deferred = try await withThrowingTaskGroup(of: NativePhotoUploadBudget.Wait?.self) { group in
+            let work: @MainActor (Original) async throws -> NativePhotoUploadBudget.Wait? = { original in
+                do { try await process(original); return nil }
+                catch let wait as NativePhotoUploadBudget.Wait { return wait }
+            }
+            var next = originals.makeIterator()
+            var deferred: NativePhotoUploadBudget.Wait?
+            for _ in 0..<min(max(1, concurrency), originals.count) {
+                if let original = next.next() { group.addTask { @MainActor in try await work(original) } }
+            }
+            do {
+                while let outcome = try await group.next() {
+                    if let wait = outcome {
+                        let retries = [deferred?.retryAt, wait.retryAt].compactMap { $0 }
+                        let minimums = [deferred?.minimumPartBytes, wait.minimumPartBytes].compactMap { $0 }
+                        deferred = .init(retryAt: retries.max(), minimumPartBytes: minimums.max())
+                    }
+                    if deferred == nil, let original = next.next() {
+                        group.addTask { @MainActor in try await work(original) }
+                    }
+                }
+            } catch { group.cancelAll(); throw error }
+            return deferred
+        }
+        // All admitted siblings have durably completed before this reaches the
+        // caller's waiting checkpoint; no queue acknowledgement has occurred.
+        if let deferred { throw deferred }
     }
 
     private func advancePhotoRun(_ proposed: NativePhotoRunRecord, checkExecution: @escaping () throws -> Void) async throws {
@@ -1067,8 +1176,10 @@ final class NativeDeferredUpload {
             guard !self.persistenceUncertain, let live = try self.photoRuns.lookup(proposed), live.sameRun(proposed),
                   live.armed, live.expiresAt > Date() else { throw CancellationError() }
             let grant = try self.grants.grant(proposed.scope, id: proposed.rootId)
-            guard grant.sourceKind == "photos", NativeUploadPartStaging.grantRevision(grant) == proposed.grantRevision,
-                  photos.access() != "unavailable" else { throw MobileFolderStore.Failure.changed }
+            guard grant.sourceKind == "photos", NativeUploadPartStaging.grantRevision(grant) == proposed.grantRevision else {
+                throw NativePhotoRunActivity.SourceFailure.grantChanged
+            }
+            guard photos.access() != "unavailable" else { throw NativePhotoRunActivity.SourceFailure.photoAccess }
             try conditions.verify(authorization)
             return grant
         }
@@ -1194,7 +1305,7 @@ final class NativeDeferredUpload {
                     throw authorizationFailure ?? error
                 }
                 try await authorize()
-                guard let batch = capture.photoQueue, batch.epoch == run.epoch else { throw MobileFolderStore.Failure.changed }
+                guard let batch = capture.photoQueue, batch.epoch == run.epoch else { throw NativePhotoRunActivity.SourceFailure.queueChanged }
                 run.batch = batch
                 run.pendingOriginals = batch.remainingKnown == false ? nil : batch.pending
                 run.unavailableOriginals = batch.unavailable
@@ -1261,17 +1372,7 @@ final class NativeDeferredUpload {
             // At most five originals occupy staging/transport concurrently.
             // Start in date order and refill from the same canonical selection;
             // acknowledgement still waits for every companion's exact receipt.
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                var next = originals.makeIterator()
-                for _ in 0..<min(5, originals.count) {
-                    if let source = next.next() { group.addTask { @MainActor in try await process(source) } }
-                }
-                do {
-                    while try await group.next() != nil {
-                        if let source = next.next() { group.addTask { @MainActor in try await process(source) } }
-                    }
-                } catch { group.cancelAll(); throw error }
-            }
+            try await Self.processPhotoOriginals(originals, process: process)
             if let lookahead {
                 // A changed library invalidates warm observations, not saved
                 // current receipts. The real next selection revalidates itself.
@@ -1320,6 +1421,7 @@ final class NativeDeferredUpload {
                 }
                 if let cloudFailure {
                     activity.phase(.waiting, reason: NativePhotoRunActivity.reason(for: cloudFailure))
+                    activity.failedOperation(NativeDeferredUploadClient.operation(cloudFailure))
                     try checkpoint(); reportPhotoProgress(run)
                 }
                 return

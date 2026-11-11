@@ -29,6 +29,7 @@ const fixtureCapabilities = (origin: string) => ({ schemaVersion: 1, origin, fea
 // Synthetic account, native bridge and HTTP fixtures. Unknown requests fail closed.
 const params = new URLSearchParams(location.search);
 const nativeOnly = params.has('nativeOnly');
+const scopedPhotoLimits = params.has('scopedPhotoLimits');
 const nativeActivity = nativeOnly && params.has('nativeActivity');
 const autoPhotos = params.has('autoPhotos') || nativeOnly, oldPhotoApp = params.has('oldPhotoApp');
 const photoRecovery = params.has('photoRecovery') || autoPhotos, editPhotos = params.has('editPhotos'), mobilePanel = params.has('mobilePanel');
@@ -45,7 +46,7 @@ const minimumBudgetCase = autoPhotos && params.has('minimumBudget');
 const budgetCase = autoPhotos && (params.has('budget') || minimumBudgetCase);
 const minimumPartBytes = 8_388_608;
 const configuration: FileSyncConfiguration = { configurationVersion: budgetCase ? 4 : 1,
- ...(budgetCase ? { photoAutomation: { notificationIntervalMs: 1_800_000, uploadBytesPerHour: minimumBudgetCase ? 1_000_000 : 1_000_000_000 } } : {}),
+ ...(budgetCase ? { photoAutomation: { notificationIntervalMs: 1_800_000, ...(scopedPhotoLimits ? { uploadBytesPerSecond: 625000 } : {}), uploadBytesPerHour: minimumBudgetCase ? 1_000_000 : 1_000_000_000 } } : {}),
  name: mobile ? 'iPhone Photos' : 'Documents backup',
  deviceId, localRootId: mobile ? photosRoot : 'local-documents', ...(mobile ? { sourceKind: 'photos' as const } : {}),
  remoteFolderId: photoRecovery ? 'fixture-folder-0' : 'cloud-documents', mode: 'backup', paused: params.has('paused'), propagateDeletes: false,
@@ -150,7 +151,7 @@ if (photoRecovery || mobilePanel) {
  window.thingtimeNativeBridge = { platform: 'ios', isNativeWebView: true, version: '1.0.0',
   devicePairingVersion: '1.0.0', fileAccessVersion: '1.8.0', fileUploadVersion: '1.5.0',
   fileStagingVersion: '1.2.0', filePublicationVersion: '1.2.0',
-  ...(autoPhotos && !oldPhotoApp ? { filePhotoAutomationVersion: nativeOnly ? '1.2.0' : '1.0.0' } : {}),
+  ...(autoPhotos && !oldPhotoApp ? { filePhotoAutomationVersion: scopedPhotoLimits ? '1.6.0' : nativeOnly ? '1.2.0' : '1.0.0' } : {}),
   ...(nativeOnly ? { filePhotoContinuationVersion: nativeActivity ? '1.1.0' : '1.0.0' } : {}),
   postMessage: async message => {
    const request = message.payload as any;
@@ -173,6 +174,13 @@ if (photoRecovery || mobilePanel) {
      return;
     }
     reply('mobile-device-result', { state: 'paired', deviceId }); return;
+   }
+   if (scopedPhotoLimits && ['read-photo-transfer-policy', 'set-photo-transfer-policy'].includes(action)) {
+    if (request.deviceId !== deviceId || rootId !== undefined && rootId !== photosRoot) throw Error('Unexpected policy scope');
+    const policyKey = databaseKey + ':policy:' + (rootId ?? 'device');
+    if (action === 'set-photo-transfer-policy') localStorage.setItem(policyKey, JSON.stringify(request.photoTransferPolicy));
+    reply('mobile-files-result', { roots: [], deviceId, ...(rootId ? { rootId } : {}), photoTransferPolicy: JSON.parse(localStorage.getItem(policyKey) ?? '{}') });
+    return;
    }
    // Build 53 accepts only one normal folder request. Pause denials
    // bypass the slot, and suspend releases only the matching operation.

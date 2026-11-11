@@ -14,12 +14,12 @@ const withGlanceAndQuick = (blocks: WebpageBlock[], uploadOnly = false) => withG
 const defaultQuickBlocks = withSyncFolderQuickBlocks(syncFolderCardBlocks);
 
 type QuickAction = { label: string; disabled?: boolean; run(): void | Promise<void> };
-export function SyncFolderCard({ title, path, description, stats, glance, uploadOnly = false, quickAction, pauseAction, continuationAction, continuationStatus, automation, destination, error, preparation, photoQueue, photoActivity, scopeKey, expanded: controlled, onToggle, disabled = false, accountTransport, editorSlotId, summaryContent, children }: {
+export function SyncFolderCard({ title, path, description, stats, glance, uploadOnly = false, quickAction, pauseAction, continuationAction, continuationStatus, automation, destination, error, preparation, photoQueue, photoActivity, scopeKey, expanded: controlled, onToggle, disabled = false, accountTransport, editorSlotId, summaryContent, settingsContent, children }: {
  quickAction?: QuickAction; pauseAction?: QuickAction; continuationAction?: QuickAction; continuationStatus?: string;
  automation?: string; destination?: string; error?: string; preparation?: SyncFolderPreparation; photoQueue?: ReturnType<typeof photoQueueDisplay>;
  photoActivity?: ReturnType<typeof nativePhotoActivityDisplay>;
  uploadOnly?: boolean; glance?: Glance; title: string; path: string; description: string; stats: string; scopeKey: string; expanded?: boolean; editorSlotId?: string; onToggle?(open: boolean): void; disabled?: boolean;
- summaryContent?: React.ReactNode; accountTransport?: SettingsDocumentHostProps['accountTransport']; children: React.ReactNode;
+ settingsContent?: React.ReactNode; summaryContent?: React.ReactNode; accountTransport?: SettingsDocumentHostProps['accountTransport']; children: React.ReactNode;
 }) {
  const [localOpen, setLocalOpen] = React.useState(false);
  const expanded = controlled ?? localOpen;
@@ -38,7 +38,19 @@ export function SyncFolderCard({ title, path, description, stats, glance, upload
      'continue-background': () => { if (continuationAction && !continuationAction.disabled) return continuationAction.run(); },
      expand: () => { if (!disabled) { setLocalOpen(!expanded); onToggle?.(!expanded); } }
     }}>
-    <WebpageBlocksRenderer blocks={findBlock(blocks, 'folder-card-expand') ? blocks : [...blocks, findBlock(syncFolderCardBlocks, 'folder-card-expand')!]} componentsByRef={{}} chrome={chrome} />
+    {settingsContent ? (() => {
+     const presentation = findBlock(blocks, 'folder-card-expand') ? blocks : [...blocks, findBlock(syncFolderCardBlocks, 'folder-card-expand')!];
+     // Keep the saved editable header and destination before policy controls,
+     // with live queue/activity metrics below. Other cards retain one renderer.
+     const destinationIndex = presentation.findIndex(block => block.id === 'folder-card-destination-state');
+     const headerIndex = presentation.findIndex(block => block.id === 'folder-card-summary');
+     const split = destinationIndex >= 0 ? destinationIndex + 1 : Math.max(0, headerIndex + 1);
+     return <>
+      <WebpageBlocksRenderer blocks={presentation.slice(0, split)} componentsByRef={{}} chrome={chrome} />
+      {settingsContent}
+      <WebpageBlocksRenderer blocks={presentation.slice(split)} componentsByRef={{}} chrome={chrome} />
+     </>;
+    })() : <WebpageBlocksRenderer blocks={findBlock(blocks, 'folder-card-expand') ? blocks : [...blocks, findBlock(syncFolderCardBlocks, 'folder-card-expand')!]} componentsByRef={{}} chrome={chrome} />}
    </TransientBlockHost>}
   </SettingsDocumentHost>
   {summaryContent}

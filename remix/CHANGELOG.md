@@ -145,6 +145,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
+  and saved sync cards, with native aggregate enforcement and active policy-only
+  saves. Queue concurrent cloud path checks instead of rejecting a five-item
+  Photos batch when two checks are active. Clear stale authority holds after
+  fresh authorization, preserve short pacing deadlines, queue paced background
+  tasks within signed URL lifetimes, checkpoint expected upload-limit waits,
+  and report closed failure reasons and operations. Physical background
+  acceptance remains a separate release gate. **Codex (AI)**
+
 - 2026-11-12: Reconcile native TOTP setup-link intake with the current password
   editor and account lifecycle. Keep one-use seeds transient, require editable
   review plus explicit Save, preserve current drafts and passkey behavior, and
