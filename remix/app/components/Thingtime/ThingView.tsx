@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 
 import { isKindSafeForUntrusted, resolveKindRender } from '../Kinds';
 import type { KindRenderer, PollRenderPollContext } from '../Kinds';
+import { PersistedThingSubject } from './ContextMenu/PersistedThingSubject';
 import { Thingtime } from './Thingtime';
 import { ThingRenderComponent } from './ThingRenderComponent';
 import { hasRenderComponent } from './renderComponentCore';
@@ -224,6 +225,7 @@ const CornerToggle = (props: { rendered: boolean; rendererTitle: string; onToggl
 };
 
 export type ThingViewProps = {
+  subjectId?: string;
   initialMode?: 'data' | 'interactive';
 	thing: unknown;
 	// what the native tree shows as the root label (display only — the store
@@ -308,9 +310,9 @@ export const ThingView = (props: ThingViewProps) => {
 				overflow="auto"
 				onKeyDown={onKeyDownCapture}
 			>
-				<LocalThingProvider initialTree={initialTree} events={events}>
+				<PersistedThingSubject.Provider value={props.subjectId || null}><LocalThingProvider initialTree={initialTree} events={events}>
 					<SandboxedThingtime storeKey={storeKey} humanLabel={humanLabel} collapsed={collapsed} />
-				</LocalThingProvider>
+				</LocalThingProvider></PersistedThingSubject.Provider>
 			</Box>
 			{canRender && (
 				<CornerToggle rendered={false} rendererTitle={rendererTitle} onToggle={() => setShowRendered(true)} />

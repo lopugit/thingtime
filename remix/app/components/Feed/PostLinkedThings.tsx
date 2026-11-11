@@ -10,10 +10,10 @@ import { thingDisplayName, thingOpenHref } from '~/components/Things/thingsCore'
 import { postThingDraft, postThingReferences } from './postThingReferences';
 import type { PublicPost } from './feedTypes';
 
-export function PostLinkedThings({ value, linkedThings, compact, poll }: { value: unknown; linkedThings?: PublicPost['linkedThings']; compact?: boolean; poll?: PollRenderPollContext }) {
+export function PostLinkedThings({ value, linkedThings, compact, poll, subjectId }: { subjectId?: string; value: unknown; linkedThings?: PublicPost['linkedThings']; compact?: boolean; poll?: PollRenderPollContext }) {
   const user = useCurrentUser();
   const references = postThingReferences(value);
-  if (!references.length) return <ThingView thing={value} compact={compact} poll={poll} />;
+  if (!references.length) return <ThingView subjectId={subjectId} thing={value} compact={compact} poll={poll} />;
   const byId = new Map((linkedThings || []).map(entry => [entry.id, entry]));
   const draft = postThingDraft(value);
   return <Flex direction="column" gap={3} minW={0}>
@@ -23,7 +23,7 @@ export function PostLinkedThings({ value, linkedThings, compact, poll }: { value
       return <Box key={`${reference.id}:${reference.mode}`} border="1px solid var(--tt-border)" borderRadius="12px" p={3} minW={0} overflow="hidden">
         {thing ? <>
           <Flex gap={2} mb={2} align="center"><Text as={Link} to={thingOpenHref(thing, 'feed', user?.id)} fontWeight={600} fontSize="sm" overflowWrap="anywhere">{thingDisplayName(thing)}</Text><Text ml="auto" flexShrink={0} fontSize="xs" color="var(--tt-muted)">{reference.mode === 'data' ? 'Data' : 'Interactive'}</Text><PersistedThingMenu id={thing.id} initialThing={thing} label={`${thingDisplayName(thing)} actions`} /></Flex>
-          {reference.mode === 'data' ? <ThingView thing={thing.crystal} initialMode="data" compact={compact} /> : <PostInteractiveThing thing={thing} compact={compact} />}
+          {reference.mode === 'data' ? <ThingView subjectId={thing.id} thing={thing.crystal} initialMode="data" compact={compact} /> : <PostInteractiveThing thing={thing} compact={compact} />}
         </> : <Text fontSize="sm" color="var(--tt-muted)">This attached Thing is unavailable or private.</Text>}
       </Box>;
     })}

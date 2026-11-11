@@ -4366,6 +4366,41 @@ email whose link points at the attacker.
 
 ## Things library archive
 
+- [ ] With the frontend manifest at api.things 1.63 and active API at 1.62,
+  Archived must report unsupported before sending a libraryArchive query.
+  Missing/breaking active contracts also refuse. After compatible active 1.63
+  negotiation, verify real app-card Archive/Restore and archived search.
+  `THINGTIME_ARCHIVE_SCOPE=contract` exercises this mixed-deployment boundary.
+
+- [ ] Build the embed with `pnpm --dir remix run build:embed`; keep the existing
+  single-file/raw/gzip budgets. Closed persisted menus must not download the
+  authenticated controller. Delay its first module request, focus an existing
+  base command or open a submenu, then resolve it: the same menu/focus/scroll
+  remains usable. A failed module request offers working Retry without exposing
+  unverified Archive. Account/plane/subject changes clear the old menu state.
+  `THINGTIME_ARCHIVE_SCOPE=lazy` exercises the real first-open module boundary;
+  `THINGTIME_ARCHIVE_SCOPE=embed` checks the compiled popup's local JSON menu
+  without privileged Thing action requests. The PR 1463 comparison currently
+  records a preexisting bridge/router startup failure on both main and the fix;
+  do not count that blocked popup check as a pass.
+
+- [ ] In **Builder → Apps**, use the actual app card (Browse/Edit app), not the
+  folder tree. Archive from ellipsis/touch and context menu; reload the active
+  app index, open Archived, search, Restore and check the original app children.
+  Repeat in a Builder library folder. Archived Apps stays root/app-only.
+- [ ] From a post permalink/feed and a message's actions, Archive then Restore.
+  The same canonical action is available for comments, linked Things, detail
+  menus and filesystem cloud roots. Posts keep their public audience and messages
+  stay in their conversation. In Archived Things, protected content has a static
+  label and Restore only, with no generic Open/Edit/Preview/content anchor.
+- [ ] A raw nested field says **Archive containing Thing** and acts only on its
+  explicitly saved root. Unsaved local data and remote inodes must not guess IDs.
+- [ ] Non-owner and protected subject refusal shows neither Archive nor Retry;
+  transient lookup failure shows one Retry and never stale Archive/Restore.
+  Delay an Archive response, close/reopen the same Thing menu, then release it:
+  the new visit stays open and resolves Restore. Retargeting another Thing or
+  changing owner/origin/data plane must not retain old content or busy state.
+
 - [ ] On desktop, right-click an owned Thing and choose **Organise → Archive**.
   Its row leaves the active view, including search. The original link, sharing
   and content still work. Check that keyboard focus remains usable when the row
