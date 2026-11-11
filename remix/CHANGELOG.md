@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Compose protected SQLite account APIs with canonical sessions,
+  entitlements, rosters, notification history, durable rate limits and encrypted
+  pending email. Fence all Mongo fallback and advertise actual runtime operation
+  availability. Keep local MongoDB independent; full SQLite/iOS parity and
+  external email delivery remain open. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-11-12: Add explicit SQLite vault/session-envelope and account-roster
   persistence plus hashed one-use verification tokens behind canonical account
   helpers; preserve Mongo token format/rollback compatibility and refuse

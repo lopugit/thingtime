@@ -1,3 +1,4 @@
+import { projectRuntimeCapabilities, type NativeCapabilitySnapshot, type RegisteredCapabilityOperation } from '../api/utils/capabilities/runtimeAvailability';
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
@@ -1025,13 +1026,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'capabilities',
-		contractVersion: '1.2.0', featureVersion: '1.2.0',
+		contractVersion: '1.3.0', featureVersion: '1.3.0',
 		group: 'platform',
 		title: 'API capabilities',
 		endpoint: '/api/v1/capabilities',
 		summary: 'Returns the origin-scoped compatibility manifest for every documented and executable Thingtime API operation.',
 		detail:
-			'Version 1.2.0 permits an explicit custom data authority on HTTP loopback for an Electron-managed local backend; production and development authorities still require HTTPS. Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
+			'Version 1.3 adds selected-runtime availability: features contains only usable contracts, registeredFeatures preserves the complete registry, and operations reports per-method availability. A selected unavailable native profile advertises discovery only; absent features must be refused, even if present in registeredFeatures. No profile identifiers or credentials are published. Version 1.2.0 permits an explicit custom data authority on HTTP loopback for an Electron-managed local backend; production and development authorities still require HTTPS. Clients use this public manifest to negotiate supported API contracts before enabling optional features. Semantic api.* features are independently versioned; route.* features enumerate every active API route, including intentionally undocumented diagnostics. The manifest also declares the non-secret data/authentication environment and federation group for this origin, so aliases and previews can select the correct first-party authority without inferring it from a deployment URL. Additions are minor or patch changes and breaking changes receive a new major version.',
 		auth: { mode: 'none', description: 'Public deployment metadata only: never an account, connection string, credential, or other database secret.' },
 		methods: ['GET'],
 		steps: ['Fetch once per origin and honour the short cache window.', 'Compare only the feature contracts a client requires.'],
@@ -1043,7 +1044,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				body: {
 					ok: true,
 					schemaVersion: 1,
-					features: { 'api.capabilities': '1.2.0', 'api.devices': '1.0.0' },
+					features: { 'api.capabilities': '1.3.0', 'api.devices': '1.0.0' },
 					dataEnvironment: {
 						schemaVersion: 1,
 						id: 'development',
@@ -4175,13 +4176,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
-    featureVersion: '1.3.2',
-    contractVersion: '1.3.2',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
     summary: 'Creates a user account, starts email verification, logs the browser in, and sets the auth cookie.',
-    detail: 'This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint on an isolated local backend instead of writing directly to MongoDB. Missing database or signing configuration returns 503 LOCAL_API_NOT_CONFIGURED without forwarding the request to another origin.',
+    detail: 'Version 1.4 adds optional verificationDelivery {status: queued|failed, delivered: false} on a protected native profile. It reports durable local queue admission or failure, never actual email delivery. This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint on an isolated local backend instead of writing directly to MongoDB. Missing database or signing configuration returns 503 LOCAL_API_NOT_CONFIGURED without forwarding the request to another origin.',
     auth: {
       mode: 'none',
       description: 'Public signup endpoint.'
@@ -4214,6 +4215,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'User created and auth cookie set.',
         body: {
           ok: true,
+          verificationDelivery: { status: 'queued', delivered: false },
           user: {
             id: '64f000000000000000000002',
             username: 'ada-lovelace',
@@ -4789,7 +4791,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
     detail:
-      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+      'An existing user projection may include avatarPresentation and bannerPresentation for styled profile images. ' + 'Use this for browser login. A selected protected native SQLite profile currently refuses email-OTP challenge creation/completion with 503; it never issues a session by bypassing configured two-factor authentication. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
@@ -15273,6 +15275,9 @@ export type ApiCapabilitiesManifest = {
 	schemaVersion: 1;
 	features: Record<string, `${number}.${number}.${number}`>;
 	dataEnvironment: DeploymentDataEnvironment | null;
+	registeredFeatures?: ApiCapabilitiesManifest['features'];
+	operations?: ReturnType<typeof projectRuntimeCapabilities>['operations'];
+	runtime?: { provider: 'sqlite'; ready: boolean };
 };
 
 /** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
@@ -15292,16 +15297,27 @@ export const apiSharedFeatureVersions = {
  */
 export const createApiCapabilitiesManifest = (
 	routeKeys: Iterable<string> = [],
-	dataEnvironment: DeploymentDataEnvironment | null = null
+	dataEnvironment: DeploymentDataEnvironment | null = null,
+	runtime?: NativeCapabilitySnapshot
 ): ApiCapabilitiesManifest => {
   const features: ApiCapabilitiesManifest['features'] = { ...apiSharedFeatureVersions, ...Object.fromEntries(
     apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
   ) };
 
-  for (const routeKey of routeKeys) {
+  const keys = [...routeKeys];
+  for (const routeKey of keys) {
     features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
   }
 
+	if (runtime) {
+    const operations: RegisteredCapabilityOperation[] = apiEndpointDocs.map(doc => ({ feature: `api.${doc.id}`, methods: doc.methods, path: doc.endpoint }));
+    for (const key of keys) {
+      const path = '/api/' + key;
+      const doc = apiEndpointDocs.find(entry => entry.endpoint === path);
+      operations.push({ feature: apiRouteCapabilityId(key), path, methods: doc?.methods ?? (key.endsWith('-docs') ? ['GET', 'POST'] : []) });
+    }
+    return { ok: true, schemaVersion: 1, dataEnvironment: null, ...projectRuntimeCapabilities(features, operations, runtime) };
+  }
 	return { ok: true, schemaVersion: 1, features, dataEnvironment };
 };
 

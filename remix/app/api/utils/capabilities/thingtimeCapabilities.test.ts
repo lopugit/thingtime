@@ -918,7 +918,7 @@ test('session replacement reports compatible protection for scoped file-sync res
     'api.auth-accounts-switch': ['1.1.0', '1.1.1'],
     'api.auth-logout': ['1.2.0', '1.2.1'],
     'api.auth-passkeys-login': ['1.3.0', '1.3.1'],
-    'api.auth-register': ['1.3.1', '1.3.2'],
+    'api.auth-register': ['1.3.1', '1.4.0'],
     'api.login': ['1.3.0', '1.3.1']
   };
   const manifest = thingtimeCapabilityManifest('https://sessions.test');

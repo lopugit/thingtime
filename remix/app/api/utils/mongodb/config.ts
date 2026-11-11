@@ -1,4 +1,5 @@
 import { PublicError } from '../errors/safeError';
+import { assertMongoProviderAllowed } from '../documentStore/nativeHomeSelection';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -8,6 +9,7 @@ const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 // - MONGO_PASS: password substituted into that placeholder, URL-encoded so
 //   special characters cannot corrupt the URI
 export const getMongoUri = () => {
+	assertMongoProviderAllowed();
 	const connectionString = process.env.MONGODB_CONNECTION_STRING;
 
 	if (!connectionString) {

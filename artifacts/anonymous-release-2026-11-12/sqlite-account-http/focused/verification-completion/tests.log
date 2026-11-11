@@ -1,0 +1,23 @@
+✔ canonical issue hashes persisted token; normalization, BSON Dates, expiry and single use survive SQLite reopen (23.107833ms)
+✔ independent SQLite handles race one atomic claim winner; account and separate home files remain isolated (10.555375ms)
+✔ scope expires before detached or queued work; native insertion rejects malformed credentials (3.574542ms)
+✔ separate real Node processes issue and consume once across process restart (1252.169833ms)
+✔ native claim rechecks expiry inside the blocked transaction queue (114.695667ms)
+✔ scope exiting after a collection mutation rolls the native transaction back (3.119417ms)
+✔ matching home labels cannot bind token reads/writes to a different SQLite provider (4.383167ms)
+✔ failed canonical mark leaves durable pending proof, retry after SQLite reopen completes once (21.157958ms)
+✔ concurrent completion has one success and all successful replays refuse (23.810959ms)
+✔ missing native owner never touches Mongo; stale email proof cannot verify another address or owner (4.549667ms)
+✔ pending proof expires at original deadline and legacy consume-only burns are never resurrected (107.087209ms)
+✔ same-label foreign provider and absent native identity refuse completion (7.222167ms)
+✔ scope exit after canonical user commit leaves pending and the same proof can finalize in a fresh request (6.531292ms)
+✔ canonical secure CAS retry refuses a proof after a concurrent address change (6.092958ms)
+✔ hosted consume then mark order and legacy failure/replay behavior stay unchanged (307.424875ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1715.052709

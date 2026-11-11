@@ -1,3 +1,4 @@
+import { projectRuntimeCapabilities, type NativeCapabilitySnapshot, type CapabilityOperation } from './runtimeAvailability';
 import { apiEndpointDocs, apiSharedFeatureVersions } from '../../../docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
 import { gatewayDescriptor } from '../deployment/environmentGateway';
@@ -10,10 +11,20 @@ const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 // API catch-all in nitro.config.ts, so the manifest must list that twin too.
 export const ROOT_DOCS_TWIN_IDS: ReadonlySet<string> = new Set(['apple-app-association', 'seo-robots', 'seo-sitemap', 'social-card', 'environment-gateway']);
 
-export const thingtimeCapabilityManifest = (origin: string) => {
+export type ThingtimeCapabilityManifest = {
+ schemaVersion: 1;
+ origin: string;
+ gateway: ReturnType<typeof gatewayDescriptor>;
+ features: Record<string, { version: string }>;
+ operations: CapabilityOperation[];
+ registeredFeatures?: Record<string, { version: string }>;
+ runtime?: { provider: 'sqlite'; ready: boolean };
+};
+
+export const thingtimeCapabilityManifest = (origin: string, runtime?: NativeCapabilitySnapshot): ThingtimeCapabilityManifest => {
   const normalizedOrigin = new URL(origin).origin;
   const features: Record<string, { version: string }> = Object.fromEntries([
-    ['api.capabilities', { version: '1.0.0' }],
+    ['api.capabilities', { version: '1.3.0' }],
     ...Object.entries(apiSharedFeatureVersions).map(([feature, version]) => [feature, { version }]),
     ...apiEndpointDocs.map((doc) => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])
   ]);
@@ -36,9 +47,8 @@ export const thingtimeCapabilityManifest = (origin: string) => {
   return {
     schemaVersion: 1,
     origin: normalizedOrigin,
-    gateway: gatewayDescriptor(),
-    features,
-    operations
+    gateway: runtime ? null : gatewayDescriptor(),
+    ...(runtime ? projectRuntimeCapabilities(features, operations, runtime) : { features, operations })
   };
 };
 

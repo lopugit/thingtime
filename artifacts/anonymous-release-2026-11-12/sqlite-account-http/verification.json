@@ -1,0 +1,89 @@
+{
+  "status": "passed-for-recorded-scope",
+  "recordedAt": "2026-11-11T20:53:13.031671+00:00",
+  "baseCommit": "5847cacbd13d04f73a2cd71e5d19032d9288b506",
+  "sourceInventory": "compiled-build/source-after.json",
+  "nitroSha256": "c6fb3c4cc80fb7021f3a7056e5972459334090e7174a6deebd9e707e0adecfa2",
+  "unchangedProductionSource": true,
+  "postBuildTestOnlyChanges": [
+    {
+      "path": "electron/scripts/test-bundled-sqlite-account.cjs",
+      "before": "0fd5b96173c254180afaf28baf789fa2d759309f452fbee942db5bc565933dcc",
+      "after": "aacdfe6dae1a5ff075aac705d1fa60e81b7ef2132905498489adf8a8275470ea"
+    },
+    {
+      "path": "electron/test/bundled-sqlite-account-fixture.test.cjs",
+      "before": "45518e33ff8dd30ca94d81bd177a57fb63bf9d7526dc575e1381347d97ea8f18",
+      "after": "7e535e5e01b8eca0ee078269e73ba208d52e6f35c7029265d3cfe130cf18da13"
+    },
+    {
+      "path": "remix/server/utils/nativeHomeDispatch.test.ts",
+      "before": "a94b05facece746ea5ac54ecc08631b71a05b7ce79a4093bd9a64c5669ff0d64",
+      "after": "8c6a72fee13572fae7820ad214a3209ba6027539e263dae08710dfc384de0a2c"
+    }
+  ],
+  "checks": [
+    {
+      "name": "document-store",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "auth-introspection",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "notifications",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "typecheck",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "ratchet",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "lint",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "verify",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    },
+    {
+      "name": "mongo-http",
+      "exitCode": 0,
+      "receipt": "compiled-build/verification.json"
+    }
+  ],
+  "sqliteHttp": {
+    "receipt": "../sqlite-native-home-bootstrap/actual-manifest-shape-fix.json",
+    "sha256": "caecd71e0602b4a3b3705ade78a5a887d5c950b502ecd4f99b22daab8abcb3f5",
+    "passed": true
+  },
+  "capabilities": {
+    "passed": 211,
+    "gatewayPassed": 9,
+    "receipts": "focused/capabilities/"
+  },
+  "limits": [
+    "Local development build from recorded source inventories; not clean-commit CI or deployed acceptance.",
+    "SQLite account HTTP with real safeStorage; generic Things/root-data and full product parity remain unavailable.",
+    "Verification and notification checks exercise canonical handlers against real files; no externally delivered email or full native UI claim.",
+    "iOS protected-key/account integration, physical-device acceptance, release trust and connected-host artifacts remain open."
+  ],
+  "failedAttemptsPreserved": true
+}

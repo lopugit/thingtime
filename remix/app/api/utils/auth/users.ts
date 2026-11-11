@@ -859,14 +859,23 @@ class SecureWriteContendedError extends Error {
 	}
 }
 
-export const markEmailVerified = async (userId: string) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.emailVerified = true;
-	});
-	if (result === 'mutated') return;
+export const markEmailVerified = async (userId: string, expectedEmail?: string): Promise<boolean> => {
+	const mismatch = new Error('Verification email no longer matches the account');
+	const expected = expectedEmail?.trim().toLowerCase();
+	if (expectedEmail !== undefined && !expected) return false;
+	let result: SecureMutateResult;
+	try {
+		result = await mutateUserThingSecure(userId, (s) => {
+			// Rechecked on every secure-version CAS retry, so an old proof cannot
+			// verify a newly changed address between the read and the write.
+			if (expected !== undefined && (typeof s.email !== 'string' || s.email.trim().toLowerCase() !== expected)) throw mismatch;
+			s.emailVerified = true;
+		});
+	} catch (error) { if (error === mismatch) return false; throw error; }
+	if (result === 'mutated') return true;
 	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: { emailVerified: true, updatedAt: new Date() } });
+	if (currentUserIdentityRepository() || !ObjectId.isValid(userId)) return false;
+	return (await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId), ...(expected === undefined ? {} : { email: expected }) }, { $set: { emailVerified: true, updatedAt: new Date() } })).matchedCount > 0;
 };
 
 // Rotate the user's password hash. Returns whether a store actually accepted
@@ -923,6 +932,12 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
 // place). Merged as a patch so two devices flipping different switches don't
 // clobber each other.
 export const getUserNotificationPrefs = async (userId: string): Promise<Record<string, boolean>> => {
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const snapshot = await native.readUserSecure(userId);
+		const prefs = snapshot ? unpackSecure(snapshot.stored.secure).meta?.notificationPrefs : undefined;
+		return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+	}
 	const things = await getThingsCollection();
 	const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
 	if (thing) {
@@ -956,6 +971,7 @@ export const setUserNotificationPrefs = async (userId: string, patch: Record<str
 	});
 	if (result === 'mutated') return true;
 	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (currentUserIdentityRepository()) return false;
 	if (!ObjectId.isValid(userId)) return false;
 	const sets: Record<string, any> = { updatedAt: new Date() };
 	for (const [key, value] of Object.entries(patch)) {

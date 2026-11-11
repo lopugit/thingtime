@@ -1,3 +1,4 @@
+import { nativeRateLimitContext, RateLimitRepositoryError } from './repository';
 import { createHash } from 'node:crypto';
 
 import { ensureIndexes, getRateLimitsCollection } from '../mongodb/collections';
@@ -22,6 +23,7 @@ export type ByteBudgetOutcome = {
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
 export const consumeByteBudget = async (name: string, bytes: number): Promise<ByteBudgetOutcome> => {
+  if (nativeRateLimitContext()) throw new RateLimitRepositoryError('RATE_LIMIT_UNSUPPORTED', 'Native byte-budget persistence is not implemented');
   const config = await getRateLimitConfig();
   const rule = config[name];
   const nowIso = new Date().toISOString();
@@ -80,6 +82,7 @@ export const consumeByteBudget = async (name: string, bytes: number): Promise<By
 // Refund bytes into the window (a charged write that ultimately failed) —
 // floored at zero, best-effort.
 export const refundByteBudget = async (name: string, bytes: number): Promise<void> => {
+  if (nativeRateLimitContext()) throw new RateLimitRepositoryError('RATE_LIMIT_UNSUPPORTED', 'Native byte-budget refunds are not implemented');
   const charge = Math.max(0, Math.floor(bytes));
   if (!charge) return;
   try {

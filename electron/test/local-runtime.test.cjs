@@ -418,3 +418,48 @@ test('authority transition clears native credentials before durable settings and
   await assert.rejects(runtime.configure({...request,mongoUri:'https://invalid.test'},async()=>{invalidCallback=true;}));
   assert.equal(invalidCallback,false);
  }));
+
+test('host-selected SQLite reopens protected keys/file identity without spawning or configuring Mongo', () => fixture(async (runtime, root) => {
+ await runtime.initialize();
+ const original = { jwt: runtime.state.jwtSecret, vault: runtime.state.vaultKey };
+ const file = path.join(runtime.root, 'home.sqlite');
+ await runtime.configureNativeHomeProfile({ sqliteFile: file });
+ assert.equal(runtime.state.jwtSecret === original.jwt, true); assert.equal(runtime.state.vaultKey === original.vault, true);
+ const profileId = runtime.state.nativeHome.profileId, outbox = runtime.state.nativeHome.outboxKey;
+ assert.equal(runtime.snapshot().storageProvider, 'sqlite');
+ assert.equal(JSON.stringify(runtime.snapshot()).includes(file), false);
+ assert.equal((await fs.stat(runtime.file)).mode & 0o777, 0o600);
+ const reopened = new LocalRuntime({ userData: root, safeStorage: storage, spawnProcess() { throw Error('Must never start Mongo'); }, createMongoClient() { throw Error('Must never connect Mongo'); } });
+ await reopened.initialize();
+ assert.equal(reopened.state.nativeHome.profileId, profileId); assert.equal(reopened.state.nativeHome.outboxKey === outbox, true);
+ const env = { MONGODB_CONNECTION_STRING: 'mongodb://synthetic.invalid/foreign', JWT_PRIVATE_KEY: 'synthetic-conflict', THINGTIME_API_FALLBACK_ORIGIN: 'https://synthetic.invalid' };
+ reopened.applyEnvironment(env);
+ assert.equal(env.MONGODB_CONNECTION_STRING, undefined); assert.equal(env.JWT_PRIVATE_KEY, undefined); assert.equal(env.THINGTIME_API_FALLBACK_ORIGIN, undefined);
+ assert.equal(env.JWT_SECRET === original.jwt, true); assert.equal(env.THINGTIME_USER_VAULT_KEY === original.vault, true);
+ assert.equal(reopened.nativeHomeHost().homePlaneId, 'native-sqlite:' + profileId);
+ const listener = net.createServer(); await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+ const apiPort = listener.address().port; await new Promise(resolve => listener.close(resolve));
+ reopened.state.apiPort = apiPort;
+ await reopened.start(); assert.equal((await fs.stat(file)).mode & 0o777, 0o600); await reopened.stop();
+ await assert.rejects(runtime.configure({ enabled: true, databaseMode: 'external', mongoUri: 'mongodb://synthetic.invalid/foreign' }));
+ await assert.rejects(runtime.configureNativeHomeProfile({ sqliteFile: path.join(runtime.root, 'other.sqlite') }));
+}));
+
+test('native profile refuses existing foreign files, linked files/root, malformed protected selection and cross-profile state', () => fixture(async (runtime, root) => {
+ await runtime.initialize(); await fs.mkdir(runtime.root, { recursive: true });
+ const foreign = path.join(runtime.root, 'foreign.sqlite'); await fs.writeFile(foreign, 'synthetic foreign data');
+ await assert.rejects(runtime.configureNativeHomeProfile({ sqliteFile: foreign }));
+ const link = path.join(runtime.root, 'linked.sqlite'); await fs.symlink(foreign, link);
+ await assert.rejects(runtime.configureNativeHomeProfile({ sqliteFile: link }));
+ const good = path.join(runtime.root, 'home.sqlite'); await runtime.configureNativeHomeProfile({ sqliteFile: good });
+ const otherRoot = path.join(root, 'other-profile'), other = new LocalRuntime({ userData: otherRoot, safeStorage: storage });
+ await fs.mkdir(other.root, { recursive: true }); await fs.copyFile(runtime.file, other.file);
+ await assert.rejects(other.initialize(), /inside this protected profile/);
+ const changed = { ...runtime.state, nativeHome: null }; await runtime.persist(changed);
+ await assert.rejects(new LocalRuntime({ userData: root, safeStorage: storage }).initialize(), /selection is invalid/);
+ runtime.state = changed; assert.throws(() => runtime.applyEnvironment({}), /selection is invalid/);
+ const linkedRoot = path.join(root, 'linked-profile'), target = path.join(root, 'target'); await fs.mkdir(linkedRoot); await fs.mkdir(target);
+ await fs.symlink(target, path.join(linkedRoot, 'local-runtime'));
+ const linked = new LocalRuntime({ userData: linkedRoot, safeStorage: storage });
+ await assert.rejects(linked.configureNativeHomeProfile({ sqliteFile: path.join(linked.root, 'home.sqlite') }), /linked directory/);
+}));

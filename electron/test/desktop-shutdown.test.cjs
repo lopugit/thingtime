@@ -87,6 +87,31 @@ test('browser cleanup failure still waits for local database cleanup', async () 
  database.finish(); await pending; assert.equal(warned,true);
 });
 
+test('native account shutdown waits for sockets before protected provider close and then local runtime stop', async () => {
+ const sockets = gate(), native = gate(), calls = [];
+ const pending = vm.runInNewContext(closeServices+'; closeDesktopServices()', { reportBundleLifecycle() {},
+  process: { platform: 'darwin' }, agentBrowsersPromise: null, webBundleUpdates: null, console, Symbol,
+  bundledRendererServer: { close: async () => { calls.push('sockets-start'); await sockets.promise; calls.push('sockets-end'); } },
+  globalThis: { [Symbol.for('thingtime.chatgpt-plan.close')]: async () => calls.push('oauth'),
+   [Symbol.for('thingtime.native-home.close')]: async () => { calls.push('native'); await native.promise; } },
+  localRuntime: { state: { nativeHome: {} }, stop: async () => calls.push('runtime-stop') }
+ });
+ await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(calls, ['sockets-start']);
+ sockets.finish(); await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(calls, ['sockets-start', 'sockets-end', 'oauth', 'native']);
+ native.finish(); await pending; assert.deepEqual(calls, ['sockets-start', 'sockets-end', 'oauth', 'native', 'runtime-stop']);
+});
+
+test('native active-work close refusal preserves provider ownership and cannot stop its runtime', async () => {
+ let stopped = false, warned = false;
+ await vm.runInNewContext(closeServices+'; closeDesktopServices()', { reportBundleLifecycle() {},
+  process: { platform: 'darwin' }, agentBrowsersPromise: null, webBundleUpdates: null, Symbol,
+  console: { warn() { warned = true; } }, bundledRendererServer: { close: async () => {} },
+  globalThis: { [Symbol.for('thingtime.native-home.close')]: async () => { throw Error('Native work remains active'); } },
+  localRuntime: { state: { nativeHome: {} }, stop: async () => { stopped = true; } }
+ });
+ assert.equal(stopped, false); assert.equal(warned, true);
+});
+
 
 test('reported account authority uses the running runtime rather than saved pending settings', () => {
  const endpoint = source.match(/function activeAccountEndpoint\(\) \{[\s\S]*?\n\}/)[0];

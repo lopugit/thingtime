@@ -10,6 +10,25 @@
 
 ## Bundled local MongoDB and portable storage — 2026-11-12
 
+- Exercise the composed native account handlers with a real SQLite file and a
+  forbidden Mongo sentinel: register, verify, roster/history/read, reopen,
+  password login, independent-session logout and cross-profile refusal. Preserve
+  privileged-field filtering and normal upload restrictions. Incomplete adapter
+  composition, invites and email OTP must refuse before unsupported writes.
+- Native verification must recover the same proof after a failed completion,
+  without allowing another owner, expired proof or completed replay. Missing
+  native users must never enter the legacy Mongo update path. Top-level email
+  link navigation remains distinct from cross-origin fetch/mutation requests.
+- Verify protected profile/file/key mismatch, malformed host selection, stale
+  repository scopes and cached Mongo handles all fail closed. Compare both
+  manifest generators: unsupported semantic features must be absent from the
+  negotiation set while the complete route registry remains visible. Never
+  advertise generic Things, root-data or remote delivery from account-only tests.
+- Native outbox tests must use real file/reopen and protected keys; cover immutable
+  idempotency conflicts, same-key recovery, wrong keys/AAD, competing/expired
+  leases and fresh suppression checks. No plaintext OTP/link may enter ordinary
+  logs or metadata. `queued` and `delivered:false` are not a transport receipt.
+
 - Run the canonical SQLite account transaction tests: require one complete identity
   plus initial ledger or neither, including caught malformed admissions, scope
   exit, borrowed/cross-profile handles, duplicate races and reopen accounting.

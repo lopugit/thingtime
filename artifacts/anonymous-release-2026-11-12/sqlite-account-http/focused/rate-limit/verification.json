@@ -1,0 +1,56 @@
+{
+  "scope": "Native semantic request-window/config persistence; no runtime provider activation or HTTP signup acceptance",
+  "baseCommit": "5847cacbd13d04f73a2cd71e5d19032d9288b506",
+  "tree": "base plus shared dirty source, hashes identify owned inputs",
+  "recordedAt": "2026-11-11T20:18:56.748037+00:00",
+  "sourceHashes": {
+    "remix/app/api/utils/rateLimit/repository.ts": "ed1a95510ba8740a9cfce930b6966ec59e6170a433170cbab3687d2acdb3b044",
+    "remix/app/api/utils/rateLimit/config.ts": "ee02d6f719bf76db67440af4911d4ad67e9111abfca11bb04b1e7c8547906fe4",
+    "remix/app/api/utils/rateLimit/enforce.ts": "94e0d84484c8334fd8b7deba2926d9fdaca2b38e9f09bf55156334c4e45fcc9b",
+    "remix/app/api/utils/rateLimit/byteBudget.ts": "e9e77b3d9eb56af369ebfe7713b67dea349e9ff664e96ec78a5ff8ab84ca1a1e",
+    "remix/app/api/utils/documentStore/nativeRateLimits.ts": "1d8cb7d7ce48b49c6440dfd96b1042c91579f07c68c7f823383b176f0a05dc5f",
+    "remix/app/api/utils/documentStore/nativeRateLimits.test.ts": "772aff170577834b01df6c40cce9cf7159d216fc740f9030c89f98d4b1a6b18c",
+    "remix/app/api/utils/documentStore/nativeRateLimits.mongo.fixture.mts": "07fe687be0020d4e4b6e68e1e429f41574abefd32de5c8e34edc95b0a720d67e",
+    "remix/app/api/utils/documentStore/nativeRateLimits.process.fixture.mts": "d3e543d8dd3ad8f76ed9b30d884de5cbc1130e3d8be6fd38643f85599061a291"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/nativeRateLimits.test.ts",
+      "exitCode": 0,
+      "tests": 10,
+      "pass": 10,
+      "fail": 0,
+      "skipped": 0,
+      "log": "pr1000-native-rate-limit-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:rate-limit",
+      "exitCode": 0,
+      "tests": 32,
+      "pass": 32,
+      "fail": 0,
+      "skipped": 0,
+      "subprocessCounts": [
+        19,
+        13
+      ],
+      "log": "pr1000-native-rate-limit-existing.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/rateLimit/repository.ts app/api/utils/rateLimit/config.ts app/api/utils/rateLimit/enforce.ts app/api/utils/rateLimit/byteBudget.ts app/api/utils/documentStore/nativeRateLimits.ts app/api/utils/documentStore/nativeRateLimits.test.ts app/api/utils/documentStore/nativeRateLimits.mongo.fixture.mts app/api/utils/documentStore/nativeRateLimits.process.fixture.mts",
+      "exitCode": 0,
+      "eslintErrors": 0,
+      "eslintWarnings": 0,
+      "log": "pr1000-native-rate-limit-lint.log"
+    }
+  ],
+  "limits": [
+    "Combined TypeScript/full lint/build belong to parent after all workers freeze; not rerun here.",
+    "Only request-count sliding windows and config persisted. Native byte budgets/refunds explicitly refuse before Mongo.",
+    "Active rows use canonical inclusive cutoff; inactive counter rows retained, no SQLite TTL reaper.",
+    "Collection queries scan O(n); unique keys ensure integrity, not query acceleration.",
+    "Normal native HTTP signup/login/me not enabled or accepted by this isolated adapter batch.",
+    "Two-process test uses one disposable SQLite file, actual canonical fixed limiter; no account rows, DB seeds or network listeners."
+  ],
+  "sourceReceipt": "/tmp/pr1000-native-rate-limit-verification.json"
+}

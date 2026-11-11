@@ -1,0 +1,25 @@
+
+> @1.0.0 typecheck /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> tsc --noEmit
+
+app/api/utils/capabilities/runtimeAvailability.test.ts(20,63): error TS2339: Property 'runtime' does not exist on type '{ features: { [k: string]: { version: string; }; }; registeredFeatures: Record<string, { version: string; }>; operations: { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }[]; runtime: { ...; }; schemaVersion: number; origin: string; gateway: GatewayDescrip...'.
+  Property 'runtime' does not exist on type '{ features: Record<string, { version: string; }>; operations: { feature: string; methods: string[]; path: string; }[]; schemaVersion: number; origin: string; gateway: GatewayDescriptor; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(21,26): error TS2339: Property 'registeredFeatures' does not exist on type '{ features: { [k: string]: { version: string; }; }; registeredFeatures: Record<string, { version: string; }>; operations: { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }[]; runtime: { ...; }; schemaVersion: number; origin: string; gateway: GatewayDescrip...'.
+  Property 'registeredFeatures' does not exist on type '{ features: Record<string, { version: string; }>; operations: { feature: string; methods: string[]; path: string; }[]; schemaVersion: number; origin: string; gateway: GatewayDescriptor; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(32,30): error TS2339: Property 'availableMethods' does not exist on type '{ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }'.
+  Property 'availableMethods' does not exist on type '{ feature: string; methods: string[]; path: string; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(32,77): error TS2339: Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }'.
+  Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(33,82): error TS2339: Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }'.
+  Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(35,19): error TS2339: Property 'registeredFeatures' does not exist on type '{ features: { [k: string]: { version: string; }; }; registeredFeatures: Record<string, { version: string; }>; operations: { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }[]; runtime: { ...; }; schemaVersion: number; origin: string; gateway: GatewayDescrip...'.
+  Property 'registeredFeatures' does not exist on type '{ features: Record<string, { version: string; }>; operations: { feature: string; methods: string[]; path: string; }[]; schemaVersion: number; origin: string; gateway: GatewayDescriptor; }'.
+app/api/utils/capabilities/runtimeAvailability.test.ts(44,81): error TS2339: Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }'.
+  Property 'available' does not exist on type '{ feature: string; methods: string[]; path: string; }'.
+server/utils/environmentGateway.test.ts(59,37): error TS2322: Type '({ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; })[]' is not assignable to type '{ feature: string; methods: string[]; path: string; }[] | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }[]'.
+  Type '({ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; })[]' is not assignable to type '{ feature: string; methods: string[]; path: string; }[]'.
+    Type '{ feature: string; methods: string[]; path: string; } | { availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }' is not assignable to type '{ feature: string; methods: string[]; path: string; }'.
+      Type '{ availableMethods: string[]; available: boolean; feature: string; methods: readonly string[]; path: string; }' is not assignable to type '{ feature: string; methods: string[]; path: string; }'.
+        Types of property 'methods' are incompatible.
+          The type 'readonly string[]' is 'readonly' and cannot be assigned to the mutable type 'string[]'.
+ ELIFECYCLE  Command failed with exit code 2.

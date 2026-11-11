@@ -23,6 +23,7 @@ export const sendVerificationEmail = async ({
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,
+    sensitive: true,
     metadata: {
       purpose: 'email_verification'
     },

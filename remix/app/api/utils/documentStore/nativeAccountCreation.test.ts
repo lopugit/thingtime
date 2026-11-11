@@ -18,6 +18,8 @@ import {createCollectionProvider} from './collectionProvider';
 import {openSqliteDocumentStore} from './sqliteStore';
 import {createNativeAccountCreationRepositories} from './nativeAccountCreation';
 import {withNativeHomeStorageTransaction} from './nativeUserStorage';
+import {withAccountCreationRepository} from '../auth/accountCreationRepository';
+import {withHomeAuthRepositories} from '../auth/userIdentityRepository';
 import type {CollectionProvider} from './collectionContract';
 const namespace=physicalCollectionName('things'),plane='isolated-home';
 const input=(username='synthetic-account',email=`${username}@example.invalid`)=>({username,password:'Disposable fixture-only phrase',email});
@@ -32,6 +34,14 @@ const fixture=async(t:TestContext)=>{
   return {provider,...auth,rows};
  };
 };
+test('same-label foreign account repositories cannot read tiers or create a cross-provider account',async t=>{
+ const open=await fixture(t),a=await open('a.sqlite'),b=await open('b.sqlite');
+ await withHomeAuthRepositories(a.identities,a.sessions,async()=>{
+  await assert.rejects(withAccountCreationRepository(b.accountCreation,a.identities,()=>getLiveSubscriptionTier(DEFAULT_SUBSCRIPTION_TIER)),code('HOME_REPOSITORY_SCOPE'));
+  await assert.rejects(withAccountCreationRepository(b.accountCreation,a.identities,()=>createUserAccount(input())),code('HOME_REPOSITORY_SCOPE'));
+ });
+ assert.deepEqual(await a.rows(),[]);assert.deepEqual(await b.rows(),[]);
+});
 // Canonical createUserAccount creates all successful accounts here. These are
 // real-file module integration tests, not Nitro registration or native rollout.
 test('real canonical creation normalizes, hashes and atomically issues a trusted ready ledger; reopen admits canonical accounting',async t=>{

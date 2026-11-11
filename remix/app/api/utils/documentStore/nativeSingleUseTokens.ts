@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { BSON } from 'mongodb';
+import type { ConsumeTokenResult } from '../auth/singleUseTokens';
 import { registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 import { physicalCollectionName } from '../mongodb/collectionNames';
 import { assertEmailVerificationRepositoryScope, SingleUseTokenRepositoryError, type SingleUseTokenRepository, type StoredSingleUseToken } from '../auth/singleUseTokenRepository';
@@ -31,7 +32,8 @@ export async function createNativeEmailVerificationRepository(provider: Collecti
    return result;
   });
  };
- const decode = (bytes: Uint8Array | null | undefined) => bytes ? BSON.deserialize(bytes) as StoredSingleUseToken : null;
+ type CompletionRecord = StoredSingleUseToken & { completionState?: 'pending' | 'completed'; completionOwnerId?: string; completionEmail?: string };
+ const decode = (bytes: Uint8Array | null | undefined) => bytes ? BSON.deserialize(bytes) as CompletionRecord : null;
  repository = Object.freeze({
   kind: 'native-home' as const, homePlaneId,
   async insert(document: StoredSingleUseToken) {
@@ -52,6 +54,49 @@ export async function createNativeEmailVerificationRepository(provider: Collecti
     return decode(s.collection(namespace).updateOne({ op: 'and', filters: [identity,
      { op: 'eq', path: ['consumedAt'], value: null }, { op: 'gt', path: ['expiresAt'], value: at }
     ] }, [{ op: 'set', path: ['consumedAt'], value: at }]).document);
+   });
+  },
+  async completeVerification(token: string, mark: (userId: string, email: string) => Promise<boolean>): Promise<ConsumeTokenResult> {
+   const identity = filter(token);
+   assertEmailVerificationRepositoryScope(repository);
+   const admitted = await transaction(s => {
+    const collection = s.collection(namespace), row = decode(collection.find({ filter: identity, limit: 1 }).documents[0]);
+    if (!row) return { ok: false as const, reason: 'invalid' as const };
+    // Never resurrect an old consume-only burn or a completed operation.
+    if (row.completionState === 'completed' || (row.consumedAt !== null && row.completionState !== 'pending')) return { ok: false as const, reason: 'used' as const };
+    const at = new Date();
+    if (!validTime(row.expiresAt) || row.expiresAt.getTime() <= at.getTime()) return { ok: false as const, reason: 'expired' as const };
+    if (typeof row.userId !== 'string' || !row.userId || typeof row.email !== 'string' || !row.email || row.email !== row.email.trim().toLowerCase()) return invalid();
+    if (row.completionState === 'pending') {
+     if (!(row.consumedAt instanceof Date) || row.completionOwnerId !== row.userId || row.completionEmail !== row.email) return invalid();
+    } else {
+     if (row.completionState !== undefined || row.consumedAt !== null) return invalid();
+     collection.updateOne(identity, [
+      { op: 'set', path: ['consumedAt'], value: at },
+      { op: 'set', path: ['completionState'], value: 'pending' },
+      { op: 'set', path: ['completionOwnerId'], value: row.userId },
+      { op: 'set', path: ['completionEmail'], value: row.email }
+     ]);
+    }
+    return { ok: true as const, userId: row.userId, email: row.email };
+   });
+   if (admitted.ok === false) return admitted;
+   // Token transaction is committed before invoking canonical secure CAS.
+   // A throw/false leaves durable pending; no nested provider transaction.
+   assertEmailVerificationRepositoryScope(repository);
+   const verified = await mark(admitted.userId, admitted.email);
+   assertEmailVerificationRepositoryScope(repository);
+   if (!verified) return { ok: false, reason: 'invalid' };
+   return transaction(s => {
+    const collection = s.collection(namespace), row = decode(collection.find({ filter: identity, limit: 1 }).documents[0]);
+    if (!row) return { ok: false as const, reason: 'invalid' as const };
+    if (row.completionState === 'completed') return { ok: false as const, reason: 'used' as const };
+    if (row.completionState !== 'pending' || row.userId !== admitted.userId || row.email !== admitted.email || row.completionOwnerId !== admitted.userId || row.completionEmail !== admitted.email) return invalid();
+    collection.updateOne(identity, [
+     { op: 'set', path: ['completionState'], value: 'completed' },
+     { op: 'set', path: ['completedAt'], value: new Date() }
+    ]);
+    return admitted;
    });
   },
   async find(token: string) {

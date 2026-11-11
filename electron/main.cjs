@@ -220,6 +220,15 @@ async function closeDesktopServices() {
  if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
  if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
  if (localRuntime) tasks.push((async () => {
+  if (localRuntime.state?.nativeHome) {
+   // Stop admission/sockets first. An unfinished handler keeps native close
+   // unavailable; never force-dispose its provider or key copies.
+   if (bundledRendererServer) await bundledRendererServer.close();
+   await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.();
+   const close = globalThis[Symbol.for('thingtime.native-home.close')];
+   if (typeof close !== 'function') throw new Error('Native account shutdown ownership is unavailable.');
+   await close(); await localRuntime.stop(); return;
+  }
   try { await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.(); }
   finally { await localRuntime.stop(); }
  })());
@@ -570,6 +579,8 @@ async function startNitroServer() {
   loadLocalEnv();
 
   localRuntime.applyEnvironment(process.env);
+  const nativeHome = localRuntime.nativeHomeHost();
+  if (nativeHome) require('./lib/native-home-profile.cjs').publishNativeHomeHost(globalThis, nativeHome);
   const fallbackOrigin = `http://127.0.0.1:${parallelDevMode ? 28640 : 28630}`;
   const remoteContentOrigin = sessionAuthority.rendererOrigin(activeApiEndpoint, fallbackOrigin, localRuntime.state.enabled);
   const port = localRuntime.state.enabled ? localRuntime.state.apiPort : Number(new URL(remoteContentOrigin).port);
@@ -617,8 +628,10 @@ async function startNitroServer() {
       return import(pathToFileURL(serverEntry).href);
     }
   });
-  bundledRendererServer = renderer;
-  app.on('before-quit', () => { void renderer.close(); });
+  let closingRenderer;
+  const closeRenderer = () => closingRenderer ??= renderer.close();
+  bundledRendererServer = { ...renderer, close: closeRenderer };
+  app.on('before-quit', () => { void closeRenderer(); });
   appOrigin = renderer.origin;
   if (webBundleLaunch?.selection?.source === 'trial') {
     const response = await fetch(new URL('/.well-known/thingtime-capabilities.json', appOrigin), {

@@ -1,5 +1,17 @@
 # Auth, accounts and admin
 
+## Explicit native account home
+
+`documentStore/nativeAccountHttpHome.ts` composes the existing account routes
+with same-provider identity/session, roster, subscription, verification,
+notification, encrypted email-outbox and rate-limit repositories. The trusted
+host alone selects the protected profile; `server/utils/nativeHomeRuntime.ts`
+checks origin, actor/data-plane identity and the concrete operation allowlist.
+`nativeHomeSelection.ts` prevents both new and cached Mongo access while that
+profile is selected. Unsupported APIs remain unavailable. Run `test:document-store`
+plus the protected-profile/runtime and bundled SQLite HTTP acceptance checks in
+`docs/native-web-bundles.md`. Queueing email is not external delivery.
+
 ## Connector confirmation preferences
 
 `settings/connector-protections` exposes private current-account preferences.

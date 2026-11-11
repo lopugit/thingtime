@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Collection, Document } from 'mongodb';
+import type { ConsumeTokenResult } from './singleUseTokens';
 import { currentUserIdentityRepository } from './userIdentityRepository';
 import { assertSameHomeRepositoryProvider } from './homeRepositoryScope';
 
@@ -16,6 +17,9 @@ export interface SingleUseTokenRepository {
  insert(document: StoredSingleUseToken): Promise<void>;
  claim(token: string, now: Date): Promise<StoredSingleUseToken | null>;
  find(token: string): Promise<StoredSingleUseToken | null>;
+ /** Native resumable completion only. mark must be the canonical owner/email
+  * mutation, called outside the token transaction (no nested SQLite work). */
+ completeVerification?(token: string, mark: (userId: string, email: string) => Promise<boolean>): Promise<ConsumeTokenResult>;
 }
 export type SingleUseTokenCollectionGetter = () => Promise<Collection>;
 const record = (row: Document | null): StoredSingleUseToken | null => row as StoredSingleUseToken | null;

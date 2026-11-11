@@ -1,0 +1,18 @@
+✔ real SQLite canonical config/enforcement survives reopen without hosted config cache or Mongo (28.382917ms)
+✔ inclusive sliding cutoff, multi-unit charge, rejected metadata and exact expiry match independent timestamp model (7.434291ms)
+✔ concurrent real handles never exceed quota and canonical fixed/quota/multiplier/disabled policies are retained (17.949583ms)
+✔ atomic concurrent partial config patches preserve both changes and canonical legacy migration (7.150792ms)
+✔ native missing/failed composition denies ordinary requests without hosted fail-open; byte budget refuses Mongo (3.194ms)
+✔ same-label other file, saved repository and queued expired lifetime cannot read or write (4.67375ms)
+✔ hostile input is inert and accepted input/config is snapshotted before queue admission (2.743ms)
+✔ malformed persisted counters/settings refuse rather than grant and do not mutate state (5.466542ms)
+✔ hosted pipeline operations/fail-open and no native import remain compatible (327.889458ms)
+✔ two independent Node processes atomically share the real-file canonical bucket (355.313959ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1058.337292

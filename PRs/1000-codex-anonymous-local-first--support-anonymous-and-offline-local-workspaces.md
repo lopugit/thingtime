@@ -2,6 +2,46 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Protected SQLite account API — 12 November 2026
+
+The protected Electron host profile selects an explicit SQLite home before Nitro
+imports. Selection is host-only opt-in; no user-facing provider selector is shipped. It preserves existing JWT/vault material, protects a separate outbox key
+with OS safeStorage, and binds profile, key identity and file. Requests cannot
+choose that provider. Selected native profiles refuse new and cached Mongo access,
+remote forwarding, unsupported operations and mismatched origin/actor/data-plane
+identity. Runtime shutdown drains requests before disposing the provider and keys.
+
+The composed account slice includes registration, ordinary password login,
+current-user and roster reads, logout, verification, notification history/read and
+durable rate limits. Existing canonical validators, crypto, sessions, permissions
+and public projections remain authoritative. Native email is encrypted and queued,
+with explicit `delivered:false`; no transport worker is claimed. Invitations, OTP
+login, generic Things/root-data, uploads and other unimplemented APIs stay unavailable.
+Both manifests retain registry coverage and expose only actually supported
+semantic contracts for native negotiation. Discovery is 1.3.0; registration 1.4.0.
+
+Focused real-file checks cover account creation/reopen/revocation, cross-provider
+refusal, entitlement reads, unread history, outbox encryption/leases/suppression,
+and concurrent durable limits. Native verification recovers interrupted completion
+and checks the email match inside every secure-state CAS retry.
+
+The canonical build and packaged-output verification pass. The exact compiled
+Nitro payload passes MongoDB HTTP account/private CRUD/ACL/restart checks and
+SQLite HTTP account registration, login, logout, roster and session retention across
+a fresh Electron/API process with real macOS safeStorage. Both manifest formats,
+unsupported-operation and foreign-origin refusals, and cleanup pass. The SQLite
+fixture does not claim full native UI, actual mail delivery or automatic replacement.
+
+132 document-store, 10 authentication, 69 notification, 211 capability and 9 gateway
+checks pass. Full typecheck and the zero-error ratchet pass; full lint has zero errors
+and 374 warnings. Failed intermediate attempts remain recorded alongside their fixes.
+[Checkpoint evidence and scope](../artifacts/anonymous-release-2026-11-12/sqlite-account-http/README.md)
+and [aggregate receipt](../artifacts/anonymous-release-2026-11-12/sqlite-account-http/verification.json)
+identify the frozen source and the three test-only postbuild corrections.
+These foundations do not establish full SQLite product parity, iOS protected-key
+integration, physical-device acceptance, external email delivery, production
+signing/distribution trust or final hosted MCP artifact acceptance. PR remains open.
+
 ## Account prerequisites and notification lifecycle — 12 November 2026
 
 Canonical SQLite vault/password and session-envelope persistence now exercise

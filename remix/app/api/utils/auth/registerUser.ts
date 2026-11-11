@@ -1,4 +1,5 @@
 import { currentAccountCreationRepository } from './accountCreationRepository';
+import { nativeAccountCompletionAvailable } from './nativeAccountCompletion';
 import { withGatewayWork } from '../deployment/environmentGateway';
 import type { CharacterIdentity } from './characterCore';
 import { bindVaultPassword } from './vaultKeys';
@@ -34,7 +35,8 @@ export type RegisterInput = {
 
 export type RegisterResult =
   | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string };
+  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string;
+      verificationDelivery?: { status: 'queued' | 'failed'; delivered: false } };
 
 export type CreateUserAccountInput = {
   // Internal-only: never accepted from public signup metadata.
@@ -224,9 +226,9 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 // Single creation path for users — used by the register route AND by seeding,
 // so a seeded user is identical to a real signup (FUNDAMENTALS.md §2).
 export const registerUser = async (input: RegisterInput): Promise<RegisterResult> => {
-  // HTTP/account completion needs vault, roster and notification/outbox adapters.
-  // Never create a partial account or process an invite in this internal slice.
-  if (currentAccountCreationRepository()) return { ok:false, status:503, error:'Native account registration is not available yet' };
+  const native = currentAccountCreationRepository();
+  if (native && (!nativeAccountCompletionAvailable() || input.inviteToken !== undefined))
+    return { ok:false, status:503, error:'This native account registration operation is unavailable' };
   let invite;
   try { if (input.inviteToken !== undefined) invite = await prepareInviteSignup(input.inviteToken, input); }
   catch (err) { if (err instanceof InviteError) return { ok: false, status: err.status, error: err.message }; throw err; }
@@ -257,6 +259,17 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
+  // Native enqueue must finish within the owning request lifetime. Queued is
+  // explicitly not delivered; a failed enqueue cannot undo the committed user.
+  if (native) {
+    let status: 'queued' | 'failed' = 'failed';
+    try {
+      const result = await sendVerificationEmail({ to: email, link: verificationLink });
+      if (result.status === 'queued' && result.delivered === false) status = 'queued';
+    } catch { /* Return a non-secret delivery failure alongside the saved account. */ }
+    return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink,
+      verificationDelivery: { status, delivered: false } };
+  }
   // Fire-and-forget: a send failure (e.g. fail-closed SES outage) must not fail
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.

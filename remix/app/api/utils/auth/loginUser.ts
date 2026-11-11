@@ -1,4 +1,5 @@
 import { characterIdentity } from './characterCore';
+import { currentUserIdentityRepository } from './userIdentityRepository';
 import { characterAccountLive } from './characterSession';
 import { bindVaultPassword } from './vaultKeys';
 import { consumeOtpChallenge, createOtpChallenge, deleteOtpChallenge, generateOtpCode } from './authOtps';
@@ -46,6 +47,9 @@ export const loginUser = async ({ username, password }: { username: string; pass
   // Opt-in email 2FA: a valid password alone doesn't mint a session — the
   // caller gets a challenge id and finishes login via completeOtpLogin.
   if (credentialUser.meta?.twoFactorEmailEnabled) {
+    // An encrypted pending queue is not OTP delivery. Keep 2FA enforced while
+    // the selected native profile has no authenticated delivery/OTP adapter.
+    if (currentUserIdentityRepository()) return { ok: false, status: 503, error: 'Email security-code login is unavailable in this local profile' };
     const code = generateOtpCode();
     const challenge = await createOtpChallenge({ userId: String(user._id), purpose: 'login', code });
     // If the code can't be delivered, don't strand a challenge the user can
@@ -75,6 +79,7 @@ export const loginUser = async ({ username, password }: { username: string; pass
 // Second step of an email-2FA login: exchange challenge + emailed code for a
 // real session. Errors stay generic so challenge ids can't be probed.
 export const completeOtpLogin = async ({ challenge, code }: { challenge: string; code: string }): Promise<LoginResult> => {
+  if (currentUserIdentityRepository()) return { ok: false, status: 503, error: 'Email security-code login is unavailable in this local profile' };
   const result = await consumeOtpChallenge({
     challenge: String(challenge || ''),
     code: String(code || ''),

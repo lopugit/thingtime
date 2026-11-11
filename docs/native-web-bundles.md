@@ -1,5 +1,33 @@
 # Native web bundles and offline runtime
 
+## Protected SQLite account API integration — 12 November 2026
+
+The explicit Electron host profile can now compose the canonical account API
+over one SQLite provider. Protected safeStorage keys bind its identity, file and
+outbox; request parameters and missing Mongo configuration cannot select it.
+MongoDB remains an independent supported local provider. There is no automatic
+database migration or dual write.
+
+The current SQLite operation set is registration, ordinary password login,
+current user, account roster reads, logout, email verification, notification
+history and mark-read. Rate limits are durable and deny on unavailable storage.
+Invitation registration, email OTP login, generic Things/root-data, attachment
+cleanup and other unimplemented operations cannot borrow Mongo or a remote API.
+The capability manifest retains the complete registry and advertises only the
+semantic operations actually available in the selected runtime.
+
+Native verification email is encrypted and queued with `delivered:false`.
+Registration reports optional `verificationDelivery.status` (`queued` or
+`failed`); successful account creation is not proof of email delivery. No native
+delivery worker, SES dispatch or console delivery is implied. Sensitive mail
+bodies are redacted from ordinary outbox metadata and console logs. Queued lease
+idempotency does not establish exactly-once delivery at an external provider.
+
+This is an account API foundation, not complete SQLite product parity. Its
+source, compiled-runtime and installed-app evidence are recorded separately in
+the [PR checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+Physical iOS protected-key/API integration and distribution trust remain open.
+
 ## Managed-local acceptance checkpoint — 12 November 2026
 
 The current isolated Electron run proves signed automatic replacement with a real

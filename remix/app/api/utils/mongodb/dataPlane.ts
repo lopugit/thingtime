@@ -12,10 +12,16 @@ export function mongoDataPlane(selection: MongoEndpointSelection | null = getAct
 
 /** An identity precondition, never a routing instruction or authorization grant. */
 export function enforceExpectedDataPlane(request: Request, selection: MongoEndpointSelection | null) {
+	if (!request.headers.has(EXPECTED_DATA_PLANE_HEADER)) return null;
+	return enforceExpectedDataPlaneIdentity(request, mongoDataPlane(selection));
+}
+
+/** Compare a host-selected public identity; the header never selects storage. */
+export function enforceExpectedDataPlaneIdentity(request: Request, publicIdentity: string) {
 	const expected = request.headers.get(EXPECTED_DATA_PLANE_HEADER);
 	if (expected === null) return null;
 	const invalid = !isDataPlane(expected);
-	if (!invalid && expected === mongoDataPlane(selection)) return null;
+	if (!invalid && expected === publicIdentity) return null;
 	return Response.json({ ok: false, code: invalid ? 'INVALID_DATA_PLANE' : 'DATA_PLANE_CHANGED', error: invalid ? 'Invalid expected database' : 'The database selection changed. Reopen this Thing before continuing.' }, {
 		status: invalid ? 400 : 409, headers: { 'Cache-Control': 'private, no-store', Vary: `Cookie, Authorization, x-tt-mongo-url, ${EXPECTED_DATA_PLANE_HEADER}` }
 	});

@@ -1,0 +1,17 @@
+✔ signed relay preserves authentication, original URL, cookies, transport hooks and manual redirects (8.101041ms)
+✔ operation registry mismatch and cross-site cookie writes fail before body or credential forwarding (1.65875ms)
+✔ stream cancellation propagates without buffering and no Mongo dial is possible on a follower (10.579458ms)
+✔ gateway rejects incompatible semantic API contracts before forwarding credentials/body (1.170375ms)
+✔ follower refuses database access and forged/repeated hops (0.277459ms)
+✔ real H3 middleware restores owner request before same-origin checks and streaming (2.959666ms)
+✔ explicit dedicated build executes its own handler, allows its Mongo client, and refuses relays (1.671458ms)
+✔ a request cannot opt a proxy deployment into dedicated connections (0.782292ms)
+✔ credential relay binds import headers and omits proofs and payloads from gateway errors (1.811333ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 537.68025

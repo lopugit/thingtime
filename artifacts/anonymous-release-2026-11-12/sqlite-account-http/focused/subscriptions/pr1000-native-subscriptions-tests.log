@@ -1,0 +1,17 @@
+✔ canonical native subscription/session projection survives reopen and reports actual canonical accounting (257.608917ms)
+✔ canonical batch projection preserves requested order/dedup with one provider transaction (376.74875ms)
+✔ missing/squatted/hostile ledgers refuse without signup-default or zero grants (184.706708ms)
+✔ trusted envelopes with missing/stale counters retain canonical unavailable status and null public counts (200.961542ms)
+✔ one private Character owner hop inherits only entitlement fields and preserves own usage/note across reopen (304.354916ms)
+✔ disabled/nested/temporary/service/missing/corrupt owners cannot grant inherited allowance (303.817167ms)
+✔ same-label different providers, missing bindings, saved calls and queued expired scopes refuse (182.251416ms)
+✔ native read snapshots freeze requested identities and refuse hostile accessor arrays without execution (170.392125ms)
+✔ hosted single/batch subscription and Character-read Mongo operations/projections remain compatible without native imports (619.667958ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3817.224667

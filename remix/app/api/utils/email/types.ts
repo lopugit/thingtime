@@ -17,6 +17,9 @@ export type EmailSendInput = {
   // placeholder instead of html/text — for mail carrying single-use secrets
   // (OTP codes, password-reset links) so a DB read can't replay them
   sensitive?: boolean;
+  // Explicit immutable operation identity for native queued sends. Hosted
+  // immediate delivery has no idempotency implementation and refuses this.
+  idempotencyKey?: string;
 };
 
 export type EmailDeliveryInput = {

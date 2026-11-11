@@ -1,0 +1,27 @@
+(node:47709) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:47709) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ inherited login verifies the current owner password and issues only a Character session (1.772667ms)
+✔ separate password never accepts the owner password (0.273583ms)
+✔ switch-only, disabled and orphaned identities cannot independently log in (0.214541ms)
+✔ inherited password preserves owner email second factor without exposing its address (1.736625ms)
+✔ disabling after an OTP challenge prevents session issuance (0.69525ms)
+(node:47710) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:47710) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ owner sessions act as the selected Character without inheriting administrator authority or owner fields (15.183167ms)
+✔ per-request identity is authorized independently of the session default (4.040959ms)
+✔ a Character login cannot become its owner or sibling (0.553708ms)
+✔ disabled, orphaned and nested Characters fail closed (0.468333ms)
+✔ revoked sessions, wrong subject and scoped credentials cannot select a Character (1.158417ms)
+✔ temporary and service accounts cannot acquire proxy identities (0.207084ms)
+✔ account roster resolution retains the principal after Character selection (0.218625ms)
+✔ Character management rejects temporary and service principals, including admin-marked service accounts (0.18975ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 274.970291

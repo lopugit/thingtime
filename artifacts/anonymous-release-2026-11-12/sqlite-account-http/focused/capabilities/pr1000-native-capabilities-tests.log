@@ -1,0 +1,13 @@
+✔ both native manifests retain full registry while supported contracts and methods are explicit (23.079833ms)
+✔ not-ready native retains discovery and docs but cannot claim account operations (18.484ms)
+✔ partial method support never advertises the whole semantic contract (0.1465ms)
+✔ no selection preserves hosted shape; malformed native selection reports no authority or private data (85.543291ms)
+✔ existing clients accept supported native contracts and refuse registry-only/missing/breaking/wrong-origin contracts (49.708416ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 484.909791

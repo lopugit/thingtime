@@ -1,9 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { currentUserIdentityRepository, type UserIdentityRepository } from './userIdentityRepository';
+import { assertSameHomeRepositoryProvider } from './homeRepositoryScope';
 
-/** Internal account-creation persistence only. Native HTTP registration is not
- * enabled: vault, verification/outbox, notification and roster remain missing.
- * This is not a query/driver facade and never opens SQLite on hosted imports. */
+/** Account-creation persistence only. HTTP activation separately requires the
+ * protected host and complete account repository composition. This is not a
+ * query/driver facade and never opens SQLite on hosted imports. */
 export interface AccountCreationRepository {
  readonly homePlaneId: string;
  ensureReady(): Promise<void>;
@@ -23,12 +24,13 @@ const scopes=new AsyncLocalStorage<{repository:AccountCreationRepository;identit
 export const currentAccountCreationRepository = (): AccountCreationRepository | null => {
  const scope=scopes.getStore();if(scope&&!scope.active)return unavailable();
  const identities=currentUserIdentityRepository();
- if(scope){if(identities!==scope.identities)return unavailable();return scope.repository;}
+ if(scope){if(identities!==scope.identities)return unavailable();assertSameHomeRepositoryProvider(scope.repository,identities);return scope.repository;}
  if(identities)return nativeAccountUnsupported();
  return null;
 };
 export const assertAccountCreationRepositoryScope = (repository:AccountCreationRepository) => {if(currentAccountCreationRepository()!==repository)return unavailable();};
 export async function withAccountCreationRepository<T>(repository:AccountCreationRepository,identities:UserIdentityRepository,work:()=>T|Promise<T>):Promise<T>{
  if(scopes.getStore()||currentUserIdentityRepository()!==identities||repository.homePlaneId!==identities.homePlaneId)return unavailable();
+ assertSameHomeRepositoryProvider(repository,identities);
  const scope={repository,identities,active:true};return scopes.run(scope,async()=>{try{return await work();}finally{scope.active=false;}});
 }

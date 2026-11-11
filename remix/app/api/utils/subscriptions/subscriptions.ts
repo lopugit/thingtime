@@ -1,5 +1,7 @@
+import { characterIdentity } from '../auth/characterCore';
+import { currentSubscriptionRepository, nativeSubscriptionUnavailable, type UserEntitlementSnapshot } from './subscriptionRepository';
 import { currentAccountCreationRepository, nativeAccountUnsupported } from '../auth/accountCreationRepository';
-import { characterEntitlementSource, characterEntitlementSources, withCharacterEntitlement } from '../auth/characterEntitlements';
+import { characterEntitlementSource, characterEntitlementSources, nativeEntitlementUserState, nativeCharacterEntitlementSourcesFromSnapshot, withCharacterEntitlement } from '../auth/characterEntitlements';
 // Subscription/billing ledgers are identity-plane objects: they live on the
 // HOME deployment only, regardless of any data-plane endpoint override — the
 // same pinning as users/sessions (see endpoint.ts). Callers passing a session
@@ -256,7 +258,30 @@ const toAppInfo = (subjectId: string, doc: any): SubscriptionInfo => {
   };
 };
 
+// Native read projection uses the same trusted ledger validator, Character
+// inheritance policy and toInfo normalization. No missing-account/tier seed
+// fallback is authoritative for a native account.
+const nativeUserSubscriptionProjection = (ids: readonly string[], snapshot: UserEntitlementSnapshot): Map<string, SubscriptionInfo> => {
+ const states = new Map(ids.map(id => [id,nativeEntitlementUserState(snapshot.users.get(id),id)]));
+ const inherited = nativeCharacterEntitlementSourcesFromSnapshot(ids,snapshot);
+ const result = new Map<string, SubscriptionInfo>();
+ for (const id of ids) {
+  const doc = snapshot.subscriptions.get(subscriptionShareId('user',id));
+  if (!doc || !userSubscriptionLedgerEnvelopeIsTrusted(doc,id)) return nativeSubscriptionUnavailable();
+  const state = states.get(id), source = inherited.get(id);
+  const identity = characterIdentity({meta:state.meta});
+  if (state.meta?.character && (!identity || identity.disabled || !source)) return nativeSubscriptionUnavailable();
+  result.set(id,toInfo('user',id,withCharacterEntitlement(doc,source)));
+ }
+ return result;
+};
+
 export const getSubscription = async (subjectType: SubscriptionSubjectType, subjectId: string): Promise<SubscriptionInfo> => {
+  const native = currentSubscriptionRepository();
+  if (native) {
+   if (subjectType !== 'user') return nativeSubscriptionUnavailable();
+   return nativeUserSubscriptionProjection([subjectId],await native.readUserEntitlements([subjectId])).get(subjectId)!;
+  }
   const things = await getThingsCollection();
   const doc = await things.findOne(subjectType === 'app' ? appMatch(subjectId) : subscriptionMatch(subjectType, subjectId));
 	const trustedUserDoc = subjectType === 'user' && doc && userSubscriptionLedgerEnvelopeIsTrusted(doc, subjectId) ? doc : null;
@@ -291,6 +316,11 @@ export const getSubscriptions = async (subjectType: SubscriptionSubjectType, sub
   const ids = [...new Set(subjectIds.filter((id) => typeof id === 'string' && id))];
   const result = new Map<string, SubscriptionInfo>();
   if (!ids.length) return result;
+  const native = currentSubscriptionRepository();
+  if (native) {
+   if (subjectType !== 'user') return nativeSubscriptionUnavailable();
+   return nativeUserSubscriptionProjection(ids,await native.readUserEntitlements(ids));
+  }
 
   const things = await getThingsCollection();
   if (subjectType === 'app') {

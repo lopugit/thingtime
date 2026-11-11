@@ -1,3 +1,4 @@
+import { nativeHomeCapabilitySnapshot } from '../utils/nativeHomeCapabilities';
 import { defineHandler } from 'nitro/h3';
 
 import {
@@ -6,13 +7,14 @@ import {
 } from '../../app/api/utils/capabilities/thingtimeCapabilities';
 import { getRequestOrigin } from '../../app/api/utils/health/statusTarget';
 
-export default defineHandler((event) => {
+export default defineHandler(async (event) => {
   const method = event.req.method.toUpperCase();
   if (method !== 'GET' && method !== 'HEAD') {
     return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD' } });
   }
   const origin = getRequestOrigin(event.req);
-  const body = method === 'HEAD' ? null : JSON.stringify(thingtimeCapabilityManifest(origin));
+  const availability = await nativeHomeCapabilitySnapshot(origin);
+  const body = method === 'HEAD' ? null : JSON.stringify(thingtimeCapabilityManifest(origin, availability));
   return new Response(body, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',

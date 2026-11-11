@@ -5,25 +5,32 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
-## Current foundations checkpoint — 2026-11-11
+## Current foundations checkpoint — 2026-11-12
 
-Main is integrated through `991a3d9d62ec06a050c078499e12ae4ca5cb7261`.
-The combined passwords 1.10 contract includes main's AppID support and the
-local file client's required accounted cancellation receipts. See the
-[current PR checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
-and [progress plan](progress/anonymous-local-first.html) for current priorities.
+Main is integrated through `c9e1bf9c438dc9e11da5b5072e95324e244e8c8e`.
+The canonical no-login renderer/export and independent posting foundations are
+retained. PR #1000 remains open with a no-merge hold while broader acceptance
+work is unfinished.
 
-No-login native rendering and canonical artifacts have browser and real hosted
-worker evidence. Exact-origin production activation and actual downloadable
-artifacts through the canonical connected host remain unverified. Electron's
-signed web-release protocol, API/download/staging and startup/rollback are
-implemented. Automatic activation is guarded in source but positive installed
-acceptance and full local API background-work admission remain open. iOS has
-real Node/bcrypt/Sharp/Nitro/Fetch simulator evidence on a pinned earlier bundle;
-transactional storage, app integration and physical-device acceptance remain.
-Local vault icon mapping, global verification preferences and complete offline
-parity are separate remaining work. Historical evidence below retains its tested
-source scope; it must not override this current summary.
+Local MongoDB has real account/private Thing CRUD and restart evidence. Actual
+managed-local Electron app and Mongo process replacement also preserves local
+sessions, private content and the protected profile. This development evidence
+uses a synthetic signer and does not establish production release trust.
+
+SQLite now has a protected host-selected account repository composition:
+identity/session, entitlement reads, rosters, verification, notification history,
+encrypted pending email and durable rate limiting. Canonical handler/file-reopen
+checks pass; current compiled and native execution results are recorded in the
+[PR checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+Unsupported operations fail closed and are absent from capability negotiation.
+There is no automatic migration, dual write or Mongo fallback. Queued mail is
+not delivered mail. Generic Things/root-data, broader SQLite product parity,
+physical iOS protected-key/API integration, production trust and final canonical
+host artifact delivery remain separate acceptance gates.
+
+The [progress plan](progress/anonymous-local-first.html) distinguishes source,
+local runtime, CI and deployed evidence. Historical checkpoints below retain
+their tested source scope and must not override this summary.
 
 ## Historical integration checkpoint — 2026-11-11
 

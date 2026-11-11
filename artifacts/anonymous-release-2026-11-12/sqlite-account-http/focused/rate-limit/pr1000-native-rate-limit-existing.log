@@ -1,0 +1,58 @@
+
+> @1.0.0 test:rate-limit /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --import tsx --test app/api/utils/rateLimit/*.test.ts app/api/utils/subscriptions/tierCatalog.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/networkProbeAccess.test.mts app/api/utils/subscriptions/tierCatalogStore.test.mts
+
+✔ registration keeps the established shared rate-limit policy (0.774834ms)
+✔ the subspace directory read carries the shared public-read ceiling (0.071208ms)
+✔ the subspace write, join and report keys keep their round-2 windows (0.084417ms)
+✔ upload policy admits two 25-file batches without an hour-long lockout (1.052375ms)
+✔ legacy upload policy upgrade preserves custom limits, disabled rules and unrelated policies (0.300875ms)
+✔ new explicit admin policy can retain the old numerical limit after migration (0.200416ms)
+✔ speed-test comparison and enforcement agree for current and historical tiers (0.608833ms)
+✔ catalog: four tiers, free is the default and mirrors the legacy caps (0.367375ms)
+✔ catalog: payg is metered with no hard caps (0.057125ms)
+✔ isKnownSubscriptionTier rejects unknown values (0.058166ms)
+✔ sanitizeQuotaOverrides: null/undefined mean no overrides (0.075875ms)
+✔ sanitizeQuotaOverrides: unknown fields fail loudly (0.103583ms)
+✔ sanitizeQuotaOverrides: clamps to bounds, floors decimals, keeps explicit null (0.068ms)
+✔ sanitizeQuotaOverrides: non-numeric values fail (0.065834ms)
+✔ resolveTierQuotas: overrides win per-field, absent fields inherit (0.088709ms)
+✔ resolveTierQuotas: no overrides returns a copy of the tier quotas (0.10175ms)
+✔ computeTierDiscounts: resolves all six annualized renewal comparisons (0.106125ms)
+✔ computeTierDiscounts: custom values win while blank/zero comparisons stay unavailable (0.053083ms)
+✔ currencyMinorUnitFactor follows zero-, two-, and three-decimal currencies (2.73875ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 296.578417
+(node:18398) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:18398) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ Free and Plus apply account budgets for five downloads and eleven upload chunks (10.838958ms)
+✔ Pro and PAYG never consume account or IP buckets, even if limiter would deny (0.456834ms)
+✔ authenticated latency preflight cannot impose a hidden guest cooldown (1.645ms)
+✔ custom quota and explicit admin overrides win over defaults (0.247125ms)
+✔ IP and token changes share account usage; different accounts have different keys (0.20125ms)
+✔ OAuth uses its granted user, ignoring client-supplied tier and user headers (0.170333ms)
+✔ revoked or invalid credentials fail closed without guest fallback (0.121542ms)
+✔ sandbox and wrong-origin app grants are rejected (0.17775ms)
+✔ guests retain the independent fail-closed public allowance (0.091875ms)
+✔ denials return Retry-After; accounting outages return 503, not a cooldown (0.29025ms)
+✔ real packet handlers enforce before transferring and keep size safeguards for Pro (0.843542ms)
+(node:18399) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:18399) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ historical PAYG revisions without a speed allowance remain readable and unchanged (0.685542ms)
+✔ metered revisions still reject an explicitly finite speed allowance (0.155333ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 229.45925

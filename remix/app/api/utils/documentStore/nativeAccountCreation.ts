@@ -6,6 +6,7 @@ import type { CollectionFilter, CollectionProvider, CollectionTransaction } from
 import { createNativeHomeAuthRepositories } from './nativeUserIdentities';
 import { accountOperation, accountTransactionContext, currentAccountTransactionContext, withNativeAccountTransaction } from './nativeAccountTransaction';
 import { encodeCollectionDocument } from './collectionProvider';
+import { registerHomeRepositoryProvider } from '../auth/homeRepositoryScope';
 
 /** Explicit internal home profile only: no runtime selection or HTTP activation.
  * Catalog bootstrapping is provider-scoped and atomic. Identity + initial
@@ -63,5 +64,6 @@ export async function createNativeAccountCreationRepositories(provider:Collectio
    });
   }
  });
+ registerHomeRepositoryProvider(repository,provider);
  return Object.freeze({...auth,accountCreation:repository,run:<T>(work:()=>T|Promise<T>)=>auth.run(()=>withAccountCreationRepository(repository,auth.identities,work))});
 }
