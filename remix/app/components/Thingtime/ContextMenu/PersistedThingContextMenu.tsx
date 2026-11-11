@@ -1,138 +1,78 @@
 import React from 'react';
-import { rootIdentity } from '~/utils/rootIdentity';
-import { useApi } from '~/hooks/useApi';
-import { ThingtimeApiError } from '~/hooks/apiFailure';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
-import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingContextMenu, type ThingContextMenuProps } from './ThingContextMenu';
-import { thingArchiveMenu } from './thingEntityMenu';
 
-export const THING_ARCHIVE_CHANGED = 'thingtime:library-archive-changed';
-export type ThingArchiveChanged = {
-  origin: string;
-  ownerId: string;
-  dataPlane: 'home';
-  ids: string[];
-  archived: boolean;
-};
+export { THING_ARCHIVE_CHANGED, type ThingArchiveChanged } from './thingArchiveEvents';
 
-type Availability = {
-  id: string;
-  availableActions: string[];
-  libraryArchived: boolean;
-};
+export type ThingMenuPresentation = Pick<ThingContextMenuProps, 'model' | 'busyLabel' | 'onAction'>;
+export type PersistedThingControllerProps = ThingContextMenuProps & { onPresentation: (value: ThingMenuPresentation) => void };
+// The local JSON editor stays independent of the authenticated API graph.
+export type PersistedThingMenuLoader = () => Promise<{ default: React.ComponentType<PersistedThingControllerProps> }>;
+export const PersistedThingMenuLoaderContext = React.createContext<PersistedThingMenuLoader | null>(null);
+const KEEP_OPEN = ['archive', 'restore', 'retry-thing-actions', 'retry-thing-controller'];
 
-// The renderer stays presentation-only. Every persisted menu resolves the same
-// small server permission contract on open, including protected content roots.
-export function PersistedThingContextMenu(props: ThingContextMenuProps) {
-  const user = useCurrentUser();
-  const dataPlane = useDataPlane();
-  const identity = JSON.stringify([user?.id, dataPlane, props.model.subjectId]);
-  return <ScopedPersistedThingContextMenu key={identity} {...props} />;
+class ControllerBoundary extends React.Component<{
+  children: React.ReactNode; onError: () => void;
+}, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { this.props.onError(); }
+  render() { return this.state.failed ? null : this.props.children; }
 }
 
-function ScopedPersistedThingContextMenu(props: ThingContextMenuProps) {
-  const api = useApi();
+export function PersistedThingContextMenu(props: ThingContextMenuProps) {
+  const loader = React.useContext(PersistedThingMenuLoaderContext);
+  return loader ? <HostedThingContextMenu {...props} loader={loader} /> : <ThingContextMenu {...props} />;
+}
+
+function HostedThingContextMenu({ loader, ...props }: ThingContextMenuProps & { loader: PersistedThingMenuLoader }) {
   const user = useCurrentUser();
-  const dataPlane = useDataPlane();
-  const lopu = useLopu();
-  const id = props.model.subjectId;
-  const suppliedArchive = props.model.sections.some(section =>
-    section.actions.some(action => action.command === 'archive' || action.command === 'restore'));
-  const scope = user?.id && !user.temporary && dataPlane === 'home'
-    ? { expectedActor: user.id, expectedApiOrigin: window.location.origin, expectedDataPlane: 'home' as const }
-    : null;
-  const identity = JSON.stringify([scope?.expectedActor, scope?.expectedApiOrigin, dataPlane, id]);
-  const visit = React.useRef({ identity, open: false, version: 0 });
-  if (visit.current.identity !== identity || (props.open && !visit.current.open))
-    visit.current = { identity, open: props.open, version: visit.current.version + 1 };
-  else visit.current.open = props.open;
-  const version = visit.current.version;
+  const plane = useDataPlane();
+  const identity = JSON.stringify([user?.id, plane, props.model.subjectId]);
   const current = React.useRef(identity);
   current.current = identity;
-  const apiRef = React.useRef(api);
-  apiRef.current = api;
-  const [availability, setAvailability] = React.useState<{ identity: string; version: number; value: Availability } | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [writing, setWriting] = React.useState(false);
-  const [failed, setFailed] = React.useState(false);
+  const supplied = props.model.sections.some(section => section.actions.some(action =>
+    action.command === 'archive' || action.command === 'restore'));
+  const needed = !!props.model.subjectId && !supplied && !!loader;
+  const [activated, setActivated] = React.useState(false);
   const [retry, setRetry] = React.useState(0);
-  const writingRef = React.useRef(false);
+  const [failed, setFailed] = React.useState(false);
+  const [presentation, setPresentation] = React.useState<(ThingMenuPresentation & { identity: string }) | null>(null);
+  const handler = React.useRef<{ identity: string; action: ThingContextMenuProps['onAction'] } | null>(null);
+  const receive = React.useCallback((value: ThingMenuPresentation) => {
+    if (current.current !== identity) return;
+    handler.current = { identity, action: value.onAction };
+    setPresentation(previous => previous?.identity === identity && previous.model === value.model &&
+      previous.busyLabel === value.busyLabel ? previous : { ...value, identity });
+  }, [identity]);
+  React.useEffect(() => { setFailed(false); }, [identity]);
+  React.useLayoutEffect(() => {
+    if (!needed) { setPresentation(null); handler.current = null; }
+  }, [needed]);
   React.useEffect(() => {
-    if (!props.open || !id || !scope || suppliedArchive) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setFailed(false);
-    void apiRef.current.v1.things.describeActions({ id }, { ...scope, signal: controller.signal }).then(result => {
-      if (controller.signal.aborted || current.current !== identity) return;
-      if (!result?.ok || result.id !== id || result.ownerId !== scope.expectedActor ||
-          !Array.isArray(result.availableActions)) throw new Error('Action permissions are unavailable.');
-      setAvailability({ identity, version, value: result });
-    }).catch(error => {
-      if (!controller.signal.aborted && current.current === identity) {
-        setAvailability(null);
-        // Permission and existence refusals are a settled unavailable state.
-        setFailed(!(error instanceof ThingtimeApiError && [401, 403, 404, 409].includes(error.status || 0)));
-      }
-    }).finally(() => {
-      if (!controller.signal.aborted && current.current === identity) setLoading(false);
-    });
-    return () => controller.abort();
-  }, [props.open, id, identity, version, suppliedArchive, retry]); // eslint-disable-line react-hooks/exhaustive-deps
-  React.useEffect(() => () => { current.current = ''; }, []);
-  const resolved = availability?.identity === identity && availability.version === version && !failed ? availability.value : null;
-  const command = resolved?.availableActions.includes('restore') ? 'restore'
-    : resolved?.availableActions.includes('archive') ? 'archive' : null;
-  const model = !suppliedArchive && command
-    ? thingArchiveMenu(props.model, command, writing || loading)
-    : props.model;
-  const retryModel = failed ? {
-    ...model,
-    sections: [...model.sections, { id: 'action-retry', actions: [{
-      id: 'retry-thing-actions', command: 'retry-thing-actions', label: 'Retry action availability',
-      icon: '🔄', lucide: 'refresh-cw'
-    }] }]
-  } : model;
-  const run = async (action: 'archive' | 'restore') => {
-    if (!id || !scope || writingRef.current || resolved?.availableActions.includes(action) !== true) return;
-    const generation = rootIdentity.read().generation;
-    if (rootIdentity.read().pending) return;
-    writingRef.current = true;
-    setWriting(true);
-    try {
-      const result = await apiRef.current.v1.things.runAction({ id, action }, scope);
-      if (!result?.ok || result.id !== id || result.ownerId !== scope.expectedActor ||
-          result.libraryArchived !== (action === 'archive')) throw new Error(result?.error || 'The action could not be confirmed.');
-      const activeIdentity = rootIdentity.read();
-      if (activeIdentity.pending || activeIdentity.generation !== generation ||
-          window.location.origin !== scope.expectedApiOrigin) return;
-      const detail: ThingArchiveChanged = { origin: scope.expectedApiOrigin, ownerId: scope.expectedActor,
-        dataPlane: 'home', ids: [id], archived: result.libraryArchived };
-      window.dispatchEvent(new CustomEvent(THING_ARCHIVE_CHANGED, { detail }));
-      if (current.current !== identity) return;
-      if (visit.current.version !== version) { setRetry(value => value + 1); return; }
-      setAvailability({ identity, version, value: { id, libraryArchived: result.libraryArchived,
-        availableActions: [action === 'archive' ? 'restore' : 'archive'] } });
-      lopu({ title: action === 'archive' ? 'Archived in your Things library' : 'Restored to your Things library',
-        description: action === 'archive' ? 'Published content keeps its current audience.' : undefined,
-        status: 'success', link: { label: action === 'archive' ? 'Archived Things' : 'Active Things',
-          href: action === 'archive' ? '/things?libraryArchive=1' : '/things' } });
-      props.onClose?.();
-    } catch (error) {
-      if (current.current === identity && visit.current.version === version) lopu({ title: action === 'archive' ? 'Could not archive' : 'Could not restore',
-        description: error instanceof Error ? error.message : 'Refresh the menu and retry.', status: 'error' });
-    } finally {
-      writingRef.current = false;
-      if (current.current === identity) setWriting(false);
-    }
-  };
-  return <ThingContextMenu {...props} model={retryModel} keepOpenCommands={suppliedArchive ? props.keepOpenCommands : ['archive', 'restore', 'retry-thing-actions']}
-    busyLabel={id && scope && !suppliedArchive && loading ? 'Checking Thing actions' : writing ? 'Updating Thing archive' : undefined}
-    onAction={event => {
-      if (event.action.command === 'retry-thing-actions') { setRetry(value => value + 1); return; }
-      if (!suppliedArchive && (event.action.command === 'archive' || event.action.command === 'restore')) {
-        void run(event.action.command);
-      } else props.onAction?.(event);
-    }} />;
+    if (props.open && needed) setActivated(true);
+  }, [props.open, needed]);
+  const Controller = React.useMemo(() => loader ? React.lazy(loader) : null, [loader, retry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const resolved = needed && !failed && presentation?.identity === identity ? presentation : null;
+  const model = failed && needed ? { ...props.model, sections: [...props.model.sections,
+    { id: 'controller-retry', actions: [{ id: 'retry-thing-controller', command: 'retry-thing-controller',
+      label: 'Retry Thing actions', icon: '🔄', lucide: 'refresh-cw' }] }
+  ] } : resolved?.model || props.model;
+  // One presentation instance preserves focus, submenu stack, scroll and position
+  // within one identity while the controller chunk and its permission read settle independently.
+  return <>
+    <ThingContextMenu key={identity} {...props} model={model}
+      busyLabel={resolved?.busyLabel || (needed && !failed && !resolved && props.open ? 'Checking Thing actions' : undefined)}
+      keepOpenCommands={needed ? KEEP_OPEN : props.keepOpenCommands}
+      onAction={event => {
+        if (needed && event.action.command === 'retry-thing-controller') {
+          setFailed(false); setPresentation(null); setRetry(value => value + 1);
+        } else if (resolved && handler.current?.identity === identity) handler.current.action?.(event);
+        else props.onAction?.(event);
+      }} />
+    {needed && activated && Controller && <ControllerBoundary key={`${identity}:${retry}`} onError={() => { if (current.current === identity) { setPresentation(null); setFailed(true); } }}>
+      <React.Suspense fallback={null}><Controller {...props} onPresentation={receive} /></React.Suspense>
+    </ControllerBoundary>}
+  </>;
 }

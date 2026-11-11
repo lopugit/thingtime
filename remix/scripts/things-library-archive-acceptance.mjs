@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -170,6 +170,89 @@ try {
       else if (input === 'keyboard') { await command.focus(); await page.keyboard.press('Enter'); }
       else await command.click();
     };
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'embed') {
+      const privileged = [];
+      context.on('request', request => { if (request.url().includes('/api/v1/things/actions')) privileged.push(request.url()); });
+      await page.goto(webOrigin + '/embed/demo.html', { waitUntil: 'domcontentloaded' });
+      await page.getByRole('button', { name: 'Full editor ↗', exact: true }).waitFor();
+      const errors = [];
+      context.on('weberror', event => errors.push(event.error().message));
+      const opened = context.waitForEvent('page');
+      await page.getByRole('button', { name: 'Full editor ↗', exact: true }).click();
+      const popup = await opened;
+      await popup.getByText('Saving creates a new thing on your Thingtime account.', { exact: true }).waitFor().catch(async error => {
+        if (evidence) {
+          await popup.screenshot({ path: join(evidence, `${size.width}-embed-popup-failure.png`) });
+          await writeFile(join(evidence, `${size.width}-embed-popup-failure.json`), JSON.stringify({ path: new URL(popup.url()).pathname, errors, body: await popup.locator('body').innerText() }, null, 2));
+        }
+        throw error;
+      });
+      await popup.locator('[title="Options"]').first().click();
+      await popup.getByRole('menu').waitFor();
+      assert.equal(await popup.getByRole('menuitem').filter({ has: popup.getByText('Archive containing Thing', { exact: true }) }).count(), 0);
+      assert.equal(privileged.length, 0, 'Unsaved embed JSON never dispatches privileged Thing actions');
+      if (evidence) await popup.screenshot({ path: join(evidence, `${size.width}-embed-local-menu.png`) });
+      await popup.keyboard.press('Escape');
+      await popup.close();
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      console.log(`Chrome ${size.width}px: real single-file embed popup/local menu; no privileged requests.`);
+      await context.close();
+      continue;
+    }
+    if (process.env.THINGTIME_ARCHIVE_SCOPE === 'lazy') {
+      const chunk = '**/PersistedThingMenuController.tsx*';
+      let requests = 0;
+      page.on('request', request => { if (request.url().includes('/PersistedThingMenuController.tsx')) requests++; });
+      await page.goto(webOrigin + '/post/' + published.id, { waitUntil: 'domcontentloaded' });
+      const trigger = page.getByRole('button', { name: 'Post options', exact: true }).first();
+      await trigger.waitFor({ timeout: 180000 });
+      const open = async () => size.width < 500 ? trigger.tap() : trigger.press('Enter');
+      assert.equal(requests, 0, 'Closed menus do not download the privileged controller');
+      if (size.width > 500) {
+        const fail = route => route.fulfill({ status: 503, contentType: 'text/javascript', body: 'Synthetic unavailable controller' });
+        await page.route(chunk, fail);
+        await open();
+        await action('Retry Thing actions').waitFor();
+        assert.equal(await action('Archive').count(), 0, 'Failed chunk exposes no unverified Archive');
+        await page.unroute(chunk, fail);
+      }
+      let release, notify, finish, routeFailure;
+      const gate = new Promise(resolve => { release = resolve; });
+      const requested = new Promise(resolve => { notify = resolve; });
+      const completed = new Promise(resolve => { finish = resolve; });
+      const defer = async route => { try { notify(); const response = await route.fetch(); await gate; await route.fulfill({ response }); } catch (error) { routeFailure = error; } finally { finish(); } };
+      await page.route(chunk, defer);
+      if (size.width > 500) await action('Retry Thing actions').press('Enter'); else await open();
+      await Promise.race([requested, delay(30000).then(() => { throw Error('Lazy controller was not requested'); })]);
+      await page.getByText('Checking Thing actions', { exact: true }).waitFor();
+      assert.equal(await action('Archive').count(), 0, 'No unverified Archive during first load');
+      if (size.width < 500) { await page.keyboard.press('Escape'); await open(); }
+      const pendingFocus = action('Copy link');
+      await pendingFocus.focus();
+      const focusedNode = await pendingFocus.elementHandle();
+      release();
+      await completed;
+      assert.equal(routeFailure, undefined);
+      await page.unroute(chunk, defer);
+      await action('Archive').waitFor();
+      assert.equal(await page.getByRole('menu').count(), 1, 'First-open load retains one current menu');
+      assert(await focusedNode.evaluate(element => element === document.activeElement), 'Pending base-action focus survives controller resolution');
+      await action('Archive').focus();
+      assert(await action('Archive').evaluate(element => element === document.activeElement), 'First-open actions accept keyboard focus');
+      if (evidence) await page.screenshot({ path: join(evidence, `${size.width}-lazy-first-open.png`) });
+      await action('Archive').press('Enter');
+      await waitFor(async () => (await describe(published.id)).libraryArchived, 'lazy archive receipt');
+      await open();
+      await action('Restore').waitFor();
+      await action('Restore').press('Enter');
+      await waitFor(async () => !(await describe(published.id)).libraryArchived, 'lazy restore receipt');
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      console.log(`Chrome ${size.width}px: deferred first-open, failure/retry, close/reopen, focus and real Archive/Restore passed.`);
+      await context.close();
+      continue;
+    }
     const appCard = () => page.locator(`[data-thing-id="${app.id}"]`).last();
     const openAppMenu = async rightClick => {
       if (rightClick) await appCard().click({ button: 'right' });

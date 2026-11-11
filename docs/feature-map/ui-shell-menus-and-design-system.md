@@ -3,7 +3,12 @@
 ## Shared persisted Thing actions
 
 `schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore
-verbs. `PersistedThingContextMenu` resolves exact-root availability on open,
+verbs. The routed app entry supplies `PersistedThingMenuLoaderContext`; its lazy
+headless `PersistedThingMenuController` leaves one menu renderer mounted while
+permissions load. Local JSON/embed entries do not import the authenticated API
+graph or infer remote subjects. Controller loading failure has explicit Retry;
+same-identity focus/submenu state survives loading, while identity changes reset
+presentation. `PersistedThingContextMenu` resolves exact-root availability on open,
 negotiates `api.things-actions` 1.1.0, and fences reads/writes by owner, origin,
 data plane, subject and menu visit. Refused subjects have no Archive or retry;
 transient lookup failures offer Retry. Shared buttons and persisted/raw-tree

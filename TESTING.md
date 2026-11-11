@@ -4357,6 +4357,18 @@ email whose link points at the attacker.
 
 ## Things library archive
 
+- [ ] Build the embed with `pnpm --dir remix run build:embed`; keep the existing
+  single-file/raw/gzip budgets. Closed persisted menus must not download the
+  authenticated controller. Delay its first module request, focus an existing
+  base command or open a submenu, then resolve it: the same menu/focus/scroll
+  remains usable. A failed module request offers working Retry without exposing
+  unverified Archive. Account/plane/subject changes clear the old menu state.
+  `THINGTIME_ARCHIVE_SCOPE=lazy` exercises the real first-open module boundary;
+  `THINGTIME_ARCHIVE_SCOPE=embed` checks the compiled popup's local JSON menu
+  without privileged Thing action requests. The PR 1463 comparison currently
+  records a preexisting bridge/router startup failure on both main and the fix;
+  do not count that blocked popup check as a pass.
+
 - [ ] In **Builder → Apps**, use the actual app card (Browse/Edit app), not the
   folder tree. Archive from ellipsis/touch and context menu; reload the active
   app index, open Archived, search, Restore and check the original app children.
