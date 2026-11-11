@@ -123,7 +123,7 @@ export type FolderResult = {
 	uploadedSingle?: { attachmentId: string; version: string; size: number; fingerprint: ContentFingerprint; payloadBytes: number | null };
 	uploadedFile?: { fingerprint: ContentFingerprint };
 	deferred?: import('./contentFingerprint').NativeDeferredFileResult;
-	uploadedPart?: { sha256: string; payloadBytes?: number };
+	uploadedPart?: { sha256: string; payloadBytes?: number; alreadyUploaded?: true };
 	writeApproval?: MobileWriteApproval;
 	publication?: SyncReceiptLookup;
 	trash?: SyncReceiptLookup;
@@ -199,9 +199,10 @@ export const supportsNativePhotoAutomation = (bridge: FolderCapabilities | undef
 	bridge?.platform === 'ios' && capabilitySatisfies(bridge.filePhotoAutomationVersion ?? '', '1.0.0');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
-/** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
+/** Mac 1.1 and iOS 1.7 distinguish verified retained parts from new traffic. */
 export const supportsNativePartPayloadBytes = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
-	bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1;
+	(bridge?.platform === 'macos' && supportsNativePartUploads(bridge) && Number(bridge.fileUploadVersion!.split('.')[1]) >= 1) ||
+	(bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion, '1.7.0'));
 export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileUploadBatchVersion ?? '');
 export const supportsNativeFolderBatches = (bridge: FolderCapabilities | undefined) =>
@@ -601,7 +602,8 @@ export function parseMobileFolderResult(
 		// Optional telemetry cannot invalidate an otherwise exact authenticated receipt.
 		result.uploadedPart = {
 			sha256: part.sha256,
-			...(Number.isSafeInteger(part.payloadBytes) && part.payloadBytes === upload.length ? { payloadBytes: part.payloadBytes } : {})
+			...(part.alreadyUploaded === true && part.payloadBytes === 0 ? { payloadBytes: 0, alreadyUploaded: true as const } :
+				Number.isSafeInteger(part.payloadBytes) && part.payloadBytes === upload.length ? { payloadBytes: part.payloadBytes } : {})
 		};
 	}
 	if (request.action.startsWith('version-')) {
@@ -1367,7 +1369,8 @@ export function mobileFolderSource(
 						if (!result.uploadedPart) throw Error('Native upload receipt is missing.');
 						return {
 							sha256: result.uploadedPart.sha256,
-							...(supportsNativePartPayloadBytes(bridge) && result.uploadedPart.payloadBytes === upload.length
+							...(bridge?.platform === 'ios' && capabilitySatisfies(bridge.fileUploadVersion, '1.7.0') && result.uploadedPart.alreadyUploaded === true && result.uploadedPart.payloadBytes === 0
+								? { payloadBytes: 0, alreadyUploaded: true as const } : supportsNativePartPayloadBytes(bridge) && result.uploadedPart.payloadBytes === upload.length
 								? { payloadBytes: upload.length } : {})
 						};
 					}

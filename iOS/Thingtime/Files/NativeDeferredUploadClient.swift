@@ -55,7 +55,7 @@ final class NativeDeferredUploadClient {
     init(record: NativeDeferredUploadRecord) {
         self.record = record
         scope = record.scope; deviceId = record.configuration.deviceId
-        minimum = record.configuration.uploadPolicy != nil ? [1, 6, 0] : record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
+        minimum = [1, 7, 0]
         let configuration = Self.configuration(allowsCellular: record.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
@@ -89,6 +89,7 @@ final class NativeDeferredUploadClient {
         try await requireCapability()
         var payload: [String: Any] = ["action": action, "admissionId": record.admissionId]
         if let parts { payload["parts"] = parts }
+        if action == "parts" { payload["reconcileAcceptedParts"] = true }
         if action == "parts", backgroundFileSupported, record.photoRunId != nil { payload["transport"] = "background-file-v1" }
         let result = try await read(Self.path, body: payload)
         if action == "complete" {
@@ -130,6 +131,7 @@ final class NativeDeferredUploadClient {
         let allowsCellular = record.configuration.network == "any"
         var request = try NativeFileSession.signedUploadRequest(signed, origin: record.scope.origin, checksum: part.checksumSha256,
             length: part.length, partNumber: partNumber)
+        if try NativeFileSession.alreadyUploaded(signed) { try check(); return }
         request.allowsCellularAccess = allowsCellular
         try check()
         let configuration = Self.configuration(allowsCellular: allowsCellular)

@@ -63,7 +63,7 @@ export type AttachmentS3 = {
 		/** Internal, current Photos admission only; never accepted from an upload body. */
 		backgroundFileTransport?: boolean;
 	}): Promise<{ url: string; expiresAt: string; headers: Record<string, string>; transport?: AttachmentBackgroundFileTransport }>;
-	listParts(input: { objectKey: string; uploadId: string }): Promise<AttachmentUploadedPart[]>;
+	listParts(input: { objectKey: string; uploadId: string; partNumber?: number }): Promise<AttachmentUploadedPart[]>;
 	completeMultipartUpload(input: { objectKey: string; uploadId: string; parts: AttachmentUploadedPart[] }): Promise<{ versionId: string }>;
 	headObject(input: { objectKey: string; versionId?: string }): Promise<AttachmentObjectHead>;
 	detectContentType(input: { objectKey: string; versionId: string }): Promise<string | undefined>;
@@ -215,9 +215,9 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			};
 		},
 
-		async listParts({ objectKey, uploadId }) {
+		async listParts({ objectKey, uploadId, partNumber }) {
 			const parts: AttachmentUploadedPart[] = [];
-			let marker: string | undefined;
+			let marker: string | undefined = partNumber === undefined ? undefined : String(partNumber - 1);
 			do {
 				const page = await client.send(
 					new ListPartsCommand({
@@ -225,7 +225,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 						Key: objectKey,
 						UploadId: uploadId,
 						PartNumberMarker: marker,
-						MaxParts: 1000
+						MaxParts: partNumber === undefined ? 1000 : 1
 					})
 				);
 				for (const part of page.Parts || []) {
@@ -239,6 +239,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 						checksumSha256: part.ChecksumSHA256
 					});
 				}
+				if (partNumber !== undefined) return parts.filter(part => part.partNumber === partNumber);
 				marker = page.IsTruncated ? page.NextPartNumberMarker : undefined;
 				if (page.IsTruncated && !marker) throw new Error('S3 returned an invalid multipart cursor');
 			} while (marker);

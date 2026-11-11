@@ -806,8 +806,8 @@ test('Photos automation settings and exact publication are additive origin-scope
 test('native background file transport is an explicit compatible transfer admission capability', () => {
  const minimum = '1.5.0';
  const docs = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest('https://photos.test');
- assert.equal(docs.features['api.file-sync-transfer-admissions'], '1.6.0');
- assert.equal(runtime.features['api.file-sync-transfer-admissions']?.version, '1.6.0');
+ assert.equal(docs.features['api.file-sync-transfer-admissions'], '1.7.0');
+ assert.equal(runtime.features['api.file-sync-transfer-admissions']?.version, '1.7.0');
  assert(capabilitySatisfies('1.5.1', minimum));
  for (const version of [undefined, '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, minimum), false);
  assert.deepEqual(runtime.operations.find(operation => operation.path === '/api/v1/files/sync-transfer-admissions')?.methods, ['POST']);

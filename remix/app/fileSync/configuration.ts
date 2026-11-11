@@ -27,7 +27,7 @@ export const canonicalResourceLimitFields = (value: FileSyncResourceLimits) => F
  const view = new DataView(new ArrayBuffer(8)); view.setFloat64(0, n);
  return view.getBigUint64(0).toString(16).padStart(16, '0');
 });
-export const FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS = { 'api.things': '1.64.0', 'api.things-update': '1.28.0', 'api.file-sync-transfer-admissions': '1.6.0' } as const;
+export const FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS = { 'api.things': '1.64.0', 'api.things-update': '1.28.0', 'api.file-sync-transfer-admissions': '1.7.0', 'api.attachment-upload-parts': '1.3.0' } as const;
 export type UploadPolicy = { uploadBytesPerSecond?: number; uploadBytesPerHour?: number };
 export function parseUploadPolicy(value: unknown): UploadPolicy | undefined {
  if (value === undefined) return undefined;

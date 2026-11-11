@@ -49,7 +49,7 @@ export type FingerprintSource = {
 
 	/** Native file-backed multipart upload. Resolves only after authenticated
 	 * signing, bounded storage upload and source checks; returns the part hash. */
-	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number }>;
+	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string; payloadBytes?: number; alreadyUploaded?: true }>;
 
 	/** Trusted native-part adapter validates the expected source before/after PUT.
 	 * Only removes duplicate wrapper checks; initial, pre-complete and final

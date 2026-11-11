@@ -813,7 +813,7 @@ test('new folder policy client refuses old host before dispatch and negotiates a
  await assert.rejects(requestMobileFolders('owner', { action: 'upload-part', rootId, upload }, new AbortController().signal), /Update Thingtime/);
  assert.equal(requests.length, 0, 'an unsupported host sees no upload mutation');
  const bridge = (window as any).thingtimeNativeBridge;
- bridge.fileUploadPolicyVersion = '1.0.0'; bridge.fileUploadVersion = '1.6.0';
+ bridge.fileUploadPolicyVersion = '1.1.0'; bridge.fileUploadVersion = '1.6.0';
  const pending = requestMobileFolders('owner', { action: 'upload-part', rootId, upload }, new AbortController().signal);
  await new Promise(resolve => setTimeout(resolve, 0));
  assert.equal((requests[0] as any).action, 'upload-part-authorized');

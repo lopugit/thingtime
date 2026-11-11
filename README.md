@@ -2469,6 +2469,21 @@ The runtime role needs only those object actions:
 - `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
 - `s3:PutObjectVersionTagging`
 
+Resumable part verification also uses the existing object-scoped
+`s3:ListMultipartUploadParts` permission. Before enabling native upload-policy
+1.1 / upload 1.7 clients, verify each selected environment's actual runtime role
+through a disposable private multipart upload: negotiate
+`api.attachment-upload-parts` 1.3 and transfer-admissions 1.7, PUT one exact
+part, then request the same part with `reconcileAcceptedParts: true` and verify
+`alreadyUploaded: true`, complete the missing parts and compare the downloaded
+file hash. Use the normal API and secret-safe fixture workflow, never expose
+role credentials or signed URLs. Local storage tests do not establish production
+IAM readiness. A denied/unavailable provider lookup stays retryable and retains
+the original reservation; legacy signing without the opt-in has no new lookup
+dependency. Do not fall back to full retransmission while claiming reliable
+hourly resume. Older provider parts without canonical checksums cannot be
+treated as accepted from local progress or cached payloads.
+
 Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
 public-read, or bucket-administration actions. Completed attachments persist
 the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target

@@ -10941,6 +10941,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] With a signed newer standalone `Thingtime Passwords.app` running, install
+  a verified Thingtime bundle whose nested companion is older. Confirm the
+  standalone path, inode, version, signature, Keychain group and running PID
+  stay intact while the main app and Node update; verify runtime `native.passwords`
+  negotiation and a normal provider status/action separately. Equal or older
+  standalone companions must still require a clean quit before replacement.
+  Malformed or reversed versions, different signing/team/group/entitlement or
+  changed destination during staging must refuse safely. Also test an idle
+  newer companion with mismatched signing and an unreadable version/profile:
+  neither may be staged or replaced, and the diagnostic must not print the
+  verifier's raw error. A failed main install
+  must restore the old main app without touching a preserved companion. Run
+  `node --test electron/test/install-local-app.test.cjs` for the synthetic guards.
+
 - [ ] macOS companion editing shortcuts: in the signed installed companion,
   focus a synthetic password input and verify Command-V inserts masked text.
   Compare the field's normal context-menu Paste without reading the clipboard
@@ -16189,6 +16203,13 @@ never print the file-download JSON, encryption metadata or signed URL.
 - Exhaust a rolling-hour allowance, verify its exact persisted deadline and
   automatic resume; an allowance below one provider part remains an actionable
   wait and retains the pending original. Explicit Pause must prevent resume.
+- Stop the host after one accepted multipart part, retain its upload/operation
+  IDs, and resume the same file across allowances that each fit only one part.
+  Provider-confirmed parts must not be PUT again; compare each part hash and the
+  final full file hash. Test malformed/unavailable proof, expiry/revocation after
+  provider awaits, owner/session change while a verified-part reply is delayed,
+  and legacy signing without lookup opt-in. Verified skips add zero new payload
+  bytes and never refund prior consumption or uncertain usage.
 - Change only upload policy on an existing interrupted Backup job, reload, and
   verify old plan receipts and completed cloud copies survive without duplicate
   publication. Direction, destination, network and security edits stay guarded.

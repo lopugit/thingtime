@@ -77,9 +77,9 @@ test('paired file transfer admissions require their independent same-origin cont
   const origin = 'https://file-transfer.test';
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(typeof routeModules['v1/files/sync-transfer-admissions'], 'function');
-  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features[feature], feature === 'api.file-sync-transfer-admissions' ? '1.6.0' : '1.5.1');
+  assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features[feature], feature === 'api.file-sync-transfer-admissions' ? '1.7.0' : '1.5.1');
   assert.equal(manifest.origin, origin);
-  assert.equal(manifest.features[feature].version, feature === 'api.file-sync-transfer-admissions' ? '1.6.0' : '1.5.1');
+  assert.equal(manifest.features[feature].version, feature === 'api.file-sync-transfer-admissions' ? '1.7.0' : '1.5.1');
   assert.deepEqual(manifest.operations.find(operation => operation.path === path), { feature, path, methods: ['POST'] });
   for (const compatible of ['1.2.0', '1.2.1', '1.3.0', '1.3.1']) assert.equal(capabilitySatisfies(compatible, '1.2.0'), true);
   assert.equal(capabilitySatisfies('1.2.0', '1.0.0'), true);
@@ -395,7 +395,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.devices'], '1.16.0');
 	assert.equal(manifest.features['api.devices-node-state'], '1.15.1');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.11.0');
-	assert.equal(manifest.features['api.attachment-upload-parts'], '1.2.0');
+	assert.equal(manifest.features['api.attachment-upload-parts'], '1.3.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.8.0');
 });
 

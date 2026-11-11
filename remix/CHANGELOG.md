@@ -17,6 +17,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-12: Preserve all unsaved upload-policy fields across independent input
   and unit events, keep v5 iOS Backup directions valid, and prevent policy edits
   from reopening completed or attention jobs on a shared device. **Codex (AI)**
+- 2026-11-12: Resume accepted multipart parts from exact provider metadata across
+  hourly waits and host restarts, retaining operation identity and consumed
+  usage. New native/browser clients opt in; legacy signing remains independent
+  of lookup availability. See [the contract](../docs/ios-folder-upload-policy.md).
+  **Codex (AI)**
 - 2026-11-12: Add negotiated iOS folder Backup upload speed and hourly policy
   controls with shared persisted device/folder budgets, exact scoped native
   enforcement, legacy-part accounting and policy-only interrupted-job recovery.
@@ -154,6 +159,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-11-12: Preserve a verified newer signed standalone macOS Passwords
+  companion when installing an older nested companion, without stopping or
+  rolling back the standalone app. Equal or older verified companions retain
+  the quit-and-replace path. Unknown version or incompatible signing evidence
+  stops installation before staging, so an unverified newer provider cannot be
+  downgraded. Runtime native capability acceptance remains separate.
+  **Codex (AI)**, reviewed by **Lopu (AI)** and corrected by **Codex (AI)**
 
 - 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
   and saved sync cards, with native aggregate enforcement and active policy-only

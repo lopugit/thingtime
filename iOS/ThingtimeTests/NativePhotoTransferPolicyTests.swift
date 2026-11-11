@@ -214,7 +214,8 @@ final class NativeFolderUploadPolicyTests: XCTestCase {
             cap: 100, rootId: "folder", configurationId: "v5-config", now: now))
     }
     func testLegacyPartPolicyCapabilityIsAdditive() {
-        XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadPolicyVersion = '1.0.0'"))
+        XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadPolicyVersion = '1.1.0'"))
+        XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadVersion = '1.7.0'"))
     }
 }
 

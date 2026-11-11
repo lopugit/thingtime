@@ -1,6 +1,7 @@
 import XCTest
 import WebKit
 import AppleFileSync
+import CryptoKit
 @testable import Thingtime
 
 private final class FileSessionProtocol: URLProtocol, @unchecked Sendable {
@@ -23,6 +24,64 @@ private final class FileSessionProtocol: URLProtocol, @unchecked Sendable {
 
 @MainActor
 final class NativeFileSessionTests: XCTestCase {
+    private struct Part: FileUploadPartSource {
+        let url: URL
+        let length: Int64
+        let sha256: String
+        let checksumSha256: String
+    }
+    func testDelayedRetainedPartRefusesChangedSessionWithoutProgressOrUsage() async throws {
+        let origin = URL(string: "https://native-sync.test")!
+        let owner = try FileSyncOwnerScope(ownerId: "test-owner", url: origin)
+        let bytes = Data([1, 2, 3, 4]), digest = Data(SHA256.hash(data: Data([1, 2, 3, 4])))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try bytes.write(to: file); defer { try? FileManager.default.removeItem(at: file) }
+        let part = Part(url: file, length: Int64(bytes.count), sha256: digest.map { String(format: "%02x", $0) }.joined(), checksumSha256: digest.base64EncodedString())
+        for changeOwner in [false, true] {
+            let dataStore = WKWebsiteDataStore.nonPersistent(), config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [FileSessionProtocol.self]
+            let webConfig = WKWebViewConfiguration(); webConfig.websiteDataStore = dataStore
+            let web = WKWebView(frame: .zero, configuration: webConfig)
+            web.loadHTMLString("<body>Retained-part identity fixture</body>", baseURL: origin)
+            let store = dataStore.httpCookieStore
+            func cookie(_ value: String) -> HTTPCookie { HTTPCookie(properties: [.name: "tt_auth", .value: value, .domain: "native-sync.test", .path: "/", .secure: "TRUE"])! }
+            await store.setCookie(cookie("fixture"))
+            let requested = expectation(description: "provider reconciliation waits"), release = DispatchSemaphore(value: 0)
+            FileSessionProtocol.set { request in
+                let response: [String: Any]
+                if request.url?.path == "/api/v1/auth/me" {
+                    response = ["user": ["id": owner.ownerId, "accountKind": "user"]]
+                } else if request.url?.path == LopuVoiceContract.manifestPath {
+                    response = ["schemaVersion": 1, "origin": origin.absoluteString, "features": ["api.attachment-upload-parts": ["version": "1.3.0"]]]
+                } else {
+                    XCTAssertEqual(request.url?.path, "/api/v1/attachments/uploads/parts")
+                    XCTAssertEqual(request.httpMethod, "POST")
+                    requested.fulfill()
+                    guard release.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+                    response = ["ok": true, "parts": [["partNumber": 1, "url": "https://storage.test/part", "headers": ["x-amz-checksum-sha256": part.checksumSha256], "alreadyUploaded": true]]]
+                }
+                return (200, ["Content-Type": "application/json"], try JSONSerialization.data(withJSONObject: response))
+            }
+            let transport = NativeFileSession(scope: owner, cookieStore: store, cookies: { values, _ in values }, check: {}, invalidated: {}, configuration: config)
+            try await transport.open()
+            var progress = 0, usage: Int64 = 0
+            let upload = Task { () throws -> Int64 in
+                let sent = try await transport.uploadPart(part, uploadId: "upload", partNumber: 1, allowsCellular: false, photoAuthorization: nil, conditions: nil)
+                progress += 1; usage += sent; return sent
+            }
+            await fulfillment(of: [requested], timeout: 5)
+            if changeOwner { await store.setCookie(cookie("changed-session")) }
+            release.signal()
+            do {
+                let sent = try await upload.value
+                XCTAssertFalse(changeOwner, "a stale owner must never receive retained-part completion")
+                XCTAssertEqual(sent, 0)
+            } catch { XCTAssertTrue(changeOwner, "unchanged owner should reuse the verified remote part: \(error)") }
+            XCTAssertEqual(progress, changeOwner ? 0 : 1)
+            XCTAssertEqual(usage, 0, "proof reuse never creates new transfer usage")
+            transport.close(); withExtendedLifetime(web) {}
+        }
+    }
     func testNativeTransportPinsIdentityBoundsBytesAndCancelsOnSessionChange() async throws {
         let origin = URL(string: "https://native-sync.test")!, owner = try FileSyncOwnerScope(ownerId: "test-owner", url: origin)
         let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [FileSessionProtocol.self]

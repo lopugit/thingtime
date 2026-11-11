@@ -29,7 +29,8 @@ test('policy replacement preserves exact backup identity, pause, destination and
 test('independent native upload and origin manifests negotiate without claiming Photos/full resources', () => {
  assert.equal(supportsNativeUploadPolicy({ platform: 'ios', filePhotoAutomationVersion: '1.6.0' }), false);
  assert.equal(supportsNativeUploadPolicy({ platform: 'ios', fileResourceLimitsVersion: '1.0.0' }), false);
- assert.equal(supportsNativeUploadPolicy({ platform: 'ios', fileUploadPolicyVersion: '1.0.0' }), true);
+ assert.equal(supportsNativeUploadPolicy({ platform: 'ios', fileUploadPolicyVersion: '1.1.0' }), true);
+ assert.equal(supportsNativeUploadPolicy({ platform: 'ios', fileUploadPolicyVersion: '1.0.0' }), false, 'pre-reconciliation native hosts cannot advertise durable hourly upload controls');
  assert.equal(supportsNativeUploadPolicy({ platform: 'ios', fileUploadPolicyVersion: '2.0.0' }), false);
  const source = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest(scope.origin);
  for (const [key, minimum] of Object.entries(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS)) {

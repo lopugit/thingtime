@@ -7,10 +7,10 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let uploadVersion = "1.6.0"
+    static let uploadVersion = "1.7.0"
     static let accessVersion = "1.8.0"
     static let photoAutomationVersion = "1.6.0"
-    static let uploadPolicyVersion = "1.0.0"
+    static let uploadPolicyVersion = "1.1.0"
     static var photoContinuationVersion: String? {
         if #available(iOS 26.0, *) { return "1.1.0" }
         return nil
@@ -363,7 +363,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             transport: NativeFileSession, allowsCellular: Bool = false,
                             authorizeBeforeSend: (() async throws -> Void)? = nil, photoAuthorization: NativeUploadAuthorization? = nil, legacyDeviceId: String? = nil,
                             download: PhotoOriginalDownloadControl? = nil,
-                            current: @escaping () throws -> Void) async throws -> String {
+                            current: @escaping () throws -> Void) async throws -> (digest: String, payloadBytes: Int64) {
         let staging = NativeUploadPartStaging(scope: scope, grant: grant, photos: photos, store: uploadParts, download: download)
         // Even retained parts require the live source version.
         try await staging.verify(request.source)
@@ -376,9 +376,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         let ready = try request.verifyPlan(started)
         let (retained, part) = try await staging.prepare(request)
         try current(); try await transport.verifyOwner()
+        var payloadBytes: Int64 = 0
         if !ready {
             try await authorizeBeforeSend?()
-            try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber, allowsCellular: allowsCellular,
+            payloadBytes = try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber, allowsCellular: allowsCellular,
                 photoAuthorization: photoAuthorization, conditions: downloadConditions, legacyDeviceId: legacyDeviceId, legacyRootId: rootId)
         }
         try current()
@@ -386,7 +387,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         try current(); try await transport.verifyOwner()
         try await staging.release(retained)
         try current()
-        return part.sha256
+        return (part.sha256, payloadBytes)
     }
     private func deferUpload(_ file: NativeUploadFileRequest, staging: NativeUploadPartStaging,
                              transport: NativeFileSession, check: () throws -> Void) async throws -> (queued: Bool, scheduled: Bool) {
@@ -560,12 +561,12 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } },
             identityChanged: { NativeDeferredUpload.shared.disarm(matching: scope) })
         self.transport = transport; try await transport.open()
-        try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
+        try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,3,0])])
         if let fileRequest {
             try await transport.require([("api.attachment-upload-complete", [1,4,0])])
             guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
             let authorization = fileRequest.authorization
-            if authorization.configuration.uploadPolicy != nil { try await transport.require([("api.things", [1,64,0]), ("api.file-sync-transfer-admissions", [1,6,0])]) }
+            if authorization.configuration.uploadPolicy != nil { try await transport.require([("api.things", [1,64,0]), ("api.file-sync-transfer-admissions", [1,7,0])]) }
             try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
             guard !NativeDeferredUpload.shared.ownsPhotoRun(scope: scope, configurationId: authorization.id,
                 rootId: rootId, deviceId: authorization.scope.deviceId) else { throw MobileFolderStore.Failure.changed }
@@ -621,9 +622,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     try await NativeFileUploadJob.run(fileRequest, check: current, authorize: authorize, json: { path, body in
                         try await transport.json(path, body: body)
                     }, upload: { part in
-                        try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport,
+                        let result = try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport,
                             allowsCellular: authorization.configuration.network == "any", authorizeBeforeSend: authorize,
                             photoAuthorization: authorization, download: download, current: current)
+                        return result.digest
                     }, progress: onProgress)
                 }
                 self.background?.finish(success: true); self.background = nil
@@ -666,7 +668,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     legacyDeviceId: deviceId, current: current)
                 return ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
                     "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
-                    "version": request.source.version, "size": request.source.size, "sha256": digest]]
+                    "version": request.source.version, "size": request.source.size, "sha256": digest.digest, "payloadBytes": digest.payloadBytes, "alreadyUploaded": digest.payloadBytes == 0]]
             }
             let authorization = try self.decode(rawAuthorization, as: NativeUploadAuthorization.self)
             try authorization.validate(owner: scope, rootId: rootId, photos: false)
@@ -684,7 +686,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 photoAuthorization: authorization, current: current)
             result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
                 "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
-                "version": request.source.version, "size": request.source.size, "sha256": digest]]
+                "version": request.source.version, "size": request.source.size, "sha256": digest.digest, "payloadBytes": digest.payloadBytes, "alreadyUploaded": digest.payloadBytes == 0]]
         }
         return result
     }
@@ -731,6 +733,15 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     let proposed = (action == "set-photo-transfer-policy" || action == "set-upload-policy") ? try NativePhotoTransferPolicy.parse(payload[general ? "uploadPolicy" : "photoTransferPolicy"]) : nil
                     try await verifyOwner(scope, check); try check()
                     try await verifyDevice(scope, device, check); try check()
+                    if proposed != nil {
+                        guard let cookies else { throw MobileFolderStore.Failure.unavailable }
+                        let session = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+                            cookies: cookies, check: check, invalidated: {})
+                        defer { session.close() }
+                        try await session.open()
+                        try await session.require([("api.attachment-upload-parts", [1,3,0]), ("api.file-sync-transfer-admissions", [1,7,0])])
+                        try check()
+                    }
                     if let rootId {
                         let grant = try self.store.grant(scope, id: rootId)
                         guard general || grant.sourceKind == "photos" else { throw MobileFolderStore.Failure.invalid }
@@ -812,6 +823,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         !limits.rates.isEmpty || limits.device.uploadBytesPerHour != nil || limits.folder.uploadBytesPerHour != nil
     }
     private static func folderErrorMessage(_ error: Error) -> String {
+        if let message = (error as? NativeFileSession.PartRetry)?.errorDescription { return message }
         if let message = (error as? LegacyClientUpgrade)?.errorDescription { return message }
         if let message = (error as? NativeDeferredUploadStore.Failure)?.errorDescription { return message }
         if let message = (error as? FileUploadPartStore.Failure)?.errorDescription { return message }

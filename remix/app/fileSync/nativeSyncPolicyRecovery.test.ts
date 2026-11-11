@@ -12,7 +12,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
 } else {
  test('same-device policy changes resume only runnable and scheduled admissions', async () => {
   const origin = 'https://policy-recovery.test', calls: string[] = [], reads: string[] = [];
-  const bridge = { platform: 'ios', fileUploadPolicyVersion: '1.0.0' };
+  const bridge = { platform: 'ios', fileUploadPolicyVersion: '1.1.0' };
   const adapter = { platform: 'ios', bridge };
   const configuration = { configurationVersion: 1, name: 'Backup', deviceId: 'device', localRootId: 'folder', remoteFolderId: 'cloud', sourceKind: 'folder', mode: 'backup', paused: false, propagateDeletes: false, network: 'wifi', chargingOnly: false, excludedPaths: [] };
   const jobs = ['complete', 'attention', 'paused', 'runnable', 'scheduled'].map(state => ({

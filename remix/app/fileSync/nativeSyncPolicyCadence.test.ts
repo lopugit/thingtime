@@ -14,7 +14,7 @@ if (!process.execArgv.includes('--experimental-test-module-mocks')) {
  test('actual task admission retains prior interval unless the caller explicitly replaces it', async () => {
   const origin = 'https://cadence.test', root = '00000000-0000-4000-8000-000000000001';
   let passes = 0, current: any;
-  const bridge = { platform: 'ios', fileAccessVersion: '1.5.0', fileUploadVersion: '1.6.0', fileUploadPolicyVersion: '1.0.0' };
+  const bridge = { platform: 'ios', fileAccessVersion: '1.5.0', fileUploadVersion: '1.6.0', fileUploadPolicyVersion: '1.1.0' };
   const adapter = { platform: 'ios', bridge };
   const module = async (path: string, namedExports: Record<string, unknown>) => (mock as any).module(new URL(path, import.meta.url).href, { namedExports });
   await module('../activity/activityManager.ts', { activityManager: { enabled: () => true, register: () => () => {} } });

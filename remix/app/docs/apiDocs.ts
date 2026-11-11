@@ -6084,13 +6084,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
 		summary: 'Issues checksum-locked presigned UploadPart URLs in bounded batches.',
-		detail: 'Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
+		detail: 'Version 1.3 accepts optional reconcileAcceptedParts:true to reconcile exact provider-confirmed multipart acceptance and return alreadyUploaded:true for the requested part number, byte length and checksum. Opted-in clients validate the echoed checksum before skipping a PUT; retained parts incur zero new network bytes. Provider lookup failures and changed/expired reservations fail closed for reconciliation. Legacy requests retain ordinary signing without a new provider lookup dependency. All signed grants retain full Content-Length even when acceptance is confirmed. Version 1.2 refuses a single sync part that differs from the upload’s canonical reserved fingerprint before issuing a storage URL. ' +
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
@@ -6106,10 +6106,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		requestExamples: [
 			{
 				name: 'Sign two parts',
-				description: 'Checksums are illustrative base64 SHA-256 values.',
+				description: 'Opt in to exact provider acceptance; checksums are illustrative base64 SHA-256 values.',
 				method: 'POST',
 				body: {
 					uploadId: '3bda8208-625c-4f5d-941f-348020021848',
+					reconcileAcceptedParts: true,
 					parts: [
 						{ partNumber: 1, checksumSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' },
 						{ partNumber: 2, checksumSha256: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=' }
@@ -6385,10 +6386,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-		id: 'file-sync-transfer-admissions', contractVersion: '1.6.0', featureVersion: '1.6.0', group: 'attachments',
+		id: 'file-sync-transfer-admissions', contractVersion: '1.7.0', featureVersion: '1.7.0', group: 'attachments',
 		title: 'Resume an admitted file transfer on a paired device', endpoint: '/api/v1/files/sync-transfer-admissions',
 		summary: 'Authorize one previously reserved private File Sync upload for a paired device.',
-		detail: 'Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
+		detail: 'Version 1.7 accepts optional reconcileAcceptedParts:true on parts requests and replies with exact provider-confirmed alreadyUploaded metadata, allowing checkpoint recovery without retransmitting accepted parts or charging new network bytes. Lookup failures and changed or expired authority remain refused. Photos reservation can reuse verified bytes for an exact same-account fingerprint. Existing admission, source and publication guards still apply to the distinct logical reference. ' +
       'A non-secret admission ID identifies a fixed authorization record. It grants no authority on its own. The paired device credential cannot reserve, redirect or delete uploads, use the ordinary Files or Things endpoints, or act as the owner session. Version 1.1 can publish an exact verified Photos file explicitly admitted by the owner. Version 1.2 lets the exact paired iPhone reserve further originals for an owner-authorized, revocable Photos run. Version 1.3.1 rechecks an existing file’s private cloud sync preference before granting further upload or publication authority.',
 		auth: { mode: 'session-or-bearer', description: 'The owning browser session admits and may revoke. The exact paired device credential may sign parts, complete, publish when explicitly admitted, or revoke only its own admission.' },
 		methods: ['POST'],

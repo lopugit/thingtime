@@ -14,9 +14,9 @@ inherited policy; unsupported direction transitions are disabled. Automatic
 policy recovery only considers runnable/scheduled admissions, so a second
 config on the same device cannot reopen completed or attention work.
 
-The independent native `fileUploadPolicyVersion` 1.0.0 capability supports only
+The independent native `fileUploadPolicyVersion` 1.1.0 capability supports only
 uploads. It does not claim CPU, scanning, download, strict watcher or two-way
-limits. Native upload 1.6 retains the old `upload-part` action: a fresh native
+limits. Native upload 1.7 retains the old `upload-part` action: a fresh native
 pairing status supplies the device identity, and device/folder budgets and pacing
 apply. If saved device/folder caps exist, native reloads the selected origin once
 before legacy byte dispatch, only after proving the document has no editing
@@ -28,6 +28,27 @@ deployment dependency; it never loops or ignores the caps. Unlimited legacy byte
 count against a later configuration allowance. Current clients use the additive
 `upload-part-authorized` action with the exact saved configuration. Native whole
 file and deferred paths enforce the same policy and fresh saved authority.
+
+Multipart retry is reconciled against the provider, rather than a local byte
+cache or progress offset. The new clients require
+`api.attachment-upload-parts` 1.3 and `api.file-sync-transfer-admissions` 1.7,
+and opt in with `reconcileAcceptedParts: true`. Only an exact provider-confirmed
+part number, length and canonical checksum may return `alreadyUploaded: true`.
+Owner, pending reservation, expiry and admission authority are checked again
+after provider awaits. Native whole/part/deferred and browser consumers validate
+the echoed checksum before skipping the PUT, preserve final source/composite
+verification, and report zero new payload bytes for the verified skip. Existing
+consumed or uncertain hourly usage is never refunded. A fresh host can therefore
+finish a file across several allowances smaller than the entire file.
+
+Legacy requests retain full signed grants without the additional lookup; old
+callers ignoring additive metadata never receive a zero-byte admission. Missing
+or malformed provider proof fails closed for opted-in callers; transient lookup
+failures retain the same original operation for retry. Pre-fix provider parts
+without canonical checksums remain a documented recovery limitation. The real
+provider role needs the existing `s3:ListMultipartUploadParts` permission; see
+README's private attachment role and verification procedure. Local acceptance
+does not prove that production permission.
 
 Configuration policy is ordinary private File Sync Thing data:
 `configurationVersion: 5`, `uploadPolicy: { uploadBytesPerSecond?,
