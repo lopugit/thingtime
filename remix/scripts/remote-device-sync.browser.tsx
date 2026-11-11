@@ -21,6 +21,7 @@ import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
 import { apiEndpointDocs } from '../app/docs/apiDocs';
 import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
 import { NativeSyncBootstrap } from '../app/fileSync/NativeSyncBootstrap';
+import { useNativePhotoRunProgress } from '../app/components/Devices/nativePhotoRunView';
 import type { NativePhotoRunProgress } from '../app/fileSync/nativePhotoRunProgress';
 
 // Browser fixture uses the canonical registry, without importing server gateway runtime.
@@ -82,6 +83,7 @@ const webTransfers: string[] = [];
 let folderSlot: string | undefined, nativeFolderContentions = 0;
 let nativeTimer: ReturnType<typeof setTimeout> | undefined;
 let declineNextContinuation = true;
+let nativeStatusUnavailable = false;
 const nativeHint = (immediate = false) => {
  if (document.visibilityState === 'visible') window.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
   detail: { type: 'mobile-files-photo-progress', payload: { immediate } }
@@ -233,6 +235,7 @@ if (photoRecovery || mobilePanel) {
       photoRunArmed: true, scheduled: true, nativeOwnsRun: true,
       photoRunProgress: { ...nativeRun.progress, configurationRevision: nativeRun.revision } });
     } else if (action === 'photo-run-status') {
+     if (nativeStatusUnavailable) { reply('mobile-files-result', { ...result, error: 'Native status temporarily unavailable' }); return; }
      const run = id === photoScope.rootId ? nativeRun : null;
      reply('mobile-files-result', run ? { ...result, configurationRevision: run.revision,
       photoRunProgress: { ...run.progress, configurationRevision: run.revision } } : { ...result, photoRunProgress: null });
@@ -394,6 +397,24 @@ Object.assign(window, { remoteSyncFixture: {
   if (!nativeRun || nativeRun.progress.continuation !== 'active') throw Error('No continued Photos task is active');
   clearTimeout(nativeTimer);
   nativeRun.progress = { stage: 'waiting', continuation: 'held', pendingOriginals: 1, confirmed: nativeRun.progress.confirmed };
+  persistNativeRun();
+ },
+ endNativePhotoLeaseWithoutHint() {
+  if (!nativeRun || nativeRun.progress.continuation !== 'active') throw Error('No continued Photos task is active');
+  clearTimeout(nativeTimer);
+  nativeRun.progress = { stage: 'waiting', pendingOriginals: 1, confirmed: nativeRun.progress.confirmed,
+   activity: { phase: 'waiting', reason: 'interrupted', backgroundRequest: 'waiting',
+    backgroundEnd: { cause: 'worker-cancelled', at: new Date().toISOString(), measuredUnits: 12_345 } } };
+  localStorage.setItem(nativeRunKey, JSON.stringify(nativeRun));
+ },
+ setNativePhotoHistoricalState(stage: 'uploading' | 'complete' | 'paused' | 'stale') {
+  if (!nativeRun) throw Error('Photos activity fixture missing');
+  clearTimeout(nativeTimer);
+  if (stage !== 'stale') nativeRun.progress = { stage, confirmed: nativeRun.progress.confirmed,
+   activity: { phase: stage === 'complete' ? 'complete' : stage === 'uploading' ? 'uploading' : 'waiting',
+    indexed: { photos: 12, videos: 1, files: 13 }, indexing: { unit: 'assets', completed: 13, total: 13 },
+    latestFound: { kind: 'photo', capturedAt: '2026-11-08T00:04:05.000Z' } } };
+  nativeStatusUnavailable = stage === 'stale';
   persistNativeRun();
  },
  setAppHidden(hidden: boolean) {
@@ -596,6 +617,25 @@ window.fetch = async (input, init) => {
  localStorage.setItem(databaseKey, JSON.stringify(rows));
  return json({ ok: true, thing: rows.find(row => row.id === (body.id || body.shareId)) });
 };
+let changeProgressScope: ((field: string) => void) | undefined;
+function ProgressScopeProbe() {
+ const initial = { origin: location.origin, ownerId, deviceId, dataPlane: 'home' as const };
+ const [scope, setScope] = React.useState(initial), [generation, setGeneration] = React.useState(0);
+ const saved = React.useMemo(() => [{ id: photoScope.rootId, updatedAt: rows.find(row => row.id === photoScope.rootId).updatedAt,
+  configuration }], []);
+ const progress = useNativePhotoRunProgress(scope, generation, true, saved);
+ React.useEffect(() => {
+  changeProgressScope = field => {
+   setScope(field === 'owner' ? { ...initial, ownerId: 'different-owner' } : field === 'origin' ?
+    { ...initial, origin: 'https://different.invalid' } : field === 'device' ? { ...initial, deviceId: 'different-device' } :
+    field === 'plane' ? { ...initial, dataPlane: 'other' as any } : initial);
+   setGeneration(field === 'generation' ? 1 : 0);
+  };
+  return () => { changeProgressScope = undefined; };
+ }, []);
+ (window as any).changeNativeProgressScope = (field: string) => changeProgressScope?.(field);
+ return <output data-testid="native-scope-probe">{JSON.stringify([...progress.values()].map(row => row.progress?.confirmed))}</output>;
+}
 const nativeFixtureHost = {
  origin: () => location.origin, capabilities: initialStatus().capabilities,
  request: async (_owner: string, request: any) => { if (request.action !== 'list') throw Error('Unexpected native fixture action'); return { roots: initialStatus().roots }; },
@@ -603,7 +643,7 @@ const nativeFixtureHost = {
  fetch: window.fetch.bind(window), requireCapability: requireThingtimeCapability, assertCurrent() {}
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <CurrentPageBuilderFixture><ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
+ element: <CurrentPageBuilderFixture>{params.has('progressScopeProbe') && <ProgressScopeProbe />}<ChakraProvider><Box maxW="1000px" mx="auto" p={4}>{photoRecovery ? <>
   {autoPhotos && <NativeSyncBootstrap ownerId={ownerId} generation={0} />}
   {editPhotos && <Box aria-label="Account settings"><RemoteDeviceSync ownerId={ownerId} deviceId={deviceId} devicePlatform="ios" /></Box>}
   <Box aria-label="Local sync">{nativeOnly ? <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} /> :

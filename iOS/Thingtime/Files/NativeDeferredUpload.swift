@@ -244,7 +244,7 @@ final class NativeDeferredUpload {
     private var continuedRequest: UUID?
     private var activeContinuedRequest: UUID?
     private var continuedCompleted: Int64 = 0
-    private var continuedPartial: Int64 = 0
+    private var continuedKnownOriginals: Int64 = 0
     private var originalsRemaining: Int64?
 
     init(store: NativeDeferredUploadStore, scheduler: NativeDeferredUploadScheduling,
@@ -297,6 +297,10 @@ final class NativeDeferredUpload {
             [weak self] _ in MainActor.assumeIsolated {
                 self?.executionLease?.becameActive()
                 self?.startNativeForegroundIfNeeded()
+                // Progress hints emitted while suspended cannot reach WebKit.
+                // A native foreground event must refresh even if WebKit emits
+                // no visibilitychange/pageshow event for the existing page.
+                NotificationCenter.default.post(name: Self.photoProgressChanged, object: nil, userInfo: ["immediate": true, "lifecycle": true])
             }
         }
         transitionObserver = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) {
@@ -559,7 +563,7 @@ final class NativeDeferredUpload {
             recordBackgroundRequest(run, .declined); return "declined"
         }
         continuedRun = requestedRun; activeContinuedRequest = id
-        continuedCompleted = 0; continuedPartial = 0
+        continuedCompleted = 0; continuedKnownOriginals = 0
         recordBackgroundRequest(requestedRun, .active)
         reportContinuedWork(requestedRun, subtitle: "Checking Photos originals…")
         return "active"
@@ -588,6 +592,8 @@ final class NativeDeferredUpload {
         observed.phase(.waiting, reason: .interrupted)
         _ = observed.cloudPreparation(nil)
         observed.background(.waiting)
+        let measured = executionLease?.continuedMeasurement ?? (0, nil)
+        observed.backgroundEnded(.systemEnded, measuredUnits: measured.0, lastProgressAt: measured.1)
         live.activity = observed.snapshot()
         // Apple delivers expiration and its own cancellation through this
         // callback. End this lease, retaining the saved automatic policy.
@@ -604,28 +610,39 @@ final class NativeDeferredUpload {
         // One original is one unit of work. Give the system real partial
         // progress within large originals while reserving the final fraction
         // for verification and the canonical publication receipt.
-        let unitsPerOriginal: Int64 = 10_000
-        // Discovery advances measured units even before we know the backup
-        // backlog. Leave the overall total indeterminate during discovery.
+        // Use finite known work: negative Progress totals pin fractionCompleted
+        // at zero, even while completedUnitCount honestly advances.
         let indexing = activity(for: run)?.measuredIndexingWork() ?? 0
-        let total = originalsRemaining.map { (indexing + continuedCompleted + $0) * unitsPerOriginal }.flatMap { $0 > 0 ? $0 : nil }
-        executionLease?.continuedProgress(completed: (indexing + continuedCompleted) * unitsPerOriginal + continuedPartial,
-                                           total: total, subtitle: subtitle)
+        let preparation = activity(for: run)?.measuredPreparationWork() ?? 0
+        let known = activity(for: run)?.knownWork() ?? (0, 0)
+        let completed = NativePhotoContinuedProgress.units(indexed: indexing, preparation: preparation,
+            completed: continuedCompleted, files: fileWork.values.map { ($0.sent, $0.total) })
+        let total = NativePhotoContinuedProgress.total(indexed: indexing, knownIndexing: known.0,
+            preparation: preparation, knownPreparation: known.1, completed: continuedCompleted,
+            knownOriginals: continuedKnownOriginals, activeFiles: fileWork.count)
+        executionLease?.continuedProgress(completed: completed,
+                                           total: total, subtitle: "Library discovery + known originals · " + subtitle)
     }
 
     private func reportContinuedBytes(_ run: NativePhotoRunRecord, sent: Int64, size: Int64) {
         guard continuedRun?.sameRun(run) == true, size > 0 else { return }
-        let fraction = min(1, max(0, Double(sent) / Double(size)))
-        continuedPartial = fileWork.isEmpty ? min(9_999, Int64(fraction * 10_000)) : fileWork.values.reduce(0) { sum, value in
-            sum + min(9_999, Int64(min(1, Double(value.sent) / Double(max(1, value.total))) * 10_000))
-        }
         let display = ByteCountFormatter.string(fromByteCount: sent, countStyle: .decimal)
         reportContinuedWork(run, subtitle: "\(continuedCompleted) originals checked · \(display) sent")
     }
 
-    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool, settledSubtitle: String? = nil) {
+    private func finishContinuedRun(_ run: NativePhotoRunRecord, success: Bool, settledSubtitle: String? = nil,
+                                    cause: NativePhotoRunActivity.BackgroundEndCause? = nil) {
         guard continuedRun?.sameRun(run) == true else { return }
-        executionLease?.finishContinued(success, settledSubtitle: settledSubtitle); continuedRun = nil; activeContinuedRequest = nil
+        var completed = success
+        if var saved = try? photoRuns.lookup(run), saved.sameRun(run) {
+            let observed = activity(for: run) ?? NativePhotoRunActivity(saved.activity)
+            let measured = executionLease?.continuedMeasurement ?? (0, nil)
+            observed.backgroundEnded(cause ?? (success ? .completed : .workerFailed), measuredUnits: measured.0, lastProgressAt: measured.1)
+            observed.background(saved.userPaused == true ? nil : success && saved.stage == "complete" ? .complete : .waiting)
+            saved.activity = observed.snapshot()
+            do { try photoRuns.write(saved) } catch { completed = false; failClosed() }
+        }
+        executionLease?.finishContinued(completed, settledSubtitle: settledSubtitle); continuedRun = nil; activeContinuedRequest = nil
         reportPhotoProgress(run)
     }
 
@@ -941,13 +958,14 @@ final class NativeDeferredUpload {
                                 }, read: { try self.photoRuns.lookup(run) }, write: { try self.photoRuns.update($0) })
                             self.reportPhotoProgress(saved)
                             self.finishContinuedRun(run, success: true,
-                                settledSubtitle: "Progress saved · waiting for upload limits")
+                                settledSubtitle: "Progress saved · waiting for upload limits", cause: .checkpointedWait)
                             continue
                         } catch { failure = error }
                     }
                     // Earlier failures keep the aggregate result unsuccessful.
                     success = false
-                    self.finishContinuedRun(run, success: false)
+                    self.finishContinuedRun(run, success: false,
+                        cause: lease.executionExpired ? .executionExpired : failure is CancellationError ? .workerCancelled : .workerFailed)
                     if var saved = try? self.photoRuns.lookup(run), saved.sameRun(run), saved.armed {
                         if Task.isCancelled, saved.activity?.reason == .interrupted { continue }
                         if (failure as? PhotoLibraryReader.Failure) == .changed {
@@ -1170,6 +1188,9 @@ final class NativeDeferredUpload {
                 guard let self, self.activePhotoRun?.sameRun(proposed) == true, self.activity(for: proposed) === activity else { return }
                 self.reportPhotoProgress(proposed, immediately: immediately)
                 let snapshot = activity.snapshot()
+                if let fraction = snapshot.cloudPreparationFraction {
+                    self.reportContinuedWork(proposed, subtitle: "Downloading an iCloud original · \(Int(fraction * 100))%")
+                }
                 switch snapshot.phase {
                 case .indexing:
                     let subtitle: String
@@ -1261,8 +1282,10 @@ final class NativeDeferredUpload {
             guard let original = try await withTaskCancellationHandler(operation: { try await next.value }, onCancel: { next.cancel() }) else { return }
             _ = try check()
             cloudFailure = nil
+            let resource = UUID()
+            activity.beginCloudPreparation(resource)
             let reporting = control?.reporting { fraction in
-                if activity.cloudPreparation(fraction) { announce(false) }
+                if activity.cloudPreparation(fraction, resource: resource) { announce(false) }
             }
             let read = Task.detached {
                 try photos.prepareDeferredCloudOriginal(scope: photoScope, resource: original, control: reporting,
@@ -1281,7 +1304,7 @@ final class NativeDeferredUpload {
                 }
                 defer {
                     watchdog.cancel(); cloudWork = nil
-                    if activity.cloudPreparation(nil) { announce(false) }
+                    if activity.cloudPreparation(nil, resource: resource) { announce(false) }
                 }
                 do {
                     let ready = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
@@ -1388,6 +1411,7 @@ final class NativeDeferredUpload {
             let read = Task.detached { try photos.queueBatchEntries(scope: photoScope, request: queue, batchId: batch.id) }
             let originals = try await withTaskCancellationHandler(operation: { try await read.value }, onCancel: { read.cancel() })
             originalsRemaining = batch.remainingKnown == false ? nil : Int64(batch.pending) + Int64(originals.count)
+            continuedKnownOriginals = max(continuedKnownOriginals, continuedCompleted + Int64(originals.count) + Int64(batch.pending))
             activity.backlog(originalsRemaining)
             reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
             var lookahead: Task<Void, Error>?
@@ -1446,7 +1470,9 @@ final class NativeDeferredUpload {
                     originalsRemaining = max(0, remaining - 1)
                     activity.backlog(max(0, remaining - 1))
                 }
-                if continuedRun?.sameRun(proposed) == true { continuedCompleted += 1; continuedPartial = 0 }
+                // Convert just this original's partial units into one receipt.
+                // Every admitted sibling retains its own measured byte work.
+                if continuedRun?.sameRun(proposed) == true { continuedCompleted += 1 }
                 reportContinuedWork(proposed, subtitle: "\(continuedCompleted) originals checked")
             }
             // At most five originals occupy staging/transport concurrently.

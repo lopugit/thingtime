@@ -12566,6 +12566,23 @@ transfer, whole-account snapshots or production deployment.
   or duplicate signed fields. Legacy grants stay at 120 seconds; background
   grants stay within 600 seconds and both saved expiries. Revoke during signing
   and confirm no grant is returned. Preserve canonical finalization and receipts.
+- [ ] Before the incremental original backlog is known, feed real discovery
+  and serialized iCloud callbacks into the actual Progress object. Its finite
+  fraction must be nonzero and change, using the known PhotoKit/library and
+  resource work rather than a negative total or fabricated heartbeat. The final
+  verification/checkpoint unit cannot complete before verified termination.
+- [ ] Run five concurrent originals near completion. Publishing one receipt
+  must preserve every sibling's partial system Progress; real serialized iCloud
+  callbacks advance measured units without upload bytes. A late callback from an
+  old resource must not alter its replacement, and a fresh lease/process must
+  not replay historical measured units. Expiration/cancellation remain failures.
+- [ ] End a continued lease while its WebView cannot receive hints, then return
+  to the same page without visibilitychange. A native lifecycle hint/focus must
+  clear stale active certainty through a fresh read without requesting another
+  continued session. Keep known counts/index/discovery visible with historical
+  labels during upload, completion, Pause and status failure; clear them
+  synchronously on owner/origin/device/plane/generation changes. Show the closed
+  prior-session cause/time in expanded activity without raw errors.
 - [ ] Deliver the same continued-task object before and after completion and a
   distinct conflicting object. Complete each at most once; never end a valid
   active task because its callback is redelivered. A clean deferred pass keeps

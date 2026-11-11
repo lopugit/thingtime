@@ -160,6 +160,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Keep measured Photos background progress monotonic across concurrent
+  originals and real iCloud preparation, refresh stale active status on native
+  foreground reentry, retain historical indexing/discovery feedback, and show a
+  closed session-ending cause/time without changing automatic backup or Pause.
+  Physical-device scheduling remains an independent acceptance gate. **Codex (AI)**
+
 - 2026-11-12: Persist pending Photos discovery incrementally through the approved
   sync-run authority, with durable native metadata retries, private owner reads,
   explicit partial counts and verified publication reconciliation. See

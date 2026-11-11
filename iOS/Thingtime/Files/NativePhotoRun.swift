@@ -121,6 +121,27 @@ struct NativePhotoRunStore {
 /// The worker is independent of its current permission to run. A system
 /// processing opportunity can attach to the very same Swift Task that began
 /// in front; expiration checkpoints it only when no other lease remains.
+/// Every unit is observed work, never elapsed time. Completing one concurrent
+/// original must retain all siblings' measured partial work.
+enum NativePhotoContinuedProgress {
+    static func total(indexed: Int64, knownIndexing: Int64, preparation: Int64, knownPreparation: Int64,
+                      completed: Int64, knownOriginals: Int64, activeFiles: Int) -> Int64 {
+        // The scope is library discovery plus currently known originals, not
+        // an invented estimate of every original still undiscovered. Reserve
+        // one real final authority/queue-checkpoint unit until verification.
+        (max(indexed, knownIndexing) + max(knownOriginals, completed + Int64(activeFiles))) * 10_000 +
+            max(preparation, knownPreparation) + 1
+    }
+    static func units(indexed: Int64, preparation: Int64, completed: Int64,
+                      files: [(sent: Int64, total: Int64)]) -> Int64 {
+        let partial = files.reduce(Int64(0)) { sum, file in
+            guard file.total > 0 else { return sum }
+            return sum + min(9_999, Int64(min(1, max(0, Double(file.sent) / Double(file.total))) * 10_000))
+        }
+        return (indexed + completed) * 10_000 + preparation + partial
+    }
+}
+
 @MainActor
 final class NativePhotoExecutionLease {
     private let foregroundAllowed: Bool
@@ -131,6 +152,7 @@ final class NativePhotoExecutionLease {
     private var continued: NativeUploadBackgroundLease?
     private var finished = false
     var expired: (() -> Void)?
+    private(set) var executionExpired = false
 
     init(foregroundAllowed: Bool,
          applicationState: @escaping @MainActor () -> UIApplication.State = { UIApplication.shared.applicationState },
@@ -165,13 +187,18 @@ final class NativePhotoExecutionLease {
     func continuedProgress(completed: Int64, total: Int64?, subtitle: String) {
         continued?.work(completed: completed, total: total, subtitle: subtitle)
     }
+    var continuedMeasurement: (units: Int64, at: Date?) {
+        (continued?.measuredUnits ?? 0, continued?.lastProgressAt)
+    }
     func finishContinued(_ success: Bool, settledSubtitle: String? = nil) {
         let previous = continued; continued = nil; previous?.finish(success: success, settledSubtitle: settledSubtitle)
     }
     private var canExecute: Bool {
         !finished && (system != nil || continuedActive || assertion != .invalid || foregroundAllowed && applicationState() != .background)
     }
-    private func cancelIfNoExecution() { if !canExecute { expired?() } }
+    private func cancelIfNoExecution() {
+        if !canExecute { executionExpired = true; expired?() }
+    }
     private func expireAssertion() {
         releaseAssertion(); cancelIfNoExecution()
     }

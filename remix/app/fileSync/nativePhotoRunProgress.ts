@@ -4,12 +4,14 @@ const counters = ['photos', 'videos', 'other', 'wifiBytes', 'mobileBytes', 'unkn
 const activityPhases = ['verifying', 'indexing', 'checking-originals', 'downloading', 'checking-cloud', 'uploading', 'publishing', 'waiting', 'complete'] as const;
 const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'device-storage', 'photo-read', 'cloud-request', 'saved-settings', 'destination-review', 'transfer-permission', 'transfer-expired', 'transfer-missing', 'transfer-state', 'grant-changed', 'queue-changed', 'retry'] as const;
 const backgroundStatuses = ['active', 'declined', 'waiting', 'complete'] as const;
+const backgroundEndCauses = ['system-ended', 'execution-expired', 'worker-cancelled', 'worker-failed', 'completed', 'checkpointed-wait'] as const;
 export type NativePhotoActivityPhase = (typeof activityPhases)[number];
 export type NativePhotoContinuation = { requested: boolean; status: (typeof backgroundStatuses)[number] };
 export type NativePhotoUnavailableReasons = { 'cloud-download': number; 'photo-read': number };
 type DiscoveredPhoto = { kind: 'photo' | 'video'; capturedAt?: string };
 const failureOperations = ['manifest', 'check-photo-run', 'reserve-photo-original', 'parts', 'complete', 'publish', 'revoke', 'revoke-photo-run', 'local-grant', 'queue'] as const;
 export type NativePhotoRunActivity = {
+    backgroundEnd?: { cause: (typeof backgroundEndCauses)[number]; at: string; measuredUnits: number; lastProgressAt?: string };
 	failureOperation?: (typeof failureOperations)[number];
 	phase: NativePhotoActivityPhase;
 	indexed?: { photos: number; videos: number; files: number };
@@ -73,6 +75,11 @@ function parseActivity(value: unknown): NativePhotoRunActivity | undefined {
 	if (operation) activity.failureOperation = operation;
 	const backgroundRequest = backgroundStatuses.find(candidate => candidate === value.backgroundRequest);
 	if (backgroundRequest) activity.backgroundRequest = backgroundRequest;
+    const end = value.backgroundEnd;
+    if (record(end) && backgroundEndCauses.some(cause => cause === end.cause) && date(end.at) && whole(end.measuredUnits)) {
+        activity.backgroundEnd = { cause: end.cause as (typeof backgroundEndCauses)[number], at: end.at, measuredUnits: end.measuredUnits,
+            ...(date(end.lastProgressAt) ? { lastProgressAt: end.lastProgressAt } : {}) };
+    }
 	if (Array.isArray(events)) {
 		// Native sends at most twelve events, already newest first.
 		activity.events = events.slice(0, 12).flatMap(event => {
