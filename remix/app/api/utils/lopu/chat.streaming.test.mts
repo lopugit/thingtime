@@ -13,7 +13,7 @@ import { after, beforeEach, mock, test } from 'node:test';
 // streaming parsers, the request shapes and the fall-through are real.
 
 type AnthropicBlock = { type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; inputChunks: string[] };
-type AnthropicPlan = { blocks?: AnthropicBlock[]; stopReason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'pause_turn'; status?: number };
+type AnthropicPlan = { blocks?: AnthropicBlock[]; stopReason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'pause_turn'; status?: number; errorMessage?: string; streamError?: boolean };
 type OpenAiToolCall = { id: string; name: string; argumentChunks: string[] };
 // `plain` answers a NON-streaming request with a whole chat.completion (an
 // OpenAI-compatible endpoint without streaming); `rejectStreaming` refuses a
@@ -48,7 +48,7 @@ const sse = (response: ServerResponse, events: Array<Record<string, unknown>>, n
 
 const sendAnthropic = (response: ServerResponse, plan: AnthropicPlan) => {
   if (plan.status) {
-    response.writeHead(plan.status, { 'content-type': 'application/json' }).end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'nope' } }));
+    response.writeHead(plan.status, { 'content-type': 'application/json' }).end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: plan.errorMessage || 'nope' } }));
     return;
   }
   const events: Array<Record<string, unknown>> = [
@@ -70,6 +70,10 @@ const sendAnthropic = (response: ServerResponse, plan: AnthropicPlan) => {
       events.push({ type: 'content_block_stop', index });
     }
   });
+  if (plan.streamError) {
+    events.push({ type: 'error', error: { type: 'overloaded_error', message: plan.errorMessage } });
+    sse(response, events, true); return;
+  }
   events.push({ type: 'message_delta', delta: { stop_reason: plan.stopReason || 'end_turn', stop_sequence: null }, usage: { output_tokens: 11 } }, { type: 'message_stop' });
   sse(response, events, true);
 };
@@ -1528,4 +1532,59 @@ test('a checkpointed Action result reaches the resumed provider without rerunnin
  assert.match(prompt, /Completed tool results from the exact interrupted reply/);
  assert.deepEqual(JSON.parse(prompt.split('\n').at(-1))[0].data.result.days, [{ today: true, records: [] }]);
  assert.equal(runs, 1);
+});
+
+
+test('Console vault mode uses native SDK streaming with the selected key and a complete tool round trip', async () => {
+ rewriteToFake('https://api.anthropic.com');
+ process.env.ANTHROPIC_AUTH_TOKEN = 'server-bearer-secret';
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'console-tool', name: 'navigate', inputChunks: ['{"path":"/things"}'] }], stopReason: 'tool_use' },
+  { blocks: [{ type: 'text', text: 'Console reply' }], stopReason: 'end_turn' });
+ const { events, outcome } = await collect(turn('hi', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', model: 'claude-own' }) }));
+ assert.equal(text(events), 'Console reply');
+ assert.equal(outcome.provider, 'vault'); assert.equal(outcome.model, 'claude-own'); assert.equal(outcome.toolCalls.length, 1);
+ assert.equal(anthropicRequests.length, 2);
+ for (const request of anthropicRequests) {
+  assert.equal(request.headers['x-api-key'], 'vault-token-xyz'); assert.equal(request.headers.authorization, undefined);
+  assert.equal(request.body.model, 'claude-own'); assert.ok(request.body.tools.some((tool: any) => tool.name === 'navigate'));
+ }
+ assert.equal(anthropicRequests[1].body.messages.at(-1).content[0].type, 'tool_result');
+ assert.ok(outcome.usage.inputTokens > 0 && outcome.usage.outputTokens > 0);
+ assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+});
+
+test('Console rejection is tried once without switching credentials or server billing', async () => {
+ rewriteToFake('https://api.anthropic.com'); anthropicPlans.push({ status: 401 });
+ const { events, outcome } = await collect(turn('hi', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com' }) }));
+ assert.match(events.find(event => event.type === 'error')?.message || '', /401/);
+ assert.equal(outcome.stopReason, 'fallback'); assert.equal(anthropicRequests.length, 1);
+ assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+ assert.doesNotMatch(JSON.stringify(events), /vault-token-xyz|server-bearer-secret/);
+});
+
+test('Console setup-token rejection and cancellation happen before dialing', async () => {
+ rewriteToFake('https://api.anthropic.com');
+ const provider = vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com', token: 'sk-ant-oat-synthetic' });
+ const rejected = await collect(turn('hi', null, { vaultProvider: provider }));
+ assert.match(rejected.events.find(event => event.type === 'error')?.message || '', /Console API key/); assert.equal(anthropicRequests.length, 0);
+ const controller = new AbortController(); controller.abort();
+ const result = await collect(turn('hi', null, { vaultProvider: { ...provider, token: 'synthetic-console-key' }, signal: controller.signal }));
+ assert.equal(result.outcome.stopReason, 'aborted'); assert.equal(anthropicRequests.length, 0);
+});
+
+
+test('Console stream failures discard malicious provider bodies before events, saved outcome and logs', async () => {
+ const malicious = 'unshaped-credential-value https://private-console.invalid/path?secret=private-body';
+ const logs: unknown[] = [];const previous = console.error;console.error = (...values: unknown[]) => { logs.push(values); };
+ try {
+  for (const midstream of [false, true]) {
+   rewriteToFake('https://api.anthropic.com');
+   anthropicPlans.push(midstream ? { blocks: [{ type: 'text', text: 'Safe partial reply' }], streamError: true, errorMessage: malicious }
+    : { status: 400, errorMessage: malicious });
+   const { events, outcome } = await collect(turn('hi', null, { vaultProvider: vaultRecord({ provider: 'anthropic-api-key', endpoint: 'https://api.anthropic.com' }) }));
+   assert.ok(events.some(event => event.type === 'error'));
+   assert.equal(outcome.stopReason, midstream ? 'error' : 'fallback');
+   assert.doesNotMatch(JSON.stringify({ events, outcome, logs }), /unshaped-credential-value|private-console|private-body/);
+  }
+ } finally {console.error = previous;}
 });

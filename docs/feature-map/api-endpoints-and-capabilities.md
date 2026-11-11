@@ -952,3 +952,13 @@ route. The route verifies the exact private owner/page/revision/action/date
 and uses the literal saved inputs; the viewer protects manual page query
 selection and keeps preview/edit/shared execution inert. See
 [Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
+
+## Anthropic Console API-key mode
+
+The additive saved-provider kind `anthropic-api-key` is published by
+`api.lopu-vault` 1.3.0 and `api.ai-models` 1.9.0, and consumed by
+`api.lopu-chats-reply` 1.23.0, `api.lopu-voice-reply` 1.5.0 and
+`api.ai-complete` 1.3.0. No route or permission was added. Existing `anthropic`
+records retain their original Claude Code runtime; Console keys never infer
+subscription access or fall back to platform billing. Both manifests derive
+these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
