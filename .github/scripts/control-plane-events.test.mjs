@@ -391,3 +391,66 @@ test('the rebase reader defers a primary budget 403 and keeps a bare 403 fatal',
     assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
   } finally { rmSync(temp, {recursive:true, force:true}); }
 });
+
+// Pairing a status with the fixed string `API rate limit exceeded` matched only
+// one of the shapes GitHub actually emits. REST also answers "API rate limit
+// ALREADY exceeded for site ID installation", and gh's GraphQL wrapper prints
+// no HTTP status line at all, so each of those reddened the detector it was
+// supposed to defer. Open repair #1361 pins this contract for
+// resolve-pr-conflicts.yml's three readers and explicitly left this workflow's
+// copy here, so the two ends are pinned to the same wordings.
+const RAW_STUB = (message) => 'sleep() { :; }\n'
+  + `gh() { printf '%s\\n' ${JSON.stringify(message)} >&2; return 1; }\n`;
+
+test('the rebase reader defers every live budget wording, not just one', () => {
+  for (const message of [
+    'gh: API rate limit already exceeded for site ID installation. (HTTP 403)',
+    'gh: API rate limit exceeded for installation. If you reach out to GitHub Support for help, please include the request ID E402:1198E7 and timestamp 2026-10-22 14:02:55 UTC. (HTTP 403)',
+    'gh: HTTP 403: API rate limit exceeded for installation (https://api.github.com/repos/lopugit/thingtime/pulls?state=open)',
+    // No status line whatsoever: the `GraphQL: ` prefix is the only corroboration.
+    'GraphQL: API rate limit already exceeded for site ID installation.',
+  ]) {
+    const temp = mkdtempSync(join(tmpdir(), 'rebase-wording-'));
+    try {
+      const result = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+        + RAW_STUB(message)
+        + rebaseReadRetry('gh_read_retry api "repos/o/r/pulls" || echo "status=$?"')],
+        {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /status=1/u);
+      assert.equal(readFileSync(join(temp, 'lopu-gh-budget-exhausted'), 'utf8'), '',
+        `deferral sentinel written for: ${message}`);
+      assert.match(result.stderr, /shared installation API budget is exhausted/u);
+      // A reset most of an hour out cannot clear inside a 2+4+8s backoff.
+      assert.doesNotMatch(result.stderr, /hit a transient failure/u);
+    } finally { rmSync(temp, {recursive:true, force:true}); }
+  }
+});
+
+test('the rebase reader keeps non-budget failures fatal or retrying', () => {
+  // The `GraphQL: ` prefix must never stand in for the budget message on its
+  // own, or a real permission denial would be swallowed as a deferral.
+  const temp = mkdtempSync(join(tmpdir(), 'rebase-fatal-'));
+  try {
+    const denied = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + RAW_STUB('GraphQL: Resource not accessible by integration')
+      + rebaseReadRetry('gh_read_retry api "repos/o/r/pulls" || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(denied.status, 0, denied.stderr);
+    assert.match(denied.stdout, /status=1/u);
+    assert.doesNotMatch(denied.stderr, /budget is exhausted/u);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+
+    // A secondary limit is a different condition: it clears inside the bounded
+    // backoff, so it must keep retrying rather than decline the whole scan.
+    const secondary = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + RAW_STUB('gh: You have exceeded a secondary rate limit. Please wait a few minutes before you try again. (HTTP 429)')
+      + rebaseReadRetry('gh_read_retry api "repos/o/r/pulls" || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(secondary.status, 0, secondary.stderr);
+    assert.match(secondary.stdout, /status=1/u);
+    assert.match(secondary.stderr, /hit a transient failure/u);
+    assert.doesNotMatch(secondary.stderr, /budget is exhausted/u);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});

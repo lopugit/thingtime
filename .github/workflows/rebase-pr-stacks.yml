@@ -297,10 +297,22 @@ jobs:
               # run 40859332671 on 2026-10-29 both died here in 5s and reddened
               # PR #832). The published reset can be most of an hour out, so the
               # backoff below cannot clear it — defer instead. A bare 403 is a
-              # real permission failure and must still fail fast, hence status
-              # AND message together.
-              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
-                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+              # real permission failure and must still fail fast, hence the
+              # message AND a corroborating shape together.
+              #
+              # The message half must accept BOTH wordings REST produces: it
+              # also answers "API rate limit ALREADY exceeded for site ID
+              # installation", which a fixed-string `API rate limit exceeded`
+              # match silently missed. The status half is satisfied by the
+              # `GraphQL: ` prefix as well, because gh's GraphQL wrapper prints
+              # no HTTP status line at all; the prefix only ever substitutes for
+              # a status in combination with the rate-limit message, and no
+              # permission error is spelled that way. This is the same contract
+              # open repair #1361 pins for resolve-pr-conflicts.yml's three
+              # readers, which deliberately left this workflow's copy to #1297.
+              if grep -Eq 'API rate limit (already )?exceeded' "$errors" \
+                 && { grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                      || grep -Fq 'GraphQL: ' "$errors"; }; then
                 : >"$LOPU_GH_BUDGET_SENTINEL"
                 echo "::notice::GitHub's shared installation API budget is exhausted; deferring this rebase scan to a later detector." >&2
                 sed -n '1,20p' "$errors" >&2
