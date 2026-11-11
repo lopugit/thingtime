@@ -145,7 +145,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-11: Correct private S3 setup examples to permit exact-origin signed GET/HEAD downloads alongside PUT uploads, and add a browser regression for encrypted attachment CORS failure and successful byte-verified download. — Codex (AI)
+- 2026-11-11: Recover saved folder-sync work after a legacy uncertain file
+  publication or cancelled native scan. Fence the original upload identity
+  through the accounted Files Timeline transaction (`api.files` 1.13.0), then
+  require fresh sealed reconciliation before advancing. Release the native
+  scanner lane on one-way failures, retain exact job enrollment, and remove
+  the 256-sync-config account ceiling while paging remains bounded. Load the
+  read-only root list during an active native task, defer expired early path
+  observations to sealed indexing, and use Mac 1.22 exact source stamps to
+  avoid hashing a captured upload twice while retaining byte-digest proof.
+  [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
 - 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
   unsupported-parameter responses into fixed safe chat diagnostics. Unknown
   responses retain status-only messages; upstream text and credential/request
@@ -154,6 +163,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-11: Explain Facebook's exact New Pages Experience endpoint/account
   restriction with fixed safe copy while preserving confirmed grants and
   permission-denied diagnostics. Feed 2.0.2 / diagnostics 1.0.1. **Codex (AI)**
+
+- 2026-11-11: Correct private S3 setup examples to permit exact-origin signed GET/HEAD downloads alongside PUT uploads, and add a browser regression for encrypted attachment CORS failure and successful byte-verified download. — Codex (AI)
 
 - 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
   grant diagnostics and Claude effort corrections into one release; negotiate

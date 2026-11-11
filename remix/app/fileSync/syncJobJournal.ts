@@ -11,7 +11,6 @@ import { INVENTORY_PIN_STORE, inventoryIdentity, type InventoryIdentity } from '
 
 const STORE = 'sync-admitted-jobs';
 export const SYNC_JOB_PAGE_SIZE = 32;
-export const MAX_SYNC_JOBS_PER_ACCOUNT = 256;
 export const SYNC_INTERVALS = [60_000, 300_000, 900_000, 3_600_000] as const;
 export const SYNC_JOBS_CHANGED_EVENT = 'tt:sync-jobs-changed';
 export type SyncJob = {
@@ -256,15 +255,9 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 							...(sameReviewed && previous.photoQueueEpoch ? { photoQueueEpoch: previous.photoQueueEpoch } : {}),
 							...(sameReviewed && previous.localImport ? { localImport: previous.localImport } : {}),
 							...(sameReviewed && previous.nativeCaptureId ? { nativeCaptureId: previous.nativeCaptureId, ...(previous.nativeCaptureGeneration ? { nativeCaptureGeneration: previous.nativeCaptureGeneration, nativeCaptureRestarts: previous.state === 'runnable' ? previous.nativeCaptureRestarts ?? 0 : 0 } : {}) } : {}) });
-						const count = store.index('account').count(accountRange());
-						count.onsuccess = () => {
-							if (!previous && count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) { fail(Error('This account has reached its saved sync job limit.')); return; }
-							const commit = () => { bound.check(); pinImport(tx, previous, job); store.put(job); done(job); };
-							try {
-								if (photoSettings) parkPhotoSettings(tx, bound.scope, bound.key, reviewed.configuration, photoSettings.transfers, replacingPhotos, commit, fail);
-								else commit();
-							} catch (error) { fail(error); }
-						};
+						const commit = () => { bound.check(); pinImport(tx, previous, job); store.put(job); done(job); };
+						if (photoSettings) parkPhotoSettings(tx, bound.scope, bound.key, reviewed.configuration, photoSettings.transfers, replacingPhotos, commit, fail);
+						else commit();
 					} catch (error) { fail(error); }
 				};
 			}).then(changed),
@@ -306,17 +299,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 						if (prior && prior.state !== 'complete') { done(null); return; }
 						const next = validate({ version: 1, key: bound.key, id, revision: (prior?.revision ?? 0) + 1,
 							scope: bound.scope, reviewed, state: 'paused', folderSetupPaused: true });
-						const save = () => { bound.check(); store.put(next); done(next); };
-						if (prior) save();
-						else {
-							const count = store.index('account').count(accountRange());
-							count.onsuccess = () => {
-								try {
-									if (count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) throw Error('This account has reached its saved sync job limit.');
-									save();
-								} catch (error) { fail(error); }
-							};
-						}
+						bound.check(); store.put(next); done(next);
 					} catch (error) { fail(error); }
 				};
 			}).then(changed),
@@ -335,17 +318,7 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 							throw Error('This saved job uses a different native source.');
 						const next = prior ? { ...prior, state: 'paused' as const, revision: prior.revision + 1 } :
 							{ version: 1 as const, key: bound.key, id, revision: 1, scope: bound.scope, reviewed, state: 'paused' as const };
-						const save = () => { bound.check(); store.put(validate(next)); done(next); };
-						if (prior) save();
-						else {
-							const count = store.index('account').count(accountRange());
-							count.onsuccess = () => {
-								try {
-									if (count.result >= MAX_SYNC_JOBS_PER_ACCOUNT) throw Error('This account has reached its saved sync job limit.');
-									save();
-								} catch (error) { fail(error); }
-							};
-						}
+						bound.check(); store.put(validate(next)); done(next);
 					} catch (error) { fail(error); }
 				};
 			}).then(changed),

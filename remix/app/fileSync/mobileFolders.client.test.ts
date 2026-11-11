@@ -17,6 +17,7 @@ import {
 	supportsMobileSyncConditions,
 	supportsMobileFolderPublication,
 	supportsNativePathInspection,
+	supportsNativePathStamp,
 	supportsNativePhotoInventoryPages,
 	supportsNativeBackupCapture,
 	assertNativeFolderInventoryCoverage,
@@ -102,6 +103,19 @@ test('single-path inspection negotiates the native contract and requires explici
 	assert.equal(parse({ entry: null })?.inspectedEntry, null);
 	for (const patch of [{ entry: undefined }, { complete: false }, { path: 'other' }, { rootId: 'other' },
 		{ entry: { ...entry, path: 'other' } }, { entry: { ...entry, size: -1 } }]) assert.throws(() => parse(patch));
+});
+test('Mac stamp inspection is additive and cannot smuggle a digest into metadata', () => {
+	for (const [platform, version, supported] of [
+		['macos', '1.21.0', false], ['macos', '1.22.0', true], ['macos', '1.23.0', true],
+		['macos', '2.0.0', false], ['ios', '1.22.0', false]
+	] as const) assert.equal(supportsNativePathStamp({ platform, fileAccessVersion: version }), supported);
+	const stamp = { path: 'file', id: entry.id, version: entry.version, kind: 'file', size: entry.size };
+	const parse = (value: unknown) => parseMobileFolderResult(response({ rootId, path: 'file', complete: true, stamp: value }), expected,
+		{ action: 'inspect-stamp', rootId, path: 'file' });
+	assert.deepEqual(parse(stamp)?.inspectedStamp, stamp);
+	assert.equal(parse(null)?.inspectedStamp, null);
+	for (const invalid of [undefined, { ...stamp, path: 'other' }, { ...stamp, size: -1 }, { ...stamp, fingerprint: 'a'.repeat(64) }])
+		assert.throws(() => parse(invalid));
 });
 test('photo inventory pages negotiate independently of legacy folder pages', () => {
 	for (const [platform, version, supported] of [

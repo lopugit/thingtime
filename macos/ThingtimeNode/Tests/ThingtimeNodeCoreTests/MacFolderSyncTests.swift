@@ -46,6 +46,16 @@ final class MacFolderSyncTests: XCTestCase {
         await rejects { try await service.handle(self.request("scan-changes", changed)) }
         let stopped = try await service.handle(request("scan-cancel", fields)).decode([String: JSONValue].self)
         XCTAssertEqual(try stopped["changesPage"]?.decode([String: JSONValue].self)["state"], .string("interrupted"))
+        // The JS worker may defer one config immediately after stopping its
+        // scanner. Another root must then enter the single native stream lane.
+        let other = folder.appendingPathComponent("other", isDirectory: true)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: false)
+        let otherGrant = try store.add(owner, selected: other)
+        var otherFields = backupFields(otherGrant.id)
+        otherFields["capturePolicy"] = .string("one-way-supported")
+        let otherStart = try await service.handle(request("scan-stream", otherFields)).decode([String: JSONValue].self)
+        XCTAssertNotNil(otherStart["changesPage"])
+        _ = try await service.handle(request("scan-cancel", otherFields))
         try store.remove(owner, id: grant.id)
         await rejects { try await service.handle(self.request("scan-changes", fields)) }
     }
@@ -169,6 +179,57 @@ final class MacFolderSyncTests: XCTestCase {
         let entries = try XCTUnwrap(result["observedEntries"]).decode([[String: JSONValue]].self)
         XCTAssertEqual(entries.map { $0["path"] }, [.string("nested/file"), .string("nested")]); XCTAssertEqual(checks, 2)
         XCTAssertEqual(result["complete"], .bool(true))
+    }
+
+    func testInspectStampReturnsOnlyCurrentMetadataAndRefusesUnsafeOrRevokedSource() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let selected = folder.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        let file = selected.appendingPathComponent("nested/file")
+        try Data("original".utf8).write(to: file)
+        let grant = try store.add(owner, selected: selected)
+        var checks = 0
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage-stamp")),
+            verify: { account, device in
+                checks += 1
+                guard account == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+            }, choose: { nil }, approve: { _ in false })
+        let fields: [String: JSONValue] = ["rootId": .string(grant.id), "path": .string("nested/file")]
+        let result = try await service.handle(request("inspect-stamp", fields)).decode([String: JSONValue].self)
+        let stamp = try XCTUnwrap(result["stamp"]).decode([String: JSONValue].self)
+        XCTAssertEqual(Set(stamp.keys), ["path", "id", "version", "kind", "size"])
+        XCTAssertEqual(stamp["path"], .string("nested/file"))
+        XCTAssertEqual(stamp["kind"], .string("file"))
+        XCTAssertEqual(result["complete"], .bool(true)); XCTAssertGreaterThanOrEqual(checks, 2)
+        let missing = try await service.handle(request("inspect-stamp", ["rootId": .string(grant.id), "path": .string("nested/missing")])).decode([String: JSONValue].self)
+        XCTAssertEqual(missing["stamp"], .null)
+        try Data("replacement".utf8).write(to: file)
+        let changed = try await service.handle(request("inspect-stamp", fields)).decode([String: JSONValue].self)
+        XCTAssertNotEqual(try changed["stamp"]?.decode([String: JSONValue].self)["version"], stamp["version"])
+        let link = selected.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+        for unsafe in ["link", "link/child", "../escape"] {
+            await rejects { try await service.handle(self.request("inspect-stamp", ["rootId": .string(grant.id), "path": .string(unsafe)])) }
+        }
+        await rejects { try await service.handle(self.request("inspect-stamp", fields.merging(["ownerId": .string("foreign")]) { _, next in next })) }
+        try store.remove(owner, id: grant.id)
+        await rejects { try await service.handle(self.request("inspect-stamp", fields)) }
+    }
+
+    func testInspectStampStopCancelsBeforeDisclosure() async throws {
+        var saved: [String: Data] = [:]
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        let owner = try FileSyncOwnerScope(ownerId: "owner", url: origin)
+        let grant = try store.add(owner, selected: folder.appendingPathComponent("selected"))
+        let entered = expectation(description: "stamp verification entered")
+        let service = try MacFolderSync(origin: origin, store: store, staging: MobileSyncStaging(directory: folder.appendingPathComponent("stage-stamp-stop")),
+            verify: { _, _ in entered.fulfill(); try await Task.sleep(for: .seconds(10)) }, choose: { nil }, approve: { _ in false })
+        let pending = Task { try await service.handle(request("inspect-stamp", ["rootId": .string(grant.id), "path": .string("missing")])) }
+        await fulfillment(of: [entered], timeout: 2)
+        service.suspend()
+        await rejects { try await pending.value }
     }
 
     func testCompoundPathObservationRefusesAuthorityPolicyAndCancellationChangesBeforeReply() async throws {
