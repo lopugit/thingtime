@@ -407,7 +407,7 @@ test('source index schemas expose no private metadata or generic write authority
     assert.equal(schema.createdVia, '/api/v1/files/sync-transfer-admissions');
     const projected = projectBuiltinSchemaCrystal(schema);
     assert.deepEqual(projected, { name: schema.title, description: schema.summary, fields: [] });
-    assert.equal(Object.hasOwn(projected, 'uniqueKeys'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(projected, 'uniqueKeys'), false);
     assert.equal(validateThingtimeCrystal(['schema'], projected).ok, true);
     for (const thingtime of [[kind], ['builder-thing', kind], ['data', kind]]) {
       assert.equal(validateThingtimeCrystal(thingtime, {}).ok, false, `${thingtime}: no generic creation sanitizer`);
