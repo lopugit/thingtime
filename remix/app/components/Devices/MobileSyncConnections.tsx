@@ -854,9 +854,10 @@ function Connections({
 		roots.some(root => root.id === row.configuration.localRootId);
 	const isConfigRunning = (id: string) => activeTransfer === id || (ownNativeTask?.active && ownNativeTask.scope.rootId === id) || nativePhotoRunActive(nativePhotoRuns.get(id));
 	const readCloud = async (id: string) => (await apiRef.current.v1.things.get({ id }, { ...options(), storageMode: 'cloud' })).thing;
-	const completeEnrollment = async (saved: SavedFileSyncConfiguration, intent: SyncEnrollmentIntent, queue: boolean) => {
+	const completeEnrollment = async (saved: SavedFileSyncConfiguration, intent: SyncEnrollmentIntent, queue: boolean, diagnostic?: NonNullable<ReturnType<typeof claimSyncEnrollment>>) => {
 		setNotice('Sync config saved. Confirming automatic setup on this device.');
 		try {
+			diagnostic?.phase('enroll-local');
 			const job = await enrollNativeFolderSync(saved, { ...scope, rootId: saved.id }, generation,
 				intent.intervalMs, controller.current?.signal, { queue });
 			assertCurrent();
@@ -867,6 +868,7 @@ function Connections({
 		} catch (cause) {
 			assertCurrent();
 			setAdmissionFailed(previous => ({ ...previous, [saved.id]: true }));
+			diagnostic?.failed(cause);
 			setNotice('Sync config saved. Automatic setup is pending.');
 			setTransferErrors(previous => ({ ...previous, [saved.id]: cause instanceof Error ? cause.message : 'Could not start automatic sync.' }));
 		}
@@ -876,7 +878,7 @@ function Connections({
 			const previous = draft && connectionsRef.current.find(row => row.id === draft.id);
             const policyOnly = !!(draft && previous && isPhotoAutomationOnlyEdit(previous, draft));
 			if (!draft || !ready || (isConfigRunning(draft.id) && !policyOnly)) return;
-			const release = startAfterSave ? claimSyncEnrollment(scope) : undefined;
+			const release = startAfterSave ? claimSyncEnrollment(scope, undefined, draft.id) : undefined;
 			if (startAfterSave && !release) throw Error('Automatic setup is already being checked.');
 			try {
 				const deferRootVerification = startAfterSave && canQueueDraft(draft);
@@ -891,9 +893,10 @@ function Connections({
 				if (draft.enrollment && !startAfterSave) throw Error('Retry automatic setup, or keep the saved config as it is.');
 				const enrollment = startAfterSave ? draft.enrollment ?? { transport: 'local' as const, intervalMs: intervalDrafts[draft.id] ?? syncJobs[draft.id]?.intervalMs ?? 300_000 } : undefined;
 				if (enrollment?.savedRevision) {
+					release?.phase('read-saved', controller.current?.signal);
 					const saved = await readPendingSyncEnrollment(draft, scope, { get: readCloud, assertCurrent });
 					acceptSave(saved);
-					await completeEnrollment(saved, enrollment, deferRootVerification);
+					await completeEnrollment(saved, enrollment, deferRootVerification, release ?? undefined);
 					return;
 				}
                 if (draft.configuration.uploadPolicy) {
@@ -956,13 +959,13 @@ function Connections({
 					// Clearing the draft before admission loses the user's explicit
 					// request if the app leaves this view at the next await.
 					persist({ ...pending, enrollment: confirmed });
-					await completeEnrollment(saved, confirmed, deferRootVerification);
+					await completeEnrollment(saved, confirmed, deferRootVerification, release ?? undefined);
 				} else {
 					persist(null);
 					if (photoAutomation && saved.configuration.sourceKind === 'photos') window.dispatchEvent(new Event(SYNC_JOBS_CHANGED_EVENT));
 					setNotice('Sync config saved.');
 				}
-			 } finally { release?.(); }
+			 } catch (cause) { release?.failed(cause); throw cause; } finally { release?.(); }
 		});
 	const verifiedSavedEnrollment = (row: ConfigurationDraft | null, job: (typeof syncJobs)[string] | undefined) => {
 		if (!row) return undefined;

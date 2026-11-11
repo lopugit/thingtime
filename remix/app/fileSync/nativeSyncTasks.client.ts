@@ -1,4 +1,5 @@
 import { nativePathObserver } from './nativePathObservation';
+import { recoverableEmptyBackupSetup } from './folderSetupRecovery';
 import { reportDeviceSyncHistoryStorage } from './deviceSyncHistory.client';
 import { createDeviceSyncHistoryRecorder } from './deviceSyncHistoryRecorder';
 import { createSyncActivityObservation } from './syncActivityJournal';
@@ -125,7 +126,7 @@ async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, sc
  if (queuedFolderEnrollments.has(key)) throw Error('This sync config is already being queued. Check its current status.');
  const pending = new AbortController();
  const signal = AbortSignal.any([lifetime, pending.signal, AbortSignal.timeout(10_000)]);
- const { reviewed, binding, check: assertCurrent } = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
+ const { reviewed, binding, adapter, check: assertCurrent } = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
  const check = () => {
   assertCurrent();
   if (respectPause && nativeSyncTasks.isPaused(binding)) throw Error('Automatic sync setup was paused.');
@@ -154,9 +155,21 @@ async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, sc
     }
     // Replacing an unfinished old config can require verified native scanner
     // cancellation. Queue only first-time configs while the lane is occupied.
-    if (prior && prior.state !== 'complete')
+    const recoverEmptyBackupSetup = recoverableEmptyBackupSetup(prior, reviewed, binding, intervalMs);
+    if (prior && prior.state !== 'complete' && !recoverEmptyBackupSetup)
      throw Error('This sync config has saved work. Wait for the device to finish its current transfer before enabling it again.');
-    const queued = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined, { previous: prior, pendingFolderValidation: true });
+    if (recoverEmptyBackupSetup) {
+     // A fresh private read, not a draft or cached list, authorizes narrowing
+     // this empty setup. The transaction independently proves no old effects.
+     const host = await createNativeSyncHost({ adapter, ownerId: binding.ownerId, deviceId: binding.deviceId, signal, assertCurrent: () => { check(); } });
+     if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
+     await host.requireCapability('api.things', '1.36.0');
+     const current = readOwnedFileSyncConfiguration(await readNativeConfiguration(host, binding, signal), binding.ownerId);
+     check();
+     assertConfiguredSyncApproval(current, { ...reviewed, scope: binding }, binding, reviewed.configuration.localRootId, reviewed.configuration.remoteFolderId);
+    }
+    const queued = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined, { previous: prior, pendingFolderValidation: true,
+     ...(recoverEmptyBackupSetup ? { recoverEmptyBackupSetup: true as const } : {}) });
     check();
     if (!respectPause) nativeSyncTasks.resumeScope(binding);
     return queued;

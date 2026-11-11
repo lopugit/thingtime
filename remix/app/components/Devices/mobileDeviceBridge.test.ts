@@ -114,13 +114,58 @@ test('foreground pairing checks serialize with polling; cancellation does not ca
         assert.equal(messages[4].payload.action, 'pair'); reply(4); await e;
 
         const beforeNavigation = requestMobileDevice('owner', 'status', new AbortController().signal);
+        const invalidated = assert.rejects(beforeNavigation, { name: 'AbortError' });
         const stale = requestMobileDevice('other-owner', 'pair', new AbortController().signal);
         const rejected = assert.rejects(stale, { name: 'AbortError' });
         await tick(); target.location.origin = 'http://localhost:14901';
-        reply(5); await beforeNavigation; await rejected; await tick();
+        reply(5); await invalidated; await rejected; await tick();
         assert.equal(messages.length, 6, 'No queued request crosses an origin change');
     } finally {
         if (previous) Object.defineProperty(globalThis, 'window', previous);
         else Reflect.deleteProperty(globalThis, 'window');
     }
+});
+
+test('legacy native busy refusals never replay status, pair or presence requests', async () => {
+ const { requestMobileDevice } = await import('./mobileDeviceBridge');
+ const { nativeBridgeMessageEvent } = await import('../../utils/nativeBridge');
+ const calls: Record<string, unknown>[] = [];
+ const page = Object.assign(new EventTarget(), { location: { origin: 'https://startup.test' }, thingtimeNativeBridge: {
+  isNativeWebView: true, platform: 'ios', devicePairingVersion: '1.1.0', postMessage: (message: { payload: Record<string, unknown> }) => {
+   calls.push(message.payload);
+   queueMicrotask(() => page.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: { type: 'mobile-device-result', payload: {
+    ...message.payload, error: 'Another device request is still running. Try again shortly.' } } })));
+  } } });
+ const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: page });
+ try {
+  for (const action of ['status', 'pair', 'presence'] as const) {
+   const before = calls.length;
+   await assert.rejects(requestMobileDevice('owner', action, new AbortController().signal), /Another device request/);
+   assert.equal(calls.length - before, 1);
+  }
+  assert.notEqual(calls[0].requestId, calls[1].requestId, 'independent requests retain separate identities');
+ } finally { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window'); }
+});
+
+test('a native busy refusal releases the renderer queue without cancelling the next pairing', async () => {
+ const { requestMobileDevice } = await import('./mobileDeviceBridge');
+ const { nativeBridgeMessageEvent } = await import('../../utils/nativeBridge');
+ const calls: Record<string, unknown>[] = [];
+ const page = Object.assign(new EventTarget(), { location: { origin: 'https://startup.test' }, thingtimeNativeBridge: {
+  isNativeWebView: true, platform: 'ios', devicePairingVersion: '1.1.0', postMessage: (message: { payload: Record<string, unknown> }) => {
+   calls.push(message.payload);
+   queueMicrotask(() => page.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, { detail: { type: 'mobile-device-result', payload: {
+    ...message.payload, ...(message.payload.action === 'status' ? { error: 'Another device request is still running. Try again shortly.' } : { state: 'paired', deviceId: 'device' }) } } })));
+  } } });
+ const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: page });
+ try {
+  const cancellation = new AbortController(), status = requestMobileDevice('owner', 'status', cancellation.signal);
+  const stopped = assert.rejects(status, /Another device request/);
+  const pair = requestMobileDevice('owner', 'pair', new AbortController().signal);
+  await new Promise(resolve => setImmediate(resolve)); cancellation.abort(); await stopped;
+  assert.equal((await pair).state, 'paired');
+  assert.deepEqual(calls.map(row => row.action), ['status', 'pair']);
+ } finally { if (previous) Object.defineProperty(globalThis, 'window', previous); else Reflect.deleteProperty(globalThis, 'window'); }
 });
