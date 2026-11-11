@@ -96,3 +96,41 @@ test('unknown or explicit personal chat providers reject pre-fix origins before 
   else delete (globalThis as any).window;
  }
 });
+
+
+test('personal replies negotiate the active API before submitting the selected provider', async (t) => {
+ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ const origin = 'https://active-effort-client.test';
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin } } });
+ let activeVersion = '1.23.0';
+ const posts: Record<string, unknown>[] = [];
+ const reads: string[] = [];
+ const mocked = t.mock.method(globalThis, 'fetch', async (url, init) => {
+  if (init?.method === 'POST') {
+   posts.push(JSON.parse(String(init.body)));
+   return new Response('{"type":"done"}\n', { headers: { 'Content-Type': 'application/x-ndjson' } });
+  }
+  const path = new URL(String(url), origin).pathname;
+  reads.push(path);
+  if (path === '/api/v1/capabilities') return Response.json({ ok: true, schemaVersion: 1, features: { 'api.lopu-chats-reply': activeVersion } });
+  return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-chats-reply': { version: '1.23.1' } } });
+ });
+ try {
+  for (const selection of [{}, { providerId: 'selected-console-provider' }]) {
+   await assert.rejects(postLopuReply({ text: 'Synthetic active API probe', requestId: 'active-effort-probe', ...selection }),
+    (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
+  }
+  assert.equal(posts.length, 0);
+  activeVersion = '1.23.1';
+  const response = await postLopuReply({ text: 'Synthetic active API probe', requestId: 'active-effort-probe', providerId: 'selected-console-provider' });
+  assert.equal(response.ok, true);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].providerId, 'selected-console-provider');
+  assert.ok(reads.includes('/.well-known/thingtime-capabilities.json'));
+  assert.equal(reads.filter(path => path === '/api/v1/capabilities').length, 3);
+ } finally {
+  mocked.mock.restore();
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  else delete (globalThis as any).window;
+ }
+});

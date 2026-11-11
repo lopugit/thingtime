@@ -436,7 +436,7 @@ test('packaged Claude Workflow replies publish a compatible runtime correction',
   const endpoint = apiEndpointDocs.find((entry) => entry.id === 'lopu-chats-reply');
   assert.match(endpoint?.detail || '', /Version 1\.14\.2.*Claude runtime availability/);
   for (const version of [createApiCapabilitiesManifest().features['api.lopu-chats-reply'], thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version]) {
-    assert.equal(version, '1.23.0');
+    assert.equal(version, '1.23.1');
     for (const minimum of ['1.14.0', '1.14.1', '1.14.2', '1.15.0']) assert.equal(capabilitySatisfies(version, minimum), true);
   }
   for (const unsupported of [undefined, '1.14.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.15.0'), false);
@@ -446,7 +446,7 @@ test('reasoning-preserving native GPT-5.6 Sol replies publish a compatible patch
   const endpoint = apiEndpointDocs.find((entry) => entry.id === 'lopu-chats-reply');
   assert.match(endpoint?.detail || '', /Version 1\.14\.1.*Responses transport/);
   for (const version of [createApiCapabilitiesManifest().features['api.lopu-chats-reply'], thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version]) {
-    assert.equal(version, '1.23.0');
+    assert.equal(version, '1.23.1');
     assert.equal(capabilitySatisfies(version, '1.14.0'), true);
     assert.equal(capabilitySatisfies(version, '1.14.1'), true);
   }
@@ -470,8 +470,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.3.0: the verified-access gate + billing / usage / costMicros / balanceMicros on meta, done and the persisted turn;
 	// 1.4.0: the in-flight cap — a billed turn holds one of at most three slots on the account, past which
 	// the request is refused 429 LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted
-	assert.equal(manifest.features['api.lopu-chats-reply'], '1.23.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.23.0');
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.23.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.23.1');
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
 	for (const unsupported of ['', '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.2'), false);
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
@@ -771,7 +771,7 @@ test('subspace image edits require the compatible presentation contract on the s
 test('background AI requires compatible operation and task contracts on both manifests', () => {
  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
  const discovery = thingtimeCapabilityManifest('https://background.test');
- for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.2', 'api.lopu-chats-reply': '1.23.0', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.3.0' })) {
+ for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.2', 'api.lopu-chats-reply': '1.23.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.3.0' })) {
   assert.equal(legacy.features[feature], required);
   assert.equal(discovery.features[feature].version, required);
   assert.equal(capabilitySatisfies(required, required), true);
@@ -977,7 +977,7 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
 
 
 test('local ChatGPT plan capabilities cover both manifests and reject unsupported origins', () => {
-  for (const [feature, version] of Object.entries({ 'api.ai-chatgpt-plan': '1.2.0', 'api.ai-models': '1.9.0', 'api.lopu-chats': '1.7.0', 'api.lopu-chats-update': '1.6.1', 'api.lopu-chats-reply': '1.23.0', 'api.lopu-chats-device-turns': '1.0.0' })) {
+  for (const [feature, version] of Object.entries({ 'api.ai-chatgpt-plan': '1.2.0', 'api.ai-models': '1.9.0', 'api.lopu-chats': '1.7.0', 'api.lopu-chats-update': '1.6.1', 'api.lopu-chats-reply': '1.23.1', 'api.lopu-chats-device-turns': '1.0.0' })) {
     assert.equal(createApiCapabilitiesManifest().features[feature], version);
     assert.equal(thingtimeCapabilityManifest('https://local.test').features[feature].version, version);
     assert.equal(capabilitySatisfies(undefined, version), false);
@@ -1212,7 +1212,7 @@ test('expanded authoring requires a Things contract newer than the source-input 
 });
 
 test('Console API-key mode is independently negotiated on both origin manifests', () => {
- const required = { 'api.lopu-vault': '1.3.0', 'api.ai-models': '1.9.0', 'api.lopu-chats-reply': '1.23.0', 'api.lopu-voice-reply': '1.5.0', 'api.ai-complete': '1.3.0' };
+ const required = { 'api.lopu-vault': '1.3.0', 'api.ai-models': '1.9.0', 'api.lopu-chats-reply': '1.23.1', 'api.lopu-voice-reply': '1.5.0', 'api.ai-complete': '1.3.0' };
  const legacy = { 'api.lopu-vault': '1.2.0', 'api.ai-models': '1.8.0', 'api.lopu-chats-reply': '1.22.0', 'api.lopu-voice-reply': '1.4.0', 'api.ai-complete': '1.2.0' };
  for (const [feature, minimum] of Object.entries(required)) {
   for (const version of [createApiCapabilitiesManifest().features[feature], thingtimeCapabilityManifest('https://thingtime.test').features[feature].version]) assert.equal(capabilitySatisfies(version, minimum), true);

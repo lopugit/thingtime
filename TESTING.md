@@ -15961,3 +15961,9 @@ projection, which requires 2.3. Retain both actual preview manifests separately.
 - Negotiate reply 1.23.1, then repeat the authorized minimal live Haiku prompt on
   the selected personal connection. Verify a real reply and BYO attribution;
   synthetic SSE acceptance does not establish live provider acceptance.
+
+Personal provider reply negotiation regression: a newer frontend advertising
+reply 1.23.1 with an older same-origin active API 1.23.0 must refuse omitted or
+explicit personal providers before POST. After active API 1.23.1 is available,
+retry must send exactly the selected provider. Preserve separate credits,
+device and ChatGPT-plan requirements.
