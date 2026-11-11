@@ -82,6 +82,11 @@ and creates synthetic accounts in its own database, without production secrets.
 ### Password manager setup
 
 The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Native `otpauth://totp` intake uses the macOS Passwords companion or iOS shell,
+normal destination-account sign-in and explicit editable review before Save.
+The seed stays in memory; deployment must serve compatible `api.passwords` 1.2+
+and the new web review bridge. See the contract for isolated build and acceptance
+steps; URI registration alone does not prove a code was saved.
 Use a Mongo replica set for canonical storage transactions and configure the
 usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
 encoded as base64url>` in ignored local env files and your deployment secret
