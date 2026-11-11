@@ -2,6 +2,17 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Final main cutoff — 2026-11-11
+
+Fetched and integrated `d0fb31984509239a033f6717234ce863b365aa2e`, including
+the iOS shared-draft reminder dismissal and current agent networking guidance.
+Product source merged without conflicts; generated snapshot rename conflicts
+were resolved as a complete set and regenerated for the combined source.
+The native-bundle implementation is preserved in commit `41ae877f8`.
+Its tested source bytes are unchanged by this merge. The imported iOS changes
+retain their main-branch implementation; no new installed iOS acceptance is
+claimed here. CI and preview acceptance must match the resulting merge head.
+
 ## Native bundle release and recovery foundation — 2026-11-11
 
 Added a shared signed release descriptor, complete-file inventory verification,

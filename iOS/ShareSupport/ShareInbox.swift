@@ -152,7 +152,17 @@ final class ShareInbox {
         guard (try? String(contentsOf: directory.appendingPathComponent("receipt"), encoding: .utf8)) == id.uuidString else { throw Failure.unavailable }
         return directory
     }
-    func pendingComposers(origin: URL) throws -> [UUID] {
+    /// Dismissing hides only the reminder; the draft stays recoverable.
+    /// A separate marker cannot overwrite an open composer's newer metadata.
+    func dismissComposerReminder(id: UUID, origin: URL) throws {
+        let directory = try composerDirectory(id: id)
+        let metadata = try ShareComposerMetadata.read(from: directory)
+        guard metadata.origin == ShareComposerSession.origin(origin), !metadata.completed else {
+            throw Failure.unavailable
+        }
+        try Data().write(to: directory.appendingPathComponent(".reminder-dismissed"), options: .atomic)
+    }
+    func pendingComposers(origin: URL, includeDismissed: Bool = true) throws -> [UUID] {
         let ready = root.appendingPathComponent("ready", isDirectory: true)
         guard files.fileExists(atPath: ready.path) else { return [] }
         return try files.contentsOfDirectory(at: ready, includingPropertiesForKeys: [.creationDateKey])
@@ -164,7 +174,9 @@ final class ShareInbox {
             .compactMap { directory in
                 guard let id = UUID(uuidString: directory.lastPathComponent),
                       let metadata = try? ShareComposerMetadata.read(from: directory),
-                      metadata.origin == ShareComposerSession.origin(origin), !metadata.completed else { return nil }
+                      metadata.origin == ShareComposerSession.origin(origin), !metadata.completed,
+                      includeDismissed || !files.fileExists(atPath: directory.appendingPathComponent(".reminder-dismissed").path)
+                else { return nil }
                 return id
             }
     }
