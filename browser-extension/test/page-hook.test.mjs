@@ -6,7 +6,7 @@ import {webcrypto} from 'node:crypto';
 const code = await readFile(new URL('../page-hook.js', import.meta.url), 'utf8');
 class CustomEvent extends Event { constructor(type, options) { super(type); this.detail = options.detail; } }
 function setup(options = {}) {
-  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.location = {origin: 'https://rp.example'}; window.PublicKeyCredential = options.api === false ? undefined : class {};
+  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.location = {origin: options.origin || 'https://rp.example'}; window.PublicKeyCredential = options.api === false ? undefined : class {};
   const calls = [], requests = [], cancels = [];
   const navigator = {credentials: {create: async options => { calls.push(['create', options]); return 'native'; }, get: async options => { calls.push(['get', options]); return 'native'; }}};
   const dispatch = (name, detail) => document.dispatchEvent(new CustomEvent(name, {detail: JSON.stringify(detail)}));
@@ -120,7 +120,7 @@ test('the observed GitHub assertion shape routes to Thingtime and diagnostics co
 });
 
 test('same-origin AppID input and false extension output survive the browser serialization boundary', async () => {
-  for (const appid of ['', 'https://rp.example/legacy-app-id.json']) {
+  for (const appid of ['', 'https://rp.example/legacy-app-id.json', 'https://rp.example:444/legacy']) {
     const env = setup(); const input = options(); input.publicKey.extensions = {appid};
     const promise = env.navigator.credentials.get(input); await tick();
     assert.equal(env.requests[0].publicKey.extensions.appid, appid);
@@ -133,10 +133,43 @@ test('same-origin AppID input and false extension output survive the browser ser
 });
 
 test('unhandled AppID authorization and mixed extensions preserve native options unchanged', async () => {
-  for (const appid of ['https://other.example/app','https://rp.example.evil.test/app','http://rp.example/app','https://user:secret@rp.example/app','https://rp.example/app#fragment','https://rp.example:444/app','bad',null,{}]) {
+  for (const appid of ['https://other.example/app','https://rp.example.evil.test/app','http://rp.example/app','https://user:secret@rp.example/app','https://rp.example/app#fragment','bad',null,{}]) {
     const env = setup(), input = options(); input.publicKey.extensions = {appid};
     assert.equal(await env.navigator.credentials.get(input), 'native'); assert.equal(env.calls[0][1], input); assert.equal(env.requests.length, 0);
+    assert.ok([13,14].includes(diagnostics(env).fallbackReason));
   }
   const env = setup(), input = options(); input.publicKey.extensions = {appid:'https://rp.example/app',prf:{}};
   assert.equal(await env.navigator.credentials.get(input), 'native'); assert.equal(env.calls[0][1], input); assert.equal(env.requests.length, 0);
+});
+
+test('AWS-shaped and parent/sibling AppIDs route without changing RP, allowlist or verification', async () => {
+  for (const [origin, rpId, appid] of [
+    ['https://signin.aws.amazon.com','aws.amazon.com','https://aws.amazon.com/path/app-id.json'],
+    ['https://login.example.com','example.com','https://example.com/legacy/app.json'],
+    ['https://login.example.com','example.com','https://accounts.example.com/legacy'],
+    ['https://login.example.co.uk','example.co.uk','https://example.co.uk/legacy']
+  ]) {
+    const env = setup({origin}), controller = new AbortController();
+    const input = {signal:controller.signal, publicKey:{challenge:new Uint8Array([1,2,3]),rpId,allowCredentials:[{type:'public-key',id:new Uint8Array([4,5,6])}],userVerification:'discouraged',extensions:{appid}}};
+    const pending=env.navigator.credentials.get(input);await tick();
+    assert.equal(env.calls.length,0);assert.equal(env.requests[0].publicKey.rpId,rpId);
+    assert.deepEqual(env.requests[0].publicKey.allowCredentials,[{type:'public-key',id:'BAUG'}]);
+    assert.equal(env.requests[0].publicKey.userVerification,'discouraged');assert.equal(env.requests[0].publicKey.extensions.appid,appid);
+    controller.abort();await assert.rejects(pending,error=>error.name==='AbortError');
+  }
+});
+test('PSL and private suffix boundaries stay native with closed diagnostics', async () => {
+  for (const [origin, appid] of [
+    ['https://signin.aws.amazon.com','https://com/app'],
+    ['https://signin.aws.amazon.com','https://aws.amazon.com.evil.test/app'],
+    ['https://login.example.co.uk','https://co.uk/app'],
+    ['https://one.github.io','https://two.github.io/app'],
+    ['https://one.github.io','https://github.io/app'],
+    ['https://one.s3.amazonaws.com','https://two.s3.amazonaws.com/app']
+  ]) {
+    const env=setup({origin}),input=options();input.publicKey.extensions={appid};
+    assert.equal(await env.navigator.credentials.get(input),'native');assert.equal(env.calls[0][1],input);
+    assert.equal(diagnostics(env).fallbackReason,14);assert.equal(env.requests.length,0);
+    assert.equal(JSON.stringify(diagnostics(env)).includes(appid),false);
+  }
 });

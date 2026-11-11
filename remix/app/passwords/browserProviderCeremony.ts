@@ -109,8 +109,8 @@ export async function runProviderCeremony(request: ProviderRequest, password: st
 }
 export async function ensureBrowserProvider(signal: AbortSignal, request?: BrowserPasskeyRequest) {
   const appid = request?.type === 'get' && Object.prototype.hasOwnProperty.call(request.publicKey.extensions || {}, 'appid');
-  await requireThingtimeCapability('api.passwords', appid ? '1.9.0' : '1.5.0');
-  if (appid) await requireActiveThingtimeCapability('api.passwords', '1.9.0');
+  await requireThingtimeCapability('api.passwords', appid ? '1.9.1' : '1.5.0');
+  if (appid) await requireActiveThingtimeCapability('api.passwords', '1.9.1');
   signal.throwIfAborted();
 }
 

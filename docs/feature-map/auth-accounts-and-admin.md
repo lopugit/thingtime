@@ -538,10 +538,10 @@ provider client requirements advertise the compatible reply PATCH. Voice retains
 its existing strict tuning guard.
 
 Browser passkey AppID compatibility: `passwords/browserPasskey.ts` validates the
-empty/default or exact-origin HTTPS no-network FIDO facet subset and emits
+empty/default or HTTPS same-site boundary documented by WebAuthn (PSL including private suffixes) and emits
 `appid:false` for ordinary RP-bound assertions. `browserProviderCeremony.ts`
-requires both frontend and active `api.passwords` 1.9.0 before AppID vault reads;
+requires both frontend and active `api.passwords` 1.9.1 before AppID vault reads;
 full request hashing retains AppID in the verification/session binding.
-`browser-extension/page-hook.js` adapter 0.5.0 preserves input/output serialization
+`browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
