@@ -48,6 +48,19 @@ replacement cleans unbound browser drafts. Exact file-sync provenance fences
 both the cleanup query and deletion claim. Explicit abort, expiry and live
 admission checks still apply.
 
+The 1.5 transfer-admission contract adds an explicit Photos-only background-file
+opt-in. Only `attachments/privateS3.ts` can describe a canonical regional provider
+target; local adapters retain foreground behavior. Native URLSession recovery,
+five-minute automatic retry and current publication authority remain separate
+from a continued-task progress presentation. Run the private S3/attachment and
+capability tests plus `scripts/test-file-sync-transfer-admissions.mts` against
+the built isolated API. `scripts/test-photo-sync-stable-ui.mjs` checks editable
+Photos settings, stable desktop/mobile progress and saved transfer limits.
+`nativePhotoRun.client.ts` recovers unchanged saved-settings authority holds only
+through fresh grant/config verification and normal native authorization; its
+WebView-lifetime retry cooldown is five minutes. The focused
+`mobileFolders.client.test.ts` covers refusal, grants, pauses and unrelated holds.
+
 The shared `MobileFolderInventoryTests` use macOS strict capture and iOS's
 explicit supported backup mode for persisted paging/integrity assertions.
 The real embedded iOS transport must advertise no strict watcher coverage and

@@ -153,6 +153,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the 256-sync-config account ceiling while paging remains bounded.
   [PR 1471 details](../PRs/1471-codex-sync-receipt-recovery.md). **Codex (AI)**
 
+- 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
+  settings. Add the explicit canonical background-file transfer contract,
+  preserve automatic recovery after system interruption and saved-settings
+  authority holds, retain Pause and authorization boundaries, and distinguish
+  deferred work from a failed continued task. Simulator logic and physical
+  background execution remain separate acceptance gates. See [PR 1466 evidence](../PRs/1466-codex-ios-photos-background-hardening-keep-photos-transfers-running.md). **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 
