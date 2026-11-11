@@ -154,6 +154,7 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 				check();
 				if ((await readLocalSource(write)) !== null) throw Error('The cloud path reappeared; preserve the local item.');
 				check();
+				await input.beforeLocalPublication?.(operation.id);
 				const receipt = await input.localTarget!.trash!(structuredClone(operation), { ...scope }, structuredClone(trashContext));
 				check();
 				return receipt;

@@ -249,7 +249,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 	const commit = async (content: CloudFile['content'], replayOnly = false) => {
 		const command = cloudWriteCommit(write, content);
 		if (!retained && !replayOnly) await runtime.automaticStoragePlacement?.admit(m, true);
-		if (write.guardDestination && !replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
+		if (!replayOnly) await runtime.beforeFilePublication?.(write.operation.id);
 		check();
 		const result = await json('/api/v1/files', retained ? parseCloudFileRetention({ ...command, kind: 'retained-version' }) : command);
 		if (retained && result.retained !== true) throw Error('The server did not confirm version retention.');
@@ -564,6 +564,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 				const parent = await readCloudPathEntry(runtime, scope, write.cloudRootId, parentPath, signal);
 				if (parent?.kind !== 'folder' || parent.id !== input.folderId) throw Error('Folder parent changed before publication.');
 			} else if (input.folderId !== write.cloudRootId) throw Error('Folder root changed before publication.');
+			await runtime.beforeFilePublication?.(write.operation.id);
 			return receipt((await json('/api/v1/files', input)).folder);
 		}
 	};

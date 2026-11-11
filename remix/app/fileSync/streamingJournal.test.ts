@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { foregroundFixture, saved, scope } from './foregroundSync.fixture';
 import { prepareCloudInventoryWrite } from './cloudWrite';
+import { EMPTY_CONTENT_SHA256 } from './contentFingerprint';
 import type { PagedRunSpec } from './pagedRunJournal';
 import type { SyncEntry } from './reconcile';
 const identity = (source: 'local' | 'remote') => ({ id: crypto.randomUUID(), generation: crypto.randomUUID(), source });
@@ -17,6 +18,28 @@ const spec = (): PagedRunSpec => ({
 		policy: { mode: 'backup', propagateDeletes: false },
 		excludedPaths: []
 	}
+});
+test('reserved publication diagnostics retain the exact upload binding without changing scheduler or exposing a path', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, runs = f.journal().pagedRuns(access), s = spec();
+	await runs.begin(s);
+	assert.equal(await runs.reservedPublication(s), null);
+	const source: SyncEntry = { path: 'private/name.txt', id: 'local-id', version: '1', kind: 'file', size: 0, sha256: EMPTY_CONTENT_SHA256 };
+	const operation = { id: crypto.randomUUID(), mutation: { kind: 'copy' as const, path: source.path, from: 'local' as const, source, expectedTarget: null }, confirmed: false };
+	await runs.appendStream(s, { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: source },
+		{ write: prepareCloudInventoryWrite(operation, scope, 'cloud-root', null, 'cloud-root') });
+	await runs.claimNext(s);
+	const before = await runs.active(), diagnostic = await runs.reservedPublication(s);
+	assert.deepEqual(diagnostic, { operationId: operation.id, direction: 'upload', kind: 'file', fileId: operation.id,
+		canonicalDispatched: false, receiptPresent: false, confirmed: false });
+	assert.doesNotMatch(JSON.stringify(diagnostic), /private|name\.txt|local-id/);
+	assert.deepEqual(await runs.active(), before);
+	await runs.markStreamCanonicalDispatch(s, operation.id);
+	assert.equal((await runs.reservedPublication(s))?.canonicalDispatched, true);
+	assert.deepEqual((await runs.claimNext(s))?.id, operation.id);
+	const changed = { ...scope, ownerId: 'another-owner' };
+	const other = f.journal().pagedRuns({ scope, currentScope: () => changed });
+	assert.throws(() => other.reservedPublication(s), /account or root changed/);
+	f.journal().close();
 });
 test('queued folder peers are run-scoped read-only hints; consumed and bounded-out peers fail closed', async () => {
 	const f = await foregroundFixture(), runs = f.journal().pagedRuns({ scope, currentScope: () => scope });

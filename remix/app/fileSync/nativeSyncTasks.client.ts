@@ -133,6 +133,18 @@ async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, sc
     const jobs = journal.jobs({ scope: binding, currentScope: check, signal });
     const prior = await jobs.read();
     if (prior && syncJobEnabled(prior) && prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) return prior;
+    // A recovered Save & Sync intent can refer to the exact job that needs
+    // attention. Re-admit that job under its original ID; the worker will
+    // verify the saved config, grants and native write approval before effects.
+    // A strict scanner still needs its explicit native cleanup on the idle lane.
+    if (prior?.state === 'attention' && prior.nextRunAt === undefined && !prior.strictCaptureId && !prior.folderSetupPaused &&
+     prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) {
+     const resumed = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined,
+      { previous: prior, pendingFolderValidation: true });
+     check();
+     if (!respectPause) nativeSyncTasks.resumeScope(binding);
+     return resumed;
+    }
     // Replacing an unfinished old config can require verified native scanner
     // cancellation. Queue only first-time configs while the lane is occupied.
     if (prior && prior.state !== 'complete')

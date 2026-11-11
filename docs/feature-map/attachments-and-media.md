@@ -7,6 +7,11 @@ protected `attachments/attachmentBlobs.ts` lifecycle and
 still authorize the attachment before resolving physical content. See
 [device sync configs](../device-sync-configs.md) and the matching `TESTING.md`
 checklist for quota, concurrent reference/deletion and installed-app acceptance.
+Streaming publication fences are recorded by `streamingForegroundSync.ts` via
+the final native/cloud publication hooks in `cloudSyncPort.client.ts` and
+`cloudTransport.ts`, after staging. `nativeSyncTasks.client.ts` queues exact
+saved-job recovery under the root lock; `syncJobJournal.ts` preserves the job ID
+and requires the normal worker validation before effects.
 
 **Image presentation.** The shared upload-first `ProfileMediaField` opens
 `ImagePresentationDialog` for profile avatar/banner and subspace icon/banner.
@@ -862,3 +867,4 @@ streaming may defer a paired folder without authorizing any effect, child or
 checkpoint. Consumed source rows are not peer evidence. Strict reconciliation
 still reads both replicas afresh. The canonical mixed fixture reports queued
 peer deferrals before first confirmed file alongside byte/hash/recovery proof.
+- Local file-sync recovery details: `pagedRunJournal.reservedPublication` performs an owner/root/run-fenced read of the original reserved operation and cloud file binding; `SyncProgressViewer` shows its safe identity and receipt markers only inside the expanded Progress → Recovery details disclosure. This diagnostic does not authorize publication, reset saved work, or interpret a missing server receipt as a terminal fence.

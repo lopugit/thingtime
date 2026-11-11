@@ -16,6 +16,12 @@ before enrollment and again before effects. If the app leaves the editor after
 the save, root discovery recovers the same confirmed config and cadence from
 its scoped setup intent. Recovery queues without replaying the cloud write or
 opening a permission dialog; it respects a saved Pause.
+When a matching saved job needs attention, queued recovery keeps that job's ID
+and requires the worker's fresh config, grant and write-approval checks. A
+different policy, a paused job or an unfinished strict scanner is not silently
+replaced. Streaming operations keep their original receipt ID across restarts;
+the journal records a publication fence immediately before the actual native
+or cloud publication, after staging and source checks have passed.
 
 ## Background recovery and activity
 
@@ -62,3 +68,4 @@ See the [acceptance checklist](../TESTING.md#unified-folder-sync-configs-and-ded
 and [mobile sync contracts](mobile-file-sync.md). Release evidence must distinguish
 local tests, deployed API behavior, signed Mac acceptance and physical mobile
 acceptance.
+- A stopped local run's expanded Progress panel includes read-only Recovery details for its reserved operation: original operation ID, file binding ID when applicable, direction, kind, and saved dispatch/receipt flags. The journal read is scoped to the selected owner, device, root, and run; it never clears or advances a reservation and omits local paths and bytes. A missing receipt is not proof that an older request cannot still commit.

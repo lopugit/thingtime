@@ -155,7 +155,7 @@ export async function streamForegroundSync(
 			currentScope: input.currentScope,
 			signal,
 			localTarget,
-			...(twoWay ? { beforeLocalPublication: markPublication } : {}),
+			beforeLocalPublication: markPublication,
 			readLocal,
 			transfer: input.transfer,
 			openSource,
@@ -165,7 +165,7 @@ export async function streamForegroundSync(
 				report();
 			}
 		},
-		twoWay ? { ...runtime, beforeFilePublication: markPublication } : runtime
+		{ ...runtime, beforeFilePublication: markPublication }
 	);
 	// A revision counter closes the lost-wakeup race around durable reads.
 	let wakeRevision = 0;
@@ -568,7 +568,6 @@ export async function streamForegroundSync(
 				}
 				const receipt = await executeSyncOperation(operation, scope, { ...port, apply: async (op, currentScope) => {
 					applyEntered = true;
-					if (!twoWay) await markPublication(op.id);
 					check(); return port.apply(op, currentScope);
 				} }, signal);
 				check();
@@ -584,10 +583,11 @@ export async function streamForegroundSync(
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false, false, dispatching.first);
 				} else if (error instanceof SyncObservationChangedError) {
 					state = await runs.skipUnpublishedStreamOperation(spec, operation.id, error.targetChanged);
-				} else if (twoWay && applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
+				} else if (applyEntered && !dispatching.marked && operation.mutation.kind === 'copy') {
 					// Staging bytes has no live effect. A source or target may
-					// change mid-transfer; exact point reads decide whether to
-					// defer, while a persisted prior dispatch still forbids it.
+					// change mid-transfer in either one-way or two-way sync. Exact
+					// point reads decide whether to defer; a persisted prior
+					// dispatch still forbids retiring the original operation.
 					check();
 					const m = operation.mutation, targetSide = m.from === 'local' ? 'remote' : 'local';
 					let sourceChanged = false, targetChanged = false;

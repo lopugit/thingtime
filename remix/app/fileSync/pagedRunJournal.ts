@@ -35,6 +35,8 @@ export const PAGED_RUN_STORES = ['sync-paged-runs', 'sync-paged-operations'] as 
 const stores = [SYNC_PRIORITY_STORE, JOURNAL_RETENTION_STORE, RETAINED_HEADS, REVIEW_STORE, CLOUD_PARENTS, ...PAGED_RUN_STORES, PAGED_RUN_HEADS, PLAN_STORES[0], PLAN_PIN_STORE, INVENTORY_STORES[0], INVENTORY_PIN_STORE, PAGED_CHECKPOINT_HEADS, 'runs'];
 export type PagedRunSpec = { id: string; plan: PagedPlanSpec; review?: PagedRunReview; configuration?: FileSyncConfiguration; photoAssetOrder?: string[]; backgroundPhotoPublication?: true; streaming?: { source: 'local' | 'remote' | 'both'; captureId: string } };
 export type PagedRunProgress = { phase: 'preparing' | 'ready' | 'running' | 'complete'; read: number; total: number; operations: number; confirmed: number; directions?: SyncDirectionalTotals; photoSourceChanged?: true };
+export type ReservedSyncPublication = { operationId: string; direction: 'upload' | 'download'; kind: 'file' | 'folder' | 'trash';
+	canonicalDispatched: boolean | null; receiptPresent: boolean; confirmed: boolean; fileId?: string };
 const directionMigrationsByDatabase = new WeakMap<IDBDatabase, Map<string, Promise<PagedRunProgress | undefined>>>();
 type SortKey = [number, number, string];
 export type CloudBindingProgress = { prepared: number; total: number; phase: 'preparing' | 'ready' };
@@ -944,6 +946,26 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 	return {
 		get scope() { return structuredClone(scope); },
 		begin, step, read, beginCloud, stepCloud, backfillDirections,
+		/** Exact, owner-scoped identity for reconciling a stopped publication. This
+		 * read never advances the scheduler or exposes source paths or bytes. */
+		reservedPublication: (value: PagedRunSpec) => {
+			const spec = parsePagedRunSpec(value);
+			return withHeader<ReservedSyncPublication | null>(spec, 'readonly', (h, tx, done, fail) => {
+				const id = h.scheduling?.reserved;
+				if (!id) { done(null); return; }
+				const get = tx.objectStore(PAGED_RUN_STORES[1]).index('operation').get([key, id]);
+				get.onsuccess = () => { try {
+					check(); const r = row(get.result, spec), m = r.operation.mutation;
+					if (r.operation.id !== id) throw Error('Reserved operation identity changed.');
+					const write = r.cloud ? rebindWrite(r, spec) : undefined;
+					const direction = m.kind === 'copy' ? m.from === 'local' ? 'upload' : 'download' : m.side === 'remote' ? 'upload' : 'download';
+					const kind = m.kind === 'trash' ? 'trash' : m.source.kind;
+					done({ operationId: id, direction, kind, canonicalDispatched: r.canonicalDispatched ?? null,
+						receiptPresent: r.receipt !== null, confirmed: r.operation.confirmed,
+						...(direction === 'upload' && kind === 'file' && write ? { fileId: write.before?.id ?? id } : {}) });
+				} catch (error) { fail(error); } };
+			});
+		},
 		/** Upgrade only structural initial uploads that could never execute.
 		 * Retire metadata atomically; large operation rows are collected later. */
 		async retireUnstartedInitialUpload(value: PagedRunSpec, expected: FileSyncConfiguration): Promise<boolean> {
