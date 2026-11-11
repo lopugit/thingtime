@@ -7174,3 +7174,12 @@ completion are separate outcomes. A configured cron or declared capability does
 not prove the selected deployment actually ran it; verify real scheduling before
 claiming the complete workflow ready. Independent storage setup remains in
 [backup destinations](docs/backup-destinations.md).
+
+Browser passkey AppID compatibility requires the optional Chromium adapter 0.5.0
+and the selected Thingtime deployment's frontend and active `api.passwords` 1.9.0.
+Build the existing distributable with `npm --prefix remix run build:password-extension`,
+retain the installed adapter's origin/settings, and reload its task-owned relying-party
+tab after the normal extension update. Forks use their own trusted HTTPS origin;
+no extra environment variables, provider secrets or AppID fetch service is needed.
+Only empty/default and exact-origin HTTPS AppIDs are handled locally; other cases
+remain native. See [Password manager](docs/password-manager.md).
