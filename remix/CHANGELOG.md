@@ -148,7 +148,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-11: Make Archive/Restore shared persisted Thing actions across Builder
   apps, posts, comments, messages and library menus. Preserve public audiences
   and provide protected metadata-only restoration; verify exact app-card paths
-  and stale-menu races through isolated real API/Chrome checks. **Codex (AI)**
+  and stale-menu races through isolated real API/Chrome checks. See
+  [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
 
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
