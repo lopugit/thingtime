@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Refresh a Mac folder-sync context's selected-origin capability
+  manifest once when a saved operation encounters an incompatible cached
+  version after deployment. Keep exact account/window fences and SemVer refusal;
+  the refresh hint stays inside Electron and does not change the native or HTTP
+  contract. **Codex (AI)**
 - 2026-11-11: Recover saved folder-sync work after a legacy uncertain file
   publication or cancelled native scan. Fence the original upload identity
   through the accounted Files Timeline transaction (`api.files` 1.13.0), then
