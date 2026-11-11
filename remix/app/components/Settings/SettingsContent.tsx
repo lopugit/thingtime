@@ -839,7 +839,7 @@ export const SettingsContent = ({
 						{user && (
 							<SettingsSection
 								eyebrow="Token minter 🪙"
-								description="Mint scoped API tokens to hand to an AI, agent, or script — it can push new things, update things, and scan your things, without your password. Expire them by time (1ms to never) or by number of uses, optionally sandbox one to only the things it creates, and revoke anytime."
+								description="Mint revocable tokens with separate permissions for Things, private agent reporting, or stateless AI text answers. Set an expiry and number of uses before sharing one."
 							>
 								<TokenMinter key={user.id} userId={user.id} />
 							</SettingsSection>

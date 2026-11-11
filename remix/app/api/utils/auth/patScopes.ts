@@ -16,6 +16,12 @@ export type PatScopeDescriptor = {
 // the route that serves it.
 export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
   {
+    id: 'ai.complete',
+    title: 'AI text completion',
+    description: 'Request stateless, bounded text answers using your Thingtime AI credits. Does not grant access to chats, Things, tools, or saved connections.',
+    emoji: '✨'
+  },
+  {
     id: 'agents.report',
     title: 'Private agent reporting',
     description: 'Create a task Character, share selected private workspace items with it, and save task reports and coordination posts. General account and Things access stays separate.',
