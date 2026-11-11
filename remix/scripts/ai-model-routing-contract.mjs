@@ -30,9 +30,20 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/ai/anthropicApiKey.ts', 'app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
+  ['app/api/utils/ai/anthropicApiKey.ts', 'app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/routes/api/v1/ai/respond/_respond.tsx'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
+
+// The scoped stateless PAT contract deliberately pins a small model and output
+// budget. It cannot inherit Admin's tool-capable/model waterfall or accept a
+// caller-selected model; changing these constants changes the published contract.
+const respond = readFileSync(join(remixRoot, 'app/routes/api/v1/ai/respond/_respond.tsx'), 'utf8');
+const respondCore = readFileSync(join(remixRoot, 'app/api/utils/ai/respondCore.ts'), 'utf8');
+assert.match(respondCore, /AI_RESPOND_MODEL = 'gpt-4o-mini'/);
+assert.match(respondCore, /AI_RESPOND_MAX_OUTPUT_TOKENS = 500/);
+assert.match(respond, /model: AI_RESPOND_MODEL/);
+assert.match(respond, /max_tokens: AI_RESPOND_MAX_OUTPUT_TOKENS/);
+assert.doesNotMatch(respond, /getAiPreferredModelWaterfall|resolveAiPreferred/);
 
 // Attachment moderation routes its model through the same admin waterfall;
 // TT_MODERATION_MODEL is only the provider default for the 'default' slot.
