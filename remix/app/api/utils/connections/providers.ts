@@ -128,7 +128,7 @@ export type ConnectionProvider = {
   // providers put their refresh grant on oauth.refreshTokens instead
   refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
   // Fixed, read-only probes owned by the adapter; no caller URL or field dispatch.
-  diagnose?: (tokens: OAuthTokens) => Promise<ConnectionDiagnostics>;
+  diagnose?: (tokens: OAuthTokens, access: { allowContentProbe: boolean }) => Promise<ConnectionDiagnostics>;
   fetchFeed: (
     account: { providerAccountId: string; config: Record<string, any> },
     opts: { limit: number; tokens?: OAuthTokens | null; pages?: number }
@@ -1716,8 +1716,10 @@ const facebookCheck = (name: string, result: { ok: true; data: any } | Fail): Co
     result.error === 'Facebook authorization is invalid or expired. Reconnect this account.' ? 'unauthorized' : 'unavailable'
 });
 
-const diagnoseFacebook = async (tokens: OAuthTokens): Promise<ConnectionDiagnostics> => {
+const diagnoseFacebook = async (tokens: OAuthTokens, access: { allowContentProbe: boolean }): Promise<ConnectionDiagnostics> => {
   const grantedScopes = await readConnectionFacebookPermissions(tokens) ?? null;
+  // Provider consent does not authorize content use through a Thingtime grant.
+  if (!access.allowContentProbe) return { grantedScopes, checks: ['posts', 'shares', 'likes', 'comments'].map(name => ({ name, status: 'skipped' })) };
   const probe = (fields: string) => authedJson(`${GRAPH}/me/posts?fields=${encodeURIComponent(fields)}&limit=1`, { token: tokens.accessToken });
   const minimal = facebookCheck('posts', await probe('id,message,created_time'));
   const checks = [minimal];
@@ -1808,6 +1810,7 @@ const facebookAccountProvider: ConnectionProvider = {
   ...facebookProvider,
   id: 'facebook-account',
   name: 'Facebook account',
+  diagnose: (tokens) => diagnoseFacebook(tokens, { allowContentProbe: false }),
   accountOnly: true,
   about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
   oauth: {

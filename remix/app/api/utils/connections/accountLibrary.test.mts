@@ -335,7 +335,7 @@ test('Facebook diagnostics bind exact owner, origin and unchanged saved credenti
   assert.deepEqual(linked.connection.authorization, { requestedScopes: saved.requestedScopes, grantedScopes: saved.confirmedScopes });
   assert.deepEqual(linked.connection.scopes, ['public_profile']);
   let probes = 0;
-  t.mock.method(facebook, 'diagnose', async () => { probes++; return { grantedScopes: ['public_profile'], checks: [] }; });
+  const diagnosticMock = t.mock.method(facebook, 'diagnose', async () => { probes++; return { grantedScopes: ['public_profile'], checks: [] }; });
   const before = JSON.stringify(docs);
   assert.equal((await diagnoseConnection(other, id, 'https://thingtime.test')).ok, false);
   assert.equal((await diagnoseConnection(user, id, 'https://foreign.test')).ok, false);
@@ -347,7 +347,7 @@ test('Facebook diagnostics bind exact owner, origin and unchanged saved credenti
   assert.deepEqual(await diagnoseConnection(user, id, 'https://thingtime.test'), { ok: false, status: 401, error: 'This account authorization expired. Reconnect it.' });
   assert.equal(probes, 1);
   await upsertAccountAndLink(user, facebook, account('facebook-one'), saved);
-  t.mock.method(facebook, 'diagnose', async () => {
+  diagnosticMock.mock.mockImplementation(async () => {
     docs = docs.filter(doc => doc.shareId !== id);
     return { grantedScopes: ['user_posts'], checks: [] };
   });
@@ -360,4 +360,48 @@ test('legacy Facebook requested scope metadata is never projected as confirmed g
     { ownerId: user.id, crystal: { scopes: ['public_profile', 'user_posts'] } }, connectionProviderById('facebook')!);
   assert.deepEqual(projection.scopes, []);
   assert.deepEqual(projection.authorization, { requestedScopes: null, grantedScopes: null });
+});
+
+test('named identity and account-only diagnostics preserve grant evidence without probing content', async t => {
+  const { diagnoseConnection } = await import('./connections.ts');
+  const { saveNamedConnection } = await import('./namedConnections.ts');
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/permissions')) return Response.json({ data: [
+      { permission: 'public_profile', status: 'granted' }, { permission: 'user_posts', status: 'granted' }
+    ] });
+    assert.equal(url.pathname, '/v23.0/me/posts');
+    return Response.json({ data: [] });
+  });
+  for (const providerId of ['facebook', 'facebook-account']) {
+    const selected = connectionProviderById(providerId)!;
+    const creds = (await oauthCredsFor(selected, 'https://thingtime.test'))!;
+    const saved = { ...tokens, clientId: creds.clientId, oauthBinding: creds.binding, oauthOrigin: creds.origin,
+      oauthEnvironment: creds.environment, confirmedScopes: ['public_profile', 'user_posts'] };
+    const named = await saveNamedConnection(user, selected, account(providerId), saved, {
+      requestId: '12345678-1234-4234-8234-123456789abc', name: 'Identity only',
+      requestedScopes: ['public_profile'], allowedOperations: ['account.identity']
+    }, ['public_profile'], creds.origin, creds.environment);
+    assert.ok(named.ok);
+    if (!named.ok) continue;
+    calls.length = 0;
+    const metadata = await diagnoseConnection(user, named.connection.id, creds.origin);
+    assert.ok(metadata.ok);
+    if (!metadata.ok) continue;
+    assert.deepEqual(metadata.grantedScopes, ['public_profile', 'user_posts']);
+    assert.deepEqual(metadata.checks.map(check => check.status), ['skipped', 'skipped', 'skipped', 'skipped']);
+    assert.deepEqual(calls, ['/v23.0/me/permissions']);
+    const legacy = await upsertAccountAndLink(user, selected, account(providerId), saved);
+    assert.ok(legacy.ok);
+    if (!legacy.ok) continue;
+    calls.length = 0;
+    const inspected = await diagnoseConnection(user, legacy.connection.id, creds.origin);
+    assert.ok(inspected.ok);
+    if (!inspected.ok) continue;
+    assert.deepEqual(inspected.grantedScopes, ['public_profile', 'user_posts']);
+    assert.deepEqual(inspected.checks.map(check => check.status), Array(4).fill(providerId === 'facebook' ? 'available' : 'skipped'));
+    assert.equal(calls.filter(path => path.endsWith('/posts')).length, providerId === 'facebook' ? 4 : 0);
+  }
 });

@@ -745,7 +745,9 @@ export async function diagnoseConnection(user: SessionUser, id: string, origin: 
     await home.findOne({ shareId: grant.shareId, ownerId: user.id, secure: grant.secure,
       thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_ACCOUNT_KIND }));
   if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
-  const result = await provider.diagnose(tokens);
+  // No named content operation is registered today. An identity-only grant
+  // must not borrow broader provider consent or a sibling account's access.
+  const result = await provider.diagnose(tokens, { allowContentProbe: !named && provider.accountOnly !== true });
   if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
   return { ok: true as const, connectionId: id, provider: provider.id, observedAt: new Date().toISOString(), ...result };
 }

@@ -7067,7 +7067,10 @@ on the selected origin, then open
 in that owner's authenticated browser. This read-only operation checks the exact
 saved grant and origin/environment binding without refreshing, rewriting or
 revoking it. It returns actual supported grant names (`null` means unknown or incomplete) and
-fixed statuses for minimal posts, shares, likes and comments; optional probes
+fixed statuses for minimal posts, shares, likes and comments. Named grants and
+account-only connections inspect permission metadata only; all content probes are
+skipped even if Meta granted broader access. Default Facebook posts connections
+can probe content; optional probes
 are skipped when minimal posts fail. No token, provider error body or post content
 is returned. Successful empty posts still establish endpoint access, not the
 presence of content. Expired grants require normal reconnect. Diagnostic results

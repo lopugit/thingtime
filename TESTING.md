@@ -15864,7 +15864,10 @@ private readback while an unrelated Home fixture remains paused.
   the intended origin. In the exact owner's browser, navigate the documented
   diagnostic GET with its connection ID and expected owner. Verify a private
   no-store JSON response, actual grants or explicit unknown, minimal posts and
-  individual optional-field statuses. Compare successful posts with the normal
+  individual optional-field statuses. Named identity-only and default account-only
+  connections must make no posts requests even with user_posts on the saved
+  token; retain actual permission metadata and mark content checks skipped.
+  Compare successful posts with the normal
   selected feed; an empty successful probe is access evidence only.
 - Verify default and named callback grants independently: declined user_posts
   is absent; failed/malformed permission verification stays unknown. Legacy

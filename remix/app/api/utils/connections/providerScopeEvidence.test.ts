@@ -57,14 +57,19 @@ test('Facebook diagnostics isolate core posts from optional fields without retur
     return Response.json({ data: [{ id: 'private-post', message: 'private-content' }] });
   });
   const diagnose = connectionProviderById('facebook')!.diagnose!;
-  const result = await diagnose({ accessToken: 'synthetic' });
+  const result = await diagnose({ accessToken: 'synthetic' }, { allowContentProbe: true });
   assert.deepEqual(result, { grantedScopes: ['user_posts'], checks: [
     { name: 'posts', status: 'available' }, { name: 'shares', status: 'available' },
     { name: 'likes', status: 'permission-denied' }, { name: 'comments', status: 'available' }
   ] });
   assert.deepEqual(fields, ['id,message,created_time', 'id,shares', 'id,likes.summary(true)', 'id,comments.summary(true)']);
   assert.ok(!JSON.stringify(result).includes('private'));
+  fields.length = 0;
+  const accountOnly = await connectionProviderById('facebook-account')!.diagnose!({ accessToken: 'synthetic' }, { allowContentProbe: true });
+  assert.deepEqual(accountOnly.grantedScopes, ['user_posts']);
+  assert.deepEqual(accountOnly.checks.map(check => check.status), ['skipped', 'skipped', 'skipped', 'skipped']);
+  assert.equal(fields.length, 0, 'Account-only adapter refuses content even when asked by a caller.');
   denyCore = true; fields.length = 0;
-  assert.deepEqual((await diagnose({ accessToken: 'synthetic' })).checks.map(check => check.status), ['permission-denied', 'skipped', 'skipped', 'skipped']);
+  assert.deepEqual((await diagnose({ accessToken: 'synthetic' }, { allowContentProbe: true })).checks.map(check => check.status), ['permission-denied', 'skipped', 'skipped', 'skipped']);
   assert.equal(fields.length, 1);
 });
