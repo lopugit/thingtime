@@ -37,3 +37,7 @@ The real isolated transfer-admissions API test separately exercises authorizatio
 - Build through the canonical iOS release workflow, verify signing/export/upload, then verify Apple processing and internal TestFlight availability for the exact new build. Existing build 59 does not contain this change.
 - On the physical iPhone, verify continued-task progress and background transfer/publication with the app away, automatic recovery on reopening, explicit Pause, and unchanged settings. Simulator success does not establish these results.
 - Independently count unique committed original bytes for the existing 10 GB acceptance goal. Transfer traffic, repeated attempts, fixture bytes and build success do not satisfy that goal.
+
+## Saved-settings recovery regression — 11 November 2026
+
+A read-only physical baseline on installed build 59 showed an unchanged enabled Photos configuration whose native run was disarmed with `needs-review` / `saved-settings`. The original denial cause is unknown. The automatic client guard suppressed fresh authorization for that same revision. The fix rechecks the current Photos grant and exact private saved configuration, then uses normal native authorization without auto-resuming explicit Pause. A five-minute WebView-lifetime cooldown prevents repeated condition wakes from hammering a persistent refusal; real denial, revoked access, saved/local/native Pause, future retry and unrelated review holds remain enforced. The focused suite passed 28/28. Deployed/physical recovery acceptance remains separate.
