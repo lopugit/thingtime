@@ -39,6 +39,25 @@ states.
 The idle worker still performs all grant, authority, scanner cleanup and
 receipt checks before any transfer; this message grants no admission.
 
+iOS native device pairing contract **1.2.0** queues device-status checks behind
+an active request for the same owner and API origin. Each queued check performs
+fresh identity and pairing verification when its turn starts; it does not reuse
+the earlier request's result. Cancelling one queued or active caller preserves
+independent waiting checks. Navigation and backgrounding invalidate the whole
+lane. Pairing and presence commands retain their existing busy refusal. Older
+native hosts retain the original status refusal; the web client does not replay
+those requests with a guessed delay.
+
+For isolated fixture diagnosis, build the client with
+`VITE_THINGTIME_SYNC_DIAGNOSTICS=1`. The read-only
+`window.__thingtimeSyncEnrollmentDiagnostics.read(scope, connectionId)` hook
+accepts the exact editor scope and returns closed phase/failure categories,
+generation, elapsed time, active/abort state, safe binding Booleans and a target
+match Boolean. It exposes no cancellation, claim release or data mutation.
+Ordinary builds do not install the hook. A reload begins a new renderer history
+and cannot identify a historical claim holder. The native queue and a successful
+status check do not override saved-config, grant, receipt or migration guards.
+
 Offline and typed transient transport failures defer with backoff. An interrupted
 strict inventory gets one fresh verification attempt; repeated incomplete scans
 need attention and cannot publish deletions. Missing folder access, revoked
