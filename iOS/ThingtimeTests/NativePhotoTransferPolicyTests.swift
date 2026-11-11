@@ -1,5 +1,6 @@
 import AppleFileSync
 import XCTest
+import WebKit
 @testable import Thingtime
 
 @MainActor
@@ -147,4 +148,105 @@ final class NativePhotoTransferPolicyTests: XCTestCase {
             now: now.addingTimeInterval(50), requiresCompletionBeforeExpiry: false, deferFutureAdmission: true), now.addingTimeInterval(50))
     }
 
+}
+
+@MainActor
+final class NativeFolderUploadPolicyTests: XCTestCase {
+    private func authorization(_ policy: NativePhotoTransferPolicy? = nil, version: Int = 1, photos: Bool = false) throws -> NativeUploadAuthorization {
+        var c: [String: Any] = ["configurationVersion": version, "name": "Backup", "deviceId": "device", "localRootId": "folder",
+            "remoteFolderId": "cloud", "mode": "backup", "paused": false, "propagateDeletes": false,
+            "network": "wifi", "chargingOnly": false, "excludedPaths": [String]()]
+        if photos { c["sourceKind"] = "photos" }
+        if let policy { c["uploadPolicy"] = policy.json }
+        return try JSONDecoder().decode(NativeUploadAuthorization.self, from: JSONSerialization.data(withJSONObject:
+            ["id": "connection", "updatedAt": "2026-11-11T00:00:00Z", "configuration": c,
+             "scope": ["ownerId": "owner", "origin": "https://sync.test", "dataPlane": "home", "deviceId": "device", "rootId": "connection"]]))
+    }
+    func testFolderUnlimitedDefaultPhotosDefaultAndStrictestScopedUploadRates() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let policies = NativePhotoTransferPolicyStore(directory: directory)
+        XCTAssertNil(try policies.limits(scope: scope, authorization: authorization()).rate)
+        XCTAssertFalse(MobileFolderBridge.legacyUploadRequiresCurrentClient(try policies.legacyLimits(scope: scope, deviceId: "device", rootId: "folder")))
+        XCTAssertEqual(try policies.limits(scope: scope, authorization: authorization(photos: true)).rate, 625_000)
+        try policies.save(.init(uploadBytesPerSecond: 1_000, uploadBytesPerHour: 100), scope: scope, deviceId: "device")
+        try policies.save(.init(uploadBytesPerSecond: 500, uploadBytesPerHour: 70), scope: scope, deviceId: "device", rootId: "folder")
+        XCTAssertTrue(MobileFolderBridge.legacyUploadRequiresCurrentClient(try policies.legacyLimits(scope: scope, deviceId: "device", rootId: "folder")))
+        let a = try authorization(.init(uploadBytesPerSecond: 100, uploadBytesPerHour: 50), version: 5)
+        try a.validate(owner: scope, rootId: "folder", photos: false)
+        let limits = try policies.limits(scope: scope, authorization: a)
+        XCTAssertEqual(limits.rate, 100)
+        XCTAssertEqual(limits.rates.map(\.key), ["device", "folder:folder", "configuration:connection"])
+        XCTAssertThrowsError(try a.validate(owner: scope, rootId: "other", photos: false))
+        XCTAssertThrowsError(try a.validate(owner: FileSyncOwnerScope(ownerId: "other", url: scope.origin), rootId: "folder", photos: false))
+        XCTAssertThrowsError(try authorization(.unlimited, version: 1).validate(owner: scope, rootId: "folder", photos: false))
+        XCTAssertThrowsError(try authorization(.unlimited, version: 5, photos: true).validate(owner: scope, rootId: "folder", photos: true))
+    }
+    func testSharedPhotosFolderUsageSurvivesPolicyEditAndRelaunchIncludingUncertainBytes() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let now = Date(timeIntervalSince1970: 1_800_000_000), budget = NativePhotoUploadBudget(directory: directory)
+        let sent = try budget.reserve(scope: scope, deviceId: "device", bytes: 60, cap: nil, rootId: "photos", configurationId: "photos", now: now)
+        try budget.finish(sent, observedBytes: 60, now: now)
+        let policies = NativePhotoTransferPolicyStore(directory: directory)
+        try policies.save(.init(uploadBytesPerSecond: nil, uploadBytesPerHour: 100), scope: scope, deviceId: "device")
+        XCTAssertThrowsError(try NativePhotoUploadBudget(directory: directory).reserve(scope: scope, deviceId: "device", bytes: 50, cap: nil, rootId: "folder", configurationId: "folder-1", deviceCap: 100, now: now)) {
+            XCTAssertNotNil(($0 as? NativePhotoUploadBudget.Wait)?.retryAt)
+        }
+        _ = try budget.reserve(scope: scope, deviceId: "device", bytes: 30, cap: nil, rootId: "folder", configurationId: "folder-1", deviceCap: 100, now: now)
+        // An uncertain request is not refunded by a fresh instance or preference edit.
+        try policies.save(.init(uploadBytesPerSecond: 10, uploadBytesPerHour: 100), scope: scope, deviceId: "device")
+        XCTAssertThrowsError(try NativePhotoUploadBudget(directory: directory).reserve(scope: scope, deviceId: "device", bytes: 20, cap: nil, rootId: "folder", configurationId: "folder-2", deviceCap: 100, now: now))
+        XCTAssertThrowsError(try budget.reserve(scope: scope, deviceId: "other", bytes: 11, cap: 10, now: now)) {
+            XCTAssertEqual(($0 as? NativePhotoUploadBudget.Wait)?.minimumPartBytes, 11)
+        }
+    }
+    func testLegacyUnattributedBytesCountAgainstLaterConfigurationAllowance() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let scope = try FileSyncOwnerScope(ownerId: "owner", url: URL(string: "https://sync.test")!)
+        let now = Date(timeIntervalSince1970: 1_800_000_000), budget = NativePhotoUploadBudget(directory: directory)
+        let part = try budget.reserve(scope: scope, deviceId: "device", bytes: 60, cap: nil, rootId: "folder", configurationId: nil, now: now)
+        try budget.finish(part, observedBytes: 60, now: now)
+        XCTAssertThrowsError(try NativePhotoUploadBudget(directory: directory).reserve(scope: scope, deviceId: "device", bytes: 50,
+            cap: 100, rootId: "folder", configurationId: "v5-config", now: now))
+    }
+    func testLegacyPartPolicyCapabilityIsAdditive() {
+        XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadPolicyVersion = '1.1.0'"))
+        XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadVersion = '1.7.0'"))
+    }
+}
+
+@MainActor
+final class NativeAuthorizedFolderPartTests: XCTestCase {
+    func testLegacyReloadWithholdsForEditableAndUnsavedDocuments() async throws {
+        let web = WKWebView()
+        for body in ["<input value='draft'>", "<div contenteditable>draft</div>", "<div contenteditable='plaintext-only'>draft</div>", "<div role='textbox'>draft</div>", "<div data-draft='pending'>draft</div>", "<textarea hidden>draft</textarea>", "<p>Read only</p>"] {
+            let token = UUID().uuidString
+            web.loadHTMLString("<html><body data-fixture='" + token + "'>" + body + "</body></html>", baseURL: URL(string: "https://sync.test"))
+            for _ in 0..<100 {
+                if (try? await web.evaluateJavaScript("document.readyState === 'complete' && document.body.dataset.fixture === '" + token + "'")) as? Bool == true { break }
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+            let idle = try await web.evaluateJavaScript(MobileFolderBridge.legacyUploadDocumentIsIdleScript) as? Bool
+            XCTAssertEqual(idle, body == "<p>Read only</p>", body)
+        }
+    }
+
+    func testMissingOrNullAuthorizationCannotFallBackToLegacyUploader() throws {
+        let bridge = MobileFolderBridge(), web = WKWebView(), origin = URL(string: "https://sync.test")!
+        for value: Any? in [nil, NSNull(), "invalid"] {
+            var upload: [String: Any] = [:]
+            if let value { upload["authorization"] = value }
+            var result: [String: Any]?
+            bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": "owner", "action": "upload-part-authorized", "upload": upload]],
+                webView: web, root: origin, currentRoot: { origin },
+                verifyOwner: { _, _ in XCTFail("Missing authorization must be refused before session, grant or legacy work") },
+                pairedDevice: { _, _ in XCTFail("The authorized action must never resolve a legacy device"); return "device" },
+                reply: { _, payload in result = payload })
+            XCTAssertTrue((result?["error"] as? String)?.contains("exact saved sync authorization") == true)
+        }
+    }
 }

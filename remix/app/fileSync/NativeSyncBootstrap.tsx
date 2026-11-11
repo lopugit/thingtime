@@ -1,3 +1,6 @@
+import { sameFolderUploadPolicySource } from './photoSettingsPolicy';
+import { supportsNativeUploadPolicy } from './photoTransferPolicy';
+import { readOwnedFileSyncConfiguration } from './configuredPlan';
 import { activityManager } from '~/activity/activityManager';
 import { useEffect } from 'react';
 import { nativeBridgeMessageEvent, nativeBridgeReadyEvent } from '../utils/nativeBridge';
@@ -7,13 +10,13 @@ import { requestMobileFolders, supportsNativePhotoAutomation, supportsSoleNative
 import { discoverAutomaticPhotos } from './photoAutomationScheduler';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
-import { nativeSyncTasks, startNativeSyncTask } from './nativeSyncTasks.client';
+import { nativeSyncTasks, readNativeConfiguration, startNativeSyncTask } from './nativeSyncTasks.client';
 import { isSyncConnectionFailure } from './syncConnectionWait';
 import { cancelSyncForActivity } from './syncTaskRuntime';
 import { recoverSavedSyncEnrollments } from './syncEnrollmentRecovery.client';
 import { SYNC_ENROLLMENT_WAKE_EVENT } from './configurationEditor';
 import { openSyncJournal } from './journal.client';
-import { SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
+import { SYNC_JOBS_CHANGED_EVENT, SYNC_UPLOAD_POLICY_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import type { SyncScope } from './reconcile';
 
@@ -73,6 +76,7 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		const explicitJobs = automaticPhotos ? discovered.filter(job => job.reviewed.configuration.sourceKind !== 'photos') : discovered;
 		// Old admissions from another selected server/device must neither run
 		// nor keep this window alive. Temporary context failure waits for retry.
+		const hosts = new Map<string, Awaited<ReturnType<typeof createNativeSyncHost>>>();
 		const origins = new Map<string, string | null>(), waitingOrigins = new Map<string, string>();
 		let prior = bridge ? verifiedDesktopOrigins.get(bridge) : undefined;
 		if (bridge && (!prior || prior.ownerId !== ownerId || prior.generation !== generation || prior.rendererOrigin !== scope.origin)) {
@@ -85,6 +89,7 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 				const host = await createNativeSyncHost({ ownerId, deviceId: job.scope.deviceId, adapter, signal, assertCurrent: () => { currentScope(); } });
 				const origin = host.origin();
 				origins.set(job.scope.deviceId, origin);
+                hosts.set(job.scope.deviceId, host);
 				prior?.devices.set(job.scope.deviceId, origin);
 			} catch (cause) {
 				currentScope(); origins.set(job.scope.deviceId, null);
@@ -102,7 +107,16 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		for (const job of explicitJobs) {
 			currentScope();
 			if (nativeSyncTasks.read()?.active) break;
-			if (!nativeSyncTasks.isPaused(job.scope) && selected(job) && syncJobDue(job, Date.now(), wakeConditions)) await startNativeSyncTask(job.reviewed, job.scope, generation, job, undefined, undefined, wakeConditions);
+            if (nativeSyncTasks.isPaused(job.scope) || !selected(job) || !['runnable', 'scheduled'].includes(job.state)) continue;
+            let reviewed = job.reviewed, policyChanged = false;
+            if (supportsNativeUploadPolicy(adapter.bridge) && reviewed.configuration.sourceKind !== 'photos' && reviewed.configuration.mode === 'backup') {
+                const host = hosts.get(job.scope.deviceId)!;
+                const current = readOwnedFileSyncConfiguration(await readNativeConfiguration(host, job.scope, signal), ownerId); currentScope();
+                if (current.id === reviewed.id && current.configuration.paused) continue;
+                policyChanged = current.id === reviewed.id && sameFolderUploadPolicySource(reviewed.configuration, current.configuration) && JSON.stringify(current) !== JSON.stringify(reviewed);
+                if (policyChanged) reviewed = current;
+            }
+            if (policyChanged || syncJobDue(job, Date.now(), wakeConditions)) await startNativeSyncTask(reviewed, job.scope, generation, job, undefined, undefined, wakeConditions);
 		}
 		if (bridge) await setDesktopSyncScheduled((await readJobs()).some(retained), bridge); currentScope();
 	} finally { journal?.close(); }
@@ -167,13 +181,13 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 		kick();
 		const visible = () => { if (document.visibilityState === 'visible') wake(); };
 		document.addEventListener('visibilitychange', visible); window.addEventListener('pageshow', wake);
-		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.addEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
+		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.addEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake); window.addEventListener(SYNC_UPLOAD_POLICY_CHANGED_EVENT, wake);
 		window.addEventListener(nativeBridgeReadyEvent, kick); window.addEventListener(nativeBridgeMessageEvent, nativeWake);
 		return () => {
 			controller.abort(); clearTimeout(queued); clearTimeout(timer);
 			activitySignal.removeEventListener('abort',disabled);
 			document.removeEventListener('visibilitychange', visible); window.removeEventListener('pageshow', wake);
-			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.removeEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
+			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.removeEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake); window.removeEventListener(SYNC_UPLOAD_POLICY_CHANGED_EVENT, wake);
 			window.removeEventListener(nativeBridgeReadyEvent, kick); window.removeEventListener(nativeBridgeMessageEvent, nativeWake);
 			if (desktop) void setDesktopSyncScheduled(false, desktop).catch(() => {});
 		};

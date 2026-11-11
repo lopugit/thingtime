@@ -113,6 +113,7 @@ export const syncConfigBasicsBlocks: WebpageBlock[] = [
 ];
 export const syncConfigDirectionBlocks: WebpageBlock[] = [
 	stack('config-mode-field', [label('mode', 'Direction'), field('mode', 'select', { disabled: '{form.modeDisabled}', 'aria-label': 'Direction' }, options('mode', syncConfigModes)),
+		syncWhen('config-upload-direction-note-visible', 'form.uploadPolicyBackupOnly', [syncElement('config-upload-direction-note', 'p', 'This iPhone supports upload limits for Backup (keep deleted files). The saved direction and limits are retained.', undefined, muted)]),
 		syncWhen('config-backup-note-visible', 'form.isBackup', [syncElement('config-backup-note', 'p', 'Keep cloud copies when files are deleted from this device.', undefined, muted)])])
 ];
 export const syncConfigTransferBlocks: WebpageBlock[] = [{

@@ -19,6 +19,7 @@ export type ThingtimeNativeBridge = {
   fileSymbolicLinksVersion?: string;
   fileResourceLimitsVersion?: string;
   filePhotoAutomationVersion?: string;
+  fileUploadPolicyVersion?: string;
   filePhotoContinuationVersion?: string;
   fileDownloadVersion?: string;
   fileUploadVersion?: string;

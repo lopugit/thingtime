@@ -580,7 +580,8 @@ export async function transferAdmission(input: {
 	if (
 		!['parts', 'complete', 'publish', 'revoke'].includes(String(raw.action)) ||
 		!jti ||
-		Object.keys(raw).some((key) => key !== 'action' && key !== 'admissionId' && !(raw.action === 'parts' && (key === 'parts' || key === 'transport'))) ||
+		Object.keys(raw).some((key) => key !== 'action' && key !== 'admissionId' && !(raw.action === 'parts' && (key === 'parts' || key === 'transport' || key === 'reconcileAcceptedParts'))) ||
+		(raw.reconcileAcceptedParts !== undefined && typeof raw.reconcileAcceptedParts !== 'boolean') ||
 		(raw.transport !== undefined && raw.transport !== 'background-file-v1')
 	)
 		return fail(400, 'Invalid admitted transfer request');
@@ -704,6 +705,6 @@ export async function transferAdmission(input: {
 	const authority = { expiresAt: meta.authorizationExpiresAt, expectedFingerprint: a.fingerprint, check,
 		...(a.photoRun && raw.transport === 'background-file-v1' ? { backgroundFileTransport: true } : {}) };
 	return raw.action === 'parts'
-		? signAttachmentUploadParts(row.userId, { uploadId: a.uploadId, parts: raw.parts }, authority)
+		? signAttachmentUploadParts(row.userId, { uploadId: a.uploadId, parts: raw.parts, ...(raw.reconcileAcceptedParts === true ? { reconcileAcceptedParts: true } : {}) }, authority)
 		: completeAttachmentUpload(row.userId, { uploadId: a.uploadId }, authority);
 }
