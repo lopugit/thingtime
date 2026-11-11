@@ -36,6 +36,12 @@ files are retained. Photos and folder workers share owner/origin/device usage.
 Device and folder caps aggregate concurrent configurations. Policy edits never
 reset consumption; failed/partial sends count and uncertain reservations remain
 charged across relaunch. One part must fit in each applicable hourly allowance.
+Verified device/folder policy saves wake matching armed native work and durable
+hourly-wait jobs through revision-guarded scheduling updates. Consumption,
+receipts, unrelated conditions and explicit Pause remain intact. Speed edits
+apply at the next part; already-started bytes can finish under their captured
+limits.
+
 A smaller allowance produces an actionable minimum-part wait, retaining the
 original source, reservation and pending operation. Timed waits persist their
 native deadline and resume through normal saved-job discovery; iOS still owns
@@ -59,8 +65,8 @@ this change.
 - Native tests cover exact scope refusal, historical Photos/ordinary defaults,
   scoped aggregate caps, policy edits, relaunch, uncertain and unattributed bytes.
 - Browser runner: `node remix/scripts/test-folder-upload-limits-ui.mjs` checks
-  desktop/phone controls, units, save/reload, unavailable host, expanded generic
-  settings, full-page overflow and separately editable nested Builder blocks.
+  desktop/phone controls, units, save/reload, unavailable host, absence of duplicate unsupported
+  resource controls, full-page overflow and separately editable nested Builder blocks.
 - Simulator app and test-bundle compilation are source validation. Actual native
   byte pacing/hourly resumption and installed-device acceptance remain separate
   parent-coordinated checks before release.

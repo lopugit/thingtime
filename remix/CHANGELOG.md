@@ -12,6 +12,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-11-12: Harden authorized-part refusal, scoped policy-edit wake and draft-safe
+  legacy recovery; hide redundant unsupported iOS resource controls.
 - 2026-11-12: Add negotiated iOS folder Backup upload speed and hourly policy
   controls with shared persisted device/folder budgets, exact scoped native
   enforcement, legacy-part accounting and policy-only interrupted-job recovery.
@@ -159,6 +161,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   tasks within signed URL lifetimes, checkpoint expected upload-limit waits,
   and report closed failure reasons and operations. Physical background
   acceptance remains a separate release gate. See [PR1481 evidence](../PRs/1481-codex-ios-photos-recovery-limits-fix-ios-sync-recovery-and-expose-scoped-upload-limits.md). **Codex (AI)**
+
+- 2026-11-12: Give the macOS Passwords companion standard responder-chain Edit
+  shortcuts so Command-V reaches focused web inputs. Keep credential delivery
+  native, preserve identity/entitlements, and advance companion host/extension
+  to 1.0.10/build 11. Menu contract tests pass; signed keyboard acceptance is
+  separate. Keep the native destination header neutral after verified readiness
+  while retaining initialization errors. **Codex (AI)**
 
 - 2026-11-12: Reconcile native TOTP setup-link intake with the current password
   editor and account lifecycle. Keep one-use seeds transient, require editable

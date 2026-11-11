@@ -16,7 +16,7 @@ import { cancelSyncForActivity } from './syncTaskRuntime';
 import { recoverSavedSyncEnrollments } from './syncEnrollmentRecovery.client';
 import { SYNC_ENROLLMENT_WAKE_EVENT } from './configurationEditor';
 import { openSyncJournal } from './journal.client';
-import { SYNC_JOBS_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
+import { SYNC_JOBS_CHANGED_EVENT, SYNC_UPLOAD_POLICY_CHANGED_EVENT, syncJobDue, syncJobEnabled, type SyncJob } from './syncJobJournal';
 import { setDesktopSyncScheduled } from './desktopSyncWindow.client';
 import type { SyncScope } from './reconcile';
 
@@ -181,13 +181,13 @@ export function NativeSyncBootstrap({ ownerId, generation }: { ownerId: string; 
 		kick();
 		const visible = () => { if (document.visibilityState === 'visible') wake(); };
 		document.addEventListener('visibilitychange', visible); window.addEventListener('pageshow', wake);
-		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.addEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
+		window.addEventListener('online', wake); window.addEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.addEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake); window.addEventListener(SYNC_UPLOAD_POLICY_CHANGED_EVENT, wake);
 		window.addEventListener(nativeBridgeReadyEvent, kick); window.addEventListener(nativeBridgeMessageEvent, nativeWake);
 		return () => {
 			controller.abort(); clearTimeout(queued); clearTimeout(timer);
 			activitySignal.removeEventListener('abort',disabled);
 			document.removeEventListener('visibilitychange', visible); window.removeEventListener('pageshow', wake);
-			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.removeEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake);
+			window.removeEventListener('online', wake); window.removeEventListener(SYNC_JOBS_CHANGED_EVENT, kick); window.removeEventListener(SYNC_ENROLLMENT_WAKE_EVENT, wake); window.removeEventListener(SYNC_UPLOAD_POLICY_CHANGED_EVENT, wake);
 			window.removeEventListener(nativeBridgeReadyEvent, kick); window.removeEventListener(nativeBridgeMessageEvent, nativeWake);
 			if (desktop) void setDesktopSyncScheduled(false, desktop).catch(() => {});
 		};

@@ -4,6 +4,7 @@ import { PHOTO_AUTOMATION_INTERVAL_MS, parseFileSyncConfiguration } from './conf
 import { PHOTO_SETTINGS_STORES, parkPhotoSettings, type PreviousPhotoSettings } from './photoSettingsJournal';
 import { backupSettingsChanged, samePhotoBackupSource } from './photoSettingsPolicy';
 import { isSyncWaitReason, type SyncWaitReason } from './foregroundSyncContext';
+import type { openSyncJournal } from './journal.client';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { journalScope, type JournalAccess } from './journalScope';
 import { syncScopeKey, type SyncScope } from './reconcile';
@@ -13,6 +14,7 @@ const STORE = 'sync-admitted-jobs';
 export const SYNC_JOB_PAGE_SIZE = 32;
 export const SYNC_INTERVALS = [60_000, 300_000, 900_000, 3_600_000] as const;
 export const SYNC_JOBS_CHANGED_EVENT = 'tt:sync-jobs-changed';
+export const SYNC_UPLOAD_POLICY_CHANGED_EVENT = 'tt:sync-upload-policy-changed';
 export type SyncJob = {
 	version: 1; key: string; id: string; revision: number;
 	scope: SyncScope; reviewed: SavedFileSyncConfiguration;
@@ -170,6 +172,12 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 			const { waitReason: _wait, minimumPartBytes: _part, ...rest } = current;
 			return { ...rest, retryAt, ...(wait ? { waitReason: wait.reason } : {}), ...(wait?.minimumPartBytes !== undefined ? { minimumPartBytes: wait.minimumPartBytes } : {}) };
 		}),
+  reconsiderUploadBudget: (expected: SyncJob, now = Date.now()) => change(expected, current => {
+   if (!Number.isSafeInteger(now) || now < 0) throw Error('Invalid upload policy retry time.');
+   if (!['runnable', 'scheduled'].includes(current.state) || current.waitReason !== 'data-budget') return null;
+   const { retryAt: _retry, waitReason: _wait, minimumPartBytes: _minimum, ...rest } = current;
+   return { ...rest, ...(current.state === 'scheduled' ? { nextRunAt: now } : {}) };
+  }),
   retryStrictCapture: (expected: SyncJob, now: number) => change(expected, current => {
    if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(now + SYNC_RETRY_DELAY_MS)) throw Error('Invalid sync retry deadline.');
    if (current.state !== 'runnable' || current.strictCaptureRetries) return null;
@@ -333,4 +341,26 @@ export function syncJobJournal(db: IDBDatabase, access: JournalAccess, keyRange?
 		attention: (expected: SyncJob, cause?: unknown, automaticPhotoRevision?: string) => change(expected, current =>
 			(['runnable', 'scheduled'].includes(current.state) || (current.state !== 'paused' && automaticPhotoRevision !== undefined)) ? { ...current, state: 'attention', failureReason: syncJobFailure(cause), ...(automaticPhotoRevision ? { automaticPhotoRevision } : {}) } : null)
 	};
+}
+
+/** Exact native preference readback may clear a scheduling hint, never usage,
+ * operation identity, receipts, admission or explicit Pause. */
+export async function wakeUploadPolicyJobs(journal: Awaited<ReturnType<typeof openSyncJournal>>,
+ change: { origin: string; ownerId: string; deviceId: string; rootId?: string }, check: () => void) {
+ const discovery: SyncScope = { origin: change.origin, ownerId: change.ownerId, deviceId: change.deviceId, dataPlane: 'home', rootId: 'upload-policy-wake' };
+ const jobs = journal.jobs({ scope: discovery, currentScope: () => { check(); return discovery; } });
+ let after: string | undefined, affected = 0;
+ for (;;) {
+  check(); const page = await jobs.list(after); check();
+  for (const job of page.jobs) {
+   if (job.scope.origin !== change.origin || job.scope.ownerId !== change.ownerId || job.scope.deviceId !== change.deviceId ||
+    (change.rootId !== undefined && job.reviewed.configuration.localRootId !== change.rootId)) continue;
+   const scoped = journal.jobs({ scope: job.scope, currentScope: () => { check(); return job.scope; } });
+   if (await scoped.reconsiderUploadBudget(job)) affected++;
+   check();
+  }
+  if (!page.next) return affected;
+  if (!page.jobs.length || (after !== undefined && page.next <= after)) throw Error('Saved upload policy wake cursor did not advance.');
+  after = page.next;
+ }
 }

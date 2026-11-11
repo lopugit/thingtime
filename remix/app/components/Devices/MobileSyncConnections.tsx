@@ -1334,13 +1334,13 @@ export function SyncConfigurationForm({
             {!photos && iosManagedResources && <PhotoAutomationControls generalUploads transferScope="configuration"
                 policy={{ ...c.uploadPolicy, notificationIntervalMs: 0 }} draft={draft.photoAutomationDraft}
                 disabled={disabled || !uploadPolicySupported || c.mode !== 'backup' || !!c.resourceLimits || !!c.ignoreRules}
-                availability={!uploadPolicySupported ? 'Update Thingtime on this iPhone to manage upload speed and hourly data limits.' : c.mode !== 'backup' ? 'Choose Backup (keep deleted files) to use folder upload limits.' : 'Applies to this backup and inherits stricter device and folder limits. Blank means no configuration limit. Existing hourly usage is retained.'}
+                availability={!uploadPolicySupported ? 'Update Thingtime on this iPhone to manage upload speed and hourly data limits.' : c.mode !== 'backup' ? 'Choose Backup (keep deleted files) to use folder upload limits.' : 'Applies to this backup and inherits stricter device and folder limits. Blank means no configuration limit. Existing hourly usage is retained. CPU, scan and download limits are unavailable on this iPhone.'}
                 scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport} onValidityChange={onResourceValidityChange}
                 onChange={(photoAutomationDraft, policy) => onChange({ ...draft, photoAutomationDraft,
                     configuration: policy ? { ...c, configurationVersion: 5, uploadPolicy: {
                         ...(policy.uploadBytesPerSecond === undefined ? {} : { uploadBytesPerSecond: policy.uploadBytesPerSecond }),
                         ...(policy.uploadBytesPerHour === undefined ? {} : { uploadBytesPerHour: policy.uploadBytesPerHour }) } } : c })} />}
-			{(!photos || showPhotoControls) && <Box as="details" open={showPhotoControls || undefined}><Box as="summary" cursor="pointer" paddingY={2}>{showPhotoControls ? 'Upload speed, data and notifications' : 'Resource limits'}</Box>
+			{((!photos && !iosManagedResources) || showPhotoControls) && <Box as="details" open={showPhotoControls || undefined}><Box as="summary" cursor="pointer" paddingY={2}>{showPhotoControls ? 'Upload speed, data and notifications' : 'Resource limits'}</Box>
 			{showPhotoControls ? <PhotoAutomationControls
 				policy={c.photoAutomation} draft={draft.photoAutomationDraft} disabled={disabled || !photoAutomation}
 				availability={photoAutomation ? 'Thingtime applies these limits to this Photos backup.' : 'Open the paired iPhone’s Thingtime app to edit these settings.'}

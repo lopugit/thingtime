@@ -80,9 +80,9 @@ try {
   assert.equal(await config.getByLabel('Average upload speed',{exact:true}).isDisabled(),true);
   await page.getByText('Update Thingtime on this iPhone to manage upload speed and hourly data limits.',{exact:true}).waitFor();
   await page.evaluate(()=>window.folderLimitsSupported(true));
-  const resources=page.locator('details').filter({has:page.locator('summary').filter({hasText:'Resource limits'})});
-  await resources.locator('summary').click();
-  assert.equal(await resources.getByLabel('CPU target (%)',{exact:true}).isDisabled(),true);
+  assert.equal(await page.locator('summary').filter({hasText:'Resource limits'}).count(),0,'iOS has no duplicate unsupported resource section');
+  assert.equal(await page.getByLabel('CPU target (%)',{exact:true}).count(),0);
+  assert.equal(await page.getByLabel('Download speed',{exact:true}).count(),0);
   for(let i=0;i<20;i++) {const end=await page.evaluate(()=>{window.scrollBy(0,innerHeight*0.8);return scrollY+innerHeight>=document.documentElement.scrollHeight});if(end)break;}
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,label+' no horizontal overflow');
   await page.screenshot({path:join(evidence,label+'.png'),fullPage:true});

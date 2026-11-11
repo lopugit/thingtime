@@ -204,6 +204,25 @@ final class NativeFileUploadJobTests: XCTestCase {
         XCTAssertTrue(batchAcknowledged); XCTAssertEqual(receipts, [1, 2]); XCTAssertEqual(uploads, [1: 1, 2: 1])
     }
 
+    func testPolicyEditReconsidersOnlyMatchingArmedHourlyWaitsAndKeepsPause() throws {
+        for scenario in ["same", "folder", "device", "owner", "paused"] {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = NativePhotoRunStore(directory: directory)
+            var run = try budgetWaitingRun(now: Date())
+            run.stage = "waiting"; run.syncWait = "data-budget"; run.retryAt = Date(timeIntervalSinceNow: 3_600)
+            if scenario == "paused" { run.pauseByUser() }
+            try store.write(run)
+            let worker = NativeDeferredUpload(store: .init(directory: directory), scheduler: DeferredUploadTestScheduler())
+            let selected = scenario == "owner" ? try FileSyncOwnerScope(ownerId: "other", url: run.scope.origin) : run.scope
+            try worker.uploadPolicyChanged(scope: selected, deviceId: scenario == "device" ? "other" : run.authorization.scope.deviceId,
+                rootId: scenario == "folder" ? "other" : run.rootId)
+            let actual = try XCTUnwrap(store.lookup(run))
+            if scenario == "same" { var expected = run; expected.retryAt = .distantPast; XCTAssertEqual(actual, expected) }
+            else { XCTAssertEqual(actual, run) }
+        }
+    }
+
     func testLateVerifiedIdentityStartsPersistedDueRunOnceAfterAlreadyActiveEvent() async throws {
         XCTAssertEqual(UIApplication.shared.applicationState, .active, "Run this lifecycle regression in an active installed test host")
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

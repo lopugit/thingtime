@@ -961,10 +961,6 @@ export function requestMobileFolders(
 	if (!bridge || !supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
 	if (signal.aborted) return Promise.reject(cancelledFolderRequest());
 	const input = structuredClone(request);
-	const send = () => requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
-	// iOS has one folder request slot. Pause commands are local denials
-	// that the native bridge can process immediately even with an active slot.
-	if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
 	const origin = window.location.origin;
 	const generation = rootIdentity.read().generation;
 	const check = () => {
@@ -972,6 +968,20 @@ export function requestMobileFolders(
 		if (signal.aborted || identity.pending || identity.generation !== generation || window.location.origin !== origin || getNativeBridge() !== bridge)
 			throw cancelledFolderRequest();
 	};
+ const send = async () => {
+  const result = await requestMobileFoldersNow(bridge, ownerId, input, signal, onProgress, onBackground);
+  if ((input.action === 'set-upload-policy' && result.uploadPolicy) || (input.action === 'set-photo-transfer-policy' && result.photoTransferPolicy)) {
+   check();
+   const [{ openSyncJournal }, { wakeUploadPolicyJobs, SYNC_UPLOAD_POLICY_CHANGED_EVENT }] = await Promise.all([import('./journal.client'), import('./syncJobJournal')]);
+   check(); const journal = await openSyncJournal();
+   try { await wakeUploadPolicyJobs(journal, { origin, ownerId, deviceId: input.deviceId, rootId: input.rootId }, check); }
+   finally { journal.close(); }
+   check(); window.dispatchEvent(new Event(SYNC_UPLOAD_POLICY_CHANGED_EVENT));
+  }
+  return result;
+ };
+ // Preferences and local denials bypass the long-running folder request slot.
+ if (bridge.platform !== 'ios' || input.action === 'pause-photo-runs' || input.action === 'read-upload-policy' || input.action === 'set-upload-policy' || input.action === 'read-photo-transfer-policy' || input.action === 'set-photo-transfer-policy' || input.action === 'cancel-deferred-upload') return send();
 	const run = (folderRequestTails.get(bridge) ?? Promise.resolve()).then(async () => {
 		check();
 		let result: FolderResult;

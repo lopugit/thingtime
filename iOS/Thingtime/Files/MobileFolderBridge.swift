@@ -652,9 +652,9 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     guard !self.legacyPolicyReloads.contains(key) else { throw LegacyClientUpgrade.unavailable }
                     // Never replace a document containing editable controls,
                     // including unfocused/hidden composers or native sheets.
-                    let editorFree = (try? await webView.evaluateJavaScript("document.readyState === 'complete' && !document.querySelector('input, textarea, select, [contenteditable=true], form, [data-unsaved=true]') && (window.getSelection()?.isCollapsed !== false)")) as? Bool == true
+                    let editorFree = (try? await webView.evaluateJavaScript(Self.legacyUploadDocumentIsIdleScript)) as? Bool == true
                     try current()
-                    guard editorFree, webView.window?.rootViewController?.presentedViewController == nil else { throw LegacyClientUpgrade.editing }
+                    guard editorFree, !webView.isLoading, webView.window?.rootViewController?.presentedViewController == nil else { throw LegacyClientUpgrade.editing }
                     self.legacyPolicyReloads.insert(key)
                     // Reload before dispatching bytes. The existing pagehide path
                     // preserves the runnable journal, operation and reservation.
@@ -702,6 +702,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend(.requestCancelled) }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
+        if requestedAction == "upload-part-authorized", !((payload["upload"] as? [String: Any])?["authorization"] is [String: Any]) {
+            reply("mobile-files-result", base.merging(["error": "The authorized folder uploader requires the exact saved sync authorization. No legacy upload was started."]) { _, new in new })
+            return
+        }
         if ["read-upload-policy", "set-upload-policy", "read-photo-transfer-policy", "set-photo-transfer-policy"].contains(action) {
             // Settings never wait behind a long-running renderer folder slot.
             // They still independently prove the live origin, owner, paired
@@ -735,6 +739,10 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     if let proposed { try policies.save(proposed, scope: scope, deviceId: device, rootId: rootId) }
                     let saved = try policies.read(scope: scope, deviceId: device, rootId: rootId)
                     guard proposed == nil || saved == proposed else { throw MobileFolderStore.Failure.changed }
+                    if proposed != nil {
+                        try NativeDeferredUpload.shared.uploadPolicyChanged(scope: scope, deviceId: device, rootId: rootId)
+                        self.conditionsChanged?()
+                    }
                     var result: [String: Any] = ["deviceId": device, "roots": [[String: Any]](), (general ? "uploadPolicy" : "photoTransferPolicy"): saved.json]
                     if let rootId { result["rootId"] = rootId }
                     try check()
@@ -799,6 +807,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         }
     }
 
+    static let legacyUploadDocumentIsIdleScript = "document.readyState === 'complete' && !document.querySelector('input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=textbox], [role=combobox], form, [data-unsaved=true], [data-draft]') && (window.getSelection()?.isCollapsed !== false)"
     static func legacyUploadRequiresCurrentClient(_ limits: NativePhotoTransferPolicyStore.Limits) -> Bool {
         !limits.rates.isEmpty || limits.device.uploadBytesPerHour != nil || limits.folder.uploadBytesPerHour != nil
     }

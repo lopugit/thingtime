@@ -1,5 +1,6 @@
 import AppleFileSync
 import XCTest
+import WebKit
 @testable import Thingtime
 
 @MainActor
@@ -214,5 +215,37 @@ final class NativeFolderUploadPolicyTests: XCTestCase {
     }
     func testLegacyPartPolicyCapabilityIsAdditive() {
         XCTAssertTrue(MobileFolderBridge.script.source.contains("fileUploadPolicyVersion = '1.0.0'"))
+    }
+}
+
+@MainActor
+final class NativeAuthorizedFolderPartTests: XCTestCase {
+    func testLegacyReloadWithholdsForEditableAndUnsavedDocuments() async throws {
+        let web = WKWebView()
+        for body in ["<input value='draft'>", "<div contenteditable>draft</div>", "<div contenteditable='plaintext-only'>draft</div>", "<div role='textbox'>draft</div>", "<div data-draft='pending'>draft</div>", "<textarea hidden>draft</textarea>", "<p>Read only</p>"] {
+            let token = UUID().uuidString
+            web.loadHTMLString("<html><body data-fixture='" + token + "'>" + body + "</body></html>", baseURL: URL(string: "https://sync.test"))
+            for _ in 0..<100 {
+                if (try? await web.evaluateJavaScript("document.readyState === 'complete' && document.body.dataset.fixture === '" + token + "'")) as? Bool == true { break }
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+            let idle = try await web.evaluateJavaScript(MobileFolderBridge.legacyUploadDocumentIsIdleScript) as? Bool
+            XCTAssertEqual(idle, body == "<p>Read only</p>", body)
+        }
+    }
+
+    func testMissingOrNullAuthorizationCannotFallBackToLegacyUploader() throws {
+        let bridge = MobileFolderBridge(), web = WKWebView(), origin = URL(string: "https://sync.test")!
+        for value: Any? in [nil, NSNull(), "invalid"] {
+            var upload: [String: Any] = [:]
+            if let value { upload["authorization"] = value }
+            var result: [String: Any]?
+            bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": "owner", "action": "upload-part-authorized", "upload": upload]],
+                webView: web, root: origin, currentRoot: { origin },
+                verifyOwner: { _, _ in XCTFail("Missing authorization must be refused before session, grant or legacy work") },
+                pairedDevice: { _, _ in XCTFail("The authorized action must never resolve a legacy device"); return "device" },
+                reply: { _, payload in result = payload })
+            XCTAssertTrue((result?["error"] as? String)?.contains("exact saved sync authorization") == true)
+        }
     }
 }
