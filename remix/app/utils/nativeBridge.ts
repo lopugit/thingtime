@@ -42,6 +42,7 @@ export type ThingtimeNativeBridge = {
 declare global {
   interface Window {
     thingtimeNativeBridge?: ThingtimeNativeBridge;
+    thingtimeAuthenticatorSetup?: { version: string; postMessage: (message: Record<string, string>) => void };
   }
 }
 

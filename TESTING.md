@@ -10941,6 +10941,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Native authenticator links: cold and warm `otpauth://totp` intake reaches
+  the configured signed companion/iOS destination, using normal sign-in.
+  Refuse malformed/duplicate/HOTP/migration input, iframe/wrong-origin delivery,
+  changed document/owner/data plane, expired/cancelled/replayed requests and
+  locked destination metadata. Opening setup never saves or overwrites a draft.
+  Select and edit nested setup text/buttons independently, save layout, reload;
+  review into a new or current non-passkey draft, explicitly Save entry, reopen
+  the saved entry and compare its code with an independent authenticator.
+  Verify URI/seed absence from navigation, persisted layouts, logs and storage.
+  `authenticatorSetup*.test.ts`, Swift `AuthenticatorSetupTests` and
+  `scripts/test-authenticator-setup-ui.mjs` cover synthetic transport regressions;
+  installed menu selection, sign-in and real setup remain independent gates.
+
 - [ ] Browser autofill modal and reconnect: open a website's current-password
   verification modal, then open Thingtime's inline chooser. Ensure it remains
   visible, in the active dialog's accessibility scope, with Tab wrapping inside;

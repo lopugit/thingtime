@@ -2,11 +2,17 @@ import SwiftUI
 import UIKit
 import WebKit
 
+struct AuthenticatorSetupDelivery {
+    let id = UUID()
+    let url: URL
+}
+
 struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
     @Binding var widgetPath: String?
+    @Binding var authenticatorSetup: AuthenticatorSetupDelivery?
     @Binding var lidarRequest: UUID?
 
     func makeCoordinator() -> Coordinator {
@@ -18,6 +24,8 @@ struct WebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
+        configuration.userContentController.addUserScript(AuthenticatorSetupBridge.script)
+        configuration.userContentController.add(context.coordinator, name: AuthenticatorSetupBridge.handler)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
         configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
@@ -29,6 +37,7 @@ struct WebView: UIViewRepresentable {
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
+        context.coordinator.authenticatorSetup.configure(webView: webView, origin: url)
         context.coordinator.shareComposer?.webView = webView
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -51,9 +60,10 @@ struct WebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let rootChanged = context.coordinator.loadedRootURL != url
+        if rootChanged { context.coordinator.authenticatorSetup.cancel() }
         // Consume a pending widget request even when it cannot resolve, so a stale
         // value cannot suppress the teardown for a later destination change.
-        let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+        var widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
         if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
         if lidarRequest != nil {
             DispatchQueue.main.async { lidarRequest = nil }
@@ -61,6 +71,14 @@ struct WebView: UIViewRepresentable {
                 context.coordinator.pendingNativeScanOrigin = url
                 context.coordinator.openLiDAR()
             }
+        }
+        if let delivery = authenticatorSetup, !rootChanged, let loaded = context.coordinator.loadedRootURL {
+            context.coordinator.authenticatorSetup.configure(webView: webView, origin: loaded)
+            context.coordinator.authenticatorSetup.offer(delivery.url, deliveryID: delivery.id)
+            if webView.url?.path != "/passwords" { widgetTarget = loaded.appendingPathComponent("passwords") }
+            DispatchQueue.main.async { if authenticatorSetup?.id == delivery.id { authenticatorSetup = nil } }
+        } else if rootChanged, authenticatorSetup != nil {
+            DispatchQueue.main.async { authenticatorSetup = nil }
         }
         guard rootChanged || widgetTarget != nil else { return }
         context.coordinator.lidar.invalidate()
@@ -101,6 +119,7 @@ struct WebView: UIViewRepresentable {
             configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: ShareComposerBridge.name)
             configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
         }
+        let authenticatorSetup = AuthenticatorSetupBridge()
         let lidar = LiDARBridge()
         let mobileDevice = MobileDeviceBridge()
         let mobileLocation = MobileDeviceLocationBridge()
@@ -155,6 +174,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            authenticatorSetup.navigationStarted()
             lidar.invalidate()
             // A background refresh may construct the initial web scene. Only a
             // foreground navigation invalidates its persisted approval here.
@@ -209,6 +229,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == AuthenticatorSetupBridge.handler { authenticatorSetup.handle(message); return }
             guard message.name == WebView.nativeMessageHandlerName else { return }
             guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
