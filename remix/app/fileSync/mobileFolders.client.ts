@@ -52,6 +52,9 @@ export type MobileFolder = {
 	photoAccess?: 'full' | 'limited' | 'unavailable';
 };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
+/** Current native metadata only. A captured digest remains provisional until
+ * the upload's byte or retained-content proof is checked. */
+export type NativePathStamp = Pick<SyncEntry, 'path' | 'id' | 'version' | 'kind' | 'size'>;
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePolicy').DeviceSyncResourcePolicy; resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
@@ -78,6 +81,7 @@ export type FolderRequest = { deviceResourceLimits?: import('./deviceResourcePol
 	| { action: 'scan-page'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; offset: number; pageSize?: number; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'scan-discard'; rootId: string; inventoryDeviceId: string; capture: NativeInventoryCapture; ignoreRules?: string; capturePolicy?: 'backup-supported' }
 	| { action: 'inspect'; rootId: string; path: string }
+	| { action: 'inspect-stamp'; rootId: string; path: string }
 	| { action: 'observe-path'; rootId: string; path: string; observation: { version: 1; network: 'wifi' | 'any'; chargingOnly: boolean; configurationId: string; configurationRevision: string }; remainingMs: number }
 	| { action: 'version-list'; rootId: string; cursor?: string }
 	| { action: 'version-inspect'; rootId: string; versionId: string; expected: SyncEntry }
@@ -128,6 +132,7 @@ export type FolderResult = {
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
 	inspectedEntry?: SyncEntry | null;
+	inspectedStamp?: NativePathStamp | null;
 	observedEntries?: (SyncEntry | null)[];
 	observationUnavailable?: true;
 	backupCapture?: NativeBackupStatus;
@@ -194,6 +199,7 @@ export const supportsNativeUploadBatches = (bridge: FolderCapabilities | undefin
 export const supportsNativeFolderBatches = (bridge: FolderCapabilities | undefined) =>
 	bridge?.platform === 'macos' && supportsNativeAuthorizationContext(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileFolderBatchVersion ?? '');
 export const supportsNativePathObservation = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.21.0');
+export const supportsNativePathStamp = (bridge: FolderCapabilities | undefined) => bridge?.platform === 'macos' && capabilitySatisfies(bridge.fileAccessVersion ?? '', '1.22.0');
 /** These native access contracts independently add exact single-path inspection. */
 export const supportsNativeInventoryPages = (bridge: FolderCapabilities | undefined = getNativeBridge()) => {
 	const minimum = bridge?.platform === 'macos' ? 5 : bridge?.platform === 'ios' ? 3 : undefined;
@@ -825,6 +831,15 @@ export function parseMobileFolderResult(
 			(payload.entry !== null && (!validSyncEntry(payload.entry) || payload.entry.path !== request.path)))
 			throw Error('Invalid native path observation.');
 		result.inspectedEntry = payload.entry === null ? null : structuredClone(payload.entry);
+	} else if (request.action === 'inspect-stamp') {
+		const stamp = payload.stamp;
+		if (!validSyncPath(request.path) || payload.rootId !== request.rootId || payload.path !== request.path || payload.complete !== true ||
+			(stamp !== null && (!stamp || Object.keys(stamp).some(key => !['path', 'id', 'version', 'kind', 'size'].includes(key)) ||
+				stamp.path !== request.path || typeof stamp.id !== 'string' || stamp.id.length < 1 || stamp.id.length > 512 ||
+				typeof stamp.version !== 'string' || stamp.version.length < 1 || stamp.version.length > 512 ||
+				!['file', 'folder'].includes(stamp.kind) || !Number.isSafeInteger(stamp.size) || stamp.size < 0)))
+			throw Error('Invalid native path stamp.');
+		result.inspectedStamp = stamp === null ? null : structuredClone(stamp);
 	} else if (request.action === 'scan') {
 		const exclusions = verifyScanExclusions(request, payload.excludedPaths), ignored = createSyncIgnorePolicy(request.ignoreRules);
 		if (
@@ -978,6 +993,8 @@ function requestMobileFoldersNow(
 		return Promise.reject(Error('Compound observation requires a supported app and a relative path.'));
 	if (request.action === 'inspect' && (!supportsNativePathInspection(bridge) || !validSyncPath(request.path)))
 		return Promise.reject(Error('Path inspection requires a supported app and a relative path.'));
+	if (request.action === 'inspect-stamp' && (!supportsNativePathStamp(bridge) || !validSyncPath(request.path)))
+		return Promise.reject(Error('Path stamp inspection requires a supported Mac app and a relative path.'));
 	if (request.action === 'upload-single' && (!supportsNativeSingleUpload(bridge) || !validFileUpload(request.upload) || request.upload.source.size > UPLOAD_BATCH_FILE_BYTES)) return Promise.reject(Error('Unsupported native single upload.'));
 	if (request.action === 'run-photo-in-background' && !supportsNativePhotoContinuation(bridge))
 		throw Error('This iPhone does not support starting continued Photos work.');

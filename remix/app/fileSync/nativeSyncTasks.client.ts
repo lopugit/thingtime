@@ -33,7 +33,7 @@ import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
 import { createAutomaticStoragePlacement } from './automaticStoragePlacement';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
-import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
+import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativePathStamp, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
 import { approveMobileSyncTarget } from './mobileSyncTarget.client';
 import { runNativePhotoQueue, runPhotoBackupPasses } from './photoBackupPasses';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
@@ -133,6 +133,18 @@ async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, sc
     const jobs = journal.jobs({ scope: binding, currentScope: check, signal });
     const prior = await jobs.read();
     if (prior && syncJobEnabled(prior) && prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) return prior;
+    // A recovered Save & Sync intent can refer to the exact job that needs
+    // attention. Re-admit that job under its original ID; the worker will
+    // verify the saved config, grants and native write approval before effects.
+    // A strict scanner still needs its explicit native cleanup on the idle lane.
+    if (prior?.state === 'attention' && prior.nextRunAt === undefined && !prior.strictCaptureId && !prior.folderSetupPaused &&
+     prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) {
+     const resumed = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined,
+      { previous: prior, pendingFolderValidation: true });
+     check();
+     if (!respectPause) nativeSyncTasks.resumeScope(binding);
+     return resumed;
+    }
     // Replacing an unfinished old config can require verified native scanner
     // cancellation. Queue only first-time configs while the lane is occupied.
     if (prior && prior.state !== 'complete')
@@ -259,7 +271,7 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 	const progressKey = 'tt:sync-progress:' + syncScopeKey(binding);
 	const persistProgress = (value: ForegroundSyncProgress) => writeStampedCache(progressKey, value);
 	const stopCleanup = createSyncStopCleanup(async () => { if (resume) throw Error('Transfer stopped, but saved native cleanup could not be opened. Reopen this connection before resuming.'); });
-	let stopRequested = false, saveStop: (() => Promise<void>) | undefined, cancelCapture: (() => Promise<void>) | undefined;
+	let stopRequested = false, saveStop: (() => Promise<void>) | undefined, cancelCapture: ((streamingOnly?: boolean) => Promise<void>) | undefined;
 	await nativeSyncTasks.start(binding, async (signal, update) => {
 		const disposeActivity = activityManager.register({id:'sync.execution',title:'File transfer and filesystem indexing',kind:'watcher',background:true,detail:'Owns the current index, upload/download runner, index change reads and their native tasks. Disable to cancel this runner; saved transfer work is retained.'}, activitySignal => {
 			const disabled=()=>{if(activitySignal.reason==='disabled') void cancelSyncForActivity(nativeSyncTasks).catch(() => {});};
@@ -308,8 +320,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				catch { failure ??= Error('Pause saved. Native indexing cleanup could not be confirmed; reopen this connection before resuming.'); }
 				if (failure) throw failure;
 			};
-			cancelCapture = async () => {
-				await cancelStrictCapture();
+			cancelCapture = async (streamingOnly = false) => {
+				if (!streamingOnly) await cancelStrictCapture();
 				// Cleanup must outlive the aborted execution host, while retaining
 				// the same account generation, adapter, origin, device and root.
 				const cleanupSignal = AbortSignal.timeout(10_000);
@@ -317,10 +329,10 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				const streaming = await journal!.pagedRuns({ scope: binding, currentScope: () => { cleanupCheck(); return binding; } }).active();
 				const captures = [
 					...(streaming?.spec.streaming && streaming.spec.streaming.source !== 'remote' ? [{ id: streaming.spec.streaming.captureId, policy: 'one-way-supported' as const }] : []),
-					...((job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
+					...(!streamingOnly && (job ?? resume)?.nativeCaptureId ? [{ id: (job ?? resume)!.nativeCaptureId!, policy: 'backup-supported' as const }] : [])
 				];
 				const cancelDeferred = reviewed.configuration.sourceKind === 'photos' && adapter.platform === 'ios' && supportsNativeDeferredUploads(adapter.bridge);
-				if (cancelDeferred) {
+				if (cancelDeferred && !streamingOnly) {
 					cleanupCheck();
 					if (window.location.origin !== binding.origin || !isNativeSyncAdapterCurrent(adapter)) throw Error('The selected sync server changed.');
 					await requestMobileFolders(binding.ownerId, { action: 'cancel-deferred-upload',
@@ -641,6 +653,8 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 						observeLocal: nativePathObserver(host, binding.ownerId, signal),
 						...(inspect ? { inspectLocal: async (path: string) => (await request(binding.ownerId,
 							{ action: 'inspect', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedEntry! } : {}),
+						...(supportsNativePathStamp(capabilities) && reviewed.configuration.sourceKind !== 'photos' ? { inspectLocalStamp: async (path: string) => (await request(binding.ownerId,
+							{ action: 'inspect-stamp', rootId: reviewed.configuration.localRootId, path }, signal)).inspectedStamp! } : {}),
 						inventory: () => readCloudFolderInventory(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal }),
 						inventoryPages: (options?: { signal?: AbortSignal }) => readCloudFolderInventoryPages(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: options?.signal ?? signal }),
 						source: async entry => mobileFolderSource(binding.ownerId, reviewed.configuration.localRootId, entry, signal, request, capabilities, !resume, photoDownloadApproval()),
@@ -711,10 +725,13 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				if (finished?.state === 'scheduled' && adapter.platform === 'macos') await setDesktopSyncScheduled(true, adapter.bridge);
 			}, undefined, signal);
 		} catch (error) {
-			// If the remote feed or a guarded transfer fails, stop only this
-			// connection's native scanner. The durable stream ID/cursors stay
-			// intact for retry, and a failed account check cannot cancel another run.
-			if (reviewed.configuration.mode === 'two-way' && !signal.aborted) await cancelCapture?.().catch(() => {});
+			// Releasing this JS lane must also release the native scanner so another
+			// config can run. Its positive observations and receipts stay durable;
+			// a stopped native generation reconciles through a fresh sealed scan.
+			if (!signal.aborted) {
+				if (reviewed.configuration.mode === 'two-way') await cancelCapture?.().catch(() => {});
+				else if (reviewed.configuration.sourceKind === 'folder') await cancelCapture?.(true).catch(() => {});
+			}
 			const failed = job ?? recoveryCandidate;
    if (failed && jobs && !signal.aborted && !photoAutomation && error instanceof NativeStrictInventoryInterrupted &&
     await jobs.retryStrictCapture(failed, Date.now())) {

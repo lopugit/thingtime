@@ -195,6 +195,161 @@ test(
 	}
 );
 
+test('one-way upload source change during staged bytes retires only the unpublished revision', { timeout: 5000 }, async () => {
+	const { streamingFileFixture } = await import('./streamingFile.fixture');
+	const f = await streamingFileFixture(), changed = deferred();
+	const originalFetch = f.input.runtime.fetch;
+	let once = false;
+	f.input.runtime.fetch = async (target, init) => {
+		const response = await originalFetch(target, init);
+		if (!once && new URL(String(target)).origin === 'https://objects.test') {
+			once = true;
+			await f.revise([4, 5, 6]);
+			changed.resolve();
+		}
+		return response;
+	};
+	f.input.streamLocalChanges = async function* (id) {
+		yield page(id, [f.entry()]);
+		await changed.promise;
+		yield page(id, [f.entry()], 1, true);
+	};
+	const dispatches: string[] = [];
+	const pagedRuns = f.input.journal.pagedRuns.bind(f.input.journal);
+	f.input.journal = { ...f.input.journal, pagedRuns: (...args) => {
+		const runs = pagedRuns(...args);
+		return { ...runs, markStreamCanonicalDispatch: async (...values) => {
+			dispatches.push(values[1]);
+			return runs.markStreamCanonicalDispatch(...values);
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, f.input, new AbortController().signal);
+	assert.equal(f.publications(), 1);
+	assert.equal(dispatches.length, 1, 'the changed source revision never receives a publication fence');
+	assert.deepEqual(f.objects.get([...f.files.values()][0].content.attachmentId), new Uint8Array([4, 5, 6]));
+	f.journal().close();
+});
+test('legacy dispatched upload marker waits for an exact server fence before replacing changed source', { timeout: 10000 }, async () => {
+	const { streamingFileFixture } = await import('./streamingFile.fixture');
+	const f = await streamingFileFixture(), terminal = deferred();
+	const fetch = f.input.runtime.fetch, terminals = new Map<string, object>();
+	f.input.runtime.fetch = async (target, init) => {
+		const url = new URL(String(target)), body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+		if (url.pathname === '/api/v1/files' && body?.kind === 'terminal-no-effect') {
+			terminals.set(body.operationId, body);
+			terminal.resolve();
+			return Response.json({ ok: true, status: 'terminal', fence: body, replayed: false });
+		}
+		if (url.pathname === '/api/v1/files' && url.searchParams.has('operationId') && terminals.has(url.searchParams.get('operationId')!))
+			return Response.json({ ok: true, receipt: null, terminal: terminals.get(url.searchParams.get('operationId')!) });
+		return fetch(target, init);
+	};
+	const old = f.entry();
+	f.input.streamLocalChanges = async function* (id) {
+		yield page(id, [old]);
+		await terminal.promise;
+		yield page(id, [f.entry()], 1, true);
+	};
+	const pagedRuns = f.input.journal.pagedRuns.bind(f.input.journal);
+	let markedId: string | undefined;
+	f.input.journal = { ...f.input.journal, pagedRuns: (...args) => {
+		const runs = pagedRuns(...args);
+		return { ...runs, claimNext: async (...values) => {
+			const operation = await runs.claimNext(...values);
+			if (operation && !markedId) {
+				markedId = operation.id;
+				await runs.markStreamCanonicalDispatch(values[0], operation.id);
+				await f.revise([4, 5, 6]);
+			}
+			return operation;
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, f.input, new AbortController().signal);
+	assert.equal(terminals.size, 1);
+	assert.ok(terminals.has(markedId!));
+	assert.equal(f.publications(), 1, 'only the fresh source revision publishes');
+	assert.deepEqual(f.objects.get([...f.files.values()][0].content.attachmentId), new Uint8Array([4, 5, 6]));
+	f.journal().close();
+});
+test('a terminal fence accepted before a lost reply replays on restart without another fence write', { timeout: 10000 }, async () => {
+	const { streamingFileFixture } = await import('./streamingFile.fixture');
+	const f = await streamingFileFixture(), observed = deferred();
+	const fetch = f.input.runtime.fetch;
+	let fence: { kind: 'terminal-no-effect'; id: string; operationId: string; expectedRevision: null } | undefined;
+	let fencePosts = 0;
+	f.input.runtime.fetch = async (target, init) => {
+		const url = new URL(String(target)), body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+		if (url.pathname === '/api/v1/files' && body?.kind === 'terminal-no-effect') {
+			fencePosts++;
+			throw Error('A replayed terminal receipt must not issue another fence.');
+		}
+		if (url.pathname === '/api/v1/files' && url.searchParams.has('operationId') && fence?.operationId === url.searchParams.get('operationId')) {
+			observed.resolve();
+			return Response.json({ ok: true, receipt: null, terminal: fence });
+		}
+		return fetch(target, init);
+	};
+	const old = f.entry();
+	f.input.streamLocalChanges = async function* (id) {
+		yield page(id, [old]);
+		await observed.promise;
+		yield page(id, [f.entry()], 1, true);
+	};
+	const pagedRuns = f.input.journal.pagedRuns.bind(f.input.journal);
+	f.input.journal = { ...f.input.journal, pagedRuns: (...args) => {
+		const runs = pagedRuns(...args);
+		return { ...runs, claimNext: async (...values) => {
+			const operation = await runs.claimNext(...values);
+			if (operation && !fence) {
+				await runs.markStreamCanonicalDispatch(values[0], operation.id);
+				fence = { kind: 'terminal-no-effect', id: operation.id, operationId: operation.id, expectedRevision: null };
+				await f.revise([7, 8, 9]);
+			}
+			return operation;
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, f.input, new AbortController().signal);
+	assert.equal(fencePosts, 0);
+	assert.equal(f.publications(), 1);
+	assert.deepEqual(f.objects.get([...f.files.values()][0].content.attachmentId), new Uint8Array([7, 8, 9]));
+	f.journal().close();
+});
+test('a refused terminal fence retains the original marked upload and never replaces it', { timeout: 10000 }, async () => {
+	const { streamingFileFixture } = await import('./streamingFile.fixture');
+	const f = await streamingFileFixture(), fetch = f.input.runtime.fetch;
+	let refused = 0, originalId: string | undefined;
+	f.input.runtime.fetch = async (target, init) => {
+		const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+		if (new URL(String(target)).pathname === '/api/v1/files' && body?.kind === 'terminal-no-effect') {
+			refused++;
+			return Response.json({ ok: false, error: 'Storage temporarily unavailable' }, { status: 503 });
+		}
+		return fetch(target, init);
+	};
+	f.input.streamLocalChanges = async function* (id) { yield page(id, [f.entry()], 0, true); };
+	const pagedRuns = f.input.journal.pagedRuns.bind(f.input.journal);
+	f.input.journal = { ...f.input.journal, pagedRuns: (...args) => {
+		const runs = pagedRuns(...args);
+		return { ...runs, claimNext: async (...values) => {
+			const operation = await runs.claimNext(...values);
+			if (operation && !originalId) {
+				originalId = operation.id;
+				await runs.markStreamCanonicalDispatch(values[0], operation.id);
+				await f.revise([8, 9, 10]);
+			}
+			return operation;
+		} };
+	} };
+	await assert.rejects(streamOneWayForegroundSync(saved, scope, f.input, new AbortController().signal), /503/);
+	const active = await pagedRuns({ scope, currentScope: f.input.currentScope }).active();
+	assert.equal(refused, 1);
+	assert.equal(f.publications(), 0);
+	assert.equal(active?.progress.operations, 1);
+	assert.equal((await pagedRuns({ scope, currentScope: f.input.currentScope }).reservedPublication(active!.spec))?.operationId, originalId);
+	assert.equal((await pagedRuns({ scope, currentScope: f.input.currentScope }).reservedPublication(active!.spec))?.canonicalDispatched, true);
+	f.journal().close();
+});
+
 test(
 	'only a never-started structurally initial upload migrates; source evidence remains and running receipt IDs are preserved',
 	{ timeout: 5000 },
@@ -245,6 +400,15 @@ test('download bytes publish while cloud inventory is still producing pages and 
 	f.objects.set('remote-original', new Uint8Array([1, 2, 3]));
 	const local = new Map<string, import('./reconcile').SyncEntry>(),
 		receipts = new Map<string, import('./execute').SyncReceipt>();
+	const dispatches: string[] = [];
+	const pagedRuns = f.input.journal.pagedRuns.bind(f.input.journal);
+	f.input.journal = { ...f.input.journal, pagedRuns: (...args) => {
+		const runs = pagedRuns(...args);
+		return { ...runs, markStreamCanonicalDispatch: async (...values) => {
+			dispatches.push(values[1]);
+			return runs.markStreamCanonicalDispatch(...values);
+		} };
+	} };
 	let finished = false;
 	const read = f.input.readConfiguration;
 	f.input.readConfiguration = async () => ({ ...((await read()) as object), crystal: download.configuration });
@@ -257,12 +421,14 @@ test('download bytes publish while cloud inventory is still producing pages and 
 		lookup: async (op) => (receipts.has(op.id) ? { status: 'complete', receipt: receipts.get(op.id)! } : { status: 'missing' }),
 		stage: async (op, binding, source) => {
 			assert.equal(op.mutation.kind, 'copy');
+			assert.equal(dispatches.length, 0, 'download staging is not a publication');
 			const bytes = await source!.read(0, source!.size);
 			assert.deepEqual(bytes, new Uint8Array([1, 2, 3]));
 			return { operationId: op.id, scope: binding, token: op.id, entry: { ...entry, id: 'staged', version: 'staged' } };
 		},
 		publish: async (op, binding, stage) => {
 			assert.equal(finished, false);
+			assert.deepEqual(dispatches, [op.id], 'the original ID is fenced immediately before native publication');
 			local.set(stage.entry.path, stage.entry);
 			const receipt = { operationId: op.id, scope: binding, entry: stage.entry };
 			receipts.set(op.id, receipt);
@@ -286,6 +452,7 @@ test('download bytes publish while cloud inventory is still producing pages and 
 	await streamOneWayForegroundSync(download, scope, f.input, new AbortController().signal);
 	assert.equal(local.size, 1);
 	assert.equal(receipts.size, 1);
+	assert.equal(dispatches.length, 1);
 	assert.equal(f.puts(), 0);
 	f.journal().close();
 });

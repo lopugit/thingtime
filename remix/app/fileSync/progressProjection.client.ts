@@ -6,6 +6,20 @@ import type { InventoryCursor, InventoryIdentity } from './inventoryJournal';
 import { assertProgressScope, parseSyncProgressDescriptor, type SyncProgressDescriptor, type SyncProgressRow, type SyncProgressSource } from './progressProjection';
 import { syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 
+/** Read only the currently reserved identity from the same fenced journal as
+ * progress. A missing reservation is not evidence that cloud work completed. */
+export async function readReservedSyncPublication(descriptor: SyncProgressDescriptor, currentScope: () => SyncScope,
+	open: typeof openSyncJournal = openSyncJournal, signal?: AbortSignal) {
+	const saved = parseSyncProgressDescriptor(descriptor);
+	assertProgressScope(saved, currentScope); signal?.throwIfAborted();
+	const journal = await open();
+	try {
+		const result = await journal.pagedRuns({ scope: saved.scope, currentScope, signal }).reservedPublication(saved.run);
+		assertProgressScope(saved, currentScope); signal?.throwIfAborted();
+		return result;
+	} finally { journal.close(); }
+}
+
 /** Each query owns its journal handle and abort signal. Stopping an uploader
  * does not revoke read access; account/origin/root changes do. */
 export function createJournalSyncProgressSource(descriptor: SyncProgressDescriptor, currentScope: () => SyncScope,
