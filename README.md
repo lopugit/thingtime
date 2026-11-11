@@ -2513,18 +2513,21 @@ principals whose network context AWS redacts:
 }
 ```
 
-Configure CORS with one exact origin per bucket, `PUT`, and the one
+Configure CORS with one exact origin per bucket, `PUT`, `GET`, `HEAD`, and the one
 application-authored request header: the production Thingtime origin for the
 production bucket, and `https://dev.thingtime.com` for the develop bucket. The
 uploader deliberately sends a Blob with no `Content-Type`, and completion
 obtains ETags/checksums server-side with ListParts, so no S3 response headers
-need to be exposed:
+need to be exposed. Encrypted password attachments fetch signed GET responses in
+the browser before decrypting them; PUT-only CORS permits uploads but makes
+downloads fail. Keep the exact environment origin, existing working rules and
+headers; CORS does not make the bucket public or replace signed authorization:
 
 ```json
 [
 	{
 		"AllowedHeaders": ["x-amz-checksum-sha256"],
-		"AllowedMethods": ["PUT"],
+		"AllowedMethods": ["PUT", "GET", "HEAD"],
 		"AllowedOrigins": ["https://<environment-origin>"],
 		"ExposeHeaders": [],
 		"MaxAgeSeconds": 300
@@ -3575,16 +3578,17 @@ Forks should first add their own wildcard to Vercel and copy every CNAME or
 verification record Vercel currently displays for that domain; do not copy
 another project's account-specific targets.
 
-The develop S3 bucket permits browser upload CORS from the stable development
-origin, the controller-managed PR aliases, and Thingtime's generated Vercel
-Preview hostnames. Downloads remain same-origin through Thingtime and the
-bucket stays private:
+The develop S3 bucket permits upload and signed encrypted-file download CORS
+from the stable development origin, the controller-managed PR aliases, and
+Thingtime's generated Vercel Preview hostnames. Ordinary attachment downloads
+use the same-origin Thingtime path; encrypted password files fetch signed storage
+responses for browser decryption. The bucket stays private:
 
 ```json
 [
 	{
 		"AllowedHeaders": ["x-amz-checksum-sha256"],
-		"AllowedMethods": ["PUT"],
+		"AllowedMethods": ["PUT", "GET", "HEAD"],
 		"AllowedOrigins": ["https://dev.thingtime.com", "https://*.previews.dev.thingtime.com", "https://thingtime-*-lopugits-projects.vercel.app"],
 		"ExposeHeaders": [],
 		"MaxAgeSeconds": 300
