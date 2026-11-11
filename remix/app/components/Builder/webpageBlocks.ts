@@ -35,6 +35,7 @@ export interface WebpageBlock {
 	// component
 	component?: string;
 	args?: Record<string, string | number | boolean>;
+	argBindings?: Record<string, string | number | boolean>;
 	// container
 	direction?: WebpageContainerDirection;
 	gap?: number;

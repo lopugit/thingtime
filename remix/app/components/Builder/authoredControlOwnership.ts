@@ -4,7 +4,10 @@
 export function ownsAuthoredControl(boundary: HTMLElement, control: Element): boolean {
 	let node: Element = control;
 	const documents = new Set<Document>();
-	while (!boundary.contains(node)) {
+	while (true) {
+		const surface = node.closest?.('[data-live]');
+		if (surface && surface !== boundary && !surface.contains(boundary)) return false;
+		if (boundary.contains(node)) return true;
 		const document = node.ownerDocument;
 		if (document === boundary.ownerDocument || documents.has(document)) return false;
 		documents.add(document);
@@ -16,5 +19,4 @@ export function ownsAuthoredControl(boundary: HTMLElement, control: Element): bo
 			return false;
 		}
 	}
-	return true;
 }
