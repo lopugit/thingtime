@@ -2652,6 +2652,37 @@ jobs:
           ROUTING_PROOF_ISSUED_AT: ${{ needs.route.outputs.routing_proof_issued_at || '' }}
         run: |
           set -euo pipefail
+
+          # This step mutates nothing until the dispatch loop at its end, so
+          # every worker inventory read before that loop is a precondition,
+          # not work in progress. When GitHub cannot answer one, the correct
+          # answer is the deferral the fleet-queue and priority-queue reads
+          # below already publish — a notice and `exit 0`, because a later
+          # detector re-enters this step on the next event or scheduled sweep.
+          #
+          # Both inventories were raw `gh api` reads under `set -euo
+          # pipefail`. An exhausted installation API budget is shared
+          # account-wide, self-healing at a published reset, caused by no PR
+          # and clearable by none, yet it answers HTTP 403 (or a status-less
+          # `GraphQL:` document) and so exited this step 1. Because `handoff`
+          # runs on base pushes, the resulting red `Hand off the selected PR
+          # batch ...` check is published against EVERY open PR and outlives
+          # the reset: nothing re-enters the step until a head moves again.
+          # The budget wording follows the reviewed `GH_BUDGET_EXHAUSTED` in
+          # .github/scripts/codeql-open-pr-backfill.mjs, which accepts both
+          # "exceeded" and "already exceeded" and the secondary limit.
+          defer_unreadable_worker_inventory() {
+            local label="$1" errors="$2"
+            sed -n '1,12p' "$errors" >&2 || true
+            if grep -Eq 'API rate limit (already )?exceeded|exceeded a secondary rate limit' "$errors"; then
+              echo "::notice::GitHub's shared installation API budget is exhausted; deferring conflict dispatch to a later detector."
+            else
+              echo "::notice::Could not read $label (error surfaced above); deferring conflict dispatch to a later repository scan."
+            fi
+            rm -f "$errors"
+            exit 0
+          }
+
           # Every base push can produce several equivalent detector events
           # (push, pull_request_target, check_run and workflow_run). Their
           # immutable worker batches used to accumulate behind the one Lopu
@@ -2665,7 +2696,8 @@ jobs:
           # matrix work, and immediately recheck each run before cancellation.
           # The new batch below re-derives live refs and mergeability, so those
           # never-started snapshots are obsolete.
-          queued_worker_ids="$(
+          queued_workers_error="$RUNNER_TEMP/lopu-queued-workers-read.err"
+          if ! queued_worker_ids="$(
             gh api --paginate \
               "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=queued&per_page=100" \
               --jq '
@@ -2677,8 +2709,13 @@ jobs:
                   )
                 | .id
               ' \
+              2>"$queued_workers_error" \
               | sort -un
-          )"
+          )"; then
+            defer_unreadable_worker_inventory \
+              'the queued Lopu worker inventory' "$queued_workers_error"
+          fi
+          rm -f "$queued_workers_error"
 
           cancelled_worker_ids=""
           while IFS= read -r queued_run_id; do
@@ -2736,7 +2773,9 @@ jobs:
           # can prove which currently latent PRs they own. Preserve the active
           # run and defer broad replacement dispatch until it drains; the next
           # event or scheduled sweep then uses the discoverable matrix format.
-          legacy_worker_ids="$(
+          legacy_workers_error="$RUNNER_TEMP/lopu-legacy-workers-read.err"
+          : >"$legacy_workers_error"
+          if ! legacy_worker_ids="$(
             for legacy_status in pending in_progress; do
               gh api --paginate \
                 "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&status=$legacy_status&per_page=100" \
@@ -2746,9 +2785,14 @@ jobs:
                   | select(.actor.login == "github-actions[bot]")
                   | select(.display_title == "Lopu resolves a PR batch from the control plane")
                   | .id
-                '
+                ' \
+                2>>"$legacy_workers_error"
             done | sort -un
-          )"
+          )"; then
+            defer_unreadable_worker_inventory \
+              'the legacy Lopu worker inventory' "$legacy_workers_error"
+          fi
+          rm -f "$legacy_workers_error"
           if [ -n "$legacy_worker_ids" ]; then
             legacy_label="$(paste -sd, <<<"$legacy_worker_ids")"
             echo "Legacy Lopu batch run(s) $legacy_label still own latent conflict selections; deferring replacement dispatch until they drain."
