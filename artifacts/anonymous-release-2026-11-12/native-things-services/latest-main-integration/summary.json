@@ -1,0 +1,34 @@
+{
+  "scope": "Final integration of main426fbef9; earlier unchanged service/storage evidence retained",
+  "sourceFileCount": 5499,
+  "suites": {
+    "file-sync": {
+      "tests": 928,
+      "pass": 928,
+      "fail": 0,
+      "skipped": 0
+    },
+    "mobile-device-bridge": {
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0
+    },
+    "capabilities": {
+      "tests": 211,
+      "pass": 211,
+      "fail": 0,
+      "skipped": 0
+    }
+  },
+  "total": {
+    "tests": 1146,
+    "pass": 1146,
+    "fail": 0,
+    "skipped": 0
+  },
+  "fullLint": {
+    "errors": 0,
+    "warnings": 375
+  }
+}

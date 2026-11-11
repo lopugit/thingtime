@@ -160,7 +160,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-11-12: Integrate main `762afab2` into the offline-workspace branch,
+- 2026-11-12: Integrate main `762afab2` and `426fbef9` into the offline-workspace branch,
   retaining iOS folder-upload policy and multipart recovery alongside native
   database contracts. Give their combined Things contract a distinct 1.65
   version and align the file-route regression with the existing 1.13.1 contract.
@@ -290,6 +290,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Add a transactional BSON/SQLite storage primitive and real file-recovery tests;
   canonical API and iOS storage integration remain unfinished. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
+
+- **2026-11-12 — iOS automatic setup:** Native device pairing 1.2.0 queues
+  same-scope status checks behind startup connection work, revalidates authority
+  for each caller, and preserves scoped cancellation. Removed the ineffective
+  client delay retry; added native race and durable automatic-enrollment tests.
+  Recover only an unexecuted legacy setup whose saved version-1 policy changed
+  solely to deletion-disabled Backup, preserving job identity, Pause, cadence
+  and atomic previous-job evidence. [PR1488 details](../PRs/1488-codex-ios-enrollment-claim-diagnostics-recover-saved-ios-folder-backup-setup-safely.md).
 
 - 2026-11-12: Label current sync attempt bytes separately from the most recent
   measured saved attempt in loaded activity history. Keep unknown bytes unknown,

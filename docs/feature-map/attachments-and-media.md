@@ -52,6 +52,16 @@ instead of rejecting concurrent Photos reservations (`api.files` 1.13.1).
 Exercise five concurrent reserves through the built HTTP API, plus FIFO,
 cancellation, access revalidation and deadline checks in `inventory.test.ts`.
 
+iOS automatic setup uses native device pairing 1.2.0 to queue same-scope
+status behind connection work with fresh authority and independent cancellation.
+`MobileDeviceBridgeQueueTests` reproduces startup contention beyond the former
+client delay; `syncEnrollmentRecoveryBusy.test.ts` exercises natural recovery
+through durable admission. See [device sync configs](../device-sync-configs.md).
+`folderSetupRecovery.ts` narrows only an unexecuted version-1 Two-way setup to
+the exact saved deletion-disabled Backup. `syncJobJournal.ts` audits all scoped
+execution stores and records the old job atomically with admission;
+`folderSetupRecovery.test.ts` covers no-effects, Pause/CAS and storage failures.
+
 Folder management and its sync configs share the editable device UI. Enrollment
 and config-scoped activity live in `fileSync/`; shared file payloads use the
 protected `attachments/attachmentBlobs.ts` lifecycle and

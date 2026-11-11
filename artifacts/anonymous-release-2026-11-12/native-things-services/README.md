@@ -28,7 +28,29 @@ These are service/primitive fixtures, not a claim of native HTTP activation.
 - Request/provider/identity/lifetime, membership pagination, completion-receipt
   binding and no-hosted-fallback checks are retained.
 
-## Latest main integration
+## Final main refresh
+
+Main advanced during validation, so the branch also integrates
+`426fbef9171399b0cc248b5126b96f118b932bad` (saved iOS folder-setup recovery and
+device-pairing queues). Runtime source merged without conflicts; both changelog
+additions are retained and generated graph snapshots are regenerated.
+
+All 10 [final integration commands](latest-main-integration/verification.json)
+pass against 5,499 unchanged source files: 1,146 file-sync/device-bridge/capability
+tests pass with no failures or skips, followed by TypeScript, zero-error ratchet,
+full lint (0 errors/375 warnings), canonical build/inventory and both actual
+database HTTP/restart fixtures. Earlier unchanged service, storage and permission
+evidence below remains applicable; these counts are not added together as unique
+tests. The final compiled Nitro hash is
+`4ae9238068bb5bf4c0516e8af1eca3af9daad9df176473383f3081c9b9ece00a`.
+
+The [updated isolated iOS compile](ios-latest-main-integration/verification.json)
+passes against that same payload and the changed native device bridge. All 1,846
+canonical files match prepared/built copies with only two pinned addon
+substitutions; native source remains unchanged. Launch, Keychain, account HTTP,
+physical-device and UI acceptance remain unverified.
+
+## First main integration
 
 Main `762afab2fd157f8490c53fb497cbb31fcf2071b3` is integrated with the service
 checkpoint. The combined contract is `api.things` 1.65.0: both parents used 1.64

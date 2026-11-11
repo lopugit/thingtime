@@ -71,19 +71,22 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 			const attemptKey = JSON.stringify([key, draft.id, intent.savedRevision]);
 			if (retryAfter.has(attemptKey) || (local && nativeSyncTasks.isPaused(binding))) continue;
 			const cancellation = new AbortController();
-			const release = claimSyncEnrollment(scope, cancellation);
+			const release = claimSyncEnrollment(scope, cancellation, draft.id);
 			if (!release) break;
 			attempted++;
 			const deadline = AbortSignal.any([signal, cancellation.signal, AbortSignal.timeout(12_000)]);
+			release.phase('claimed', deadline);
 			const changed = (event: StorageEvent) => {
 				if (event.key !== key && event.key !== null) return;
 				try { if (storage.getItem(key) !== state.raw) cancellation.abort(); } catch { cancellation.abort(); }
 			};
 			window.addEventListener('storage', changed);
 			const current = () => {
-				checkIdentity(); deadline.throwIfAborted();
-				if (storage.getItem(key) !== state.raw || (local && (!adapter || !isNativeSyncAdapterCurrent(adapter) || nativeSyncTasks.isPaused(binding))))
-					throw Error('This saved automatic setup changed.');
+				try { checkIdentity(); } catch (cause) { release.phase('recovery-identity', undefined, { code: 'identity-changed', identityCurrent: false }); throw cause; }
+				try { deadline.throwIfAborted(); } catch (cause) { release.phase('recovery-deadline', undefined, { code: 'deadline' }); throw cause; }
+				if (storage.getItem(key) !== state.raw) { release.phase('recovery-storage', undefined, { code: 'storage-changed', storageCurrent: false }); throw Error('This saved automatic setup changed.'); }
+				if (local && (!adapter || !isNativeSyncAdapterCurrent(adapter))) { release.phase('recovery-adapter', undefined, { code: 'adapter-changed', adapterCurrent: false }); throw Error('This saved automatic setup changed.'); }
+				if (local && nativeSyncTasks.isPaused(binding)) { release.phase('recovery-pause', undefined, { code: 'locally-paused', locallyPaused: true }); throw Error('This saved automatic setup changed.'); }
 			};
 			const writeDrafts = (next: ConfigurationDraft[]) => {
 				current();
@@ -93,14 +96,17 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 				window.dispatchEvent(new CustomEvent(SYNC_ENROLLMENT_RECOVERED_EVENT, { detail: { key, previous, raw: state.raw } }));
 			};
 			try {
-				const host = local && adapter ? await createNativeSyncHost({ adapter, ownerId, deviceId: scope.deviceId, signal: deadline, assertCurrent: current }) : null;
+				release.phase('create-host');
+				const host = local && adapter ? await createNativeSyncHost({ adapter, ownerId, deviceId: scope.deviceId, signal: deadline, assertCurrent: current, observeDiagnostic: (phase, facts) => release.phase(phase, undefined, facts) }) : null;
 				current();
 				if (host && host.origin() !== scope.origin) { retryAfter.set(attemptKey, Date.now() + retryMs); continue; }
+				release.phase('capabilities');
 				if (host) await host.requireCapability('api.things', '1.36.0');
 				else {
 					await requireThingtimeCapability('api.things', '1.36.0', scope.origin);
 					await requireThingtimeCapability('api.devices-sync-control', REMOTE_SYNC_ENROLLMENT_REQUIREMENTS['api.devices-sync-control'], scope.origin);
 				}
+				release.phase('read-saved');
 				const saved = await readSavedSyncEnrollment(draft, scope, { assertCurrent: current, get: async id => {
 					const url = new URL('/api/v1/things', scope.origin);
 					url.searchParams.set('id', id);
@@ -117,18 +123,22 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 				if (local) {
 					let recoverSavedIntent = false;
 					if (!nativeSyncTasks.read()?.active) {
+						release.phase('open-journal');
 						const journal = await openSyncJournal();
 						try {
+							release.phase('read-job');
 							const prior = await journal.jobs({ scope: binding, currentScope: () => { current(); return binding; }, signal: deadline }).read();
 							recoverSavedIntent = savedLocalStrictRecoveryEligible(prior ?? undefined, saved, binding, intent.intervalMs);
 						} finally { journal.close(); }
 					}
 					current();
+					release.phase('enroll-local');
 					const job = await enrollNativeFolderSync(saved, binding, generation, intent.intervalMs, deadline,
 						recoverSavedIntent ? { recoverSavedIntent: true, respectPause: true } : { queue: true, respectPause: true });
 					if (job.reviewed.updatedAt !== saved.updatedAt || job.intervalMs !== intent.intervalMs) throw Error('The saved automatic setup was not confirmed.');
 				} else {
 					const client = createRemoteSyncClient({ ...scope, signal: deadline, assertCurrent: current });
+					release.phase('remote-status');
 					let status = await client.send<RemoteSyncStatus>({ action: 'status' }, { timeoutMs: 6_000 });
 					current();
 					if (status.deviceId !== scope.deviceId || status.folderEnrollmentVersion !== '1.0.0') throw Error('The device could not confirm automatic setup.');
@@ -151,11 +161,14 @@ export async function recoverSavedSyncEnrollments(ownerId: string, generation: n
 					}
 					const recoverSavedIntent = chooseSavedIntentRecovery(first, candidate, scope.deviceId, intent.intervalMs, recoveryCompatible);
 					const expected = { connectionId: saved.id, expectedUpdatedAt: saved.updatedAt, intervalMs: intent.intervalMs };
+					release.phase('remote-start');
 					assertRemoteFolderEnrollment(await client.send({ action: 'start', ...expected,
 						...(recoverSavedIntent ? { recoverSavedIntent: true as const } : { queueOnly: true as const }) }), expected);
 				}
+				release.phase('persist-finish');
 				writeDrafts(state.drafts.filter(row => row.id !== saved.id));
-			} catch {
+			} catch (cause) {
+				release.failed(cause);
 				checkIdentity();
 				// Leave the exact request visible for review. A later existing
 				// discovery tick may retry a changed network or device condition.

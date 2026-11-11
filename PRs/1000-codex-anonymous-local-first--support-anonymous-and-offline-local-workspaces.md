@@ -2,6 +2,21 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Final main refresh — 12 November 2026
+
+Main moved during validation; also integrated
+`426fbef9171399b0cc248b5126b96f118b932bad` with its iOS setup recovery/device queue
+changes. Runtime source had no merge conflicts. All 10 focused integration
+commands pass against 5,499 unchanged source files: 1,146 tests pass without
+failures/skips, TypeScript/ratchet/full lint (0 errors/375 warnings), canonical
+build/inventory and both actual database HTTP/restart fixtures. Earlier unchanged
+service/storage/permission evidence is retained below. Final Nitro SHA-256:
+`4ae9238068bb5bf4c0516e8af1eca3af9daad9df176473383f3081c9b9ece00a`.
+The changed iOS native source also compiles in the isolated unsigned arm64 lane;
+all 1,846 canonical payload files match prepared/built copies with only the two
+pinned addon substitutions. This does not establish launch or Keychain/UI acceptance.
+[Final integration receipt](../artifacts/anonymous-release-2026-11-12/native-things-services/latest-main-integration/verification.json).
+
 ## Main integration and contract collision — 12 November 2026
 
 Integrated newly fetched main `762afab2fd157f8490c53fb497cbb31fcf2071b3`, retaining
