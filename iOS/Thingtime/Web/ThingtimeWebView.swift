@@ -22,6 +22,7 @@ struct ThingtimeWebView: View {
     @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
     @Environment(\.scenePhase) private var scenePhase
+    @State private var authenticatorSetup: AuthenticatorSetupDelivery?
     @State private var widgetPath: String?
     @State private var lidarRequest: UUID?
     @State private var invalidScanLink = false
@@ -91,7 +92,7 @@ struct ThingtimeWebView: View {
                         .padding(.horizontal, 8)
                         .background(.regularMaterial)
                     }
-                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, lidarRequest: $lidarRequest)
+                    WebView(url: selectedDestination.url, widgetPath: $widgetPath, authenticatorSetup: $authenticatorSetup, lidarRequest: $lidarRequest)
                         .ignoresSafeArea(.container, edges: [.bottom])
                 }
 
@@ -178,7 +179,9 @@ struct ThingtimeWebView: View {
                 Text(shareReminderError ?? "Please try again. Your draft is still saved.")
             }
             .onOpenURL { url in
-                if url.scheme == "thingtime", url.host == "scan" {
+                if ["otpauth", "otpauth-migration"].contains(url.scheme?.lowercased() ?? "") {
+                    authenticatorSetup = AuthenticatorSetupDelivery(url: url)
+                } else if url.scheme == "thingtime", url.host == "scan" {
                     if LiDARLaunchRoute.accepts(url, selectedOrigin: selectedDestination.url) {
                         closeDestinationPicker(); lidarRequest = UUID()
                     } else { invalidScanLink = true }

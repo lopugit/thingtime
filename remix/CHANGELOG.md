@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Reconcile native TOTP setup-link intake with the current password
+  editor and account lifecycle. Keep one-use seeds transient, require editable
+  review plus explicit Save, preserve current drafts and passkey behavior, and
+  add native/browser security coverage. Signed-app and live-provider acceptance
+  remain separate checks. **Codex (AI)**
+
 - 2026-11-11: Correct AppID compatibility to WebAuthn's documented same-site
   browser rule using one private-PSL-aware validator in the hook and provider;
   accept parent paths and same-host ports while preserving RP-bound signing,
