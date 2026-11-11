@@ -148,7 +148,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-11-12: Retire only exact native source-changed file-batch members
   proven never canonically dispatched, preserving all marked or ambiguous
   original receipts. A lost journal reply is idempotent, and fresh sealed
-  backup reconciliation must publish any replacement identity. The native
+  backup reconciliation must publish any replacement identity. A saved terminal
+  local feed now drains its pending original receipts before completion even
+  when a batch admission misses; blocked parent dependencies stay retained. The native
   identity diagnostic remains value-free. See [PR 1478](../PRs/1478-codex-sync-source-identity-and-batch-recovery.md). **Codex (AI)**
 
 - 2026-11-11: Recover an exact saved automatic folder intent after an idle

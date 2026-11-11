@@ -97,11 +97,12 @@ export async function streamForegroundSync(
 	};
 	if (JSON.stringify(spec.configuration) !== JSON.stringify(configuration))
 		throw Error('Restore the streaming transfer’s original settings before retrying.');
-	let state: PagedRunProgress = await runs.begin(spec),
-		indexed = (await runs.streamState(spec)).indexedSequence ?? (await runs.streamState(spec)).sequence,
+	let state: PagedRunProgress = await runs.begin(spec);
+	const savedStream = await runs.streamState(spec);
+	let indexed = savedStream.indexedSequence ?? savedStream.sequence,
 		indexState: 'indexing' | 'watching' | 'complete' = 'indexing',
 		skipped: number | undefined;
-	if (priorities && state.phase !== 'complete') await runs.enableStreamPriorities(spec);
+	if (priorities && state.phase !== 'complete' && !savedStream.terminal) await runs.enableStreamPriorities(spec);
 	if (!state.directions) state = await runs.backfillDirections(spec) ?? state;
  let priorityReadiness: PriorityReadiness | undefined;
 	let lastProgress: ForegroundSyncProgress | undefined;
@@ -569,15 +570,21 @@ export async function streamForegroundSync(
 					wake(); report(); continue;
 				}
 			} else await runs.recoverUploadBatch(spec);
-			const operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, batching, false, !!folderBulk);
+			let operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, batching, false, !!folderBulk);
 			await refreshReadiness();
 			check();
 			if (!operation) {
 				const status = await runs.streamState(spec);
 				check();
-				if (status.terminal) return;
-				await wait(observed);
-				continue;
+				if (!status.terminal) { await wait(observed); continue; }
+				if (await runs.streamReadyToFinish(spec)) { check(); return; }
+				// Once the producer is sealed, a missed bulk admission cannot wait
+				// for another input event. Claim one original operation through the
+				// journal's ordinary receipt and ancestor guards before sealing.
+				operation = await runs.claimNext(spec, input.nativeOperationGuards === true, batching ? 512 : 128, false, false, false);
+				await refreshReadiness();
+				check();
+				if (!operation) throw Error('Preserve pending stream receipts until their original operations are ready.');
 			}
 			let applyEntered = false;
 			dispatching = { id: operation.id, first: false, marked: false };

@@ -212,6 +212,161 @@ test('absent or blocked priorities cannot deadlock ordinary work; reserved IDs s
 	f.journal().close();
 });
 
+test('a sealed interrupted local feed resumes its pending original receipt without enabling priority preparation again', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	let runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await f.journal().priorities(access).save(['still-not-indexed'], 0);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())!.progress.phase, 'running');
+	await f.reload();
+	runs = f.journal().pagedRuns(access);
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(f.creates(), 1);
+	assert.equal(await runs.active(), null, 'the original receipt must drain before sealed reconciliation');
+	f.journal().close();
+});
+
+test('a terminal stream drains a pending eligible member when one batch admission is withheld', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('A withheld batch must drain under the original scalar ID.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let withheld = false;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, claimTransferBatch: async (...values) => {
+			if (!withheld) { withheld = true; return null; }
+			return journal.claimTransferBatch(...values);
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(withheld, true);
+	assert.equal(f.creates(), 1);
+	f.journal().close();
+});
+
+test('a terminal feed refuses to seal when both bulk and original claims remain unavailable', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	const write = binding(s, change);
+	await runs.appendStream(s, change, write);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('No batch may execute while its admission is unavailable.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let ordinaryAttempts = 0;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal,
+			claimTransferBatch: async () => null,
+			claimNext: async () => { ordinaryAttempts++; return null; }
+		};
+	} };
+	await assert.rejects(streamOneWayForegroundSync(saved, scope, input, new AbortController().signal), /Preserve pending stream receipts/);
+	assert.equal(ordinaryAttempts, 2, 'one normal and one bounded terminal fallback claim');
+	assert.equal(f.creates(), 0);
+	assert.equal((await runs.find(s, change.entry.path))!.id, write.write.operation.id);
+	assert.deepEqual([(await runs.active())!.progress.operations, (await runs.active())!.progress.confirmed], [1, 0]);
+	f.journal().close();
+});
+
+test('a terminal feed retains an original child when its parent was affirmatively superseded', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const parent = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('Parent') };
+	const parentWrite = binding(s, parent);
+	const child = { generation: s.streaming!.captureId, sequence: 2, revision: '1', entry: folder('Parent/child') };
+	const childWrite = binding(s, child, parentWrite.write.operation.id);
+	await runs.appendStream(s, parent, parentWrite);
+	await runs.appendStream(s, child, childWrite);
+	const selectedParent = await runs.claimNext(s);
+	assert.equal(selectedParent?.id, parentWrite.write.operation.id);
+	await runs.skipUnpublishedStreamOperation(s, selectedParent!.id, false);
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 2);
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === child.entry.path ? child.entry : path === parent.entry.path ? parent.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); },
+		folderBatch: async () => { throw Error('A child with an unpublished parent cannot enter a cloud folder batch.'); }
+	};
+	await assert.rejects(streamOneWayForegroundSync(saved, scope, input, new AbortController().signal), /Preserve pending stream receipts/);
+	assert.equal(f.creates(), 0, 'neither the superseded parent nor its child was published');
+	assert.equal((await runs.find(s, child.entry.path))?.id, childWrite.write.operation.id);
+	assert.deepEqual([(await runs.active())!.progress.operations, (await runs.active())!.progress.confirmed], [1, 0]);
+	f.journal().close();
+});
+
+test('a terminal feed uses durable completion after its final original operation retires', async () => {
+	const f = await foregroundFixture(), access = { scope, currentScope: () => scope }, s = spec();
+	const runs = f.journal().pagedRuns(access);
+	await runs.begin(s);
+	await runs.enableStreamPriorities(s);
+	const change = { generation: s.streaming!.captureId, sequence: 1, revision: '1', entry: folder('retained') };
+	await runs.appendStream(s, change, binding(s, change));
+	await runs.endRemountedLocalFeed(s);
+	await runs.sealStream(s, s.streaming!.captureId, 1);
+	assert.equal((await runs.active())?.progress.phase, 'running');
+	const input: ForegroundSyncInput = {
+		...f.input(), nativeOperationGuards: true,
+		inspectLocal: async (path) => path === change.entry.path ? change.entry : null,
+		streamLocalChanges: async function* () { yield* []; throw Error('The sealed old producer must not reopen.'); }
+	};
+	const original = input.journal.pagedRuns.bind(input.journal);
+	let retired = false;
+	input.journal = { ...input.journal, pagedRuns: (...args) => {
+		const journal = original(...args);
+		return { ...journal, begin: async (...values) => {
+			const stale = await journal.begin(...values);
+			if (!retired) {
+				retired = true;
+				const operation = await journal.claimNext(s);
+				assert.ok(operation);
+				await journal.skipUnpublishedStreamOperation(s, operation.id, true);
+			}
+			return stale;
+		} };
+	} };
+	await streamOneWayForegroundSync(saved, scope, input, new AbortController().signal);
+	assert.equal(retired, true);
+	assert.equal(f.creates(), 0);
+	assert.equal(await runs.active(), null);
+	f.journal().close();
+});
+
 test('generic local and remote sources keep FIFO despite saved priorities', async () => {
 	for (const source of ['local', 'remote'] as const) {
 		const f = await foregroundFixture(),
