@@ -602,7 +602,11 @@ export async function streamForegroundSync(
 					} else if (!rebind.undispatched) {
 						throw Error('Original child publication may still be in flight; preserve its identity for reconciliation.');
 					} else if (rebind.recovery || !rebind.parentId) {
-						await runs.deferTargetRebind(spec, operation.id);
+						const stream = await runs.streamState(spec);
+						check();
+						if (stream.terminal && (stream.indexedSequence ?? stream.sequence) === stream.sequence && !rebind.parentId)
+							state = await runs.skipUnpublishedStreamOperation(spec, operation.id, false);
+						else await runs.deferTargetRebind(spec, operation.id);
 					} else {
 						const source = operation.mutation.kind === 'copy' && operation.mutation.source.kind === 'file'
 							? await readLocalUploadSource(operation.mutation.source) : await readLocal(operation.mutation.path);

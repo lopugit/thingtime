@@ -40,8 +40,12 @@ The focused journal and complete-backup consumer regressions cover a mixed
 batch, legacy missing dispatch evidence, reopened journal, lost reply,
 post-staging source change, fresh sealed scan and exactly one replacement
 publication. Separate terminal-run fixtures cover a reopened producer, missed
-batch admission, unavailable claims, a superseded parent retaining its child
-without publication, and completion after an in-memory count becomes stale.
+batch admission, unavailable claims, and completion after an in-memory count
+becomes stale. A terminal superseded-parent fixture covers original folder and
+file descendants, an accepted original replay, a marked file's exact terminal
+fence, and a fresh full scan before a current parent publication. Unknown or
+marked row dispatch remains guarded across reopen; a recovered batch member
+must independently prove dispatch false before no-effect retirement.
 They use synthetic native, authorization and storage fixtures.
 The changed Markdown was refreshed structurally in the portable Graphify
 snapshot. Its semantic chunks were not re-extracted: the earlier bounded

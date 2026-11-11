@@ -1257,7 +1257,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							check(); const m = get.result;
 							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.operationId !== operationId || m.ordinal !== p.ordinal || m.batchId !== recovery.id || m.confirmed || m.retired)
 								throw Error('Unpublished member recovery evidence changed.');
-						if (m.canonicalDispatched && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
+						if (m.canonicalDispatched !== false && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
 						if (!terminal) r.canonicalDispatched = false;
 						m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
 							if (!recovery.remaining) {
@@ -1978,14 +1978,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (bytes(chosen) + 2 > INVENTORY_PAGE_BYTES) throw Error('Sync operation exceeds its byte bound.');
 						// Planned ancestor copies must be acknowledged before their child.
 						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
-						const finish = (operation: SyncOperation) => {
+						const finish = (operation: SyncOperation, preserveUnknownDispatch = false) => {
 							// A new input may arrive between the bulk probe and this fallback
 							// claim. Leave eligible unreserved work for the next bulk probe.
 							// A full preparation queue still frees one ordinary slot.
 							if (deferBatchEligible && !candidate.rebindPending && operation.id === chosen.id && h.operations - h.confirmed < preparationCapacity &&
 								candidate.cloud && (eligibleUploadBatchWrite(candidate.cloud.write, scope) || deferFolderBatchEligible && eligibleFolderBatchWrite(candidate.cloud.write, scope))) { done(null); return; }
 							if (operation.id === chosen.id) advance?.();
-							if (operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
+							if (!preserveUnknownDispatch && operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
 								candidate.canonicalDispatched = false; ops.put(candidate, [key, spec.id, ...orderKey(chosen, spec)]);
 							}
 							schedule.reserved = operation.id; schedule.canonical = canonical; delete schedule.streamScan; schedule.legacy = false; persist(); done(operation);
@@ -2006,11 +2006,33 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 									throw Error('Upload ancestor requires canonical sync order.');
 								if (!first && candidate.cloud && ancestors.length && parents.at(-1) === null && identifier(candidate.cloud.write.folderId)) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { done(null); return; } finish(chosen); } catch (e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										if (supersession.result) {
+											const mutation = chosen.mutation, write = rebindWrite(candidate, spec);
+											// A sealed feed cannot receive its replacement parent. Reserve
+											// this original solely for receipt-first target recovery. An
+											// unknown historical dispatch marker must remain unknown.
+											if (spec.streaming?.source === 'local' && h.stream?.terminal &&
+												(h.stream.indexedSequence ?? h.stream.sequence) === h.stream.sequence &&
+												['backup', 'upload'].includes(spec.configuration!.mode) &&
+												write && mutation.kind === 'copy' && mutation.from === 'local' &&
+												mutation.expectedTarget === null && write.before === null && write.folderId === candidate.cloud!.write.folderId) {
+												finish(chosen, true); return;
+											}
+											done(null); return;
+										}
+										finish(chosen);
+									} catch (e) { fail(e); } }; return;
 								}
 								if (!first && candidate.cloud && parents.at(-1)?.confirmed && candidate.cloud.write.folderId !== parents.at(-1)!.id) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId!]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation, spec)]); } finish(chosen); } catch(e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										const replaced = !!supersession.result;
+										if (replaced) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation, spec)]); }
+										finish(chosen, replaced);
+									} catch(e) { fail(e); } }; return;
 								}
 								finish(first ?? chosen);
 							} catch (error) { fail(error); } };

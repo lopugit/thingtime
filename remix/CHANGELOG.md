@@ -150,7 +150,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   original receipts. A lost journal reply is idempotent, and fresh sealed
   backup reconciliation must publish any replacement identity. A saved terminal
   local feed now drains its pending original receipts before completion even
-  when a batch admission misses; blocked parent dependencies stay retained.
+  when a batch admission misses. A sealed local feed recovers superseded parent
+  dependents through their original receipts, retiring only proven unpublished
+  children before a fresh full scan; ambiguous publication stays retained.
   The native identity diagnostic remains value-free. See [PR 1478](../PRs/1478-codex-sync-source-identity-and-batch-recovery.md). **Codex (AI)**
 
 - 2026-11-11: Correct AppID compatibility to WebAuthn's documented same-site
