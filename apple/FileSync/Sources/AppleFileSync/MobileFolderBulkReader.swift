@@ -14,6 +14,12 @@ public enum MobileFolderBulkReader {
     public enum ReadGuard: String, CaseIterable, Sendable {
         case invalidShape = "invalid-shape", firstInspectError = "first-inspect-error"
         case firstInspectAbsent = "first-inspect-absent", firstInspectIdentity = "first-inspect-identity"
+        case firstInspectIdentitySameVersion = "first-inspect-identity-same-version"
+        case firstInspectIdentityMalformed = "first-inspect-identity-malformed"
+        case firstInspectIdentityVersionInconsistent = "first-inspect-identity-version-inconsistent"
+        case firstInspectIdentityDeviceChanged = "first-inspect-identity-device-changed"
+        case firstInspectIdentityInodeChanged = "first-inspect-identity-inode-changed"
+        case firstInspectIdentityRepresentation = "first-inspect-identity-representation"
         case firstInspectPath = "first-inspect-path", firstInspectVersion = "first-inspect-version"
         case firstInspectKind = "first-inspect-kind", firstInspectSize = "first-inspect-size"
         case firstInspectFingerprint = "first-inspect-fingerprint", firstInspectLink = "first-inspect-link"
@@ -44,11 +50,41 @@ public enum MobileFolderBulkReader {
     private static func hex(_ value: String) -> Bool {
         value.count == 64 && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
     }
+    private static func numericPart(_ value: Substring) -> UInt64? {
+        if let unsigned = UInt64(value) { return unsigned }
+        if let signed = Int64(value) { return UInt64(bitPattern: signed) }
+        return nil
+    }
+    private static func identityParts(_ value: String) -> (UInt64, UInt64)? {
+        let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, let device = numericPart(parts[0]), let inode = numericPart(parts[1]) else { return nil }
+        return (device, inode)
+    }
+    private static func versionIdentity(_ value: String) -> (UInt64, UInt64)? {
+        let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 7, parts.allSatisfy({ numericPart($0) != nil }),
+              let device = numericPart(parts[0]), let inode = numericPart(parts[1]) else { return nil }
+        return (device, inode)
+    }
+    private static func identityGuard(actual: MobileFolderReader.Entry, expected: MobileFolderReader.Entry) -> ReadGuard {
+        // The full native stamp matching while the ID differs points to an inconsistent saved descriptor.
+        if actual.version == expected.version,
+           let currentID = identityParts(actual.id), let stampID = versionIdentity(actual.version),
+           currentID == stampID { return .firstInspectIdentitySameVersion }
+        guard let expectedID = identityParts(expected.id), let savedStampID = versionIdentity(expected.version) else {
+            return .firstInspectIdentityMalformed
+        }
+        guard expectedID == savedStampID else { return .firstInspectIdentityVersionInconsistent }
+        guard let currentID = identityParts(actual.id) else { return .firstInspectIdentity }
+        if currentID.0 != expectedID.0 { return .firstInspectIdentityDeviceChanged }
+        if currentID.1 != expectedID.1 { return .firstInspectIdentityInodeChanged }
+        return .firstInspectIdentityRepresentation
+    }
     private static func check(_ actual: MobileFolderReader.Entry?, _ expected: MobileFolderReader.Entry,
                               final: Bool, observer: ReadObserver?) throws {
         func reject(_ reason: ReadGuard) throws -> Never { observer?(final ? .finalInspectMismatch : reason); throw MobileFolderStore.Failure.changed }
         guard let actual else { try reject(.firstInspectAbsent) }
-        guard actual.id == expected.id else { try reject(.firstInspectIdentity) }
+        guard actual.id == expected.id else { try reject(identityGuard(actual: actual, expected: expected)) }
         guard actual.path == expected.path else { try reject(.firstInspectPath) }
         guard actual.version == expected.version else { try reject(.firstInspectVersion) }
         guard actual.kind == "file" else { try reject(.firstInspectKind) }
