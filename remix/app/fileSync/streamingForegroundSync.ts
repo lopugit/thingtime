@@ -15,6 +15,7 @@ import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
 import { inventorySyncEntry, type CloudInventoryNode } from './cloudInventory';
 import { parseCloudInventoryPage } from './cloudInventoryPages';
 import { prepareCloudOperationBinding } from './cloudBinding';
+import { CloudParentMissing } from './cloudWrite';
 import { executeSyncOperation, SyncObservationChangedError, SyncTerminalOperationError, type SyncOperation } from './execute';
 import { decideSyncPath, sameSyncStamp, syncPathKey, type SyncEntry, type SyncScope } from './reconcile';
 import { createSyncIgnorePolicy } from './syncIgnore';
@@ -470,11 +471,21 @@ export async function streamForegroundSync(
 				return;
 			}
 			const operation: SyncOperation = { id: crypto.randomUUID(), mutation: decision, confirmed: false };
-			const binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
-				node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path, provisional ? observations : undefined)),
-				operation: (path) => runs.find(spec, path),
-				previousTrash: async () => undefined
-			});
+			let binding;
+			try {
+				binding = await prepareCloudOperationBinding(operation, scope, configuration.remoteFolderId, {
+					node: (path) => (path === change.entry.path ? Promise.resolve(node) : cloudNode(path, provisional ? observations : undefined)),
+					operation: (path) => runs.find(spec, path),
+					previousTrash: async () => undefined
+				});
+			} catch (error) {
+				if (!local || !(error instanceof CloudParentMissing)) throw error;
+				// A positive child may arrive before its parent. Keep the source
+				// hint, but leave effects to the sealed full-tree reconciliation.
+				check();
+				state = await runs.appendStream(spec, event, null);
+				wake(); report(); return;
+			}
 			check();
 			state = await runs.appendStream(spec, event, binding);
 			wake();

@@ -21,7 +21,7 @@ await (mock as any).module(new URL('./nativeSyncTasks.client.ts', import.meta.ur
 		started = { value, binding, interval }; snapshot = { scope: binding, active: true, progress: { stage: 'checking', confirmed: 0, total: 0 } };
 		return new Promise(() => {});
 	},
-	enrollNativeFolderSync: async (value: any, binding: any, _generation: number, interval: number, signal: AbortSignal, options: { queue?: boolean; respectPause?: boolean }) => {
+	enrollNativeFolderSync: async (value: any, binding: any, _generation: number, interval: number, signal: AbortSignal, options: { queue?: boolean; respectPause?: boolean; recoverSavedIntent?: true }) => {
 		started = { value, binding, interval, options };
 		if (delayedEnrollment) await delayedEnrollment(signal);
 		return { reviewed: value, intervalMs: interval, pendingFolderValidation: options.queue };
@@ -73,6 +73,40 @@ test('remote enrollment recovery queues the exact folder revision without native
 	started = null;
 	await assert.rejects(executeRemoteSyncCommand(command, photoContext, session), /requires a saved folder sync config/);
 	assert.equal(started, null);
+});
+
+test('advertised worker accepts the separate saved-intent command with current server and exact revision', async () => {
+ snapshot = null; started = null;
+ const status: any = await executeRemoteSyncCommand({ action: 'status' }, context, session);
+ assert.equal(status.folderEnrollmentVersion, '1.0.0');
+ assert.equal(status.folderEnrollmentRecoveryVersion, '1.0.0');
+ const command = { action: 'start', connectionId: saved.id, expectedUpdatedAt: saved.updatedAt, intervalMs: 300_000, recoverSavedIntent: true } as const;
+ const result: any = await executeRemoteSyncCommand(command, context, session);
+ assert.equal(result.accepted, true);
+ assert.deepEqual(started.options, { queue: undefined, respectPause: true, recoverSavedIntent: true });
+ assert.equal(snapshot, null);
+ const old = { ...context, host: { ...host, requireCapability: async (feature: string, minimum: string) => {
+  if (feature === 'api.devices-sync-control' && minimum === '1.6.0') throw Error('Old selected origin');
+ } } };
+ started = null;
+ await assert.rejects(executeRemoteSyncCommand(command, old, session), /Old selected origin/);
+ assert.equal(started, null);
+});
+
+test('owner-private status marks only a retained strict capture for guarded recovery', async () => {
+ historyFactory = new IDBFactory(); snapshot = null;
+ try {
+  const journal = await openRealSyncJournal(historyFactory, 'worker-history', IDBKeyRange);
+  try {
+   const jobs = journal.jobs({ scope, currentScope: () => scope });
+   const admitted = await jobs.admit({ id: saved.id, updatedAt: saved.updatedAt, configuration }, '00000000-0000-4000-8000-000000000001', 300_000);
+   const attention = await jobs.attention((await jobs.strictCapture(admitted, '00000000-0000-4000-8000-000000000002'))!);
+   assert.equal(attention?.id, admitted.id);
+   const status: any = await executeRemoteSyncCommand({ action: 'status' }, context, session);
+   assert.equal(status.folderEnrollmentRecoveryVersion, '1.0.0');
+   assert.deepEqual(status.jobs.map((job: any) => [job.connectionId, job.strictCapturePending]), [['connection', true]]);
+  } finally { journal.close(); }
+ } finally { historyFactory = undefined; }
 });
 
 test('recovery cannot borrow another device scope', async () => {
@@ -158,8 +192,9 @@ test('older server or native versions strip optional paths while status and fold
   assert.deepEqual(page.roots, [{ id: 'selected', name: 'Music library' }]);
   const folders: any = await executeRemoteSyncCommand({ action: 'folders', request: { action: 'list' } }, contextOld, sessionOld);
   assert.deepEqual(folders.roots, page.roots);
-  assert.deepEqual(negotiations, nativeVersion === '1.14.0' ? ['1.5.0'] : ['1.5.0', '1.1.0']);
+  assert.deepEqual(negotiations, nativeVersion === '1.14.0' ? ['1.5.0', '1.6.0'] : ['1.5.0', '1.6.0', '1.1.0']);
   assert.equal(page.connectionActivityVersion, undefined);
+  assert.equal(page.folderEnrollmentRecoveryVersion, undefined);
   assert.equal(sessionOld.roots[0].sourcePath, roots[0].sourcePath);
  }
 });

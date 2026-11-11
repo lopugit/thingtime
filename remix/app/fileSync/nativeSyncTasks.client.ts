@@ -31,6 +31,7 @@ import { readCloudFolderInventory } from './cloudInventory.client';
 import { CLOUD_SYNC_DESTINATION_REQUIREMENTS } from './cloudSyncDestination';
 import { CLOUD_FOLDER_REQUIREMENTS, parseCloudFolder } from './cloudFolder';
 import { cloudRequests } from './cloudTransport';
+import { REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS } from './remoteSyncProtocol';
 import { createAutomaticStoragePlacement } from './automaticStoragePlacement';
 import { preparePhotoSettingsRecovery } from './photoSettingsRecovery';
 import { mobileFolderSource, requestMobileFolders, assertNativeFolderInventoryCoverage, supportsNativeInventoryPages, supportsNativePhotoInventoryPages, supportsNativePhotoCloudGaps, supportsNativePhotoCloudFetch, supportsNativePhotoQueue, supportsNativeDeferredUploads, supportsNativePathInspection, supportsNativePathStamp, supportsNativeBackupCapture, supportsNativeStrictCapture, supportsNativeIgnoreRules, supportsNativeInventoryBatches, supportsNativeStreamingIndex, supportsNativeStreamingBatches, supportsNativeAuthorizationContext, supportsNativeCloudStaging, supportsNativeResourceLimits, supportsNativePhotoAutomation, supportsNativePhotoRuns, supportsSoleNativePhotoRun, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
@@ -67,11 +68,15 @@ async function readNativeConfiguration(host: Awaited<ReturnType<typeof createNat
  * busy, journal the exact saved config without performing any file operation.
  * The runner will verify its grants and existing write consent before work. */
 export async function enrollNativeFolderSync(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number,
- intervalMs: number = DEFAULT_NATIVE_FOLDER_SYNC_INTERVAL_MS, signal: AbortSignal = new AbortController().signal, options: { queue?: boolean; respectPause?: boolean } = {}) {
+ intervalMs: number = DEFAULT_NATIVE_FOLDER_SYNC_INTERVAL_MS, signal: AbortSignal = new AbortController().signal,
+ options: { queue?: boolean; respectPause?: boolean; recoverSavedIntent?: true } = {}) {
  signal.throwIfAborted();
+ if (options.recoverSavedIntent && !options.respectPause) throw Error('Saved automatic setup must respect the current pause.');
  const key = syncScopeKey(scope), task = nativeSyncTasks.read();
  if ((task?.active && syncScopeKey(task.scope) === key) || folderEnrollment?.key === key)
   throw Error('This sync config already has a transfer or approval in progress. Check its current status.');
+ if (options.recoverSavedIntent && (task?.active || folderEnrollment))
+  throw Error('The device is busy. Saved automatic setup will resume when it is free.');
  if (task?.active || folderEnrollment || options.queue)
   return queueNativeFolderEnrollment(saved, scope, generation, intervalMs, signal, options.respectPause);
  const pending = { key, controller: new AbortController() };
@@ -79,7 +84,7 @@ export async function enrollNativeFolderSync(saved: SavedFileSyncConfiguration, 
  const bounded = AbortSignal.any([signal, pending.controller.signal, timeout]);
  folderEnrollment = pending;
  try {
-  return await confirmNativeFolderEnrollment(saved, scope, generation, intervalMs, bounded);
+  return await confirmNativeFolderEnrollment(saved, scope, generation, intervalMs, bounded, options);
  } catch (cause) {
   if (timeout.aborted && !signal.aborted && !pending.controller.signal.aborted)
    throw Error('The device did not confirm automatic sync in time. Check its current status before enabling sync again.');
@@ -158,10 +163,20 @@ async function queueNativeFolderEnrollment(saved: SavedFileSyncConfiguration, sc
  } finally { queuedFolderEnrollments.delete(key); }
 }
 
-async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, intervalMs: number, signal: AbortSignal) {
- const { reviewed, binding, config, adapter, check } = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
+async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, scope: SyncScope, generation: number, intervalMs: number, signal: AbortSignal,
+ options: { respectPause?: boolean; recoverSavedIntent?: true } = {}) {
+ const context = folderEnrollmentContext(saved, scope, generation, intervalMs, signal);
+ const { reviewed, binding, config, adapter } = context;
+ const check = () => {
+  context.check();
+  if (options.respectPause && nativeSyncTasks.isPaused(binding)) throw Error('Automatic sync setup was paused.');
+  if (options.recoverSavedIntent && nativeSyncTasks.read()?.active) throw Error('The device is busy. Saved automatic setup will resume when it is free.');
+  return binding;
+ };
+ check();
  const host = await createNativeSyncHost({ adapter, ownerId: binding.ownerId, deviceId: binding.deviceId, signal, assertCurrent: check });
  if (host.origin() !== binding.origin) throw Error('The selected sync server changed.');
+ if (options.recoverSavedIntent) await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS['api.devices-sync-control']);
  const assertExact = async () => {
   const current = readOwnedFileSyncConfiguration(await readNativeConfiguration(host, binding, signal), binding.ownerId);
   check();
@@ -184,6 +199,10 @@ async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, 
    let prior = await jobs.read();
    if (prior && !prior.pendingFolderValidation && !nativeSyncTasks.isPaused(binding) && syncJobEnabled(prior) && prior.intervalMs === intervalMs &&
     JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)) return prior;
+   if (options.recoverSavedIntent &&
+    !(prior?.state === 'attention' && prior.nextRunAt === undefined && !!prior.strictCaptureId && !prior.folderSetupPaused &&
+     prior.intervalMs === intervalMs && JSON.stringify(prior.reviewed) === JSON.stringify(reviewed)))
+    throw Error('This sync config has saved work. Wait for the device to finish its current transfer before enabling it again.');
    const roots = (await host.request(binding.ownerId, { action: 'list' }, signal)).roots;
    assertPhotoSourcePolicy(config, roots);
    if (roots.find(root => root.id === config.localRootId)?.sourceKind === 'photos') throw Error('Use the Photos backup controls for this source.');
@@ -223,7 +242,7 @@ async function confirmNativeFolderEnrollment(saved: SavedFileSyncConfiguration, 
    await assertExact();
    const pending = await jobs.admit(reviewed, crypto.randomUUID(), intervalMs, undefined, undefined, { previous: prior });
    check();
-   nativeSyncTasks.resumeScope(binding);
+   if (!options.recoverSavedIntent) nativeSyncTasks.resumeScope(binding);
    if (adapter.platform === 'macos') void setDesktopSyncScheduled(true, adapter.bridge).catch(() => {});
    return pending;
   } finally { journal.close(); }

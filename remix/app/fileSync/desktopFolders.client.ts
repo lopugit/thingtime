@@ -82,7 +82,7 @@ export async function createDesktopFolderHost(input: {
 		input.assertCurrent();
 		if (input.rendererOrigin() !== localOrigin) throw changed();
 	};
-	const send = async (request: FolderRequest | { action: 'context' }, signal: AbortSignal) => {
+	const send = async (request: FolderRequest | { action: 'context'; refreshApiCapabilities?: true }, signal: AbortSignal) => {
 		check();
 		signal.throwIfAborted();
 		const payload = structuredClone(request);
@@ -175,8 +175,8 @@ export async function createDesktopFolderHost(input: {
 				.finally(() => combined.removeEventListener('abort', abort));
 		});
 	};
-	const negotiate = async (signal: AbortSignal): Promise<ContextReply> => {
-		const { value, expected } = await send({ action: 'context' }, signal);
+	const negotiate = async (signal: AbortSignal, refreshApiCapabilities = false): Promise<ContextReply> => {
+		const { value, expected } = await send({ action: 'context', ...(refreshApiCapabilities ? { refreshApiCapabilities: true as const } : {}) }, signal);
 		const capabilities = { ...value.capabilities, platform: 'macos' } as FolderCapabilities;
 		const manifest = value.apiCapabilities;
 		if (
@@ -194,6 +194,8 @@ export async function createDesktopFolderHost(input: {
 			...(parsed ? { authorization: { roots: parsed.roots, conditions: parsed.conditions! } } : {}) };
 	};
 	let context = await negotiate(input.signal);
+	let capabilityEpoch = 0;
+	let capabilityRefresh: Promise<void> | null = null;
 	origin = context.origin;
 	if (input.resourcePolicy?.deviceResourceLimits && (!capabilitySatisfies(context.capabilities?.fileAccessVersion, '1.16.0') || !capabilitySatisfies(context.capabilities?.fileResourceLimitsVersion, '1.1.0'))) throw Error('Update Thingtime before using device-wide sync resource limits.');
 	if (input.resourcePolicy && !supportsNativeResourceLimits(context.capabilities)) throw Error('Update Thingtime before using sync resource limits.');
@@ -257,21 +259,38 @@ export async function createDesktopFolderHost(input: {
 		...(supportsNativeAuthorizationContext(context.capabilities) ? {
 			authorizeContext: async (expectedOwner: string, expectedDevice: string, signal: AbortSignal) => {
 				if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
+				const epoch = capabilityEpoch;
 				const next = await negotiate(signal);
-				if (JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities) || !next.authorization) throw changed();
-				context = next;
+				if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities) || !next.authorization) throw changed();
+				// An older authorized reply may finish after a public-manifest refresh.
+				// Its roots are still bound, but it must not restore the older manifest.
+				if (epoch === capabilityEpoch) context = next;
 				return structuredClone(next.authorization);
 			}
 		} : {}),
 		authorizeDevice: async (expectedOwner, expectedDevice, signal) => {
 			if (expectedOwner !== ownerId || expectedDevice !== deviceId) throw changed();
+			const epoch = capabilityEpoch;
 			const next = await negotiate(signal);
-			if (JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
-			context = next;
+			if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
+			if (epoch === capabilityEpoch) context = next;
 		},
 		requireCapability: async (feature, minimumVersion) => {
 			check();
-			const version = context.apiCapabilities.features[feature]?.version;
+			let version = context.apiCapabilities.features[feature]?.version;
+			if (typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion)) {
+				const pending = capabilityRefresh ??= (async () => {
+					const next = await negotiate(input.signal, true);
+					check();
+					if (next.origin !== context.origin || JSON.stringify(next.capabilities) !== JSON.stringify(context.capabilities)) throw changed();
+					context = next;
+					capabilityEpoch++;
+				})();
+				try { await pending; }
+				finally { if (capabilityRefresh === pending) capabilityRefresh = null; }
+				check();
+				version = context.apiCapabilities.features[feature]?.version;
+			}
 			if (typeof version !== 'string' || !capabilitySatisfies(version, minimumVersion))
 				throw Error(`Thingtime capability ${feature} is incompatible`);
 		}

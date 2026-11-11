@@ -145,6 +145,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Recover an exact saved automatic folder intent after an idle
+  strict scanner using the original job identity and a separately advertised
+  worker contract (`api.devices-sync-control` 1.6.0). Defer one-way child hints
+  whose parent has not arrived until a complete sealed inventory can order
+  creation safely. Retain earlier receipts and strict refusal on incomplete
+  or conflicting inventories. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
+
+- 2026-11-11: Continue an original file-batch recovery after a proven unpublished
+  parent revision, retaining member order and receipt guards until a replacement
+  parent is confirmed. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
+
+- 2026-11-11: Add private fixed-category native upload source guard and failure-code
+  counts after a closed batch refusal, keeping file paths, content and raw errors
+  out of diagnostics and preserving upload validation. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
+
+- 2026-11-11: Refresh a Mac folder-sync context's selected-origin capability
+  manifest once when a saved operation encounters an incompatible cached
+  version after deployment. Keep exact account/window fences and SemVer refusal;
+  the refresh hint stays inside Electron and does not change the native or HTTP
+  contract. **Codex (AI)**
+
 - 2026-11-11: Keep the shared authenticated menu controller outside the single-file
   embed dependency graph, preserving the unchanged bundle budget and first-open
   menu focus through lazy permission loading. See [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRemoteSyncClient, negotiateRemoteSourcePaths } from './remoteSyncClient.client';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 const storage = () => {
 	const data = new Map<string, string>();
@@ -74,6 +75,28 @@ test('queue-only enrollment negotiates the remote server contract before dispatc
 	await assert.rejects(client.send(command), /updated, reachable Thingtime server/);
 	assert.equal(dispatched, false);
 	assert.equal(input.storage.data.size, 0);
+});
+
+test('saved-intent recovery requires compatible 1.6 control on the selected origin before dispatch', async () => {
+ const command = { action: 'start', connectionId: 'connection', expectedUpdatedAt: '2026-10-23T00:00:00.000Z', intervalMs: 300_000, recoverSavedIntent: true } as const;
+ for (const offered of [undefined, '1.5.0', '2.0.0']) {
+  const input = base(); let dispatched = 0;
+  const client = createRemoteSyncClient({ ...input, requireCapability: async (feature, minimum) => {
+   assert.equal(feature, 'api.devices-sync-control'); assert.equal(minimum, '1.6.0');
+   if (!offered || !capabilitySatisfies(offered, minimum)) throw Error('Incompatible selected origin');
+  }, fetch: async () => { dispatched++; throw Error('Unexpected dispatch'); } });
+  await assert.rejects(client.send(command), /updated, reachable Thingtime server/);
+  assert.equal(dispatched, 0); assert.equal(input.storage.data.size, 0);
+ }
+ const input = base(); let dispatched = 0;
+ const client = createRemoteSyncClient({ ...input, requireCapability: async (feature, minimum) => {
+  assert.equal(feature, 'api.devices-sync-control'); assert.equal(minimum, '1.6.0');
+ }, fetch: async (url, init) => {
+  assert.equal(String(url), `${input.origin}/api/v1/devices/sync-control`);
+  assert.deepEqual(JSON.parse(init.body as string).command, command);
+  dispatched++; return reply({ ok: true, status: 'complete', result: { accepted: true } });
+ } });
+ assert.deepEqual(await client.send(command), { accepted: true }); assert.equal(dispatched, 1);
 });
 
 test('pause remains available when an earlier start reply was lost', async () => {
