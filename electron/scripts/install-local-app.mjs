@@ -34,7 +34,7 @@ function commandFailure(result, label) {
 }
 
 function runRequired(command, args, label, options = {}) {
-  const result = spawnSync(command, args, { encoding: options.encoding, stdio: options.stdio || 'inherit' });
+  const result = spawnSync(command, args, { encoding: options.encoding, stdio: options.stdio || 'inherit', input: options.input });
   if (result.error || result.status !== 0) throw commandFailure(result, label);
   return result;
 }
@@ -85,6 +85,112 @@ export function assertExpectedBundle(appPath, label, identifierReader = readBund
   if (identifier !== expectedIdentifier) {
     throw new Error(`${label} has bundle identifier ${identifier || '(missing)'}; expected ${expectedIdentifier}.`);
   }
+}
+
+const companionIdentifier = 'com.thingtime.passwords';
+const providerIdentifier = 'com.thingtime.passwords.provider';
+const privateOutput = { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
+
+function readPlist(appPath) {
+  return JSON.parse(runRequired('/usr/bin/plutil', ['-convert', 'json', '-o', '-', join(appPath, 'Contents', 'Info.plist')],
+    'Password AutoFill bundle metadata', privateOutput).stdout);
+}
+
+function signedFacts(appPath) {
+  const signature = runRequired('/usr/bin/codesign', ['--display', '--verbose=4', appPath],
+    'Password AutoFill signing identity', privateOutput);
+  const team = signature.stderr.match(/^TeamIdentifier=([A-Z0-9]{10})$/mu)?.[1];
+  if (!team) throw new Error('Password AutoFill signing team is unavailable.');
+  const authorities = signature.stderr.match(/^Authority=.+$/gmu) || [];
+  const requirement = runRequired('/usr/bin/codesign', ['-dr', '-', appPath],
+    'Password AutoFill designated requirement', privateOutput).stdout.match(/^designated => (.+)$/mu)?.[1];
+  if (!authorities.length || !requirement) throw new Error('Password AutoFill signing requirement is unavailable.');
+  const xml = runRequired('/usr/bin/codesign', ['--display', '--entitlements', ':-', appPath],
+    'Password AutoFill signed entitlements', privateOutput).stdout;
+  const entitlements = JSON.parse(runRequired('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'],
+    'Password AutoFill signed entitlements', { ...privateOutput, input: xml }).stdout);
+  const profileXml = runRequired('/usr/bin/security', ['cms', '-D', '-i', join(appPath, 'Contents', 'embedded.provisionprofile')],
+    'Password AutoFill provisioning profile', privateOutput).stdout;
+  const profileField = (key, format) => runRequired('/usr/bin/plutil', ['-extract', key, format, '-o', '-', '-'],
+    'Password AutoFill provisioning profile', { ...privateOutput, input: profileXml }).stdout.trim();
+  const profile = {
+    ExpirationDate: profileField('ExpirationDate', 'raw'),
+    TeamIdentifier: JSON.parse(profileField('TeamIdentifier', 'json')),
+    Entitlements: JSON.parse(profileField('Entitlements', 'json'))
+  };
+  return { team, authorities, requirement, entitlements, profile };
+}
+
+export function profileAllowsCompanion(facts, identifier, group) {
+    const teams = facts.profile.TeamIdentifier;
+    const groups = facts.profile.Entitlements?.['keychain-access-groups'];
+    return Date.parse(facts.profile.ExpirationDate) > Date.now() &&
+      Array.isArray(teams) && teams.every(value => typeof value === 'string') && teams.includes(facts.team) &&
+      facts.profile.Entitlements?.['com.apple.developer.authentication-services.autofill-credential-provider'] === true &&
+      facts.profile.Entitlements?.['com.apple.application-identifier'] === `${facts.team}.${identifier}` &&
+      Array.isArray(groups) && groups.every(value => typeof value === 'string') &&
+      (groups.includes(group) || groups.includes(`${facts.team}.*`));
+}
+
+export function readCompanionFacts(appPath, identifierReader = readBundleIdentifier) {
+  assertExpectedBundle(appPath, 'Password AutoFill host', identifierReader, companionIdentifier);
+  const provider = join(appPath, 'Contents', 'PlugIns', 'ThingtimePasswordProvider.appex');
+  assertExpectedBundle(provider, 'Password AutoFill provider', identifierReader, providerIdentifier);
+  const hostInfo = readPlist(appPath), providerInfo = readPlist(provider);
+  const host = signedFacts(appPath), extension = signedFacts(provider);
+  const group = hostInfo.ThingtimePasswordKeychainGroup;
+  if (hostInfo.CFBundleIdentifier !== companionIdentifier || providerInfo.CFBundleIdentifier !== providerIdentifier ||
+    typeof group !== 'string' || !group || providerInfo.ThingtimePasswordKeychainGroup !== group || host.team !== extension.team ||
+    hostInfo.CFBundleShortVersionString !== providerInfo.CFBundleShortVersionString ||
+    hostInfo.CFBundleVersion !== providerInfo.CFBundleVersion ||
+    !profileAllowsCompanion(host, companionIdentifier, group) || !profileAllowsCompanion(extension, providerIdentifier, group) ||
+    ![host.entitlements, extension.entitlements].every(value => value['com.apple.developer.authentication-services.autofill-credential-provider'] === true &&
+      value['com.apple.developer.team-identifier'] === host.team && Array.isArray(value['keychain-access-groups']) && value['keychain-access-groups'].includes(group))) {
+    throw new Error('Password AutoFill host and provider identity or signed entitlements do not match.');
+  }
+  return { version: hostInfo.CFBundleShortVersionString, build: hostInfo.CFBundleVersion, team: host.team, group,
+    hostAuthorities: host.authorities, providerAuthorities: extension.authorities,
+    hostRequirement: host.requirement, providerRequirement: extension.requirement,
+    hostIdentifier: companionIdentifier, providerIdentifier };
+}
+
+function numericVersion(value) {
+  if (typeof value !== 'string' || !/^\d+\.\d+\.\d+$/u.test(value)) throw new Error('Password AutoFill version is unknown.');
+  const parts = value.split('.').map(Number);
+  if (parts.some(part => !Number.isSafeInteger(part))) throw new Error('Password AutoFill version is unknown.');
+  return parts;
+}
+
+function numericBuild(value) {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/u.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new Error('Password AutoFill build is unknown.');
+  }
+  return Number(value);
+}
+
+export function preserveNewerCompanion(source, installed) {
+  if (source?.hostIdentifier !== companionIdentifier || installed?.hostIdentifier !== companionIdentifier ||
+    source?.providerIdentifier !== providerIdentifier || installed?.providerIdentifier !== providerIdentifier ||
+    !source.team || installed.team !== source.team || !source.group || installed.group !== source.group ||
+    !source.hostRequirement || installed.hostRequirement !== source.hostRequirement ||
+    !source.providerRequirement || installed.providerRequirement !== source.providerRequirement ||
+    !Array.isArray(source.hostAuthorities) || !source.hostAuthorities.length ||
+    JSON.stringify(installed.hostAuthorities) !== JSON.stringify(source.hostAuthorities) ||
+    !Array.isArray(source.providerAuthorities) || !source.providerAuthorities.length ||
+    JSON.stringify(installed.providerAuthorities) !== JSON.stringify(source.providerAuthorities)) {
+    throw new Error('Password AutoFill companion identity is incompatible.');
+  }
+  const sourceVersion = numericVersion(source.version), installedVersion = numericVersion(installed.version);
+  const sourceBuild = numericBuild(source.build), installedBuild = numericBuild(installed.build);
+  const versionOrder = sourceVersion.reduce((order, part, index) => order || Math.sign(installedVersion[index] - part), 0);
+  const buildOrder = Math.sign(installedBuild - sourceBuild);
+  if (versionOrder > 0 || buildOrder > 0) {
+    if (installedVersion[0] !== sourceVersion[0] || versionOrder < 0 || buildOrder < 0) {
+      throw new Error('Password AutoFill companion versions are incompatible.');
+    }
+    return true;
+  }
+  return false;
 }
 
 function exactRunningPids(executablePath, processName, label) {
@@ -271,6 +377,7 @@ export function installLocalApp(options = {}) {
   });
   const companionRunningPids = options.companionRunningPids || ((executable) => exactRunningPids(executable, 'Thingtime Passwords', 'Thingtime Passwords'));
   const identifierReader = options.identifierReader || readBundleIdentifier;
+  const companionFactsReader = options.companionFactsReader || ((appPath) => readCompanionFacts(appPath, identifierReader));
   const runningPids = options.runningPids || exactRunningInstalledPids;
   const nodeRunningPids = options.nodeRunningPids || exactRunningNodePids;
   const serviceLifecycle = options.serviceLifecycle || createNodeServiceLifecycle({ targetApp });
@@ -286,12 +393,34 @@ export function installLocalApp(options = {}) {
   try {
     assertExpectedBundle(sourceApp, 'Source Thingtime app', identifierReader);
     verifyApp(sourceApp);
-    const companionExists = lstatSync(targetCompanion, { throwIfNoEntry: false }) !== undefined;
+    const companionStat = lstatSync(targetCompanion, { throwIfNoEntry: false });
+    const companionExists = companionStat !== undefined;
+    let preserveCompanion = false;
+    let preservedCompanionFacts = null;
     if (hasCompanion) {
       assertExpectedBundle(sourceCompanion, 'Source Password AutoFill companion', identifierReader, companionIdentifier);
       verifyCompanion(sourceCompanion);
-      if (companionExists) assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
+      if (companionExists) {
+        assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
+        verifyCompanion(targetCompanion);
+        const sourceFacts = companionFactsReader(sourceCompanion);
+        preservedCompanionFacts = companionFactsReader(targetCompanion);
+        preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
+      }
     }
+    const verifyPreservedCompanion = () => {
+      if (!preserveCompanion) return;
+      const currentStat = lstatSync(targetCompanion);
+      if (!currentStat.isDirectory() || currentStat.isSymbolicLink() ||
+        currentStat.dev !== companionStat.dev || currentStat.ino !== companionStat.ino) {
+        throw new Error('The preserved Password AutoFill companion changed during installation.');
+      }
+      assertExpectedBundle(targetCompanion, 'Preserved Password AutoFill companion', identifierReader, companionIdentifier);
+      verifyCompanion(targetCompanion);
+      if (JSON.stringify(companionFactsReader(targetCompanion)) !== JSON.stringify(preservedCompanionFacts)) {
+        throw new Error('The preserved Password AutoFill companion changed during installation.');
+      }
+    };
 
     const targetExists = lstatSync(targetApp, { throwIfNoEntry: false }) !== undefined;
     if (targetExists) {
@@ -311,7 +440,7 @@ export function installLocalApp(options = {}) {
 
     const stagedCompanion = join(stageRoot, companionName);
     const backupCompanion = join(stageRoot, 'Previous Thingtime Passwords.app');
-    if (hasCompanion) {
+    if (hasCompanion && !preserveCompanion) {
       copyApp(sourceCompanion, stagedCompanion);
       assertExpectedBundle(stagedCompanion, 'Staged Password AutoFill companion', identifierReader, companionIdentifier);
       verifyCompanion(stagedCompanion);
@@ -346,7 +475,8 @@ export function installLocalApp(options = {}) {
         const qualifier = serviceState.registered ? 'Thingtime Node did not stop cleanly' : 'Quit the unmanaged Thingtime Node process';
         throw new Error(`${qualifier} before replacing the app (running PID${nodePids.length === 1 ? '' : 's'}: ${nodePids.join(', ')}).`);
       }
-      if (hasCompanion && companionRunningPids(join(targetCompanion, 'Contents', 'MacOS', 'Thingtime Passwords')).length) {
+      verifyPreservedCompanion();
+      if (hasCompanion && !preserveCompanion && companionRunningPids(join(targetCompanion, 'Contents', 'MacOS', 'Thingtime Passwords')).length) {
         throw new Error('Quit the Thingtime AutoFill companion before replacing it.');
       }
       if (targetExists) {
@@ -358,7 +488,8 @@ export function installLocalApp(options = {}) {
       assertExpectedBundle(targetApp, 'Installed Thingtime app', identifierReader);
       verifyApp(targetApp);
       accessSync(targetExecutable, constants.X_OK);
-      if (hasCompanion) {
+      verifyPreservedCompanion();
+      if (hasCompanion && !preserveCompanion) {
         if (companionExists) { renameSync(targetCompanion, backupCompanion); companionBackupMoved = true; }
         renameSync(stagedCompanion, targetCompanion); companionInstalledMoved = true;
         assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
@@ -370,7 +501,7 @@ export function installLocalApp(options = {}) {
       }
     } catch (error) {
       const rollbackErrors = rollbackAppReplacements([
-        { target: targetCompanion, backup: backupCompanion, installedMoved: companionInstalledMoved, backupMoved: companionBackupMoved },
+        ...(!preserveCompanion && hasCompanion ? [{ target: targetCompanion, backup: backupCompanion, installedMoved: companionInstalledMoved, backupMoved: companionBackupMoved }] : []),
         { target: targetApp, backup: backupApp, installedMoved, backupMoved }
       ]);
       if (serviceStopped) {
@@ -390,8 +521,8 @@ export function installLocalApp(options = {}) {
     }
 
     registerMetadata(targetApp);
-    if (hasCompanion && existsSync(lsregister)) runOptional(lsregister, ['-f', targetCompanion]);
-    return { sourceApp, targetApp, ...(hasCompanion ? { targetCompanion } : {}) };
+    if (hasCompanion && !preserveCompanion && existsSync(lsregister)) runOptional(lsregister, ['-f', targetCompanion]);
+    return { sourceApp, targetApp, ...(hasCompanion ? { targetCompanion, companionPreserved: preserveCompanion } : {}) };
   } finally {
     if (stageRoot && !preserveStage) rmSync(stageRoot, { force: true, recursive: true });
     releaseLock();
