@@ -1,5 +1,7 @@
 // Provider error bodies are untrusted and may contain credentials or account
 // data. Select fixed copy from a closed vocabulary; never interpolate values.
+export const FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR = 'Facebook does not support this endpoint for this account in the New Pages Experience.';
+
 export const safeProviderError = (url: string, status: number, data: unknown): string | null => {
   let target: URL;
   try { target = new URL(url); } catch { return null; }
@@ -21,6 +23,7 @@ export const safeProviderError = (url: string, status: number, data: unknown): s
   }
   if (target.hostname === 'graph.facebook.com' && /^\/v\d+\.\d+\//.test(target.pathname)) {
     if (status !== 400 && status !== 401 && status !== 403) return null;
+    if (status === 400 && error.code === 200 && error.error_subcode === 2069030) return FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR;
     if (error.code === 190) return 'Facebook authorization is invalid or expired. Reconnect this account.';
     if (error.code === 10 || error.code === 200) return 'Facebook denied this operation. Check the app’s posts permission and account access.';
     if (error.code === 100) return 'Facebook rejected the feed request or a requested field. Check the integration’s Graph API request.';

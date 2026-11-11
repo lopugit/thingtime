@@ -5099,10 +5099,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.23.1',
-    featureVersion: '1.23.1',
+    contractVersion: '1.23.2',
+    featureVersion: '1.23.2',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
-    detail: 'Version 1.23.1 normalizes personal-provider effort against the actual resolved saved model: known models omit unsupported effort, unknown custom models retain explicit tuning, and supported effort, credentials and billing remain unchanged. ' +
+    detail: 'Version 1.23.2 classifies recognized structured Console billing, spend-limit, model-access and unsupported-parameter failures into fixed safe diagnostics; unknown errors retain status-only messages, and credentials, upstream text, retry and billing policies are unchanged. ' +
+      'Version 1.23.1 normalizes personal-provider effort against the actual resolved saved model: known models omit unsupported effort, unknown custom models retain explicit tuning, and supported effort, credentials and billing remain unchanged. ' +
       'Version 1.23.0 supports the explicit anthropic-api-key saved-provider kind for Console-billed native Anthropic Messages requests; existing anthropic connections retain their Claude Code OAuth mode. No implicit mode or billing fallback. ' +
       'Version 1.21.1 keeps personal-plan turns on their persistent runtime with client management, including older clients requesting server management, and allows follow-up turns to retain the same verified provider. Completed Responses output items are reconciled before tool execution, including terminal frames with empty output; conflicting or unfinished items fail closed. Version 1.21.0 admits text turns on a live owner/origin-bound ChatGPT plan without admin verification, using a full account session and no Character override header. Scoped credentials, ordinary BYO, catalog and voice retain existing policy; unavailable plans never fall back to API billing. Version 1.20.0 accepts local ChatGPT plan provider IDs with fail-closed account resolution, streaming Responses and existing tool permissions. Plan failure never switches billing. Version 1.19.3 routes GPT-6 Astra native tool turns through Responses, preserving explicit or provider-default reasoning and encrypted reasoning across tool hops without retrying a weaker request. ' +
       'Version 1.19.2 restores up to eight completed tool results (64 KiB) from the exact interrupted private background task on a verified continuation. Current account, conversation, deployment, retention and completed-boundary checks apply. No Action is replayed and no result is added to public message history. Expired task output stops refetching until the account or deployment changes. ' +
@@ -14701,7 +14702,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-feed', contractVersion: '2.0.1', featureVersion: '2.0.1',
+    id: 'connections-feed', contractVersion: '2.0.2', featureVersion: '2.0.2',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -14714,7 +14715,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'posts. The caller’s enabled AI feed filters annotate each post via feedFilterMatches. ' +
       'synced[].error and connections[].lastSyncError contain fixed redacted diagnostics for known provider errors; ' +
       'unknown errors remain generic. YouTube distinguishes API activation, permission, quota and authorization; ' +
-      'Facebook distinguishes request, permission and authorization failures without upstream messages. ' +
+      'Facebook distinguishes request, permission and authorization failures without upstream messages. Version 2.0.2 maps exact HTTP 400 Graph code 200/subcode 2069030 to fixed New Pages Experience endpoint/account restriction copy instead of suggesting another posts permission grant. ' +
       'Total YouTube uploads-playlist request failure reports a sync error rather than successful emptiness.',
     auth: {
       mode: 'session-or-bearer',
@@ -14770,11 +14771,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-diagnostics', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    id: 'connections-diagnostics', contractVersion: '1.0.1', featureVersion: '1.0.1',
     group: 'connections', title: 'Inspect connection access',
     endpoint: '/api/v1/connections/diagnostics', methods: ['GET'],
     summary: 'Read-only exact-owner inspection of a saved provider authorization.',
-    detail: 'Negotiate api.connections-diagnostics 1.0.0 on this origin first. Requires connectionId and matching expectedOwnerId. Uses only fixed adapter probes; accepts no URLs, fields or provider operations. Currently Facebook checks actual catalogued Facebook grants. Only default posts connections probe minimal posts and individual optional engagement fields; named and account-only connections return permission metadata with all content checks skipped regardless of provider consent. Returns grant names or null (unknown), closed check statuses and observation time; never credentials, post content or raw provider errors. Does not refresh, rewrite or revoke credentials, sync content or update saved scope metadata. Expired, wrong-origin or changed credentials fail closed. Facebook connection projections additionally expose authorization.requestedScopes and authorization.grantedScopes, with null for legacy/unverified evidence; legacy scopes are not confirmed grants.',
+    detail: 'Version 1.0.1 preserves permission-denied for exact Graph New Pages Experience endpoint/account restrictions; granted user_posts remains independent evidence. No raw errors or content are returned. Existing 1.0.0 clients remain compatible. Negotiate api.connections-diagnostics 1.0.0 on this origin first. Requires connectionId and matching expectedOwnerId. Uses only fixed adapter probes; accepts no URLs, fields or provider operations. Currently Facebook checks actual catalogued Facebook grants. Only default posts connections probe minimal posts and individual optional engagement fields; named and account-only connections return permission metadata with all content checks skipped regardless of provider consent. Returns grant names or null (unknown), closed check statuses and observation time; never credentials, post content or raw provider errors. Does not refresh, rewrite or revoke credentials, sync content or update saved scope metadata. Expired, wrong-origin or changed credentials fail closed. Facebook connection projections additionally expose authorization.requestedScopes and authorization.grantedScopes, with null for legacy/unverified evidence; legacy scopes are not confirmed grants.',
     auth: { mode: 'session-or-bearer', description: 'Requires the exact owning account; service accounts are refused.' },
     steps: ['Negotiate the origin capability.', 'Select the exact connection ID and owning account.', 'Inspect the private no-store diagnostic response.'],
     requestExamples: [{ name: 'Inspect saved access', description: 'Use the signed-in owner.', method: 'GET',

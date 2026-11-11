@@ -73,3 +73,16 @@ test('Facebook diagnostics isolate core posts from optional fields without retur
   assert.deepEqual((await diagnose({ accessToken: 'synthetic' }, { allowContentProbe: true })).checks.map(check => check.status), ['permission-denied', 'skipped', 'skipped', 'skipped']);
   assert.equal(fields.length, 1);
 });
+
+test('Facebook New Pages restriction preserves permission-denied diagnostics despite confirmed user_posts', async t => {
+ let probes = 0;
+ t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL) => {
+  const url = new URL(String(input)); assert.equal(url.origin, 'https://graph.facebook.com');
+  if (url.pathname.endsWith('/permissions')) return Response.json({ data: [{ permission: 'user_posts', status: 'granted' }] });
+  assert.ok(url.pathname.endsWith('/me/posts')); probes++;
+  return Response.json({ error: { code: 200, error_subcode: 2069030, message: 'synthetic-secret request echo', fbtrace_id: 'synthetic-private-trace' } }, { status: 400 });
+ });
+ const result = await connectionProviderById('facebook')!.diagnose!({ accessToken: 'synthetic-private-key' }, { allowContentProbe: true });
+ assert.deepEqual(result, { grantedScopes: ['user_posts'], checks: [{ name: 'posts', status: 'permission-denied' }, { name: 'shares', status: 'skipped' }, { name: 'likes', status: 'skipped' }, { name: 'comments', status: 'skipped' }] });
+ assert.equal(probes, 1); assert.doesNotMatch(JSON.stringify(result), /synthetic-|request echo|fbtrace/);
+});
