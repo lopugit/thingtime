@@ -7689,6 +7689,15 @@ separate user_posts grant. Provider testing mode, eligible test accounts, app
 review and publication remain provider prerequisites. A configured card only
 proves valid vault configuration, not real provider consent or API permission.
 
+For YouTube subscriptions, select the Google Cloud project that owns the
+configured OAuth client, then open **APIs & Services → Library → YouTube Data
+API v3 → Enable**. Approving `youtube.readonly` does not enable the API.
+This OAuth feed does not require the optional `YOUTUBE_API_KEY` used for virtual
+channel search. After activation, retry the selected connection's feed once
+(`sync=force` bypasses its one-minute cooldown) and inspect `synced[].error`;
+a saved OAuth connection alone does not prove a successful provider fetch.
+
+
 Authenticated grants are encrypted per Thingtime owner/account and saved with
 origin/environment/client binding. Reconnect migrates only the caller's legacy
 link while preserving its ID; shared legacy tokens are refused until reconnect.

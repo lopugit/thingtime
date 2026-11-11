@@ -144,5 +144,16 @@
     "narrow320": true,
     "card": true,
     "result": "Earlier visual inspection retained because final captures are verified byte-identical; exact line breaks, centered card, preserved margins, no clipping or overlap."
+  },
+  "latestMainParity": {
+    "observedAt": "2026-11-11T04:42:55.309817+00:00",
+    "baseHead": "04a98995f28efb1ea987f077f979e70dd12efbe9",
+    "mergedMain": "9ebe2be328f6cf76b502f1c6c047c353ccc14f80",
+    "state": "clean automatic merge working tree before commit; completed canonical full build",
+    "runnerSha256": "c1415d5d0945826eed52817fb5e915450335cab73568e7ca7cbc0279fef5d3d1",
+    "runnerMatchesBrowserAcceptedBytes": true,
+    "recordedRendererSourceFilesMatch": true,
+    "browserRerun": false,
+    "reason": "Exact final runner and recorded renderer source bytes unchanged; reuse prior actual browser acceptance."
   }
 }

@@ -5,7 +5,7 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 ## Latest main integration and capability audit — 2026-11-11
 
 Integrated freshly fetched main through
-`0d8cf373344434d8341882db9a681ded3807c81e` into the feature branch. The first
+`9ebe2be328f6cf76b502f1c6c047c353ccc14f80` into the feature branch. The first
 64-commit integration of `1f5c09c` is merge commit `de28a6d9a`; a subsequent
 fetch included the Anthropic Console connection PR that landed during validation.
 Together these updates bring Builder collections/selection, library archive,
@@ -56,6 +56,14 @@ remote cases prove Console negotiation refuses 1.4 before POST and permits 1.5.
 [Vault UI evidence](../artifacts/anonymous-release-2026-11-11/console-vault-ui/verification.json).
 These tests do not establish real provider authentication or billing. The latest
 full-build renderer was independently rerun; prior runner hashes remain historical.
+A further main advance through `9ebe2be32` adds redacted provider-feed error
+handling (`api.connections-feed` 2.0.1) without changing the earlier combined
+contracts. Its 156 connection tests and 192 capability tests pass. The final
+canonical build, full lint (zero errors, 369 warnings), raw TypeScript, zero-error
+ratchet, all 23 content contracts and the separate compiled Connections smoke
+pass. The completed build retains the exact `c1415d5d` runner and renderer source
+bytes, so the recorded native browser acceptance remains applicable by verified
+byte parity; no additional browser run is claimed for this last delta.
 The portable map is refreshed structurally; prior bounded semantic attempts timed
 out, and no new semantic documentation coverage or shared-proxy change is claimed.
 

@@ -7,7 +7,7 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
 
 ## Current integration checkpoint — 2026-11-11
 
-Freshly fetched main through `0d8cf373344434d8341882db9a681ded3807c81e` is
+Freshly fetched main through `9ebe2be328f6cf76b502f1c6c047c353ccc14f80` is
 reconciled into PR #1000, including explicit Console connections alongside newer
 Builder/archive/attachment behavior and local-first recovery. The first
 integration of `1f5c09c` passed the canonical client/server build,
@@ -37,7 +37,10 @@ Focused API, transport, chat and encrypted vault regressions pass. The actual
 Secure Vault UI passed 1440/390/320px offline save, cold unlock, token-mode
 clearing and two synthetic remote capability checks.
 [Vault UI evidence](../artifacts/anonymous-release-2026-11-11/console-vault-ui/verification.json).
-Real provider authentication is separate. Prior passes below remain scoped to
+The final provider-error delta also passes 156 connection checks, 192 capability
+checks and the compiled Connections smoke. Build, raw TypeScript, ratchet and
+full lint pass again; the accepted renderer bytes are unchanged. Real provider
+authentication is separate. Prior passes below remain scoped to
 their original source checkpoints.
 
 The canonical hosted connection still has no render/export tool; fresh production

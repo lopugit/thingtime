@@ -901,6 +901,9 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+`api.connections-feed` 2.0.1 adds fixed, redacted provider diagnostics and reports
+total YouTube uploads-playlist failure as an error. The provider-error tests and
+compiled Connections smoke cover this patch; earlier merged contracts stay unchanged.
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
