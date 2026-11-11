@@ -119,7 +119,7 @@ test('authorized AppID assertion remains RP-bound and verifies independently wit
   const registration = await prepareBrowserPasskeyRegistration(create(), true, [], crypto);
   const enrolled = await verifyRegistrationResponse({response: registration.response as any, expectedChallenge: challenge, expectedOrigin: create().origin, expectedRPID: 'example.com', requireUserVerification: true});
   assert.ok(enrolled.registrationInfo);
-  for (const appid of ['', 'https://login.example.com/legacy-app-id.json?version=1']) {
+  for (const appid of ['', 'https://login.example.com/legacy-app-id.json?version=1', 'https://example.com/legacy/app.json', 'https://accounts.example.com/legacy', 'https://login.example.com:444/app']) {
     const request = get(); request.publicKey.extensions = {appid};
     const assertion = await createBrowserPasskeyAssertion(registration.entry, request, true, crypto);
     assert.deepEqual(assertion.clientExtensionResults, {appid: false});
@@ -135,7 +135,7 @@ test('authorized AppID assertion remains RP-bound and verifies independently wit
 });
 
 test('AppID cannot expand origin, RP, algorithms or supported extension authority', () => {
-  for (const appid of ['https://other.example.com/app', 'https://login.example.com.evil.test/app', 'https://user:secret@login.example.com/app', 'http://login.example.com/app', 'https://login.example.com/app#fragment', 'https://login.example.com:444/app', 'not a URL', null, true, {}]) {
+  for (const appid of ['https://other.test/app', 'https://com/app', 'https://login.example.com.evil.test/app', 'https://user:secret@login.example.com/app', 'http://login.example.com/app', 'https://login.example.com/app#fragment', 'not a URL', null, true, {}]) {
     const request = get(); request.publicKey.extensions = {appid};
     assert.throws(() => validateBrowserPasskeyRequest(request));
   }
@@ -145,4 +145,16 @@ test('AppID cannot expand origin, RP, algorithms or supported extension authorit
   assert.throws(() => validateBrowserPasskeyRequest(creation), errorName('NotSupportedError'));
   const wrongRp = get(); wrongRp.publicKey.extensions = {appid: 'https://login.example.com/app'}; wrongRp.publicKey.rpId = 'other.example.com';
   assert.throws(() => validateBrowserPasskeyRequest(wrongRp), errorName('SecurityError'));
+});
+
+test('AppID same-site validation respects ICANN and private public suffixes', () => {
+  for (const [origin, rpId, appid] of [
+    ['https://login.example.co.uk','example.co.uk','https://co.uk/app'],
+    ['https://one.github.io','one.github.io','https://two.github.io/app'],
+    ['https://one.github.io','one.github.io','https://github.io/app'],
+    ['https://one.s3.amazonaws.com','one.s3.amazonaws.com','https://two.s3.amazonaws.com/app']
+  ]) {
+    const request=get();request.origin=origin;request.publicKey.rpId=rpId;request.publicKey.extensions={appid};
+    assert.throws(()=>validateBrowserPasskeyRequest(request),errorName('SecurityError'));
+  }
 });

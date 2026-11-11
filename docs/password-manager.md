@@ -207,14 +207,19 @@ while accepting the writer's normal field-property ordering.
 The extension is off by default and requires explicit installation and enablement.
 It is a Chromium MV3 integration, not a browser-store release or an OS provider.
 Basic ES256 registration/assertion and registration `credProps` are supported.
-Browser adapter 0.5.0 with both frontend and active same-origin `api.passwords`
-1.9.0 additionally supports assertion `appid` for an empty/default AppID or a
-credential-free HTTPS URL at the exact requesting origin. This implements the
-no-network subset of [FIDO facet authorization](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-appid-and-facets-v2.0-id-20180227.html#determining-if-a-callers-facetid-is-authorized-for-an-appid).
+Browser adapter 0.5.1 with both frontend and active same-origin `api.passwords`
+1.9.1 additionally supports assertion `appid` for an empty/default AppID or a
+credential-free HTTPS URL at the same requesting site (registrable domain, including private public suffixes). This implements the
+same-host/empty no-network [FIDO facet authorization](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-appid-and-facets-v2.0-id-20180227.html#determining-if-a-callers-facetid-is-authorized-for-an-appid).
+The WebAuthn specification documents the browser same-site relaxation of FIDO
+step 3; parent and sibling hosts with the same registrable domain are accepted
+without fetching. Same-host ports are insignificant to FIDO authorization.
+The shared PSL-aware validator is bundled lexically into the MAIN-world hook;
+invalid and outside-site AppIDs have fixed diagnostics with no request values.
 It signs only the existing RP-bound WebAuthn credential: RP-ID hashing, allowlist,
 verification and request/session binding remain unchanged, and the result reports
 `appid: false` per [WebAuthn 10.1.1](https://www.w3.org/TR/webauthn-3/#sctn-appid-extension).
-No legacy U2F credential is retargeted or claimed. Cross-origin AppIDs, malformed
+No legacy U2F credential is retargeted or claimed. Cross-site AppIDs, malformed
 values, unknown extensions and registration AppID requests remain native or
 unsupported; the adapter never fetches AppID URLs or trusted-facet lists.
 The [public AWS sign-in constructor](https://signin.aws.amazon.com/v2/assets/_next/static/chunks/4399.a1d04a6db629497a.js) conditionally requests AppID, but its dynamic value and

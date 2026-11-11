@@ -1,3 +1,4 @@
+import { browserPasskeyAppIdReason } from './browserPasskeyAppId';
 import { parse as parseDomain } from 'tldts';
 import { PASSWORD_PROVIDER_NAME, passwordProviderAAGUIDBytes } from './passwordProviderIdentity';
 import type { PasswordEntry } from './model';
@@ -50,17 +51,10 @@ function relyingParty(request: BrowserPasskeyRequest): string {
     return fail('SecurityError', 'A public suffix or invalid domain cannot be a relying party.');
   return rp;
 }
-/** Only the no-network FIDO facet authorization subset is supported. Cross-origin
- * AppIDs require trusted-facet processing and remain with the native provider. */
+/** Same-site client compatibility; signing remains independently RP-bound. */
 function validateAppId(value: unknown, origin: string): void {
   if (typeof value !== 'string') return fail('TypeError', 'AppID must be a string.');
-  // FIDO AppID/facets 3.1.2 step 2 defaults an empty AppID to this facet.
-  if (value === '') return;
-  if (value.trim() !== value || value.includes('\\')) return fail('SecurityError', 'Invalid AppID.');
-  let app: URL;
-  try { app = new URL(value); } catch { return fail('SecurityError', 'Invalid AppID.'); }
-  if (app.protocol !== 'https:' || app.origin !== origin || app.username || app.password || app.hash)
-    return fail('SecurityError', 'This AppID requires the native passkey provider.');
+  if (browserPasskeyAppIdReason(value, origin)) return fail('SecurityError', 'This AppID requires the native passkey provider.');
 }
 export function validateBrowserPasskeyRequest(input: unknown): BrowserPasskeyRequest {
   if (!object(input) || !['create', 'get'].includes(input.type) || typeof input.origin !== 'string' || !object(input.publicKey)) return fail('TypeError', 'Invalid passkey request.');
