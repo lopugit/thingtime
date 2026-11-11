@@ -618,6 +618,35 @@ fork once the owner decides. Write a note before a plan and a plan before a new
 `TODO/claude-todo/README.md`) in the same change — those indexes are the entry
 points, not the individual files.
 
+### Everything is a Thing: shared actions and context menus
+
+- **Fundamental architecture rule:** build common actions on the unified Thing
+  model, shared context-menu system and canonical permission checks. A Thing's
+  kind, page, card renderer or browsing mode must not arbitrarily determine
+  whether a common Thing action exists. Extend the shared action contract and
+  its consumers instead of implementing separate copies for individual views.
+- **Archive example (owner guidance, 11 November 2026):** Archive belongs on
+  every Thing-backed context menu when the current user has the appropriate
+  permission, including posts, comments, apps, folders, Builder items and
+  ordinary Things. Adding Archive only to `/things`, or excluding `builderMode`,
+  does not deliver this feature. Everything is a Thing; the shared action must
+  follow the Thing wherever its context menu is presented.
+- Derive availability from the canonical action and permission contract for
+  the exact Thing, account and origin. Reauthorize on the server when executing;
+  a visible menu item never grants access. Preserve protected-system boundaries,
+  scoped-token restrictions, ownership and collaborator rules. A missing
+  adapter or unsupported surface is an implementation gap to resolve or report,
+  not permission to silently exclude that class of Things.
+- Keep the action's meaning, mutation path, feedback and state updates
+  consistent across consumers. For Archive, preserve content and relationships,
+  define its visibility semantics explicitly, and provide a discoverable
+  Archived/Restore path. Do not confuse archiving with deletion or file export.
+- Verify the shared contract and representative real consumers: post/feed and
+  detail menus, Builder app cards, folders and ordinary Things, on desktop and
+  mobile. Cover authorized and refused actions, refresh/reload and restoration.
+  A successful test of one page is not evidence that a shared feature works
+  everywhere; inspect the menu consumers and record any uncovered surface.
+
 ## Local development and worktrees
 
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, to start or restart the local web app — it is now the blessed lifecycle command (it cleans up the previous timestamped app and starts a fresh one). Do **not** use a raw `pm2 restart ecosystem.config.js`: the app name carries a clock-time suffix that is re-stamped on each config load, so a raw restart would spawn a duplicate instead of restarting in place. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.

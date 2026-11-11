@@ -482,11 +482,11 @@ export const PreviewModal = ({
                 // handles clicks (grid previews stay pointerEvents:none)
                 <RenderThing
                   context={{ size: 'full', untrusted }}
-                  fallback={<ThingView compact thing={thing.crystal} />}
+                  fallback={<ThingView subjectId={thing.id} compact thing={thing.crystal} />}
                   thing={thing as unknown as Record<string, unknown>}
                 />
               ) : (
-                <ThingView compact thing={thing.crystal} />
+                <ThingView subjectId={thing.id} compact thing={thing.crystal} />
               )}
             </Box>
             <ThingComments thingId={thing.id} />

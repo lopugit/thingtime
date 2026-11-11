@@ -1,5 +1,24 @@
 # UI shell, menus and design system
 
+## Shared persisted Thing actions
+
+`schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore
+verbs. The routed app entry supplies `PersistedThingMenuLoaderContext`; its lazy
+headless `PersistedThingMenuController` leaves one menu renderer mounted while
+permissions load. Local JSON/embed entries do not import the authenticated API
+graph or infer remote subjects. Controller loading failure has explicit Retry;
+same-identity focus/submenu state survives loading, while identity changes reset
+presentation. `PersistedThingContextMenu` resolves exact-root availability on open,
+negotiates `api.things-actions` 1.1.0, and fences reads/writes by owner, origin,
+data plane, subject and menu visit. Refused subjects have no Archive or retry;
+transient lookup failures offer Retry. Shared buttons and persisted/raw-tree
+adapters carry explicit saved-root IDs. A nested field says **Archive containing
+Thing**; an unsaved local value or remote inode cannot become a guessed target.
+`THING_ARCHIVE_CHANGED` refreshes same-scope library consumers; archiving a post
+keeps its published audience. See the Things library archive checklist and
+`things-library-archive-acceptance.mjs` (real API, Builder app cards, posts,
+messages, desktop/touch, stale-menu races and failure recovery).
+
 ## Editable LiDAR capture controls
 
 The Things root shows an editable LiDAR scan section on iOS. Its

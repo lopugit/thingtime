@@ -145,6 +145,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Keep the shared authenticated menu controller outside the single-file
+  embed dependency graph, preserving the unchanged bundle budget and first-open
+  menu focus through lazy permission loading. See [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
+
+- 2026-11-11: Make Archive/Restore shared persisted Thing actions across Builder
+  apps, posts, comments, messages and library menus. Preserve public audiences
+  and provide protected metadata-only restoration; verify exact app-card paths
+  and stale-menu races through isolated real API/Chrome checks. See
+  [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
 - 2026-11-11: Recover saved folder-sync work after a legacy uncertain file
   publication or cancelled native scan. Fence the original upload identity
   through the accounted Files Timeline transaction (`api.files` 1.13.0), then
