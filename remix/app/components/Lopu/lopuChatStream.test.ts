@@ -83,7 +83,7 @@ test('unknown or explicit personal chat providers reject pre-fix origins before 
  let posts = 0;
  const mocked = t.mock.method(globalThis, 'fetch', async (_url, init) => {
   if (init?.method === 'POST') posts++;
-  return Response.json({ schemaVersion: 1, origin: 'https://effort-client.test', features: { 'api.lopu-chats-reply': { version: '1.23.0' } } });
+  return Response.json({ schemaVersion: 1, origin: 'https://effort-client.test', features: { 'api.lopu-chats-reply': { version: '1.23.1' } } });
  });
  try {
   for (const selection of [{}, { providerId: 'saved-console-provider' }]) {
@@ -97,12 +97,35 @@ test('unknown or explicit personal chat providers reject pre-fix origins before 
  }
 });
 
+test('personal-provider diagnostics reject an older active gateway behind a current frontend', async (t) => {
+ const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ const origin = 'https://diagnostic-gateway.test';
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin } } });
+ let posts = 0; let activeReads = 0;
+ const mocked = t.mock.method(globalThis, 'fetch', async (url, init) => {
+  if (init?.method === 'POST') posts++;
+  if (String(url).endsWith('/api/v1/capabilities')) {
+   activeReads++;
+   return Response.json({ ok: true, schemaVersion: 1, features: { 'api.lopu-chats-reply': '1.23.1' } });
+  }
+  return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-chats-reply': { version: '1.23.2' } } });
+ });
+ try {
+  await assert.rejects(postLopuReply({ text: 'Synthetic contract probe', requestId: 'diagnostic-contract-probe', providerId: 'saved-console-provider' }), (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
+  assert.equal(activeReads, 1); assert.equal(posts, 0);
+ } finally {
+  mocked.mock.restore();
+  if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  else delete (globalThis as any).window;
+ }
+});
+
 
 test('personal replies negotiate the active API before submitting the selected provider', async (t) => {
  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
  const origin = 'https://active-effort-client.test';
  Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin } } });
- let activeVersion = '1.23.0';
+ let activeVersion = '1.23.1';
  const posts: Record<string, unknown>[] = [];
  const reads: string[] = [];
  const mocked = t.mock.method(globalThis, 'fetch', async (url, init) => {
@@ -113,7 +136,7 @@ test('personal replies negotiate the active API before submitting the selected p
   const path = new URL(String(url), origin).pathname;
   reads.push(path);
   if (path === '/api/v1/capabilities') return Response.json({ ok: true, schemaVersion: 1, features: { 'api.lopu-chats-reply': activeVersion } });
-  return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-chats-reply': { version: '1.23.1' } } });
+  return Response.json({ schemaVersion: 1, origin, features: { 'api.lopu-chats-reply': { version: '1.23.2' } } });
  });
  try {
   for (const selection of [{}, { providerId: 'selected-console-provider' }]) {
@@ -121,7 +144,7 @@ test('personal replies negotiate the active API before submitting the selected p
     (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
   }
   assert.equal(posts.length, 0);
-  activeVersion = '1.23.1';
+  activeVersion = '1.23.2';
   const response = await postLopuReply({ text: 'Synthetic active API probe', requestId: 'active-effort-probe', providerId: 'selected-console-provider' });
   assert.equal(response.ok, true);
   assert.equal(posts.length, 1);
