@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Add signed, content-addressed native web-release inventories,
+  actual Electron runtime compatibility metadata and profile-owned launch-trial
+  recovery primitives. Keep API delivery, startup activation and iOS runtime
+  acceptance explicitly separate. [Native architecture](../docs/native-web-bundles.md).
+  **Codex (AI)**
+
 - 2026-11-11: Integrate current main into the anonymous/local-first feature
   branch, preserving new archive, Builder and attachment behavior, plus explicit
   Anthropic Console mode across local and remote vaults. Record the

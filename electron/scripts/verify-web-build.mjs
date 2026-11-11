@@ -2,6 +2,8 @@ import { access, lstat, readFile, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import inventory from '../../native-bundles/inventory.cjs';
+import contract from '../../native-bundles/release.cjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const webOutputDir = path.join(electronDir, 'dist', 'web', '.output');
@@ -60,4 +62,9 @@ if (!html.includes('id="root"')) {
   throw new Error(`Electron web bundle index is missing the React root: ${indexHtml}`);
 }
 
+const stagedInventory = JSON.parse(await readFile(path.join(electronDir, 'dist', 'web-integrity.json'), 'utf8'));
+if (contract.canonical(await inventory.inventoryDirectory(path.dirname(webOutputDir))) !== contract.canonical(stagedInventory)) {
+  throw new Error('Staged desktop web bundle integrity changed after packaging.');
+}
+if (!metadata.nativeBundle || metadata.nativeBundle.runtime.id !== 'electron-node-middleware-v1') throw new Error('Missing native web bundle compatibility metadata.');
 console.log('Electron web bundle verified.');

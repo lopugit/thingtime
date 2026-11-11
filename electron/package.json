@@ -22,7 +22,9 @@
 		"dist:unsigned": "node scripts/build-unsigned-release.mjs",
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
-		"test": "node --test test/**/*.test.cjs",
+		"test": "node --test test/**/*.test.cjs ../native-bundles/*.test.cjs",
+		"test:web-bundles": "node --test ../native-bundles/*.test.cjs test/web-bundle-store.test.cjs test/native-bundle-metadata.test.cjs test/native-bundle-build.test.cjs test/native-password-package.test.cjs",
+		"release:web-bundle": "node ../native-bundles/package-release.mjs",
 		"verify:window-zoom": "node scripts/test-window-zoom.mjs",
 		"verify:folder-sync-host": "node scripts/test-folder-sync-host.mjs",
 		"verify:folder-upload-native": "node scripts/test-folder-upload-native.mjs",
@@ -54,6 +56,7 @@
 			"package.json"
 		],
 		"extraResources": [
+			{ "from": "../native-bundles", "to": "native-bundles", "filter": ["release.cjs", "inventory.cjs"] },
 			{ "from": "scripts/password-agent.mjs", "to": "password-agent.mjs" },
 			{ "from": "scripts/password-agent-acl.cjs", "to": "password-agent-acl.cjs" },
 			{ "from": "scripts/agent-browser.mjs", "to": "agent-browser.mjs" },

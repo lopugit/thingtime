@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
+const { createNativeBundleBuildMetadata } = require('./native-bundle-metadata.cjs');
+const { inventoryDirectory } = require('../../native-bundles/inventory.cjs');
 const { normalizeBuildEndpointConfiguration, normalizeEndpointUrl } = require('../lib/desktop-settings.cjs');
 const repoRoot = path.resolve(electronDir, '..');
 const remixDir = path.join(repoRoot, 'remix');
@@ -21,8 +23,23 @@ const desktopReleaseMetadata = {
   baseVersion: process.env.THINGTIME_ELECTRON_BASE_VERSION || null,
   buildNumber: process.env.THINGTIME_ELECTRON_BUILD_NUMBER || null,
   tag: process.env.THINGTIME_ELECTRON_RELEASE_TAG || null,
-  version: process.env.THINGTIME_ELECTRON_RELEASE_VERSION || null
+  version: String(process.env.THINGTIME_ELECTRON_RELEASE_VERSION || '').trim() || null
 };
+
+function nativeBundleBuildMetadata() {
+  // Inspect the runtime shipped by this shell, rather than the Node process
+  // running the build. Native addons compiled for another ABI cannot update it.
+  const runtime = spawnSync(require('electron'), ['-p', 'JSON.stringify({platform:process.platform,arch:process.arch,versions:process.versions})'], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (runtime.status !== 0) throw new Error('Could not inspect the packaged Electron runtime ABI.');
+  const inspected = JSON.parse(runtime.stdout.trim());
+  return createNativeBundleBuildMetadata({
+    inspected,
+    packageVersion: require('../package.json').version,
+    releaseVersion: process.env.THINGTIME_ELECTRON_RELEASE_VERSION
+  });
+}
 
 function desktopEndpointMetadata() {
 	const configuredOptions = process.env.THINGTIME_DESKTOP_ENDPOINT_OPTIONS_JSON
@@ -99,6 +116,9 @@ function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
 
+// Fail before expensive builds when this checkout has no executable shell ABI.
+const nativeBundle = nativeBundleBuildMetadata();
+
 // Mail and database staging resolve packages from Remix before its build runs.
 // Repair fresh-worktree dependency links through the shared preflight first.
 run(process.execPath, [path.join(remixDir, 'scripts/ensure-dependencies.js')]);
@@ -143,6 +163,7 @@ run(pnpmRunner.command, [...pnpmRunner.args, '--dir', mcpDir, 'run', 'build:desk
 
 await mkdir(stagedWebDir, { recursive: true });
 await cp(remixOutputDir, path.join(stagedWebDir, '.output'), {
+  filter: (source) => path.basename(source) !== '.DS_Store',
   dereference: true,
   recursive: true
 });
@@ -170,11 +191,15 @@ await writeFile(
       desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
       gitCommit: readGitValue(['rev-parse', 'HEAD']),
-      nitroPreset: 'node_middleware'
+      nitroPreset: 'node_middleware',
+      nativeBundle
     },
     null,
     2
   )}\n`
 );
+
+// Keep inventory outside its own payload to avoid an unsigned recursive entry.
+await writeFile(path.join(electronDir, 'dist', 'web-integrity.json'), `${JSON.stringify(await inventoryDirectory(stagedWebDir), null, 2)}\n`);
 
 console.log(`Electron web bundle staged at ${path.relative(repoRoot, stagedWebDir)}`);

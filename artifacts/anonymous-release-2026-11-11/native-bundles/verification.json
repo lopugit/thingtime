@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "observedAt": "2026-11-11T06:09:55.231Z",
+  "source": "electron/dist/web",
+  "releaseId": "1bf7ee525aea719073af3420fb616ce8b64fc6a04f8ed215a38e48cdfacae694",
+  "rolledBackCandidate": "0da88c27e3109deb2841a6f7aa1357e6df5d5a4db2aacd57d2c4715d53e757c9",
+  "fileCount": 1809,
+  "payloadBytes": 269396784,
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "runtimeId": "electron-node-middleware-v1",
+    "nativeAbi": "electron-43.1.0-node-24.18.0-modules-148",
+    "shellVersion": "0.1.2",
+    "channel": "verification",
+    "minimumSequence": 0
+  },
+  "sourcePublicationRemovedBeforeLaunch": true,
+  "syntheticSigner": true,
+  "bootAcknowledgment": "simulated",
+  "serverExecuted": false,
+  "installedAppAcceptance": false,
+  "temporaryResourcesRemoved": true,
+  "baseCommit": "ba3d65888ebb28962ec62fee1aeeb20babb7b4e7",
+  "sourceState": "uncommitted native-bundle foundation on recorded base; default shell version 0.1.2",
+  "implementationFilesSha256": {
+    "native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e",
+    "native-bundles/package-release.mjs": "89d2e4d17fae9d341fe0de64c2869f03da4cef38dcf530d42169590f852673e4",
+    "electron/lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "electron/scripts/build-web.mjs": "50af8e1cce72e4fe3e96b4b9faf00349d8907be28d192b12bedaf238532303c7",
+    "electron/scripts/verify-web-build.mjs": "701aa58c52a372a6249fa51509b4222e3b348e2ceef4a173feda36d5e7b5d4e8",
+    "electron/scripts/native-bundle-metadata.cjs": "987642a9bae971b69b9dc3138a7ff7cbc9c9447345f24c00ae9537cef82c7867",
+    "electron/scripts/verify-web-bundle-store.cjs": "fd9e82200e38d2e6a4a88f3b456aea290413bca0633f5f830d0172b21d163ff2",
+    "electron/scripts/build-portable-app.mjs": "f8f6b2c31534b1952e160eaa8d1120dde0f9d406994d1f032ef695d1fc903c1a",
+    "electron/portable-builder.cjs": "f97bfd6e1fd1e980cfca59c7d36e72681f91b7af743b320f7819ca28140e9be9"
+  },
+  "focusedTests": {
+    "passed": 26,
+    "failed": 0,
+    "skipped": 0
+  },
+  "electronSuite": {
+    "passed": 489,
+    "failed": 0,
+    "skipped": 5,
+    "total": 494
+  },
+  "finalDefaultBuildMetadataParity": true
+}

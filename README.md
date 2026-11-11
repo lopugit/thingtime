@@ -1450,6 +1450,13 @@ checked out without dependencies. Flags: `--no-deps`, `--no-env`,
 
 ## Electron desktop app
 
+Native web-release signing, compatibility and local trial/rollback primitives
+are described in [native web bundles](docs/native-web-bundles.md). The release
+packager needs an explicitly selected public trust policy and a protected signer
+pipe; no production private key is bundled or required for ordinary builds.
+Release API discovery, updater startup wiring and iOS runtime acceptance remain
+in progress. The existing signed whole-app updater is unchanged.
+
 The desktop shell lives in `electron/` and packages the same `remix/` web app
 with Electron. It builds the Vite client and Nitro server with
 `NITRO_PRESET=node_middleware`, stages the output in `electron/dist/web`, then

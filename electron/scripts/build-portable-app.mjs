@@ -2,6 +2,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { build, Platform, Arch } from 'electron-builder';
+import { readFile } from 'node:fs/promises';
+import { assertStagedNativeBundle } from './native-bundle-metadata.cjs';
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 if (!['linux', 'win32'].includes(process.platform)) throw new Error('Build the portable desktop package on its target Linux or Windows host. macOS uses the existing signed build.');
@@ -11,6 +13,10 @@ for (const script of [...(process.argv.includes('--staged') ? [] : ['build-web.m
   const result = spawnSync(process.execPath, [path.join(projectDir, 'scripts', script)], { stdio: 'inherit' });
   if (result.error || result.status !== 0) throw new Error(`${script} failed.`);
 }
+const packageMetadata = JSON.parse(await readFile(path.join(projectDir, 'package.json'), 'utf8'));
+const stagedMetadata = JSON.parse(await readFile(path.join(projectDir, 'dist/web/metadata.json'), 'utf8')).nativeBundle;
+const packagedVersion = String(process.env.THINGTIME_ELECTRON_RELEASE_VERSION || '').trim() || packageMetadata.version;
+assertStagedNativeBundle(stagedMetadata, { platform: process.platform, arch: process.arch, shellVersion: packagedVersion });
 await build({
   projectDir,
   targets: (process.platform === 'linux' ? Platform.LINUX : Platform.WINDOWS).createTarget(['dir'], Arch[process.arch]),

@@ -2,6 +2,34 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native bundle release and recovery foundation — 2026-11-11
+
+Added a shared signed release descriptor, complete-file inventory verification,
+immutable release packaging and a profile-owned staging/trial/rollback store.
+The canonical Electron build records its actual runtime ABI and verifies the
+completed renderer/Nitro inventory. The real default build and inventory verifier
+pass; independent staging and cold recovery pass on 1,809 files / 269,396,784
+bytes with a synthetic signer and simulated boot acknowledgment.
+[Build-byte evidence](../artifacts/anonymous-release-2026-11-11/native-bundles/README.md).
+
+The focused release/store/metadata/packaging batch passes 26/26. The full Electron
+suite passes 489 with five explicit skips and no failures. Release overrides
+retain full SemVer precedence and the portable packaging version/target matches
+its staged output. Final default-build metadata parity was checked through the
+actual Electron executable. This does not claim another full build or installed
+application launch after the compatible metadata correction.
+
+Independent review found a FIFO substitution race in inventory reads; nonblocking
+open and a bounded subprocess regression address it. Source unit tests retain
+signature, target/runtime, sequence, path, concurrency and recovery refusals.
+No release API, updater startup activation, production signing authority or iOS
+runtime is claimed. The current Node Mobile release does not satisfy the web
+app's Node 24 requirement, and desktop native modules/processes cannot simply be
+copied into iOS. [Architecture and next gates](../docs/native-web-bundles.md).
+The portable graph is refreshed structurally. New architecture documents are
+included in its source manifest, but fresh semantic indexing is not claimed;
+the earlier bounded semantic attempts timed out and the shared proxy is unchanged.
+
 ## Latest main integration and capability audit — 2026-11-11
 
 Integrated freshly fetched main through

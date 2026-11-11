@@ -1,3 +1,26 @@
+## Native web release integrity and recovery — 2026-11-11
+
+- Run `node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
+  Cover wrong signatures/key scopes, ABI/target/shell mismatch, replay floors,
+  missing/extra/changed files, traversal, symlinks and special files. A source
+  file substituted with a FIFO between `lstat` and `open` must fail promptly;
+  use the bounded child-process regression instead of allowing a hung test.
+- Build the actual web/Nitro payload using `corepack pnpm --dir electron run build:web`
+  and verify with `corepack pnpm --dir electron run verify:web`. Confirm the
+  recorded ABI comes from Electron, not the build driver's Node process.
+  Then run `node electron/scripts/verify-web-bundle-store.cjs` for independent
+  staging and recovery using the actual built bytes with a synthetic signer.
+  This does not execute the server or prove an installed application update.
+- Stage independently retained bytes, remove the source, launch and acknowledge
+  the exact candidate, then reopen the store. Interrupt before acknowledgment:
+  the next launch must retain the known-good or shipped bundle and refuse to
+  repeat the failed sequence. Test a changed candidate, changed active payload,
+  concurrent stage calls, caller mutation, cancellation and malformed state.
+- When host startup/API integration is implemented, repeat these through the
+  separate development app and physical iOS target with real Nitro/renderer
+  startup and unchanged local data. The current unit tests do not establish
+  installed update, filesystem power-loss or iOS acceptance.
+
 ## Unified folder sync configs and deduplication
 
 - [ ] Add a task-owned folder, save its automatically prepared config, and reload. Confirm one source and one config with a valid cloud destination. Add a second config with a different direction/destination; edit, pause and remove each independently. Existing Downloads grants and older config labels must group under the actual source without duplicate grants/configs.
