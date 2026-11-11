@@ -89,6 +89,51 @@ Images are decoded locally and discarded; streams stop after the capture.
 screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
 
+### Native authenticator setup links
+
+The macOS Passwords companion and iOS shell register `otpauth` and validate only
+`otpauth://totp` setup links. HOTP, migration payloads, malformed Base32 and
+unsupported/duplicate URI parameters are refused without logging the input.
+The pending URI is memory-only, expires after ten minutes and is consumed once.
+It is never put into navigation URLs, local storage, saved layouts or a generic
+Action. Opening another setup preserves the current pending request and draft.
+
+The companion uses a separate nonpersistent browser session: sign in normally
+to its displayed configured HTTPS origin and linked owning account. It never
+copies the native AutoFill session into that browser. A locked or unreadable
+linked destination cannot fall back to another origin. Destination/account
+changes cancel setup and replace that ephemeral browser session.
+
+The narrow `thingtimeAuthenticatorSetup` bridge is independently versioned at
+1.0.0. It verifies the exact main-frame `/passwords` document, origin, live
+account, home data plane and document nonce before one-use delivery. Existing
+`api.passwords` compatible 1.2+ is required; the current API remains 1.9.1.
+The web bundle must also contain the matching review bridge. No HTTP endpoint
+or server permission is added. Logout, navigation, cancellation and scope changes
+retire pending delivery. Setup enters the ordinary controlled draft only after
+**Create new entry** or **Add to current draft**; **Save entry** remains a separate
+explicit action through the existing encrypted vault API. Passkey entries cannot
+receive an authenticator field.
+
+Review status, labels and buttons are separate editable Password Workspace
+blocks. No seed is passed into their saved layout or binding scope. QR import
+and passkey device ceremonies retain their existing separate paths.
+
+Build the companion through the existing `build-native-passwords.mjs` tooling;
+use its complete isolated host/provider/Keychain/build/staging overrides for
+development. An isolated helper's optional `ThingtimeDesktopBundleIdentifier`
+metadata may select its corresponding development desktop app; it never opens
+the production app by default. Keep stable signed app replacement separate.
+
+Run `pnpm --dir remix run test:passwords`, `swift test --package-path apple/Passwords`
+and `node remix/scripts/test-authenticator-setup-ui.mjs` (optional absolute
+`TT_PLAYWRIGHT_MODULE` for an existing Playwright installation). The browser
+harness uses a disposable profile and synthetic in-memory API transport; it
+checks review, explicit save, draft preservation and desktop/mobile layout.
+It does not prove installed OS menu selection, real-account sign-in or provider
+acceptance. Complete those through the final signed app, compare a saved code
+with an independent authenticator and exercise cancel/reload/account changes.
+
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
 key. Importing its image does not register a passkey. Native passkey creation
 is implemented by the signed Apple credential provider described below. A passkey

@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Reconcile native TOTP setup-link intake with the current password
+  editor and account lifecycle. Keep one-use seeds transient, require editable
+  review plus explicit Save, preserve current drafts and passkey behavior, and
+  add native/browser security coverage. Signed-app and live-provider acceptance
+  remain separate checks. [Review and acceptance notes](../PRs/PR-1479-native-authenticator-intake.md). **Codex (AI)**
+
 - 2026-11-12: Retire only exact native source-changed file-batch members
   proven never canonically dispatched, preserving all marked or ambiguous
   original receipts. A lost journal reply is idempotent, and fresh sealed

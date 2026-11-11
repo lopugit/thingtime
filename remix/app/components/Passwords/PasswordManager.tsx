@@ -1,3 +1,4 @@
+import { PasswordAuthenticatorSetup } from './PasswordAuthenticatorSetup';
 import { PasswordBrandMark } from './PasswordBrandMark';
 import { PasswordSource } from './PasswordSource';
 import { PasswordGenerator } from './PasswordGenerator';
@@ -241,6 +242,11 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const controls = (kind: React.ComponentProps<typeof PasswordWorkspaceControls>['kind']) => <PasswordWorkspaceControls kind={kind} scopeKey={ownerId} scope={workspaceScope} actions={workspaceActions} />;
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
     {controls('toolbar')}
+    <PasswordAuthenticatorSetup ownerId={ownerId} draft={draft} busy={busy || iconBusy} configured={configured} onSetup={(value, previous) => {
+      const base = previous || { id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() };
+      setDraft({ ...base, entry: { ...base.entry, fields: [...base.entry.fields, { id: crypto.randomUUID(), label: 'Verification code', type: 'totp', value }] } });
+      setOpenCount(count => count + 1);
+    }} />
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
     <Box mt={4}><PasswordVerificationSettings ownerId={ownerId} /></Box>
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
