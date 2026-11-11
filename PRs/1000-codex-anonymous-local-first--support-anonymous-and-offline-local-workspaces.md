@@ -2,6 +2,63 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Requested main refresh and capability status — 2026-11-11
+
+Fetched main `981036caaf58f2766d07588bf1ce635a1f843e09` and merged it into
+`codex/anonymous-release`, published on the existing
+`codex/anonymous-local-first` PR branch. The only textual conflict was the
+changelog; both entries were retained. The imported change is PR #1466 Photos
+background transfer and saved-settings recovery, including its documented
+capability contract. No primary-branch merge, deployment or stable-app
+replacement is part of this checkpoint.
+
+The newer native startup implementation is preserved separately as work in
+progress; it is not included in this merge. Its prior checks passed raw
+TypeScript, the zero-error ratchet, lint and 503 Electron tests with five explicit
+skips. An actual isolated app launch reached the first confirmed-update
+screenshot, but the acceptance run ended before staging the failed-update case
+and did not retain its final verification receipt or exception. The task's
+processes, ports and temporary policy/cache are cleaned up. Diagnose and complete
+that acceptance before calling startup/rollback delivered.
+
+Capability/foundation status:
+
+- **Verified locally:** no-login editable Thing/transfer input; canonical native
+  renderer and dependency closure; exact affirmation text; desktop 1440×1000,
+  phone 390×844, narrow 320px and card-only PNGs; clear invalid-input behavior
+  and no account traffic. Retained normal importer, identity and Builder checks
+  remain tied to their recorded source revisions.
+- **Already in main:** renderer foundations from PR #998 and independent posting
+  and draft completion from PR #999. Local workspace, retained files, History,
+  identity fencing and synchronization have scoped acceptance in this branch.
+- **Implemented foundations, incomplete delivery:** canonical hosted MCP adapter
+  and private artifact provider; native signed inventory/compatibility/staging/
+  trial rollback primitives. This chat's live canonical tool inventory still has
+  no render/export capability. Previous provider results do not prove present
+  connected-host delivery.
+- **P0 remaining:** finish the preserved startup run and final receipt; verify
+  the integrated head's CI/preview; retain the unresolved aggregate workspace
+  retention timeout until a passing full run or diagnosed fix establishes it.
+- **P1 remaining:** activate a matching hosted provider and verify real tool
+  downloads, diagnostics and cleanup; implement native release API, trusted
+  signing authority, download/activation and unsaved-work-aware reload; finish
+  real update/interruption/rollback acceptance.
+- **P1 platform work:** resolve the iOS bundled runtime, Node/native-module/local
+  data adapter gaps and complete offline/startup/update acceptance. Desktop
+  foundations do not establish iOS functionality or release approval.
+
+Fresh combined-source verification passes raw TypeScript, the zero-error ratchet,
+full lint (0 errors, 370 warnings), the canonical Vercel build, 163 focused
+attachment/sync tests, 193 capability tests and all 23 compiled manifest/docs
+contracts. The final draft renderer is byte-identical to the accepted
+`c1415d5d` runner and all five recorded renderer source files match; the prior
+browser evidence is reused by parity, not described as another browser run.
+[Refresh receipt](../artifacts/anonymous-release-2026-11-11/main-refresh/verification.json).
+Production discovery still advertises MCP 2.2.0 without render/export. The portable
+graph is refreshed structurally; fresh semantic documentation indexing is not
+claimed after the prior bounded backend timeouts. Earlier results remain tied
+to their checkpoints; resulting-head CI and deployment are separate.
+
 ## Final main cutoff — 2026-11-11
 
 Fetched and integrated `d0fb31984509239a033f6717234ce863b365aa2e`, including

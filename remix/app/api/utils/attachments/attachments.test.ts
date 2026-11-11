@@ -1071,6 +1071,39 @@ test('part signing passes the server-derived exact length for every checksum-loc
 	assert.equal(partsIssuedAt, now);
 });
 
+test('native background byte grants are bounded by admission and reservation expiry and cannot be requested in a client body', async () => {
+	const calls: { seconds?: number; background?: boolean }[] = [];
+	const fingerprint = { algorithm: 'sha256-parts-v1' as const, partCount: 2, partSizeBytes: 8 * 1024 * 1024,
+		sha256: createHash('sha256').update(Buffer.concat([Buffer.alloc(32, 1), Buffer.alloc(32, 2)])).digest('hex') };
+	let reservationSeconds = 900, refused = false, checks = 0;
+	const service = createAttachmentService({
+		now: () => now,
+		store: { getOwned: async () => attachmentDoc({ attachmentPurpose: 'file',
+			attachmentExpiresAt: new Date(now.getTime() + reservationSeconds * 1000) }), markPartsIssued: async () => {} } as any,
+		getS3: () => noopS3({ signUploadPart: async ({ expiresInSeconds, backgroundFileTransport, checksumSha256 }) => {
+			calls.push({ seconds: expiresInSeconds, background: backgroundFileTransport });
+			return { url: 'https://s3.example/part', headers: { 'x-amz-checksum-sha256': checksumSha256 },
+				expiresAt: new Date(now.getTime() + (expiresInSeconds || 0) * 1000).toISOString() };
+		} })
+	});
+	const body = { uploadId: 'attachment-1', parts: [{ partNumber: 1, checksumSha256: checksum(1) }] };
+	const authority = { expiresAt: new Date(now.getTime() + 1200_000), expectedFingerprint: fingerprint,
+		check: async () => { checks++; return refused ? { ok: false as const, status: 410, error: 'Revoked' } : null; } };
+	assert.equal((await service.signParts('user-1', body, authority)).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true,
+		expiresAt: new Date(now.getTime() + 300_000) })).ok, true);
+	reservationSeconds = 60;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, true);
+	assert.deepEqual(calls, [{ seconds: 120, background: undefined }, { seconds: 600, background: true },
+		{ seconds: 300, background: true }, { seconds: 60, background: true }]);
+	assert.equal(checks, 8, 'authority checked before signing and before returning grants');
+	assert.equal((await service.signParts('user-1', { ...body, backgroundFileTransport: true }, authority)).ok, false);
+	refused = true;
+	assert.equal((await service.signParts('user-1', body, { ...authority, backgroundFileTransport: true })).ok, false);
+	assert.equal(calls.length, 4, 'no byte grants after refusal or client-supplied override');
+});
+
 test('post preflight is owner-bound, ready, unexpired and unattached, then atomic bind remains separate', async () => {
 	const visual = attachmentDoc({
 		attachmentState: 'ready',

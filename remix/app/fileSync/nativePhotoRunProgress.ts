@@ -6,6 +6,7 @@ const activityReasons = ['interrupted', 'library-changed', 'photo-access', 'devi
 const backgroundStatuses = ['active', 'declined', 'waiting', 'complete'] as const;
 export type NativePhotoActivityPhase = (typeof activityPhases)[number];
 export type NativePhotoContinuation = { requested: boolean; status: (typeof backgroundStatuses)[number] };
+export type NativePhotoUnavailableReasons = { 'cloud-download': number; 'photo-read': number };
 type DiscoveredPhoto = { kind: 'photo' | 'video'; capturedAt?: string };
 export type NativePhotoRunActivity = {
 	phase: NativePhotoActivityPhase;
@@ -27,6 +28,7 @@ export type NativePhotoRunProgress = {
 	minimumPartBytes?: number;
 	pendingOriginals?: number;
 	unavailableOriginals?: number;
+	unavailableReasons?: NativePhotoUnavailableReasons;
 	confirmed: Record<(typeof counters)[number], number>;
 	currentFile?: { confirmedBytes: number; sentBytes: number; totalBytes: number };
 	uploadBytesPerSecond?: number;
@@ -101,11 +103,18 @@ export function parseNativePhotoRunStatus(configurationRevision: unknown, photoR
 		file = { confirmedBytes: currentFile.confirmedBytes, sentBytes: currentFile.sentBytes, totalBytes: currentFile.totalBytes };
 	}
 	const activity = parseActivity(photoRunProgress.activity);
+	const reasons = photoRunProgress.unavailableReasons;
+	// Optional reason telemetry may lag an older client; never discard a valid run for it.
+	const unavailableReasons = record(reasons) && whole(reasons['cloud-download']) && whole(reasons['photo-read']) &&
+		Object.keys(reasons).every(key => key === 'cloud-download' || key === 'photo-read') &&
+		whole(unavailableOriginals) && reasons['cloud-download'] + reasons['photo-read'] === unavailableOriginals
+		? { 'cloud-download': reasons['cloud-download'], 'photo-read': reasons['photo-read'] } : undefined;
 	const progress = {
 		stage, syncWait, retryAt, minimumPartBytes, pendingOriginals, unavailableOriginals, uploadBytesPerSecond, continuation,
 		confirmed: Object.fromEntries(counters.map(key => [key, confirmed[key]])),
 		...(file ? { currentFile: file } : {}),
-		...(activity ? { activity } : {})
+		...(activity ? { activity } : {}),
+		...(unavailableReasons ? { unavailableReasons } : {})
 	} as NativePhotoRunProgress;
 	return { configurationRevision, photoRunProgress: progress };
 }

@@ -9,6 +9,7 @@ public struct PhotoBackupQueueBatch: Codable, Equatable, Sendable {
     public let pending: Int
     public let unavailable: Int
     public var remainingKnown: Bool?
+    public var unavailableReasons: [String: Int]?
 }
 
 public struct PhotoBackupQueueRequest: Codable, Equatable, Sendable {
@@ -24,7 +25,7 @@ public struct PhotoBackupQueueRequest: Codable, Equatable, Sendable {
 /// completed attachment alone does not advance the selection: the consumer
 /// acknowledges only after its verified folder and Timeline checkpoint.
 final class PhotoBackupQueue {
-    static let batchSize = 4
+    static let batchSize = 10
     struct Asset {
         let key: String
         let version: String
@@ -43,6 +44,7 @@ final class PhotoBackupQueue {
     struct Attempt: Codable {
         let stamp: Stamp
         let unavailable: [String]
+        var reasonByPath: [String: String]?
     }
     private struct Deferred: Codable {
         let stamp: Stamp
@@ -52,6 +54,7 @@ final class PhotoBackupQueue {
         let unavailable: [String]
         let observed: OrderedPhotoCheckpoint
         var retryByPath: [String: Date]
+        var reasonByPath: [String: String]?
     }
     private struct DeferredCandidate {
         let entry: Deferred
@@ -79,6 +82,7 @@ final class PhotoBackupQueue {
         var sourceAssets: [String]?
         var orderedCursor: OrderedPhotoCheckpoint?
         var remainingKnown: Bool?
+        var priorReadFailures: Int?
     }
     struct Work {
         let assets: [Asset]
@@ -88,23 +92,26 @@ final class PhotoBackupQueue {
     private let directory: URL
     let request: PhotoBackupQueueRequest
     private var outcomes: [String: Attempt]?
-    private var membership: (revision: String, ordered: [Asset], byKey: [String: Asset], position: Int, pending: Int, unavailable: Int)?
+    private var membership: (revision: String, ordered: [Asset], byKey: [String: Asset], position: Int, pending: Int, unavailable: Int, readFailures: Int)?
     private var completed: UUID?
     private final class OrderedSelection {
         let inventory: any OrderedPhotoInventory
         var limit: Int
         var candidates: [Asset] = []
         var unavailable: Int
+        var readFailures: Int
 
         init(_ inventory: any OrderedPhotoInventory, first: Bool) {
             self.inventory = inventory
             limit = first ? 1 : PhotoBackupQueue.batchSize
             unavailable = inventory.checkpoint.unavailable
+            readFailures = inventory.checkpoint.unavailableReadFailures ?? 0
         }
 
         var checkpoint: OrderedPhotoCheckpoint {
             var cursor = inventory.checkpoint
             cursor.unavailable = unavailable
+            cursor.unavailableReadFailures = readFailures
             return cursor
         }
     }
@@ -191,7 +198,7 @@ final class PhotoBackupQueue {
         let prior = try read(Deferred.self, at: file)
         let retries = prior?.stamp == outcome.stamp ? prior?.retryByPath.filter { outcome.unavailable.contains($0.key) } ?? [:] : [:]
         let entry = Deferred(stamp: outcome.stamp, asset: source.asset, capturedAt: source.capturedAt, modifiedAt: source.modifiedAt,
-                             unavailable: outcome.unavailable, observed: cursor, retryByPath: retries)
+                             unavailable: outcome.unavailable, observed: cursor, retryByPath: retries, reasonByPath: outcome.reasonByPath)
         try write(entry, at: file)
         if let candidate = DeferredCandidate(entry) {
             if let searchAfter = deferredSearchAfter, candidate.retryAt < searchAfter { deferredSearchAfter = candidate.retryAt }
@@ -262,7 +269,7 @@ final class PhotoBackupQueue {
             // A crash can leave this secondary row without its receipt. With
             // no current selection to finish, the ordered queue rediscovers it.
             guard let outcome = try read(Attempt.self, at: record(entry.stamp.key)), outcome.stamp == entry.stamp,
-                  outcome.unavailable == entry.unavailable else { throw PhotoLibraryReader.Failure.changed }
+                  outcome.unavailable == entry.unavailable, outcome.reasonByPath == entry.reasonByPath else { throw PhotoLibraryReader.Failure.changed }
             guard let resources = try provider.orderedResources(identifiers: [entry.asset]).first, !resources.isEmpty,
                   Stamp(Asset(resources)) == entry.stamp,
                   let resource = resources.first(where: { $0.path == next.path }) else {
@@ -282,9 +289,14 @@ final class PhotoBackupQueue {
     }
 
     private func descriptor(_ selection: Selection) -> PhotoBackupQueueBatch {
-        .init(epoch: request.epoch, id: selection.id, assetKeys: selection.stamps.map(\.key), pending: selection.pending,
-              unavailable: selection.priorUnavailable + (selection.attempts?.reduce(0) { $0 + $1.unavailable.count } ?? 0),
-              remainingKnown: selection.remainingKnown)
+        let unavailable = selection.priorUnavailable + (selection.attempts?.reduce(0) { $0 + $1.unavailable.count } ?? 0)
+        let reads = min(unavailable, (selection.priorReadFailures ?? 0) + (selection.attempts?.reduce(0) { $0 + Self.readFailures($1) } ?? 0))
+        return .init(epoch: request.epoch, id: selection.id, assetKeys: selection.stamps.map(\.key), pending: selection.pending,
+            unavailable: unavailable, remainingKnown: selection.remainingKnown,
+            unavailableReasons: ["cloud-download": unavailable - reads, "photo-read": reads])
+    }
+    private static func readFailures(_ attempt: Attempt) -> Int {
+        attempt.unavailable.filter { attempt.reasonByPath?[$0] == "photo-read" }.count
     }
 
     func usesOrderedSelection(preferred: Bool) throws -> Bool {
@@ -350,7 +362,8 @@ final class PhotoBackupQueue {
             let previouslyCounted = included ? deferred.unavailable.count : 0
             let selection = Selection(id: UUID(), stamps: [Stamp(asset)], pending: 0,
                 priorUnavailable: max(0, state.unavailable - previouslyCounted),
-                sourceAssets: [preparedDeferred.asset], orderedCursor: cursor, remainingKnown: initial.inspected == initial.total)
+                sourceAssets: [preparedDeferred.asset], orderedCursor: cursor, remainingKnown: initial.inspected == initial.total,
+                priorReadFailures: max(0, state.readFailures - (included ? deferred.unavailable.filter { deferred.reasonByPath?[$0] == "photo-read" }.count : 0)))
             try write(selection, at: selectedFile)
             return Work(assets: [asset], selection: selection, descriptor: descriptor(selection))
         }
@@ -363,6 +376,7 @@ final class PhotoBackupQueue {
                 do {
                     if let outcome = try exactOutcome(asset) {
                         state.unavailable += outcome.unavailable.count
+                        state.readFailures += Self.readFailures(outcome)
                         if !outcome.unavailable.isEmpty { try rememberDeferred(asset, outcome: outcome, at: state.checkpoint) }
                     } else { state.candidates.append(asset) }
                 } catch {
@@ -384,19 +398,39 @@ final class PhotoBackupQueue {
         let assets = state.candidates
         let exhausted = state.inventory.progress.inspected == state.inventory.progress.total
         let selection = Selection(id: UUID(), stamps: assets.map(Stamp.init), pending: 0, priorUnavailable: state.unavailable,
-            sourceAssets: assets.map { $0.resources[0].asset }, orderedCursor: state.checkpoint, remainingKnown: exhausted)
+            sourceAssets: assets.map { $0.resources[0].asset }, orderedCursor: state.checkpoint, remainingKnown: exhausted, priorReadFailures: state.readFailures)
         try write(selection, at: selectedFile)
         return Work(assets: assets, selection: selection, descriptor: descriptor(selection))
+    }
+
+    /// Read-only lookahead owns a separate bounded cursor. It neither replaces
+    /// current.json nor advances the durable acknowledgement checkpoint.
+    func lookahead(provider: any OrderedPhotoResourceProvider, batchId: UUID) throws -> [PhotoResource] {
+        guard let selected = try read(Selection.self, at: selectedFile), selected.id == batchId,
+              let cursor = selected.orderedCursor, cursor.libraryToken != nil else { return [] }
+        let inventory = try provider.orderedInventory(resuming: cursor)
+        var resources: [PhotoResource] = [], count = 0
+        while count < Self.batchSize, let group = try inventory.next() {
+            try Task.checkCancellation()
+            guard !group.isEmpty else { continue }
+            let asset = Asset(group)
+            if try selected.stamps.contains(Stamp(asset)) || exactOutcome(asset) != nil { continue }
+            resources.append(contentsOf: group); count += 1
+        }
+        guard try inventory.isCurrent() else { throw PhotoLibraryReader.Failure.changed }
+        return resources
     }
 
     private func advanceOrderedCursor(_ selection: Selection) throws {
         guard var cursor = selection.orderedCursor else { return }
         cursor.unavailable = selection.priorUnavailable + (selection.attempts?.reduce(0) { $0 + $1.unavailable.count } ?? 0)
+        cursor.unavailableReadFailures = (selection.priorReadFailures ?? 0) + (selection.attempts?.reduce(0) { $0 + Self.readFailures($1) } ?? 0)
         if cursor.libraryToken != nil { try write(cursor, at: cursorFile) }
         if let state = orderedSelection {
             state.candidates.removeAll(keepingCapacity: true)
             state.limit = Self.batchSize
             state.unavailable = cursor.unavailable
+            state.readFailures = cursor.unavailableReadFailures ?? 0
         }
     }
 
@@ -404,15 +438,15 @@ final class PhotoBackupQueue {
                 startWithSingleAsset: Bool = false) throws -> Work {
         try loadOutcomes()
         if membership?.revision != revision {
-            var pending = 0, unavailable = 0
+            var pending = 0, unavailable = 0, readFailures = 0
             let all = PhotoBackupAssetOrder.groups(resources).map(Asset.init)
             let ordered = all.filter { asset in
                 if let attempted = outcomes?[asset.key], attempted.stamp == Stamp(asset) {
-                    unavailable += attempted.unavailable.count; return false
+                    unavailable += attempted.unavailable.count; readFailures += Self.readFailures(attempted); return false
                 }
                 pending += asset.resources.count; return true
             }
-            membership = (revision, ordered, Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) }), 0, pending, unavailable)
+            membership = (revision, ordered, Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) }), 0, pending, unavailable, readFailures)
         }
         guard let membership else { throw PhotoLibraryReader.Failure.changed }
         let selection: Selection
@@ -436,17 +470,18 @@ final class PhotoBackupQueue {
             let limit = startWithSingleAsset && outcomes?.isEmpty == true ? 1 : Self.batchSize
             assets = Array(membership.ordered.dropFirst(membership.position).prefix(limit))
             let pending = membership.pending - assets.reduce(0) { $0 + $1.resources.count }
-            selection = .init(id: UUID(), stamps: assets.map(Stamp.init), pending: pending, priorUnavailable: membership.unavailable)
+            selection = .init(id: UUID(), stamps: assets.map(Stamp.init), pending: pending, priorUnavailable: membership.unavailable, priorReadFailures: membership.readFailures)
             try write(selection, at: selectedFile)
         }
         return Work(assets: assets, selection: selection, descriptor: descriptor(selection))
     }
 
-    func prepare(_ work: Work, unavailable: Set<String>, entries: [MobileFolderReader.Entry]) throws -> PhotoBackupQueueBatch {
+    func prepare(_ work: Work, unavailable: Set<String>, entries: [MobileFolderReader.Entry], reasons: [String: String] = [:]) throws -> PhotoBackupQueueBatch {
         guard var selected = try read(Selection.self, at: selectedFile), selected.id == work.selection.id,
               selected.stamps == work.assets.map(Stamp.init) else { throw PhotoLibraryReader.Failure.changed }
         let attempts = work.assets.map { asset in
-            Attempt(stamp: Stamp(asset), unavailable: asset.resources.map(\.path).filter(unavailable.contains))
+            Attempt(stamp: Stamp(asset), unavailable: asset.resources.map(\.path).filter(unavailable.contains),
+                reasonByPath: Dictionary(uniqueKeysWithValues: asset.resources.map(\.path).filter(unavailable.contains).map { ($0, reasons[$0] ?? "cloud-download") }))
         }
         let available = work.assets.flatMap(\.resources).map(\.path).filter { !unavailable.contains($0) }
         guard entries.map(\.path) == available, entries.allSatisfy({ $0.kind == "file" && ($0.fingerprint != nil || $0.sha256 != nil) }) else {
@@ -528,6 +563,7 @@ final class PhotoBackupQueue {
             membership?.position += selection.stamps.count
             membership?.pending = cursor.pending - cursor.ordered.dropFirst(cursor.position).prefix(selection.stamps.count).reduce(0) { $0 + $1.resources.count }
             membership?.unavailable = cursor.unavailable + attempts.reduce(0) { $0 + $1.unavailable.count }
+            membership?.readFailures = cursor.readFailures + attempts.reduce(0) { $0 + Self.readFailures($1) }
         } else {
             membership = nil
         }

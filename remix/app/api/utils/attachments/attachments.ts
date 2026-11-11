@@ -140,6 +140,8 @@ export type AttachmentTransferAuthority = {
 	expiresAt: Date;
 	expectedFingerprint: ContentFingerprint;
 	check: () => Promise<AttachmentFail | null>;
+	/** Server-derived native Photos grant. Other delegated transfers stay at 120 seconds. */
+	backgroundFileTransport?: boolean;
 };
 
 const matchesTransferFingerprint = (head: AttachmentObjectHead, authority: AttachmentTransferAuthority): boolean => {
@@ -1064,7 +1066,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			const plan = attachmentPartPlan(doc.objectSizeBytes);
 			const requested = exactPartRequest(raw.parts, plan.partCount);
-			const expiresInSeconds = authority ? Math.min(120, Math.floor((authority.expiresAt.getTime() - dependencies.now().getTime()) / 1000)) : undefined;
+			const expiresInSeconds = authority ? Math.min(authority.backgroundFileTransport ? 600 : 120,
+				Math.floor((Math.min(authority.expiresAt.getTime(), doc.attachmentExpiresAt.getTime()) - dependencies.now().getTime()) / 1000)) : undefined;
 			if (expiresInSeconds !== undefined && expiresInSeconds < 1) return fail(410, 'Transfer admission expired');
 			// A one-part object's entire committed source can be verified before
 			// giving storage any URL. Multipart objects are verified before Complete.
@@ -1086,7 +1089,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						// Signed Content-Length closes the cost bypass where a tiny quota
 						// reservation could otherwise accept an oversized incomplete part.
 						contentLength: attachmentExpectedPartBytes(doc.objectSizeBytes, part.partNumber),
-						...(expiresInSeconds === undefined ? {} : { expiresInSeconds })
+						...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
+						...(authority?.backgroundFileTransport ? { backgroundFileTransport: true } : {})
 					}))
 				}))
 			);
