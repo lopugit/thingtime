@@ -55,3 +55,12 @@ Typecheck and required PR checks are separate gates. The installed Downloads
 job has not yet demonstrated a new confirmed transfer, independent byte hash,
 or completed checkpoint. Thingtime's saved automatic setup is also pending
 its exact idle enrollment condition; neither is claimed complete here.
+
+The installed adfb build entered a fresh backup scan after retiring old pending
+work, but Progress continued to show only the retained hierarchy summary.
+The display now puts the current native indexed-entry count ahead of that saved
+summary during a running scan, labels its total as still being discovered, and
+keeps the saved tree available. Focused display coverage checks current, cold
+and completed states. Installed progress acceptance remains open. The canonical
+installer stops the Node helper before replacing the app; a UI bundle install
+during an active capture must be timed and its saved-cursor resume verified.
