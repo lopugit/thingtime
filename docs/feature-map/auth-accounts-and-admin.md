@@ -519,3 +519,12 @@ block template expose resource IDs and opaque next-page actions. Existing grants
 do not acquire operations automatically. See [service actions](../google-service-actions.md),
 `namedServiceActions.test.mts`, `googleServiceRequests.test.ts`, and the existing
 isolated OAuth-tab UI fixture. Provider consent/data acceptance is separate.
+Connections access inspection: `GET /api/v1/connections/diagnostics` negotiates
+`api.connections-diagnostics` 1.0.0, requires an exact connection and expected
+owner, and uses registered provider `diagnose` adapters only. The service checks
+owner, saved OAuth binding, selected origin/environment and unchanged encrypted
+grant before and after probes. It never refreshes or persists. Facebook returns
+actual grant names or unknown and separates minimal posts from engagement fields.
+Connections 2.2 exposes requested/confirmed grant evidence; callbacks 2.1.1 verify
+both default and named Facebook grants. Run `test:connections`, capability tests
+and compiled Connections smoke; live provider acceptance is separate.

@@ -7074,6 +7074,26 @@ separate user_posts grant. Provider testing mode, eligible test accounts, app
 review and publication remain provider prerequisites. A configured card only
 proves valid vault configuration, not real provider consent or API permission.
 
+For saved Facebook grants, negotiate `api.connections-diagnostics` **1.0.0**
+on the selected origin, then open
+`/api/v1/connections/diagnostics?connectionId=<exact-id>&expectedOwnerId=<owner-id>`
+in that owner's authenticated browser. This read-only operation checks the exact
+saved grant and origin/environment binding without refreshing, rewriting or
+revoking it. It returns actual supported grant names (`null` means unknown or incomplete) and
+fixed statuses for minimal posts, shares, likes and comments. Named grants and
+account-only connections inspect permission metadata only; all content probes are
+skipped even if Meta granted broader access. Default Facebook posts connections
+can probe content; optional probes
+are skipped when minimal posts fail. No token, provider error body or post content
+is returned. Successful empty posts still establish endpoint access, not the
+presence of content. Expired grants require normal reconnect. Diagnostic results
+do not rewrite historical connection metadata. Connections **2.2.0** adds
+`authorization.requestedScopes` and `authorization.grantedScopes`; `null` means
+unverified/legacy. Facebook `scopes` now reflects confirmed evidence only. Both
+default and named Facebook callbacks read `/me/permissions`; requesting access
+alone is not proof that Meta granted it. No extra permissions are requested and
+the adapter remains on Graph v23.0. Confirm live posts before claiming acceptance.
+
 For YouTube subscriptions, select the Google Cloud project that owns the
 configured OAuth client, then open **APIs & Services → Library → YouTube Data
 API v3 → Enable**. Approving `youtube.readonly` does not enable the API.

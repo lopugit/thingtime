@@ -158,6 +158,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   history and attachments individually editable with private transient values.
   Preserve current verification, branding, generator and passkey flows. See
   [PR 1468 evidence](../PRs/1468-codex-password-editor-current-editable-password-workspace.md). **Codex (AI)**
+- 2026-11-11: Verify actual Facebook grants for default and named OAuth; expose
+  requested/confirmed permissions separately and add exact-owner, read-only
+  Connections access diagnostics for basic posts and optional engagement fields.
+  Saved content and credentials remain untouched by inspection. **Codex (AI)**
 
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
   settings. Add the explicit canonical background-file transfer contract,

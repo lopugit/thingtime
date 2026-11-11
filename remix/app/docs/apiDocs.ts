@@ -14769,6 +14769,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'connections-diagnostics', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    group: 'connections', title: 'Inspect connection access',
+    endpoint: '/api/v1/connections/diagnostics', methods: ['GET'],
+    summary: 'Read-only exact-owner inspection of a saved provider authorization.',
+    detail: 'Negotiate api.connections-diagnostics 1.0.0 on this origin first. Requires connectionId and matching expectedOwnerId. Uses only fixed adapter probes; accepts no URLs, fields or provider operations. Currently Facebook checks actual catalogued Facebook grants. Only default posts connections probe minimal posts and individual optional engagement fields; named and account-only connections return permission metadata with all content checks skipped regardless of provider consent. Returns grant names or null (unknown), closed check statuses and observation time; never credentials, post content or raw provider errors. Does not refresh, rewrite or revoke credentials, sync content or update saved scope metadata. Expired, wrong-origin or changed credentials fail closed. Facebook connection projections additionally expose authorization.requestedScopes and authorization.grantedScopes, with null for legacy/unverified evidence; legacy scopes are not confirmed grants.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the exact owning account; service accounts are refused.' },
+    steps: ['Negotiate the origin capability.', 'Select the exact connection ID and owning account.', 'Inspect the private no-store diagnostic response.'],
+    requestExamples: [{ name: 'Inspect saved access', description: 'Use the signed-in owner.', method: 'GET',
+      query: { connectionId: 'ext-link-example', expectedOwnerId: 'owner-id' } }],
+    responseExamples: [{ status: 200, description: 'Current provider evidence without content.',
+      body: { ok: true, connectionId: 'ext-link-example', provider: 'facebook', observedAt: '2026-11-11T00:00:00.000Z', grantedScopes: ['public_profile'], checks: [{ name: 'posts', status: 'permission-denied' }, { name: 'shares', status: 'skipped' }, { name: 'likes', status: 'skipped' }, { name: 'comments', status: 'skipped' }] } }]
+  }),
+  endpoint({
     id: 'connections-named', contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'connections', title: 'Use a named connection',
     endpoint: '/api/v1/connections/named', methods: ['POST'],

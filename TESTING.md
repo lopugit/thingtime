@@ -15932,3 +15932,22 @@ projection, which requires 2.3. Retain both actual preview manifests separately.
 - On the intended deployed account separately verify imported source data and real
   attachments through encrypted save/export/reimport; preserve the original vault
   until checked. Native passkeys and provider sign-in retain their own acceptance.
+### Facebook saved-grant diagnostics (11 November 2026)
+
+- Negotiate `api.connections-diagnostics` 1.0.0 and `api.connections` 2.2.0 on
+  the intended origin. In the exact owner's browser, navigate the documented
+  diagnostic GET with its connection ID and expected owner. Verify a private
+  no-store JSON response, actual grants or explicit unknown, minimal posts and
+  individual optional-field statuses. Named identity-only and default account-only
+  connections must make no posts requests even with user_posts on the saved
+  token; retain actual permission metadata and mark content checks skipped.
+  Compare successful posts with the normal
+  selected feed; an empty successful probe is access evidence only.
+- Verify default and named callback grants independently: declined user_posts
+  is absent; failed/malformed permission verification stays unknown. Legacy
+  hardcoded scopes never count as granted. Preserve content and existing grants.
+- Wrong owner, service principal, wrong origin/environment, expired grant and
+  removal/reconnect during inspection must fail closed. Inspection must never
+  refresh/migrate credentials, sync content, follow provider pagination or emit
+  tokens, raw errors or post content. Run Connections and capability suites and
+  the compiled Connections manifest smoke after the canonical build.
