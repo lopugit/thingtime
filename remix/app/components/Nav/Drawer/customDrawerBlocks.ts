@@ -62,3 +62,15 @@ export function upgradeCustomDrawerBlocks(blocks: WebpageBlock[], settings: bool
  });
  return upgrade(blocks);
 }
+
+/** A closed custom-item editor owns no draft: close() clears its state. Keep
+ * its saved template intact, but do not mount default form values as live
+ * editors. An open editor stays mounted even when its navigation is hidden;
+ * Builder mode also retains every editable block. Unknown dialogs are kept. */
+export function customDrawerPresentationBlocks(blocks: WebpageBlock[], editorOpen: boolean, layoutEditing: boolean): WebpageBlock[] {
+ if (editorOpen || layoutEditing) return blocks;
+ const project = (nodes: WebpageBlock[]): WebpageBlock[] => nodes
+  .filter(node => !(node.id === 'custom-drawer-dialog' && node.type === 'element' && node.tag === 'dialog'))
+  .map(node => node.children ? { ...node, children: project(node.children) } : node);
+ return project(blocks);
+}

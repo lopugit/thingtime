@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
 import { composeLopuSurfacePrompt } from './promptSettingsCore';
@@ -277,7 +278,7 @@ const drainWithin = async (gen: AsyncGenerator<string>, deadlineAt: number | nul
     for await (const chunk of gen) all += chunk;
     return all;
   }
-  const abandon = () => void Promise.resolve(gen.return(undefined as never)).catch(() => {});
+  const abandon = () => void withGatewayWork(() => gen.return(undefined as never)).catch(() => {});
   let text = '';
   for (;;) {
     const remaining = deadlineAt - Date.now();

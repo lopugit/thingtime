@@ -151,7 +151,7 @@ const emitNotificationNow = async (input: EmitNotificationInput): Promise<void> 
     }
     // The email channel rides the same emit but is fire-and-forget — the
     // social action never waits on SES (emails.ts re-checks its own gates).
-    void maybeEmailNotification(input).catch(() => {});
+    void withGatewayWork(() => maybeEmailNotification(input)).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] emit failed:', err?.message || err);
   }
@@ -311,7 +311,7 @@ const emitNotificationsBulkNow = async (
       }));
     }
     // Email retains its existing delivery boundary.
-    void emailNotificationsBulk(deduped, base).catch(() => {});
+    void withGatewayWork(() => emailNotificationsBulk(deduped, base)).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] bulk emit failed:', err?.message || err);
   }

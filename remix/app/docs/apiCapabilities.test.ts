@@ -1202,13 +1202,15 @@ test('Builder provenance corrections negotiate every affected shared-content con
 });
 
 test('remote folder sync control is registered on both capability manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.5.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.5.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.devices-sync-control'], '1.6.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.devices-sync-control'].version, '1.6.0');
   for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
   const history = REMOTE_SYNC_HISTORY_REQUIREMENTS['api.devices-sync-control'];
   for (const version of [undefined, '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, history), false);
   for (const version of ['1.4.0', '1.4.1', '1.5.0']) assert.equal(capabilitySatisfies(version, history), true);
+  for (const version of [undefined, '1.5.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), false);
+  for (const version of ['1.6.0', '1.6.1']) assert.equal(capabilitySatisfies(version, '1.6.0'), true);
   assert.equal(typeof routeModules['v1/devices/sync-control'], 'function');
 });
 

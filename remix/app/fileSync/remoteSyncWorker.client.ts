@@ -16,7 +16,7 @@ import { createFolderHostFetch } from './folderHostFetch.client';
 import { executeRemoteSyncDetails } from './remoteSyncDetails.client';
 import type { SyncScope } from './reconcile';
 import { deviceResourceKey, readDeviceSyncResourcePolicy, saveDeviceSyncResourcePolicy } from './deviceResourcePolicy';
-import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_ACTIVITY_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { REMOTE_SYNC_DIRECTION_REQUIREMENTS, REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESOURCE_REQUIREMENTS, REMOTE_SYNC_HISTORY_REQUIREMENTS, REMOTE_SYNC_ACTIVITY_REQUIREMENTS, REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, parseRemoteSyncResources, supportsRemoteResourceControls, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
 
 export const REMOTE_SYNC_REQUIREMENTS = { 'api.devices-sync-control': '1.0.0' } as const;
 // One bounded, host/owner/device/origin-scoped optional negotiation. A short
@@ -173,6 +173,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 		case 'status': {
             const directionsReady = await remoteDirectionsReady(context);
 			const activityReady = await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_ACTIVITY_REQUIREMENTS['api.devices-sync-control']).then(() => true, () => false);
+			const recoveryReady = await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS['api.devices-sync-control']).then(() => true, () => false);
 			context.check();
 			const scope = context.scope('remote-sync-status');
 			const journal = await openSyncJournal();
@@ -190,6 +191,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 						jobs.push({ connectionId: job.scope.rootId, state: job.state, ...(job.intervalMs ? { intervalMs: job.intervalMs } : {}),
 							...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}), ...(job.retryAt ? { retryAt: job.retryAt } : {}),
 							...(job.pendingFolderValidation ? { pendingFolderValidation: true as const } : {}),
+							...(recoveryReady && job.strictCaptureId ? { strictCapturePending: true as const } : {}),
 							...(job.failureReason ? { failureReason: job.failureReason } : {}) });
 					}
 					after = page.next ?? undefined;
@@ -217,7 +219,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			} finally { journal.close(); }
 			const roots = [...session.roots].sort((a, b) => a.id.localeCompare(b.id));
 			const snapshot: RemoteSyncStatus = {
-				version: 1, ...(activityReady ? { folderEnrollmentVersion: '1.0.0' as const } : {}), ...(directionsReady ? { directionalProgressVersion: '1.0.0' as const } : {}), ...(activityReady ? { connectionActivityVersion: '1.0.0' as const } : {}), deviceId, observedAt: new Date().toISOString(), capabilities: { ...host.capabilities! }, rootsReady: session.rootsReady,
+				version: 1, ...(activityReady ? { folderEnrollmentVersion: '1.0.0' as const } : {}), ...(recoveryReady ? { folderEnrollmentRecoveryVersion: '1.0.0' as const } : {}), ...(directionsReady ? { directionalProgressVersion: '1.0.0' as const } : {}), ...(activityReady ? { connectionActivityVersion: '1.0.0' as const } : {}), deviceId, observedAt: new Date().toISOString(), capabilities: { ...host.capabilities! }, rootsReady: session.rootsReady,
 				...(session.rootsObservedAt ? { rootsObservedAt: session.rootsObservedAt } : {}),
 				roots: await projectRemoteRoots(context, roots.slice(offset, offset + pageSize)), jobs: pageJobs.map(job => {
                     const cached = directionsReady ? readStampedCache<ForegroundSyncProgress>('tt:sync-progress:' + syncScopeKey(context.scope(job.connectionId))) : null;
@@ -260,6 +262,10 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			return { ...result, roots: await projectRemoteRoots(context, result.roots) };
 		}
 		case 'start': {
+			if (command.recoverSavedIntent) {
+				await host.requireCapability('api.devices-sync-control', REMOTE_SYNC_ENROLLMENT_RECOVERY_REQUIREMENTS['api.devices-sync-control']);
+				context.check();
+			}
 			const saved = await readRemoteSyncConfiguration(context, command.connectionId);
 			if (saved.updatedAt !== command.expectedUpdatedAt)
 				throw Error('The connection changed. Refresh its saved settings before starting sync.');
@@ -268,7 +274,8 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 				throw Error('Automatic folder enrollment requires a saved folder sync config.');
 			if (command.intervalMs !== undefined && saved.configuration.sourceKind !== 'photos') {
 				const job = await enrollNativeFolderSync(saved, context.scope(saved.id), generation, command.intervalMs, signal,
-					{ queue: command.queueOnly, respectPause: command.queueOnly });
+					{ queue: command.queueOnly, respectPause: command.queueOnly || command.recoverSavedIntent,
+						...(command.recoverSavedIntent ? { recoverSavedIntent: true as const } : {}) });
 				context.check();
 				if (!job || job.reviewed.id !== saved.id || job.reviewed.updatedAt !== saved.updatedAt || job.intervalMs !== command.intervalMs)
 					throw Error('The saved automatic sync job could not be confirmed.');

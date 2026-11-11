@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { isModelUnavailableError } from './modelDiscovery';
 import { claudeOAuthPrompt } from './claudeOAuthPrompt';
 import Anthropic from '@anthropic-ai/sdk';
@@ -209,7 +210,7 @@ export function createClaudeOAuthClient(options: { token?: string; env?: NodeJS.
 		let usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
 		let stopReason = 'end_turn';
 		const stream = new ReadableStream<Uint8Array>({
-			async start(controller) {
+			start: controller => withGatewayWork(async () => {
 				const send = (event: any) => controller.enqueue(encode.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`));
 				const emit = (event: any) => {
 					if (event.type === 'text') {
@@ -274,7 +275,7 @@ export function createClaudeOAuthClient(options: { token?: string; env?: NodeJS.
 				} catch (error) {
 					controller.error(error);
 				}
-			},
+			}),
 			cancel() {
 				abort.abort();
 			}

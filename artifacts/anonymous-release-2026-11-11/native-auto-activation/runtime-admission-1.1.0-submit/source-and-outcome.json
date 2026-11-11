@@ -1,0 +1,46 @@
+{
+  "sourceRevision": "0fecb007965f42a05fdcebe53ac704a68c0b6b5a",
+  "prepared": {
+    "main.cjs": "47603b10676a34c475acf252f8ae5d4c49af5cd5679f11d9624c747e917c11f4",
+    "preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "lib/web-bundle-activation.cjs": "bf56527ebcc568ea91d930beea32509838378835bf172f313c56cf06ce08412a",
+    "lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "dist/web/metadata.json": "1dcd55bb4b2e402db02162d108c8e8a76d5e33857fb91224f0107c89840a72c1"
+  },
+  "preparedSourceMatchesBuildInputs": true,
+  "verifierSha256": "8aec9b9e05549171325b722af44138bb250d26b36839ed1e0ff065067ac183ee",
+  "focusedCanonicalTests": {
+    "command": "node --import tsx --test app/Providers/flushThingtimeSnapshot.test.ts app/local-workspace/editorTree.test.ts",
+    "passed": 10
+  },
+  "observed": {
+    "signedDownloadStaged": true,
+    "dirtyPendingMs": 70346,
+    "normalEnterCommitted": true,
+    "canonicalPersistedReadback": true,
+    "hardReloadReadback": true,
+    "idleProcessReplacement": false,
+    "idleDeadlineMs": 150000,
+    "manualRestartCalled": false
+  },
+  "cleanup": {
+    "verified": true,
+    "launcherAbsent": true,
+    "trustPolicyRestored": true,
+    "baselinePid69393Exited": true,
+    "taskListenersAbsent": [
+      28640,
+      47145,
+      47146,
+      47147
+    ],
+    "snapshotRetained": true,
+    "stableAppUntouched": true
+  },
+  "limits": [
+    "No automatic fresh process observed; next activation refusal reason requires diagnosis",
+    "No local account API acceptance",
+    "No further retry performed"
+  ]
+}

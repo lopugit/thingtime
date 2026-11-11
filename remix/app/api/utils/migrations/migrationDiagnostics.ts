@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { randomUUID } from 'node:crypto';
 
 import { fromBin, toBin } from '../auth/users';
@@ -268,7 +269,7 @@ export const createMigrationDiagnostic = async (input: CreateMigrationDiagnostic
 		await things.insertOne(doc as any, { timeoutMS: DIAGNOSTIC_WRITE_OPERATION_TIMEOUT_MS });
 		// Do not hold the original failure response open for retention cleanup.
 		// The TTL is the hard lifetime bound; this newest-25 cleanup is best effort.
-		void pruneOldDiagnostics(ownerId).catch((error) => {
+		void withGatewayWork(() => pruneOldDiagnostics(ownerId)).catch((error) => {
 			safeErrorText(error, 'migration diagnostic retention', 'Diagnostic retention error');
 		});
 		return { ok: true, id: doc.shareId };

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import { setImmediate as turn } from 'node:timers/promises';
 import { createCatalogueSnapshotService, CATALOGUE_PAGE_ENTRIES } from './catalogueSnapshot';
 import { readCatalogueStream, type CatalogueIdentity } from '../../../catalogue/catalogueStream';
@@ -65,6 +66,18 @@ async function consume(body: ReadableStream<Uint8Array>, scope = identity()) {
 		complete: async () => { completed = true; } });
 	return { rows, receipt, completed };
 }
+
+test('reader cancellation retains shutdown admission until snapshot query and session settle', async () => {
+	const f = fixture(), entered = deferred(), finish = deferred();
+	f.page(async () => { entered.resolve(); await finish.promise; });
+	const reader = f.body().getReader(); await reader.read(); await entered.promise;
+	await reader.cancel();
+	assert.equal(f.counts().active, true);
+	assert.equal(reserveGatewayWorkShutdown(), null);
+	finish.resolve(); await f.settled; await turn();
+	assert.equal(f.counts().active, false);
+	assert.equal(isGatewayWorkIdle(), true);
+});
 
 test('both domains stream past old caps, merge sorted legacy IDs and prefer modern duplicates in one pinned snapshot', async () => {
 	for (const domain of ['themes', 'algorithms'] as const) {

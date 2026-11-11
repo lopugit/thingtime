@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { redirect } from '~/api/http';
 
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
@@ -27,7 +28,7 @@ export const loader = async ({ request }: { request: Request }) => {
   // verification into an error page for the user. The permission stays
   // withheld regardless, so a lost notification delays approval, never
   // grants it.
-  void (async () => {
+  void withGatewayWork(async () => {
     const user = await findUserById(result.userId);
     if (!user || user.accountKind === 'service' || user.meta?.temporary === true) return;
     await sendNewUserAdminNotification({
@@ -38,7 +39,7 @@ export const loader = async ({ request }: { request: Request }) => {
       createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
       origin: resolveTrustedOrigin(request)
     });
-  })().catch(() => {});
+  }).catch(() => {});
 
   return redirect('/login?verify=success');
 };

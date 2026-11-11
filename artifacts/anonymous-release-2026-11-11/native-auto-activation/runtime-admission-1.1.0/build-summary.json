@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "command": "corepack pnpm --dir electron build:web",
+  "uncontended": true,
+  "logSha256": "6cb61de7b94b99fcab6ca5797073ca27e7fe65836d072880ba703818be98b0bd",
+  "note": "Raw local build log retained outside the staged evidence set; source inputs are in run-input.json."
+}

@@ -63,7 +63,7 @@ test('activation sender requires current exact window, main frame and loaded app
   for (const altered of [{ ...event, sender: {} }, { ...event, senderFrame: { ...frame } }]) assert.throws(() => assertBundleActivationSender(altered, window, 'http://127.0.0.1:18423'));
   assert.throws(() => assertBundleActivationSender(event, window, 'https://thingtime.com'));
   assert.throws(() => assertBundleActivationSender(event, null, 'http://127.0.0.1:18423'));
-  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.0.0', methods: ['set-policy', 'checkpoint'] });
+  assert.deepEqual(bundleActivationManifest('http://127.0.0.1:18423').features['native.web-bundle-activation'], { version: '1.1.0', methods: ['set-policy', 'checkpoint'], modes: ['remote-account', 'local-api'] });
 });
 test('close timeout retains one observer and work fence until actual Chromium veto', async () => {
   const window = new EventEmitter(); window.webContents = new EventEmitter(); window.close = () => {};
@@ -146,15 +146,48 @@ test('ordinary presentation restores an existing window and never creates before
   assert.deepEqual(actions, ['restore', 'show', 'focus']);
   assert.equal(presentBundleWindow({ blocked: false, window: null, origin: null, create: () => assert.fail('not ready') }), false);
 });
-test('only a positively initialized remote-account runtime permits automatic activation', () => {
-  const { remoteAccountBundleActivationAllowed: allowed } = require('../lib/web-bundle-activation.cjs');
-  const runtime = { runningEnabled: false, state: { enabled: false }, error: null, child: null };
-  assert.equal(allowed({ initialized: true, runtime }), true);
-  for (const input of [{ initialized: false, runtime }, { initialized: true, runtime: null },
-    { initialized: true, runtime: { ...runtime, runningEnabled: undefined } }, { initialized: true, runtime: { ...runtime, state: {} } },
-    { initialized: true, runtime: { ...runtime, runningEnabled: true } }, { initialized: true, runtime: { ...runtime, state: { enabled: true } } },
-    { initialized: true, runtime: { ...runtime, restartRequired: true } }, { initialized: true, runtime: { ...runtime, child: {} } },
-    { initialized: true, runtime: { ...runtime, error: 'unavailable' } }]) assert.equal(allowed(input), false);
+test('remote and local API lanes require current authority and a compatible process work contract', () => {
+  const { nativeBundleActivationAllowed: allowed, nativeRuntimeWorkLifecycle: negotiate } = require('../lib/web-bundle-activation.cjs');
+  const activity = { version: '1.0.0', isIdle: () => true, reserveShutdown: () => null };
+  const remote = { runningEnabled: false, state: { enabled: false }, error: null, child: null };
+  const external = { ...remote, runningEnabled: true, state: { enabled: true, databaseMode: 'external' } };
+  const managed = { ...external, state: { enabled: true, databaseMode: 'managed' }, child: { pid: 123, exitCode: null, signalCode: null, killed: false } };
+  for (const runtime of [remote, external, managed]) {
+    assert.equal(allowed({ initialized: true, runtime, activity }), true);
+    for (const patch of [{ initialized: false }, { runtime: null }, { activity: null },
+      { runtime: { ...runtime, runningEnabled: undefined } }, { runtime: { ...runtime, state: {} } },
+      { runtime: { ...runtime, restartRequired: true } }, { runtime: { ...runtime, error: 'unavailable' } }]) {
+      assert.equal(allowed({ initialized: true, runtime, activity, ...patch }), false);
+    }
+  }
+  for (const runtime of [{ ...external, child: {} }, { ...managed, state: { enabled: true, databaseMode: 'unknown' } },
+    ...[null, {}, { ...managed.child, pid: 0 }, { ...managed.child, killed: true }, { ...managed.child, exitCode: 1 },
+      { ...managed.child, signalCode: 'SIGTERM' }].map(child => ({ ...managed, child }))]) {
+    assert.equal(allowed({ initialized: true, runtime, activity }), false);
+  }
+  for (const candidate of [null, undefined, {}, { ...activity, version: '2.0.0' }, { ...activity, version: '1.0.0-unknown' },
+    { ...activity, isIdle: true }, { ...activity, reserveShutdown: null }, { get version() { throw Error('unavailable'); } }]) {
+    assert.ok(!negotiate(candidate));
+    assert.equal(allowed({ initialized: true, runtime: remote, activity: candidate }), false);
+  }
+  const compatible = { ...activity, version: '1.2.3' };
+  assert.equal(negotiate(compatible), compatible);
+});
+test('all three shutdown providers remain reserved until release and a busy API producer rolls back preparation', () => {
+  const { reserveBundleShutdown } = require('../lib/web-bundle-activation.cjs');
+  let apiBusy = true;
+  const held = [false, false, false];
+  const providers = held.map((_, index) => () => {
+    if (held[index] || (index === 2 && apiBusy)) return null;
+    held[index] = true;
+    return { isCurrent: () => held[index], release: () => { held[index] = false; } };
+  });
+  assert.equal(reserveBundleShutdown(providers), null); assert.deepEqual(held, [false, false, false]);
+  apiBusy = false;
+  const current = reserveBundleShutdown(providers);
+  assert.equal(current.isCurrent(), true); assert.deepEqual(held, [true, true, true]);
+  assert.equal(reserveBundleShutdown(providers), null); assert.equal(current.isCurrent(), true);
+  current.release(); assert.deepEqual(held, [false, false, false]); assert.equal(current.isCurrent(), false);
 });
 test('renderer loss during checkpoint or lease release cannot escape as an unhandled activation failure', () => {
   const { sendBundleActivation } = require('../lib/web-bundle-activation.cjs'); const sent = [];

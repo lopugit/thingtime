@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import { runBoundedBackupRequest } from './backupTransport.server';
 import { internalAccountSession, withInternalAccountSession } from '../auth/internalAccountSession';
 import { fenceAccountSession } from '../auth/fenceAccountSession';
@@ -16,8 +17,10 @@ test('hung handler times out, releases its trusted binding and cancels a late re
 	const f = fixture(), result = deferred<Response>(); let cancelled = false;
 	await assert.rejects(runBoundedBackupRequest(f.context, f.request, async () => result.promise, 20), { name: 'TimeoutError' });
 	assert.ok(f.captured); assert.equal(internalAccountSession(f.captured!), undefined);
+	assert.equal(reserveGatewayWorkShutdown(), null, 'timed-out handler may still be committing its accepted effect');
 	result.resolve(new Response(new ReadableStream({ cancel() { cancelled = true; } })));
 	await new Promise(resolve => setImmediate(resolve)); assert.equal(cancelled, true);
+	assert.equal(isGatewayWorkIdle(), true);
 });
 test('hung body read and even a stalled stream cancel cannot retain the trusted binding', async () => {
 	const f = fixture(); let cancelled = false;
@@ -49,5 +52,7 @@ test('a stalled initial guard times out without binding or dispatching a late ha
  const f = fixture(), gate = deferred<void>(); let calls = 0;
  f.context.guard = async () => gate.promise;
  await assert.rejects(runBoundedBackupRequest(f.context, f.request, async () => { calls++; return Response.json({ok:true}); }, 20), {name:'TimeoutError'});
+	assert.equal(reserveGatewayWorkShutdown(), null, 'response deadline cannot settle the actual guard');
  assert.equal(f.captured, null); gate.resolve(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(calls,0);
+	assert.equal(isGatewayWorkIdle(), true);
 });

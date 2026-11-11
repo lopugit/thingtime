@@ -1,4 +1,5 @@
 import { StorageMutationError } from '../storage/storageCore';
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { CLOUD_INVENTORY_TIMEOUT_MS } from '../../../fileSync/cloudInventoryPages';
 import { streamCloudInventoryPages } from './inventoryPages';
 
@@ -14,7 +15,7 @@ export function cloudInventoryResponse(ownerId: string, rootId: unknown, request
 	const timer = setTimeout(() => controller.abort(new DOMException('Cloud inventory timed out', 'TimeoutError')), CLOUD_INVENTORY_TIMEOUT_MS);
 	controller.signal.addEventListener('abort', abortWriter, { once: true });
 	if (request.signal.aborted) abort(); else request.signal.addEventListener('abort', abort, { once: true });
-	void service(ownerId, rootId, page => writer.write(encoder.encode(JSON.stringify(page) + '\n')), controller.signal, subtreeId)
+	void withGatewayWork(() => service(ownerId, rootId, page => writer.write(encoder.encode(JSON.stringify(page) + '\n')), controller.signal, subtreeId)
 		.then(() => writer.close(), async error => {
 			try {
 				if (!controller.signal.aborted) await writer.write(encoder.encode(JSON.stringify({ ok: false,
@@ -25,6 +26,9 @@ export function cloudInventoryResponse(ownerId: string, rootId: unknown, request
 		}).catch(() => {}).finally(() => {
 			clearTimeout(timer); request.signal.removeEventListener('abort', abort); controller.signal.removeEventListener('abort', abortWriter);
 			writer.releaseLock();
+		})).catch(() => {
+			clearTimeout(timer); request.signal.removeEventListener('abort', abort);
+			controller.abort();
 		});
 	return new Response(stream.readable, { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'X-Content-Type-Options': 'nosniff' } });
 }

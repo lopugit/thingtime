@@ -5,6 +5,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 import { isBlockedLopuProviderHostname } from '../lopu/userVaultCore';
 import { withExportDeadline } from '../../../utils/thingTransfer/exportDeadline';
+import { withGatewayWork } from '../deployment/environmentGateway';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PIXELS = 4 * 1024 * 1024;
@@ -31,7 +32,7 @@ const defaults = { lookup, get };
  * The socket uses the vetted DNS answer, not a second hostname resolution.
  * Only the membership-authorized live-chat adapter calls this helper. */
 export const downloadArchiveAvatar = async (value: string, parent?: AbortSignal,
-  overrides: Partial<typeof defaults> = {}): Promise<{ bytes: Uint8Array; mime: string }> => withExportDeadline(async signal => {
+  overrides: Partial<typeof defaults> = {}): Promise<{ bytes: Uint8Array; mime: string }> => withExportDeadline(signal => withGatewayWork(async () => {
   const deps = { ...defaults, ...overrides };
   let url: URL;
   try { url = new URL(value); } catch { throw unavailable(); }
@@ -87,4 +88,4 @@ export const downloadArchiveAvatar = async (value: string, parent?: AbortSignal,
   await image.stats();
   signal.throwIfAborted();
   return { bytes: new Uint8Array(bytes), mime };
-}, parent, 10_000);
+}), parent, 10_000);

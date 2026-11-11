@@ -34,9 +34,33 @@ integration follows from this evidence; see the [current image probe](../../iOS/
 `electron/scripts/verify-web-bundle-auto-activation.mjs` uses a separate
 remote-mode development workspace and synthetic signed catalogue/content fixture.
 It verifies real download/staging after baseline startup before dirty/background
-checks. The latest run stopped at native window control; its retained receipt
-must not be called successful automatic activation. Final fixture corrections
-remain unrerun. See [partial acceptance](../../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
+checks. Actual native control, dirty refusal and submitted/persisted/hard-reload value
+now pass on a recorded checkpoint. Automatic replacement timed out; a closed
+editor projection fix is observed in the next actual renderer, whose text-entry
+readiness assertion then stopped the run. Automatic replacement remains open. See [partial acceptance](../../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
+
+## Embedded document storage foundation
+
+`remix/app/api/utils/documentStore/{contract,sqliteStore}.ts` provides a
+transaction-scoped file store for exact BSON bytes, with ordered paged scans,
+rollback and serialized async callbacks. The caller supplies an absolute path;
+no account authority, API capabilities or Mongo-compatible behavior is inferred.
+`test:document-store` runs actual SQLite file and fresh-process recovery checks
+and is included in `test:unit`. The runtime needs Node 24 with `node:sqlite`.
+The collection/query/update/index adapters, storage ledger and ACL route
+acceptance, native profile bootstrap and iOS file persistence are still required.
+Do not select this store in production merely because these primitive tests pass.
+
+The native 1.1 activation host negotiates the process-local Nitro runtime-work
+contract and combines its reservation with the HTTP and ChatGPT admissions.
+`CustomDrawerItems` omits its known closed editor from the rendered projection;
+open drafts and Builder layouts retain every saved block. The global unknown-draft
+guard still protects hidden unsaved editors. Run `test:nav` for the projection.
+Stream cancellation and request timeout tests must retain actual producer,
+cleanup and write lifetimes. Run the native activation/launch/runtime checks,
+`test:environment-gateway`, and the changed provider, backup, moderation,
+notification, inventory, catalogue and overview regressions. Actual automatic
+replacement remains an independent installed-app acceptance requirement.
 
 ## Agent browser runtime
 

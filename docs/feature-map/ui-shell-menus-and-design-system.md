@@ -1,5 +1,14 @@
 # UI shell, menus and design system
 
+## Custom drawer editor lifecycle
+
+`CustomDrawerItems` projects saved `customDrawerBlocks` without its known closed
+item dialog, so default Emoji fields are not mounted as unfinished edits.
+Opening the editor retains every input even when navigation hides; Builder mode
+retains the full editable template. Closing explicitly discards that editor draft.
+No global visibility exemption is added to the desktop unknown-draft guard.
+Run `test:nav`, then actual desktop/phone Add, type, hide, reopen and cancel checks.
+
 ## Shared persisted Thing actions
 
 `schemas/thingActions.ts` and `thingEntityMenu.ts` define common Archive/Restore

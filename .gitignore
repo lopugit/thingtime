@@ -131,3 +131,6 @@ iOS/scripts/__pycache__/
 
 # Separate linked Rust/Swift boundary acceptance products
 apple/FileSync/.build-embedded/
+
+# Local native build logs; commit safe hashes/receipts instead.
+artifacts/**/build-web.log

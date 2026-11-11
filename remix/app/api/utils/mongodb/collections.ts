@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { requireGatewayDatabaseAccess, registerGatewayDrain, withGatewayWork } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
 import { mongoConnectionTracker } from './connectionTracker';
@@ -84,7 +84,7 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     const stale = clientCache.get(staleUri);
     clientCache.delete(staleUri);
     customIndexesEnsured.delete(staleUri);
-    stale?.then((client: any) => client.close()).catch(() => {});
+    if (stale) void withGatewayWork(async () => { await (await stale).close(); }).catch(() => {});
   }
 
   const client = await entry;

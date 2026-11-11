@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { json, readJsonBody } from '~/api/http';
 
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
@@ -35,7 +36,7 @@ export const action = async ({ request }: { request: Request }) => {
       const link = `${resolveTrustedOrigin(request)}/api/v1/auth/verify-email?token=${verification.token}`;
       // Fire-and-forget so a send failure can't turn the neutral response into
       // a 500 (which would leak that this email belongs to an unverified user).
-      void sendVerificationEmail({ to: user.email, link }).catch(() => {});
+      void withGatewayWork(() => sendVerificationEmail({ to: user.email, link })).catch(() => {});
       if (showLink) return json({ ok: true, verificationLink: link });
     }
   }

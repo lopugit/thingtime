@@ -2,6 +2,46 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main integration — 11 November 2026
+
+Integrate newly fetched main `a5054d78a18361d4c7457922c1d7a6badb712f5d`
+(PR #1476 sync capability refresh and saved-folder recovery) while preserving the
+current runtime/storage work. Source conflicts were confined to the changelog;
+both histories remain. Immutable Graphify variants are retained intact until
+canonical combined-tree regeneration. The combined registry retains devices
+sync-control 1.6, passwords 1.10, Things 1.64 and search 1.8. Imported sync,
+Electron folder-sync and capability regressions pass 326 checks, with no skips.
+
+Native acceptance stays source-specific: signed staging, dirty refusal and
+canonical saved-value/reload readback passed before this sync merge. Automatic
+replacement timed out. A known closed drawer editor was then removed from the
+live projection while preserving open/hidden drafts and Builder mode. Its actual
+renderer check confirms zero closed Emoji fields; that run stopped at initial
+input readiness before staging. Automatic replacement and drawer dialog
+interaction at desktop/phone widths remain unfinished.
+
+## Runtime completion and storage checkpoint — 11 November 2026
+
+Fresh fetch still resolves main to `991a3d9d6`, already merged. The current source
+extends shutdown admission across stream producer cleanup, parallel tools,
+transcript/lease persistence, timed moderation/backup operations, detached queues
+and database cleanup. Backup SDK acceptance and fenced receipt attachment now
+share one continuation, closing a reviewed abort-ordering gap.
+
+Native bundle activation 1.1 negotiates the loaded Nitro process contract and
+reserves all three work providers. Remote and local account modes require known,
+unchanged authority; managed local mode requires its database process alive.
+Installed automatic replacement and local-account persistence must still be
+verified independently of these source/unit checks.
+
+The new internal SQLite document store preserves exact BSON bytes and provides
+scoped atomic transactions. Eleven real-file checks include independent-process
+recovery. This is an unfinished storage foundation: it does not yet implement the
+canonical query/index/transaction adapters or establish API/ACL/ledger or iOS
+account acceptance. No storage provider is activated by this checkpoint.
+
+[Current verification and limitations](../artifacts/anonymous-release-2026-11-11/runtime-continuations/README.md).
+
 ## Shutdown foundation checkpoint — 11 November 2026
 
 Freshly fetched main remains `991a3d9d6`, already included by merge `b5b70e0c8`.

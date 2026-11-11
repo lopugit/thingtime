@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { resolveOwnedChatGPTPlan } from '~/api/utils/ai/chatgptPlanAdmission';
 import type { OwnedPlanAdmission } from '~/api/utils/ai/chatgptPlanAdmissionCore';
 import { chatGPTPlanFailure, isChatGPTPlanProvider } from '~/api/utils/ai/chatgptPlanScope';
@@ -448,7 +449,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     const persistedChatId = chatId;
 
     const stream = new ReadableStream({
-      async start(controller) {
+      start: controller => withGatewayWork(async () => {
         let closed = false;
         const pendingTools = new Set<string>();
         let awaitingConfirmation = false;
@@ -465,13 +466,11 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         };
 
-        let renewing = false;
-        const leaseHeartbeat = access.renew ? setInterval(async () => {
+        let renewing: Promise<void> | null = null;
+        const leaseHeartbeat = access.renew ? setInterval(() => {
           if (renewing) return;
-          renewing = true;
-          try { await access.renew?.(); }
-          catch { abort.abort(); }
-          finally { renewing = false; }
+          renewing = withGatewayWork(async () => { await access.renew?.(); })
+            .catch(() => { abort.abort(); }).finally(() => { renewing = null; });
         }, 30_000) : null;
         let outcome: LopuChatTurnOutcome | null = null;
         try {
@@ -517,6 +516,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           send({ type: 'error', message: 'The AI connection was interrupted. Saved progress is kept — use Retry / Continue to pick up from here.', retryable: true });
         } finally {
           if (leaseHeartbeat) clearInterval(leaseHeartbeat);
+          await renewing;
           // persist whatever streamed, even after an error or a disconnect
           const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const stopReason = outcome?.stopReason || 'error';
@@ -595,7 +595,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
             // already closed by a cancel
           }
         }
-      },
+      }),
       cancel() {
         abort.abort();
       }

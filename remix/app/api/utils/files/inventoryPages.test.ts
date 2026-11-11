@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import { createCloudInventoryPagesService } from './inventoryPages';
 import { openInventoryQueue, INVENTORY_QUEUE_BYTES } from './inventoryQueue';
 import { cloudInventoryResponse } from './inventoryStream';
@@ -11,6 +12,20 @@ const folder = (id: string, parent: string | null = 'root') => ({ shareId: id, o
 const file = (id: string) => ({ ...folder(id), thingtime: ['file'], timelineHeadId: 'revision-' + id, crystal: { name: id, trashed: false,
 	content: { attachmentId: 'attachment-' + id, version: 'a'.repeat(64), size: 4,
 		fingerprint: { algorithm: 'sha256-parts-v1', ...contentPartPlan(4), sha256: 'b'.repeat(64) } } } });
+
+test('inventory reader cancellation keeps admission through delayed service cleanup', async () => {
+	let enter!: () => void, finish!: () => void;
+	const entered = new Promise<void>(resolve => { enter = resolve; });
+	const pending = new Promise<void>(resolve => { finish = resolve; });
+	const response = cloudInventoryResponse('owner', 'root', new Request('https://thingtime.test/inventory'), async (_owner, _root, _write, signal) => {
+		await new Promise<void>(resolve => { signal!.addEventListener('abort', () => { enter(); resolve(); }, { once: true }); });
+		await pending;
+	});
+	await response.body!.cancel(); await entered;
+	assert.equal(reserveGatewayWorkShutdown(), null);
+	finish(); await new Promise<void>(resolve => setImmediate(resolve));
+	assert.equal(isGatewayWorkIdle(), true);
+});
 function fixture(children: any[] = [file('file')]) {
 	const docs = [folder('root', null), ...children]; let session: any, queries = 0, closed = 0, time = 0, sessions = 0, workspaces = 0;
 	let afterRow = () => {}, afterSnapshot = () => {}, custom = false;

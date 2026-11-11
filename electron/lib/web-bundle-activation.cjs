@@ -1,6 +1,6 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
-const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.0.0', methods: Object.freeze(['set-policy', 'checkpoint']) });
+const BUNDLE_ACTIVATION_FEATURE = Object.freeze({ version: '1.1.0', methods: Object.freeze(['set-policy', 'checkpoint']), modes: Object.freeze(['remote-account', 'local-api']) });
 const bundleActivationManifest = origin => ({ origin, features: { 'native.web-bundle-activation': BUNDLE_ACTIVATION_FEATURE } });
 function assertBundleActivationSender(event, window, origin) {
   if (!window || window.isDestroyed() || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame ||
@@ -19,11 +19,21 @@ const withAbort = (work, signal) => new Promise((resolve, reject) => {
   else Promise.resolve().then(work).then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
 });
 
-/** Detached local-account API jobs do not yet share shutdown admission.
- * Only a positively initialized, unchanged remote-account lane can activate. */
-function remoteAccountBundleActivationAllowed({ initialized, runtime }) {
-  return initialized === true && Boolean(runtime) && runtime.runningEnabled === false && runtime.state?.enabled === false &&
-    runtime.error === null && runtime.child === null && runtime.restartRequired !== true;
+/** Negotiate the loaded bundle's process-only background-work boundary. */
+function nativeRuntimeWorkLifecycle(value) {
+  try {
+    return value && /^1\.\d+\.\d+$/.test(value.version) && typeof value.isIdle === 'function' &&
+      typeof value.reserveShutdown === 'function' ? value : null;
+  } catch { return null; }
+}
+/** Both API lanes require initialized, unchanged authority and the bundle's
+ * background-work contract. Managed databases must still be alive. */
+function nativeBundleActivationAllowed({ initialized, runtime, activity }) {
+  if (initialized !== true || !runtime || !nativeRuntimeWorkLifecycle(activity) || runtime.error !== null || runtime.restartRequired === true ||
+      typeof runtime.runningEnabled !== 'boolean' || runtime.runningEnabled !== runtime.state?.enabled) return false;
+  if (!runtime.runningEnabled || runtime.state.databaseMode === 'external') return runtime.child === null;
+  return runtime.state.databaseMode === 'managed' && Number.isSafeInteger(runtime.child?.pid) && runtime.child.pid > 0 &&
+    runtime.child.exitCode === null && runtime.child.signalCode === null && runtime.child.killed === false;
 }
 
 /** Acquire all in-process admission reservations without yielding. Failure of
@@ -150,4 +160,4 @@ function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onC
     } catch (error) { cleanup(); reject(error); }
   });
 }
-module.exports = { queueDesktopRelaunch, sendBundleActivation, remoteAccountBundleActivationAllowed, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };
+module.exports = { queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation };

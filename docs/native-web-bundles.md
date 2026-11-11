@@ -126,18 +126,22 @@ installed acceptance distinct from the recorded startup/rollback receipt.
 ## Automatic activation work in progress
 
 The renderer now supports a nonce-bound durable persistence checkpoint through
-`native.web-bundle-activation` 1.0.0. The existing automatic-update preference
+`native.web-bundle-activation` 1.1.0. The existing automatic-update preference
 controls it. An unfocused window must be idle for 30 seconds; dirty or unknown
 editors, active media, failed persistence and identity changes keep the candidate
 pending. This source checkpoint still requires final installed-app acceptance.
 The isolated remote-mode fixture used the canonical release API and real native
-downloader to stage 1,823 signed payload files after baseline startup. Native
-window control stopped that attempt before the background/automatic-restart
-checks; no positive automatic replacement is claimed. See the
-[partial acceptance receipt](../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
+downloader to stage 1,823 signed payload files. Dirty-input refusal, normal Enter
+submission, integrity-checked persisted value and hard navigation readback pass.
+Automatic process replacement then timed out. Known closed navigation editors
+are now omitted from the rendered projection; open hidden drafts and Builder
+layouts remain protected. The updated actual renderer confirms the closed
+fields are absent, but that run stopped at initial text-entry readiness before
+publication. No positive automatic replacement or local-account recovery is
+claimed. See the [current receipt](../artifacts/anonymous-release-2026-11-11/runtime-continuations/README.md).
 
-The main process reserves both the embedded HTTP server and ChatGPT runtime
-before starting close. Existing requests, streamed responses, websocket sessions,
+The main process reserves the embedded HTTP server, ChatGPT runtime and
+loaded Nitro background-work lifecycle before starting close. Existing requests, streamed responses, websocket sessions,
 queued storage/model work and pending OAuth refuse the reservation. New requests
 receive retryable 503 while held. A veto releases it; a stalled close retains one
 observer and its reservation. Electron cannot cancel an already dispatched
@@ -145,17 +149,28 @@ observer and its reservation. Electron cannot cancel an already dispatched
 accepted close fences `activate` and `second-instance` window recreation until
 canonical restart/recovery. No renderer-supplied value grants shutdown authority.
 
-Automatic activation remains pending in full local API mode. Its detached Lopu
-stream cleanup and notification/background tasks can outlive an HTTP response;
-the in-process `thingtime.runtime-work.lifecycle` 1.0.0 contract now exposes
-synchronous idle/reservation checks over admitted work and pool cleanup. Messenger
-recent reactions, deployment-session revocation, underlying error-log persistence
-and background-task heartbeats retain admission until actual completion. This
-is a partial inventory: streamed producer cleanup, notification/email work,
-moderation and backup continuations still need coverage before the native host
-can use it to certify this mode idle. The remote-account desktop bridge awaits protected
-reply persistence within its request. Unknown/missing bridges also remain pending.
-Normal restart still selects a staged update through the verified boot path.
+The native host now negotiates `thingtime.runtime-work.lifecycle` 1.x directly
+inside the loaded server process. Both remote-account and local-API lanes require
+this contract; unknown or older bundles remain pending. The local lane also
+requires unchanged initialized authority and, for a managed database, a live
+owned child process. This source eligibility is not installed acceptance.
+
+Admission follows the actual asynchronous operation after response deadlines or
+reader cancellation: transcript saves and lease renewal, parallel tools, provider
+cleanup, catalogue/inventory/overview streams, ZIP and avatar cleanup,
+notification/email and moderation queues, backup start/receipt/handler work,
+index warmup and pool/cursor cleanup. Backup SDK acceptance and its exactly-once
+fenced attachment are one continuation, including an abort between acceptance
+and response observation. Request completion alone cannot make this work idle.
+The existing HTTP/ChatGPT reservations and renderer persistence checkpoint remain
+independent requirements. No account, origin or credential boundary is relaxed.
+
+A new internal `documentStore` primitive uses file-backed SQLite transactions and
+lossless BSON bytes. Real temporary-file tests cover typed data, rollback,
+serialization, scoped sessions and independent-process recovery. It does not yet
+implement the canonical collection/query/index facade, authorize an account,
+select a native storage path or advertise local API readiness. See
+[local development foundations](feature-map/local-development-and-worktrees.md).
 
 ## Remaining integration and acceptance
 
@@ -169,8 +184,8 @@ Normal restart still selects a staged update through the verified boot path.
    cancellation, retry and independent staging against the actual selected API.
    Preserve origin/profile and unsaved work. Next-normal-start activation is
    implemented. Automatic activation has a guarded source implementation, but
-   installed acceptance, full local API background-work admission and external
-   frozen-process recovery remain open.
+   installed acceptance of both account modes and external frozen-process
+   recovery remain open.
 3. **P1 — iOS runtime and storage.** Continue from the actual simulator result:
    Node 24, genuine bcrypt and Sharp/libvips now import the canonical Nitro
    bundle in a disposable simulator. Prove the full API and in-process

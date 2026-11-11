@@ -1,0 +1,254 @@
+{
+  "observedAt": "2026-11-11T12:58:05.346319+00:00",
+  "parentHead": "0fecb007965f42a05fdcebe53ac704a68c0b6b5a",
+  "checks": {
+    "nativeUnits": {
+      "exitCode": 0,
+      "logSha256": "c67071576446589e1c58d3a42e79998f2b26c97a738472fad108f51b0b9a620a",
+      "passed": 48,
+      "skipped": 0
+    },
+    "streamAndBackup": {
+      "exitCode": 0,
+      "logSha256": "f9c92ed6b11efcc5f5b83b4a135c135989327ee81691f33420cbe834b6bc37aa",
+      "passed": 129,
+      "skipped": 0
+    },
+    "overviewCatalogueInventoryReply": {
+      "exitCode": 0,
+      "logSha256": "b01cab8e847241e3e2cf3e1fca5c15e8e977602ec44d544a8913f9a44dacdd9c",
+      "passed": 32,
+      "skipped": 0
+    },
+    "queueRegressions": {
+      "exitCode": 0,
+      "logSha256": "4a88f708c1b901a893a307da8e26a76d58ac37a010cee34917c2b6d78c559e37",
+      "passed": 73,
+      "skipped": 0,
+      "note": "Backup dispatch changed afterwards; final dispatch coverage is in the 129-test streamAndBackup batch."
+    },
+    "sqlite": {
+      "exitCode": 0,
+      "logSha256": "fc0fbf4f36997c492c8e385cd1e8c89b7bba4ff598e4e8cdf71d3a14bbe0a485",
+      "passed": 11,
+      "skipped": 0
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "errors": 0
+    },
+    "ratchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "errors": 0
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "2c635a7b9a314341cfb4942aadef03aafa25d73f939ced5807515718ecebc4e8",
+      "note": "Uncontended rerun after overlapping native build output was discarded as acceptance evidence."
+    },
+    "compiledHandler": {
+      "exitCode": 0,
+      "logSha256": "10f62c4fe83bd34ff3e0612b1819b9aa7457d7deed2cb2a831cf5ae97e78d944",
+      "contracts": 27,
+      "shutdownReservation": true,
+      "note": "Waits for actual synthetic startup-pool cleanup before reserving; no database persistence claimed."
+    },
+    "plan": {
+      "exitCode": 0,
+      "logSha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73",
+      "widths": [
+        1440,
+        390,
+        320
+      ],
+      "fullScroll": true,
+      "filtersSearchNavigation": true
+    },
+    "lint": {
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 372,
+      "logSha256": "1ecd46b912558500c1fe6f379e39056924843a9c8ef8399ecbf375904e4cf88c"
+    },
+    "smokeScriptLint": {
+      "exitCode": 0,
+      "logSha256": "549e544dadb621699769583f159b84b03d5d76a6e62a247aa5565587013e1e49"
+    },
+    "nativeAutomatic": {
+      "passed": false,
+      "phase": "durable-save-and-readback",
+      "signedReleaseStaged": true,
+      "dirtyBackgroundRefusedMs": 70345,
+      "automaticRestartReached": false,
+      "cleanupVerified": true,
+      "receipt": "../native-auto-activation/runtime-admission-1.1.0/verification.json",
+      "note": "First runtime attempt; subsequent failure boundaries are recorded separately and do not establish success."
+    },
+    "drawerRegression": {
+      "exitCode": 0,
+      "logSha256": "2cfe35852a0ae499bcb058d7d55769333d50eeb55a0167302b07935b195d6f46",
+      "passed": 13,
+      "skipped": 0
+    },
+    "finalTypecheck": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "errors": 0
+    },
+    "finalLint": {
+      "exitCode": 0,
+      "logSha256": "1ecd46b912558500c1fe6f379e39056924843a9c8ef8399ecbf375904e4cf88c",
+      "errors": 0,
+      "warnings": 372
+    },
+    "mergedTypecheck": {
+      "exitCode": 0,
+      "logSha256": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+      "errors": 0
+    },
+    "mergedRatchet": {
+      "exitCode": 0,
+      "logSha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "errors": 0
+    },
+    "mergedLint": {
+      "exitCode": 0,
+      "logSha256": "0429c5d5346c25ecc03ee8165cd581f04bd5a3ef4bb73afcdf5804fd9a557af1",
+      "errors": 0,
+      "warnings": 372
+    },
+    "mergedBuild": {
+      "exitCode": 0,
+      "logSha256": "10a46d752375896a07bd600922047015ba1164212e1af8ab8f72c8ab73813fbd"
+    },
+    "mergedCompiledHandler": {
+      "exitCode": 0,
+      "logSha256": "10f62c4fe83bd34ff3e0612b1819b9aa7457d7deed2cb2a831cf5ae97e78d944",
+      "contracts": 27,
+      "importedSyncContract": "1.6.0",
+      "shutdownReservation": true
+    },
+    "finalPlan": {
+      "exitCode": 0,
+      "logSha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73",
+      "widths": [
+        1440,
+        390,
+        320
+      ]
+    }
+  },
+  "sourceSha256": {
+    ".gitignore": "dd8b8bec7716533b843c6c27106e286b3e71cc495a1973512059abb888a991cc",
+    "PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md": "95ce41039306e5b4f74a0b92635f4588cb67a989f4b9fb01156e7827dcf2aaab",
+    "PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md": "e609db9714bdc77323175e8b023367c8a7497931973c67add60f73a4a00ac55d",
+    "TESTING.md": "3d536f83a4e662d29b68ce4be06ba5a5dcfe0dbf823d8b974e60d32469b6559f",
+    "apple/FileSync/Sources/AppleFileSync/MobileFolderBulkReader.swift": "dea4d077905d87e482b9b143a2e37f93863feb45c928a4eedbbc116a19ed1dea",
+    "apple/FileSync/Tests/AppleFileSyncTests/MobileFolderBulkReaderTests.swift": "56a4406dac36aa3a3186047d8fdba4cfae414a3b83c9dcd95fab9c8745b1eac2",
+    "docs/feature-map/api-endpoints-and-capabilities.md": "c519838aeca5977654e5e425f2377ec9752a0e8d392127f3b3a4f38f0923fbd0",
+    "docs/feature-map/local-development-and-worktrees.md": "5420b74c590813fecf2209ab6a60d5a0698dc3d81a4194f21e6661f8487bbaa8",
+    "docs/feature-map/ui-shell-menus-and-design-system.md": "cedbdbd715f6370e12a70da2189d042eff13761a50d84bdee9d2a15dd976542a",
+    "docs/native-web-bundles.md": "90b2b2ca29e58307a41e4138112c416e83dfde0ca1a9d9c670aea4d6e9e8a04c",
+    "docs/progress/anonymous-local-first.html": "5f7b4c3326080f42409e4557c05d06430984f1a4ecac462a18aeb2443900290f",
+    "electron/lib/folder-sync.cjs": "3e15ba1ad7c58c2cb1acff70b22a91d5bc532ea976e928bbbdfc98dfe7ae3772",
+    "electron/lib/web-bundle-activation.cjs": "bf56527ebcc568ea91d930beea32509838378835bf172f313c56cf06ce08412a",
+    "electron/main.cjs": "47603b10676a34c475acf252f8ae5d4c49af5cd5679f11d9624c747e917c11f4",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "d88102485d63d58ee6a398f625fdc98f638759f0f1d6e87730e885a18dc9f256",
+    "electron/test/folder-sync.test.cjs": "7e6db79a275d5e0d1c118a4715c9cb8ea183ff048af07fb7d6c95a22df55dd17",
+    "electron/test/web-bundle-activation.test.cjs": "635ef0f5a5a69f72b6fe09f24cc9cd8c5340bad868d9db8ca00916cdc8de6384",
+    "macos/ThingtimeNode/Sources/ThingtimeNodeCore/MacUploadBatchOperation.swift": "40d996b91616cbdec5ded4c5fa9a939ba94d17ea90f4cc6572b41ea2c6d0753f",
+    "macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/MacUploadBatchOperationTests.swift": "7fa0d55aca29b5265bfbeb9c0aeb77f12cea8b15d997e32f1423dad5ebeb8fcd",
+    "remix/CHANGELOG.md": "8da759a3c4021812adc901d501e5349fe9677251e404e5fd85fcbe02bd49aee3",
+    "remix/app/api/utils/agents/overview.test.mts": "a6ac0dd1b411bba144fa043c37beb42ecc75e7c739b46b430bce3a73f6682dd8",
+    "remix/app/api/utils/agents/overview.ts": "8ef2aa635678668df54a2eb848de7ecde3a8cc3624c39dfbcf819cc944ab7397",
+    "remix/app/api/utils/ai/claudeOAuth.test.ts": "223c3307a2e3d4b3ee8a873b8487563793bb4f5378ee0a46e7e359619028ea85",
+    "remix/app/api/utils/ai/claudeOAuth.ts": "362897283018151d4781cdf3fd1411765b6ef23df7a2ecab511050823728d91b",
+    "remix/app/api/utils/attachments/zipStream.test.ts": "7b062d7ba2c2f254b8f51a9cd9d2658fc973354cf07592a188ba5fa7fdf11257",
+    "remix/app/api/utils/attachments/zipStream.ts": "fc919c3462bc8e451e8ff7cb10be9f55372ac16479bbae7a94d41cfda341e8e3",
+    "remix/app/api/utils/auth/registerUser.ts": "2cd48bbc2816352b6e0ff9c1a77e8681930cdf78b3b82f4c49d67e6789fff935",
+    "remix/app/api/utils/auth/serviceAccounts.ts": "b960b1360e263ab2629a22e3c5ae28bbfb53220298ac5704b0b72a1c67139082",
+    "remix/app/api/utils/backups/backupDispatch.server.ts": "082f5d9d507b4960729f88665689c05d62fdea918011c9df3387b5191913602f",
+    "remix/app/api/utils/backups/backupDispatch.test.ts": "31b016523aabac547acbd4e7a2476126739e9e78b7df1e72118708af97923d91",
+    "remix/app/api/utils/backups/backupTransport.server.ts": "50626ac580739d1cfd9a5bfa074d18b2368b66094e19319635218f49bffb5b6d",
+    "remix/app/api/utils/backups/backupTransport.test.ts": "6489b39201001b0ca015eeb464416cfd263821d99e9e35d8d1bd1d6a3f53e50e",
+    "remix/app/api/utils/backups/backupWorkspace.server.ts": "108210c287458dcf6eae30ca4db1a428892e6d2b61fe52b6441d64d354dbe6d6",
+    "remix/app/api/utils/catalogue/catalogueSnapshot.test.ts": "8a01c8e3c4acbc34f10c8e60e95671a8babca8e3345c7907a921364e2e806de6",
+    "remix/app/api/utils/catalogue/catalogueSnapshot.ts": "f3431f081c268fee3559882cba46f4d746f218a9b9009373c6cda072540543d2",
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/documentStore/reopen.fixture.mjs": "628722c1003110ad06654ed3d6981e4ed7c078963d6f00672b37a909050f65a3",
+    "remix/app/api/utils/documentStore/sqliteStore.test.ts": "dce263357545a2ad6cf4297e54c7c453546981d6ebca3762e1a1b7568b780c0c",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/files/inventoryPages.test.ts": "d9dc92d2634f9799bcdf972f0b398a0df42a2ae7b06caed5161ed637027fd980",
+    "remix/app/api/utils/files/inventoryStream.ts": "96d43c873542ea185fd114ca182657ab0c75533a09a4adc217b8bdf75e2e5983",
+    "remix/app/api/utils/lopu/chat.streaming.test.mts": "2197051cc3ff3d888cce29741aa774ead8def83be6459c0f9bcbf84e5ce8f726",
+    "remix/app/api/utils/lopu/chat.ts": "e6ca7288828fcfd67399a5ab837b0cb814870ade27e145bc682b35c8bd6cb69a",
+    "remix/app/api/utils/lopu/musing.ts": "0202931c54dc420049819c719d9bfca7546707b0663517e674f2742b60af7ab1",
+    "remix/app/api/utils/lopu/pageContextRoute.test.mts": "1aa2a1224185c868287cbbae6f1cd09ea086dbdbe251ac15ecf64c00ca9a07f4",
+    "remix/app/api/utils/migrations/migrationDiagnostics.ts": "f9f9af83276fdac81da7e11d67f408310e7553cbe1d04b68be8e40fd495c2fd3",
+    "remix/app/api/utils/moderation/analyzeAttachment.ts": "8c7d08b75d67e26077f9ad31b084f115a25c5156efaa58b0a9d077f8fb165629",
+    "remix/app/api/utils/moderation/analyzeText.ts": "156b89a2d3c4c8bbcf445892a47572a5f15516f5e88497e0ad0413072e6e0278",
+    "remix/app/api/utils/moderation/detachedQueuesShutdown.test.ts": "7fa30a22b2ab4ae9fe63100f53b85bcbfb669bcb9c40e43cb76eb1f9e3390b37",
+    "remix/app/api/utils/mongodb/collections.ts": "62af9ea3633ef5f571b21f16bda707cec8ca1837d4f6c5600aef53e6dbeca82f",
+    "remix/app/api/utils/mongodb/queryRunner.ts": "699710d917ff0e605313291dbb255a2ce1aae4a10d21ed9baed96f9bc278b767",
+    "remix/app/api/utils/notifications/notifications.ts": "9ca40a7dd54e19662ab3e8382a34b6ef5d08337b3ecb6f21611464689a0d1775",
+    "remix/app/api/utils/notifications/persistence.test.mts": "87210c4f7d111d8e01cadc66d678c208ff419172f4ab2c8e7a2198bca8bdada9",
+    "remix/app/api/utils/things/archiveAvatarDownload.ts": "c7f11fed422e63783e3413cbfac094b9aed344bee3bb544eefae505eb76f4bf4",
+    "remix/app/api/utils/things/things.ts": "0d680e6961f0af56cd6acfd6b74f49924a843587c7a67d7ba88ba700116287bd",
+    "remix/app/components/Nav/Drawer/CustomDrawerItems.tsx": "916aa9496ca241dd7848ec153d52cd2279673def8149957227ca5cdb83b90e38",
+    "remix/app/components/Nav/Drawer/customDrawerBlocks.test.ts": "adc862a42b936e10a31e0f27e7221ab2f18842f494270fbf2d6ac3b4fdf99f6a",
+    "remix/app/components/Nav/Drawer/customDrawerBlocks.ts": "8d26ec785efea2c51f4d6a40b8d60436d325f8effa2714b07357cfbff291d53d",
+    "remix/app/docs/apiCapabilities.test.ts": "4f09f9a763469de05a50598955ae36e7c13fe650802b36f90066738649e348d2",
+    "remix/app/docs/apiDocs.ts": "c2851ffaa636faaee298ae9efaebc3a69c5e749ae960a9ba7d54153000062a51",
+    "remix/app/fileSync/cloudWrite.ts": "89aa36466bf5edab68624584ed2e596f49175c8ce73705a3f2be3520eaba2b2d",
+    "remix/app/fileSync/desktopFolders.client.test.ts": "3ffed8e67a5e525bfe00cf612fd2a3581762a9971929e5c3d6852d8ebe3f812d",
+    "remix/app/fileSync/desktopFolders.client.ts": "70e0dd71854db5ce4f5b27e0c1089f33ad9d82b7f135fb5b122c8413b9ab2117",
+    "remix/app/fileSync/folderBatchJournal.test.ts": "e1c7d63d5597e509153f40f9f80dbeb2343da649153f6e0a7434d7b69ec87e8b",
+    "remix/app/fileSync/nativeFolderEnrollment.test.ts": "192d158485ccb8f10f071f0d34f783667eb3b6f52bbe3fc9e3fdc1b2220edff7",
+    "remix/app/fileSync/nativeSyncTasks.client.ts": "00c1671f3bbef6687205be2cc1d435247800fd2bff50bd2525e0c376c8edc3ec",
+    "remix/app/fileSync/pagedRunJournal.ts": "2bffcb555710d893a52a1d7528058f722bd355ce97b861fcb15b3dc8a3ff392f",
+    "remix/app/fileSync/remoteSyncClient.client.test.ts": "4357b7cc63cc35b4fc9db203d8703f5eb3a5bc135cd823c4268172f6c3a789de",
+    "remix/app/fileSync/remoteSyncClient.client.ts": "7d4c0ee26c97100e5642b086975e78e85c5b12068426c913a2e7c037b69337a7",
+    "remix/app/fileSync/remoteSyncProtocol.test.ts": "7ddd106857c3c41f117dd008e0e00be3fff9e76aa883b41211feb358b315561d",
+    "remix/app/fileSync/remoteSyncProtocol.ts": "77d33bbb9bcbfa109104beb126b62bb9a07f6244e96f2a45afddcb917ca95399",
+    "remix/app/fileSync/remoteSyncWorker.client.ts": "53c4c49ae3ff2907fef7bba365db9f9c59a1b280ecec60963e7feb8d9536ca45",
+    "remix/app/fileSync/remoteSyncWorker.test.mts": "b2102f8608437ad15973f89c6289fe205d7f861ceebbc85e7ba6dfc148f98e6d",
+    "remix/app/fileSync/streamingForegroundSync.ts": "334ae36bc31a2cc4fde241577c2739c588256b578775b346006a54baf1babd8b",
+    "remix/app/fileSync/streamingMissingParent.test.ts": "3dc9b08fa5ba5a5b81d17063fd5b9b1fce2e93ba600eea35c85462a9de62b354",
+    "remix/app/fileSync/streamingUploadBatch.test.ts": "384d78768e7c281b6b3de8ec224320156495b4ac25d2648de554ddc3891f9a3d",
+    "remix/app/fileSync/syncEnrollmentRecovery.client.ts": "0deef3ec02413c2d3c526da88129faf406aac9a0dc349006fa58c1c5d7b0dfc0",
+    "remix/app/fileSync/syncEnrollmentRecovery.test.ts": "4cdb7878edb9320e35ed5876ab9a02adab7ac767e18b4d6262107ef9cb2a4af8",
+    "remix/app/routes/api/v1/agent-overview/_agent-overview.tsx": "d7e77e8556f708795906a29f0eb58ed33f0054f2b49d718d52d23cd269604b3b",
+    "remix/app/routes/api/v1/auth/password-reset/_password-reset.tsx": "eb3efbd98548ef69f57f9441bbf0efbc64a9364a060559991b7015c43323b30f",
+    "remix/app/routes/api/v1/auth/resend-verification/_resend-verification.tsx": "674e9da807e2cfa45f4b73daedc7de4cb295f66c1a9577e55193f1ed0d0ce294",
+    "remix/app/routes/api/v1/auth/verify-email/_verify-email.tsx": "da56eb117a0bd8f602e77ad490b6ff69e7e764bd14c376eb268d8d73bba1414f",
+    "remix/app/routes/api/v1/lopu/chats/reply/_reply.tsx": "f1a65a2c700cb9d201981167268c4e534218a3ed701df25bdb5729b097ca98bd",
+    "remix/app/routes/api/v1/lopu/musing/_musing.tsx": "f2432208575458660a7e034ec459b0ca0a7a3bdcf00af9d9ff62cd7a5b05d3bc",
+    "remix/app/routes/api/v1/lopu/voice/reply/_reply.tsx": "73ae2f5ea108cac5ac0ccd9536e0dd3e6937d992971c4f29a06503e14bd306eb",
+    "remix/package.json": "a7753058ae7124478fcfaf0a4f0c22d4c39eed37ce2ee285229eca6e97638053",
+    "remix/scripts/smoke-built-content-execution.mjs": "94fc8cebe9156584efdcb17fa29c880e812287e5e85d6c919d53d1bcb3a6256c",
+    "remix/server/plugins/mongo-warmup.ts": "bc78a16906f0abc3d2f3b81328c30957994ef8613e4dd5704952e65887a8ac2d"
+  },
+  "limitations": [
+    "Native automatic replacement and local account API cold-restart acceptance are recorded separately; no claim from unit tests.",
+    "SQLite primitive is not wired to canonical collections, queries, indexes, account permissions or storage accounting.",
+    "No iOS app integration, device storage or production provider activation established.",
+    "Connected-host render/export remains separate from existing local/provider output.",
+    "Structural Graphify only; prior semantic backend failure preserved."
+  ],
+  "review": {
+    "scope": "Static review of native admission/relaunch, documentStore and stream wrappers",
+    "findings": 0,
+    "source": "Internal foundation_report_review agent; parent-reported",
+    "limits": "No additional UI/device acceptance implied"
+  },
+  "nativeFailureDiagnosis": {
+    "firstRun": "Unsubmitted undefined-Thing Commander input; harness now uses Enter and canonical persistence readback.",
+    "secondRun": "Actual automatic replacement timeout. Home DOM contains known closed navigation editor default fields, which correctly trigger the generic unknown-draft guard.",
+    "productCorrection": "Remove only known closed drawer dialog from rendered projection; open hidden drafts and Builder layouts preserved; generic guard unchanged.",
+    "acceptance": "Changed-product run observed zero closed Emoji fields, then failed initial text-entry assertion before staging; restart and dialog action acceptance remain open. See separate receipt."
+  },
+  "mainAtEarlierChecks": "a5054d78a18361d4c7457922c1d7a6badb712f5d",
+  "integratedMain": "a5054d78a18361d4c7457922c1d7a6badb712f5d"
+}

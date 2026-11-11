@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { normalizeVaultProviderEffort } from './userVaultCore';
 import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
@@ -1068,7 +1069,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
         const channel = createChannel<LopuChatStreamEvent>();
         ctx.emit = (toolEvent: LopuToolEvent) => channel.push(toolEvent);
         const results: LopuProviderToolResult[] = [];
-        const runs = Promise.allSettled(
+        const runs = withGatewayWork(() => Promise.allSettled(
           toRun.map(async (call) => {
             const result = await deps.runTool(call, ctx);
             if (result.ok === false && result.needsConfirmation) state.awaitingConfirmation = true;
@@ -1095,7 +1096,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               ...(result.ok === false && result.needsConfirmation ? { needsConfirmation: true } : {})
             });
           })
-        );
+        ));
         runs.then(
           () => channel.close(),
           () => channel.close()

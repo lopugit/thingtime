@@ -12,7 +12,7 @@ import { useDrawer } from './useDrawer';
 import { legacyDeviceSettingsDocument } from '~/components/Settings/settingsDocument';
 import { Global } from '@emotion/react';
 import { drawerRowStyles } from './drawerRow';
-import { customDrawerBlocks, upgradeCustomDrawerBlocks } from './customDrawerBlocks';
+import { customDrawerBlocks, customDrawerPresentationBlocks, upgradeCustomDrawerBlocks } from './customDrawerBlocks';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { isKeyPublished } from '~/marketing/publishingCore';
 import { drawerAncestorPath, drawerChildParentIds, drawerParentOptions, normalizeCustomDrawerItems, removeCustomDrawerItem, moveCustomDrawerSibling, customDrawerUrl, updateCustomDrawerDraft, type CustomDrawerItem } from './drawerCustomItems';
@@ -148,7 +148,7 @@ function CustomDrawerScope({ scopeKey, settings, preview, onNavigate, parentId, 
    items: customItems.filter(item => parents.some(parent => parent.id === item.id) && (settings || item.parentId === parentId)).map(item => ({ ...item, hasChildren: childParentIds.has(item.id), selected: item.id === selectedItem, closes: closesOnClick(item.id), location: drawerAncestorPath(item.parentId, parents).map(parent => parent.title).join(' / ') || 'Top level' })), parents: parentChoices.map(parent => ({ ...parent, title: drawerAncestorPath(parent.id, parents).map(ancestor => ancestor.title).join(' / ') })), nested: !!parentId, browse: !!onOpenChildren, open, draft, heading: draft.id ? 'Edit drawer item' : 'Add drawer item',
    attached: draft.thingId ? (draft.thingTitle ? `Attached Thing: ${draft.thingTitle}` : 'Thing attached') : '', query, results, error, searchMessage, saving, managementError, hasMore: !!nextCursor
   } }} actions={actions}>
-   <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+   <WebpageBlocksRenderer blocks={customDrawerPresentationBlocks(blocks, open, editing)} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
   </TransientBlockHost>}
  </SettingsDocumentHost></div>;
 }

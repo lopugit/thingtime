@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { json } from '~/api/http';
 import { actorCors, actorPat, actorUser, resolveActor, revalidateActor, type Actor } from '~/api/utils/auth/resolveActor';
 import { viewerOf } from '~/api/utils/things/things';
@@ -63,7 +64,7 @@ export function createAgentOverviewHandler(deps = { resolveActor, revalidateActo
 		const stream = new ReadableStream<Uint8Array>({
 			start(controller) {
 				const send = (event: string, data: unknown) => controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-				void (async () => {
+				void withGatewayWork(async () => {
 					let previous = hash(first);
 					const end = Date.now() + timing.lifetimeMs;
 					const timer = setTimeout(() => lifetime.abort(), timing.lifetimeMs);
@@ -79,7 +80,10 @@ export function createAgentOverviewHandler(deps = { resolveActor, revalidateActo
 					} catch (error) {
 						if (!lifetime.signal.aborted) send(error instanceof OverviewError && [401,403,409].includes(error.status) ? 'forbidden' : 'error', { ok: false, error: error instanceof OverviewError ? error.message : 'Agent overview is reconnecting' });
 					} finally { clearTimeout(timer); request.signal.removeEventListener('abort', abort); lifetime.abort(); try { controller.close(); } catch { /* canceled reader */ } }
-				})();
+				}).catch(() => {
+					lifetime.abort(); request.signal.removeEventListener('abort', abort);
+					try { controller.error(new Error('Agent overview is reconnecting')); } catch { /* canceled reader */ }
+				});
 			},
 			cancel() { lifetime.abort(); request.signal.removeEventListener('abort', abort); }
 		});

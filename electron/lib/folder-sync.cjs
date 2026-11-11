@@ -231,6 +231,8 @@ class DesktopFolderSync {
             !identifier(input.ownerId) || !identifier(input.deviceId) || !ACTIONS.has(input.action) ||
             (input.action !== 'context' && !(input.action === 'suspend' && input.origin === undefined) && input.origin !== apiOrigin) || Buffer.byteLength(JSON.stringify(stageRangeMetadata(input))) > (input.action === 'validate-folder-batch' ? 524_288 : input.action === 'upload-batch' ? 600_000 : 131_072)) throw unavailable();
         if (input.action === 'observe-path' && (!Number.isInteger(input.remainingMs) || input.remainingMs < 1 || input.remainingMs > 30_000)) throw unavailable();
+        if (input.refreshApiCapabilities !== undefined &&
+            (input.action !== 'context' || input.refreshApiCapabilities !== true)) throw unavailable();
         if (input.deviceResourceLimits !== undefined) deviceLimits(input.deviceResourceLimits);
         if (input.resourceLimits !== undefined) {
             if (!input.rootId || typeof input.resourceScope !== 'string' || !input.resourceScope || input.resourceScope.length > 512 || !Object.keys(resourceLimits(input.resourceLimits)).length) throw unavailable();
@@ -360,7 +362,7 @@ class DesktopFolderSync {
             let apiCapabilities;
             if (state.input.action === 'context') {
                 state.phase = 'capability-verification';
-                apiCapabilities = this.samePageCapability(context, state.input)?.apiCapabilities;
+                apiCapabilities = state.input.refreshApiCapabilities ? null : this.samePageCapability(context, state.input)?.apiCapabilities;
                 if (!apiCapabilities) {
                     apiCapabilities = await timing.measure('capability', () => this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)])));
                     await verify();
@@ -418,13 +420,15 @@ class DesktopFolderSync {
             }
             state.phase = 'native-request';
             state.dispatched = true;
+            const nativeInput = { ...state.input, origin: context.apiOrigin };
+            delete nativeInput.refreshApiCapabilities;
             const value = state.input.action === 'upload-single' ? await uploadFolderSingle({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) : state.input.action === 'upload-batch' ? await uploadFolderBatch({ input: state.input, context, signal: state.abort.signal,
                 assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, fetchUpload: this.fetchUpload, refreshPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); } }) :
                 state.input.action === 'upload-part' ? await uploadFolderPart({ input: state.input, context,
                 signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), fetchUpload: this.fetchUpload,
                 requestNative: nativeRequest,
                 signPart: async body => { await verify(); return signDesktopUploadPart(context, body, state.abort.signal, 20_000, this.diagnostic); }
-            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest({ ...state.input, origin: context.apiOrigin });
+            }) : state.input.action === 'stage-download' ? await stageFolderDownload({ input: state.input, context, signal: state.abort.signal, authorize: verify, assertCurrent: () => this.assertCurrent(state), requestNative: nativeRequest, diagnostic: this.diagnostic }) : await nativeRequest(nativeInput);
             if (governor && !readResources) value.resources = governor.snapshot();
             endReply = timing.begin('reply');
             state.phase = 'reply-verification';

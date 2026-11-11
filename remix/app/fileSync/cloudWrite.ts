@@ -11,6 +11,9 @@ const hasStoredContentIdentity = (source: import('./reconcile').SyncEntry): bool
 /** Queue metadata only. File bytes remain attachments; history stays in Timeline. */
 export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string; guardDestination?: true };
 export type CloudSyncRun = SyncRun & { cloudWrites: CloudWrite[] };
+/** An early positive stream hint can precede its parent. A sealed inventory
+ * still treats this as an error unless the parent is prepared in that run. */
+export class CloudParentMissing extends Error {}
 export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	const row = structuredClone(value);
 	validateSyncScope(row.scope);
@@ -133,7 +136,7 @@ export function prepareCloudInventoryWrite(operation: SyncOperation, scope: Sync
 		if (before) throw Error('A local Trash path is still present in the cloud inventory.');
 		return parseCloudWrite({ operation, scope, folderId: null, before: null, cloudRootId: rootId });
 	}
-	if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
+	if (!folderId) throw new CloudParentMissing('A cloud parent is missing from the complete inventory and prepared run.');
 	if (before && (before.kind === 'file' ? before.file.folderId : before.folderId) !== folderId) throw Error('Cloud inventory parent changed.');
 	if (m.kind === 'copy' && m.from === 'remote') {
 		if (!before || before.kind !== m.source.kind) throw Error('Cloud download source is missing from the complete inventory.');

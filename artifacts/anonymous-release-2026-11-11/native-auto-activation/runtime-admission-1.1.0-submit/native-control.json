@@ -1,0 +1,181 @@
+[
+  {
+    "case": "native-control",
+    "action": "minimize",
+    "beforePid": 69393,
+    "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-submit/runtime/Electron.app/Contents/MacOS/Electron",
+    "result": {
+      "version": "2.6",
+      "ok": false,
+      "command": "minimize",
+      "error": {
+        "code": "TIMEOUT",
+        "message": "Accessibility surface read failed for AXMinimized",
+        "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+        "details": {
+          "attribute": "AXMinimized",
+          "ax_error": -25204,
+          "kind": "surface_read",
+          "retryable": true,
+          "steps": [
+            {
+              "label": "window_minimize",
+              "mechanism": "semantic_api",
+              "outcome": "succeeded",
+              "verified": false
+            }
+          ],
+          "target": {
+            "id": "w-2583",
+            "kind": "window",
+            "process": {
+              "instance": "macos-proc-v1:1794400575:115386",
+              "pid": 69393
+            },
+            "title": "[Native QA] Thingtime - Your Home for Everything"
+          }
+        },
+        "disposition": {
+          "delivery": "delivered_unverified",
+          "retry": "unsafe"
+        }
+      }
+    },
+    "repeated": false,
+    "postcondition": {
+      "focused": false,
+      "visibility": "hidden"
+    }
+  },
+  {
+    "case": "native-control",
+    "action": "restore",
+    "beforePid": 69393,
+    "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-submit/runtime/Electron.app/Contents/MacOS/Electron",
+    "result": {
+      "version": "2.6",
+      "ok": false,
+      "command": "restore",
+      "error": {
+        "code": "TIMEOUT",
+        "message": "Accessibility surface read failed for AXMinimized",
+        "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+        "details": {
+          "attribute": "AXMinimized",
+          "ax_error": -25204,
+          "kind": "surface_read",
+          "retryable": true,
+          "steps": [
+            {
+              "label": "window_restore",
+              "mechanism": "semantic_api",
+              "outcome": "succeeded",
+              "verified": false
+            }
+          ],
+          "target": {
+            "id": "w-2583",
+            "kind": "window",
+            "process": {
+              "instance": "macos-proc-v1:1794400575:115386",
+              "pid": 69393
+            },
+            "title": "[Native QA] Thingtime - Your Home for Everything"
+          }
+        },
+        "disposition": {
+          "delivery": "delivered_unverified",
+          "retry": "unsafe"
+        }
+      }
+    },
+    "repeated": false,
+    "postcondition": {
+      "focused": true,
+      "visibility": "visible"
+    }
+  },
+  {
+    "case": "native-control",
+    "action": "focus-window",
+    "beforePid": 69393,
+    "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-submit/runtime/Electron.app/Contents/MacOS/Electron",
+    "result": {
+      "version": "2.6",
+      "ok": true,
+      "command": "focus-window",
+      "data": {
+        "focused": {
+          "accessible": true,
+          "app_name": "Electron",
+          "bounds": {
+            "height": 860,
+            "width": 1280,
+            "x": 384,
+            "y": 171
+          },
+          "id": "w-2583",
+          "is_focused": true,
+          "minimized": false,
+          "pid": 69393,
+          "process_instance": "macos-proc-v1:1794400575:115386",
+          "title": "[Native QA] Thingtime - Your Home for Everything",
+          "visible": true
+        }
+      }
+    },
+    "repeated": false,
+    "postcondition": {
+      "focused": true,
+      "visibility": "visible"
+    }
+  },
+  {
+    "case": "native-control",
+    "action": "minimize",
+    "beforePid": 69393,
+    "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-submit/runtime/Electron.app/Contents/MacOS/Electron",
+    "result": {
+      "version": "2.6",
+      "ok": false,
+      "command": "minimize",
+      "error": {
+        "code": "TIMEOUT",
+        "message": "Accessibility surface read failed for AXMinimized",
+        "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+        "details": {
+          "attribute": "AXMinimized",
+          "ax_error": -25204,
+          "kind": "surface_read",
+          "retryable": true,
+          "steps": [
+            {
+              "label": "window_minimize",
+              "mechanism": "semantic_api",
+              "outcome": "succeeded",
+              "verified": false
+            }
+          ],
+          "target": {
+            "id": "w-2583",
+            "kind": "window",
+            "process": {
+              "instance": "macos-proc-v1:1794400575:115386",
+              "pid": 69393
+            },
+            "title": "[Native QA] Thingtime - Your Home for Everything"
+          }
+        },
+        "disposition": {
+          "delivery": "delivered_unverified",
+          "retry": "unsafe"
+        }
+      }
+    },
+    "repeated": false,
+    "postcondition": {
+      "focused": false,
+      "visibility": "hidden"
+    }
+  }
+]

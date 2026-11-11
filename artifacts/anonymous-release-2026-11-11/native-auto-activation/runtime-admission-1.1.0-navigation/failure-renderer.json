@@ -1,0 +1,19 @@
+{
+  "pathname": "/edit/nativeAutoActivationFixture",
+  "fields": [
+    {
+      "tag": "DIV",
+      "editable": "true",
+      "label": null,
+      "visible": true,
+      "text": "nativeAutoActivationFixture"
+    },
+    {
+      "tag": "DIV",
+      "editable": "true",
+      "label": null,
+      "visible": true,
+      "text": ""
+    }
+  ]
+}

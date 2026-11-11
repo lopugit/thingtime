@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 mock.module('../things/search', { namedExports: { searchThings: async () => { throw new Error('Inject the authorized search'); } } });
 mock.module('../things/things', { namedExports: { viewerOf: (user: any, pat: any) => ({ id: user.id, username: user.username, pat }) } });
 mock.module('../auth/resolveActor', { namedExports: {
@@ -44,9 +45,14 @@ test('operational scan deadline discloses lower bounds and continuation reaches 
 
 test('abort fences delayed search completion and prevents additional queries', async () => {
 	const controller = new AbortController(); let calls = 0;
-	const result = readAgentOverview({ id: 'owner' }, input(), null, { signal: controller.signal, search: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 30)); return page([]); } });
+	let finish!: () => void;
+	const pending = new Promise<void>(resolve => { finish = resolve; });
+	const result = readAgentOverview({ id: 'owner' }, input(), null, { signal: controller.signal, search: async () => { calls++; await pending; return page([]); } });
 	controller.abort(new Error('stopped'));
 	await assert.rejects(result, /stopped/); assert.equal(calls, 1);
+	assert.equal(reserveGatewayWorkShutdown(), null, 'aborted response still owns its unfinished canonical query');
+	finish(); await new Promise<void>(resolve => setImmediate(resolve));
+	assert.equal(isGatewayWorkIdle(), true);
 });
 
 const request = (stream = false, signal?: AbortSignal) => new Request(`https://thingtime.test/api/v1/agent-overview?taskSchema=tasks${stream ? '&stream=1' : ''}`, { signal });
@@ -114,4 +120,20 @@ test('reader cancellation stops the polling lifecycle', async () => {
 	const handler = createAgentOverviewHandler(dependencies({ readAgentOverview: async () => { reads++; return { rows: [], measuredAt: 'now' }; } }), { intervalMs: 2, lifetimeMs: 50 });
 	const response = await handler({ request: request(true) }); const reader = response.body!.getReader(); await reader.read(); await reader.cancel();
 	const stopped = reads; await new Promise(resolve => setTimeout(resolve, 12)); assert.equal(reads, stopped);
+});
+
+test('canceled overview stream retains its in-flight read until actual cleanup', async () => {
+	let reads = 0, enter!: () => void, finish!: () => void;
+	const entered = new Promise<void>(resolve => { enter = resolve; });
+	const pending = new Promise<void>(resolve => { finish = resolve; });
+	const handler = createAgentOverviewHandler(dependencies({ readAgentOverview: async () => {
+		if (++reads === 2) { enter(); await pending; }
+		return { rows: [], measuredAt: 'now' };
+	} }), { intervalMs: 1, lifetimeMs: 5000 });
+	const response = await handler({ request: request(true) }); const reader = response.body!.getReader();
+	await reader.read(); await entered; await reader.cancel();
+	assert.equal(reserveGatewayWorkShutdown(), null);
+	finish(); await new Promise<void>(resolve => setImmediate(resolve));
+	assert.equal(isGatewayWorkIdle(), true);
+	assert.equal(reads, 2);
 });

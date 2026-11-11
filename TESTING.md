@@ -76,9 +76,12 @@
 - [ ] Start the Desktop renderer with an empty in-process folder cache while a native sync task is active. The read-only grant list must load existing roots and saved config controls without waiting for the transfer to stop; choosing, scanning and removing roots remain disabled during that task. Repeat after a foreground wake, and verify an owner/origin change cannot show the previous account's roots.
 - [ ] On a two-way Mac job with a large file, let the 30-second early `observe-path` deadline expire. Confirm the saved job waits for a complete strict scan, then transfers without a second full-file source hash on Mac file access 1.22.0. Verify its current native stamp, uploaded part/whole-file digest, or already verified ready attachment matches the captured fingerprint before publication. A changed stamp, altered bytes, revoked grant, Stop, incompatible host, download or deletion must refuse or use the original full guard; preserve confirmed receipts and the scanner lane for another config.
 - [ ] Repeat Save & sync with an exact saved config in attention while another job owns the native lane. Verify queued recovery keeps the same job ID, does not open consent or publish bytes, and requires fresh worker validation. A paused job or unfinished strict scanner must retain its prior work.
+- [ ] Let that lane become idle with an exact unscheduled attention job and retained strict scanner. Confirm automatic setup uses the advertised worker recovery contract and compatible selected-origin control feature, retires only the scanner after native acknowledgement, and retains the original job ID, imports and receipts. A lost reply, Pause during cleanup, changed revision/policy, scheduled attention or old/breaking worker or server must leave saved work intact and cannot start another job.
+- [ ] Resume a one-way backup whose streaming child hint arrives before its cloud parent. Close and reopen the journal before the complete inventory seal; verify normal reconciliation creates the parent first and publishes the child once. A missing parent in a complete inventory, changed parent kind, or incomplete seal must still refuse publication without discarding saved receipts.
 - [ ] Interrupt a streaming download after staging and before native publication, then change the source or placement policy. Verify no premature publication fence is saved and the original operation is safely superseded. Interrupt after publication and verify the same receipt ID is recovered without publishing again.
 - [ ] Resume a two-way Desktop job whose native streaming capture was cancelled after confirmed work. Verify the old feed drains under its original receipt IDs, a fresh full local scan and complete cloud scan seal before checkpoint, and no upload repeats. After a temporary connection/indexing wait, another config must be able to use the native scanner lane. Explicit Pause remains stopped until Resume. Revoked authority or an incomplete fresh scan must retain the saved work without a checkpoint or propagated deletion.
 - [ ] Resume a one-way upload with a legacy saved dispatch marker and a changed local source. A null receipt lookup must retain the row until the owner-authenticated Files terminal fence occupies the original Timeline operation ID, or the original commit wins and replays. Check a late original POST cannot publish after the terminal fence, a refused/timeout fence leaves the row intact, and a fresh authorized scan then uploads the current source once.
+- [ ] Keep the signed Mac app open while its selected API deploys a compatible `api.files` minor update. Retry the same saved uncertain upload without reloading: an incompatible same-page snapshot must trigger exactly one host-owned, no-store context refresh under the same owner/origin/window generation, then recheck SemVer and preserve the original journal. A still-old or breaking-major manifest, failed refresh, Stop or authority change must refuse without publishing or retiring the receipt; the refresh hint must never reach native Swift.
 - [ ] Interrupt an approved native Photos upload after its direct publication request but before the native reply or final source check. Confirm the original dispatch marker is already durable, the receipt replays under the same ID after restart, and neither a new byte transfer nor a second file revision occurs.
 - [ ] Interrupt navigation or reload after the config save and before enrollment. Recover only the exact saved revision automatically, without duplicate configs or background permission prompts. Test a busy native Photos lane, cancellation of a prior backup scanner, and remote Pause while enrollment awaits write approval.
 - [ ] Compare config last activity and sent/received history with real transfer receipts before/after reload and remote reads. A reused content blob sends zero payload bytes; unavailable measurements remain unknown. Activity from another config/account/device must not appear.
@@ -16633,6 +16636,7 @@ Local results do not establish current-head CI or deployed acceptance.
 - [x] Shared parser cross-language ASCII/Unicode/V1/existing-parent vectors, normalized collisions, bounded metadata, exact ordered native subsets and immutable canonical parent IDs.
 - [x] Actual 512-operation journal reserves 117 representative folders topologically, then releases 395 small files in bounded batches; restart preserves original reservations and contiguous source proof.
 - [x] Parent A source failure, receipt-missing/never-dispatched dependent release, legitimate indexed B, unchanged child source with a new target intent, descendant cascade and restart. Unknown/dispatched children cannot be released or rekeyed; stale source requires a legitimate new observation.
+- [x] A retained original file batch may encounter a folder supersession while its never-dispatched children are recovered. Defer those exact members in original ordinal order across journal reopen, retain their IDs and receipts, and wait for the replacement parent's canonical receipt before allocating each new target intent. A possibly dispatched member must stay reserved for receipt-first recovery.
 - [x] Actual shared consumer survives restart after durable release and loss of the folder capability, using scalar fallback and fresh parent/source checks before canonical recovery.
 - [x] Receipt replay precedes deleted-source IO; configuration drift, expired validation, stale parent IDs and source failures cannot fabricate canonical confirmations. Newly prepared folders cannot fall through the batch-probe race into scalar execution while the negotiated batch adapter is ready.
 - [x] **Original numeric speed gate FAILED (46.102s→34.513s; repeat44.280s→32.750s, conservative38.374s). Parent explicitly superseded this local release threshold for a partial performance release; installed speed remains OPEN.** `node remix/scripts/test-file-sync-folder-batches.mjs --pipeline`: exact 84c3 shared baseline versus current real planner/journal/consumer and canonical Mongo folder/file CAS, Timeline and quota; same synthetic native/provider schedule, first file before full index, full elapsed and conservative native-time sensitivity. This is not installed speed evidence.
@@ -16642,6 +16646,7 @@ Local results do not establish current-head CI or deployed acceptance.
 ### Sync recovery observations — 2026-10-21
 
 - [x] Existing upload-batch disk rows count only actual closed failure codes after final host validation; counts sum to failed members, bounded to256, and malformed/getter/proxy input cannot leak raw metadata. Legacy missing histograms mean unknown, never zero. Whole-request authority/cancellation refusals do not publish accepted-member counts.
+- [x] Native `source-changed` batch summaries count a fixed stage, exact first-read guard and independent native failure code without path, ID, digest, byte or raw-error values. Verify an unchanged Rust capture passes, controlled stale identity/version/fingerprint and descriptor/digest refusals retain the same thrown error/result, and cancellation does not turn into a source-change retry. A closed stage/guard count diagnoses an installed failure; it does not authorize relaxing source validation.
 - [x] Existing editable priority-readiness status renders negotiated folder gate and exact journal reservation kind/remaining count from the same read-only header projection. Old/malformed observations say UNKNOWN; no recovery inference from a reserved boolean. IDs, receipts, source watermarks and recovery order survive observation/reopen unchanged.
 - [x] Focused Electron49/49 and progress/journal/formatter24/24 pass. Changed9 TypeScript files have zero semantic errors (not a full-repo zero-error claim); lint has zero errors. Old producer fails the new histogram regression. OS-isolated Chromium proof passes at1440/390px, scroll/overflow, existing status block editing, save/reload, paused and legacy-unknown states.
 - [ ] After reviewed deployment/install, record ONE natural same-Home window. Timestamp-filter existing rotated logs and compare visible gate/recovery count; classify only newly returned failures. Historical89 codes remain unknown; missing rows/rotated intervals are not zero failures. Preserve all job IDs/settings; no manual Retry/reset/regrant.
@@ -19072,21 +19077,40 @@ never print the file-download JSON, encryption metadata or signed URL.
 
 ### Native update activity reservations
 
+- A closed custom drawer item editor must not mount its default form fields.
+  Open Add/Edit at desktop and phone widths, type a draft, hide the navigation,
+  and verify the mounted unsaved editor still prevents automatic replacement.
+  Cancel clears only that draft and unmounts its dialog; Builder layout editing
+  must retain the full saved block definition. Do not exempt arbitrary hidden
+  inputs from the unknown-draft guard.
+
 - Keep a staged update pending during an active HTTP response, websocket,
   deferred middleware cleanup, OAuth callback or queued ChatGPT credential/model
   operation. Close-veto must release admission; a stalled close retains one
   observer and must not trigger a second attempt or force close.
 - After accepted close, trigger application activation/second instance during
   delayed service teardown and verify no replacement window opens before restart.
-- Full local API mode remains pending until detached stream/background work has
-  its own shutdown admission proof. An idle socket count is insufficient.
+- Negotiate the loaded Nitro process activity contract in both remote and local
+  API modes. Missing/incompatible contracts, changed authority and a dead managed
+  database keep activation pending. An idle socket count is insufficient.
 - End the parent request while a detached save, session revocation, error-log
   insert or heartbeat remains unresolved; shutdown must stay unavailable through
   success/failure and final save. A timed-out logging response must not release
   its still-running insert. Pool demotion must settle all closes before new work
   or shutdown, even when one close throws. Run `test:environment-gateway`,
   `test:messenger`, `test:error-logs` and the background-task regression file.
-  These fixtures do not enable or prove full local-mode automatic activation.
+  Actual installed automatic activation remains a separate required check.
+- Cancel a Lopu/provider/overview/catalogue/inventory/ZIP stream and hold its
+  underlying producer, tool write, transcript or cleanup unresolved. Shutdown
+  must refuse until that operation settles, including rejection. A timeout in
+  moderation or backup dispatch/handler/guard must retain the actual operation.
+  Abort backup dispatch in the microtask gap after SDK acceptance: the accepted
+  receipt must still attach exactly once through its original fenced attempt.
+- Run `test:document-store` against real temporary SQLite files. Check typed BSON
+  byte preservation, duplicate-key and cross-collection rollback, transaction
+  serialization, expired/foreign session refusal, close drain and fresh-process
+  recovery after writer exit without checkpoint. These tests do not prove API
+  filters/index semantics, accounting, account ACLs or iOS integration.
 
 ### Combined offline password-file contract
 

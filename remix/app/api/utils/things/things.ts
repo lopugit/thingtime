@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
 import { sanitizeTags } from '../../../schemas/thingTags';
 import { eligibleLibraryArchive, libraryArchiveMatch, libraryArchiveNeedsMinimalPresentation, minimalLibraryArchivePresentation } from './libraryArchiveEligibility';
@@ -6594,10 +6595,10 @@ export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: st
 // born-pending doc (verdict clear/nsfw), its creation notifications fire now —
 // followers hear about a post at the moment it becomes visible to them.
 setModerationReleaseNotifier((shareId) => {
-	void (async () => {
+	void withGatewayWork(async () => {
 		const doc = await findThing(shareId);
 		if (!doc) return;
 		const target = (doc as any).targetId ? await findThing(String((doc as any).targetId)) : null;
 		await emitCreationNotifications(doc, target, asViewer(String(doc.ownerId)));
-	})().catch((error) => console.warn('[moderation] release notification failed:', (error as Error)?.message || error));
+	}).catch((error) => console.warn('[moderation] release notification failed:', (error as Error)?.message || error));
 });

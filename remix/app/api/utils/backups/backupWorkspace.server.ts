@@ -6,7 +6,7 @@ import { internalRequestActor } from '../auth/internalRequestActor';
 import { EXPECTED_ACTOR_HEADER } from '../auth/expectedActor';
 import { signContentProof, verifyContentProof } from '../auth/jwt';
 import { mongoDataPlane } from '../mongodb/dataPlane';
-import { getGatewaySettings } from '../deployment/environmentGateway';
+import { getGatewaySettings, withGatewayWork } from '../deployment/environmentGateway';
 import { findViewableThing } from '../things/things';
 import { backupJobs, type CompletedBackupJob } from './backupJobs';
 import { backupJobDigest } from './backupJobCore';
@@ -36,7 +36,7 @@ export function parseBackupWorkspaceCommand(input:any):BackupWorkspaceCommand{
 type Open=typeof backupDestinationRegistry.open;
 type Dependencies={jobs:typeof backupJobs;discover:typeof backupDestinationRegistry.discover;open:Open;kick(jobId:string,origin:string):void;worker(origin:string):Promise<BackupWorkspaceAvailability>};
 const defaults:Dependencies={jobs:backupJobs,discover:backupDestinationRegistry.discover,open:backupDestinationRegistry.open,
- kick:(id,origin)=>{waitUntil(backupDispatcher.dispatch(id,origin).catch(()=>{}));},
+ kick:(id,origin)=>{waitUntil(withGatewayWork(()=>backupDispatcher.dispatch(id,origin)).catch(()=>{}));},
  worker:async origin=>{const deployment=getGatewaySettings()?.deploymentId??process.env.VERCEL_DEPLOYMENT_ID;if(!deployment)return {available:false,reason:'worker-unavailable'};return await backupJobs.executionConfirmation(origin,deployment)?{available:true}:{available:false,reason:'worker-unverified'};}};
 export function createBackupWorkspaceService(overrides:Partial<Dependencies>={}){
  const deps={...defaults,...overrides};

@@ -1,3 +1,4 @@
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import assert from 'node:assert/strict';
@@ -1635,4 +1636,45 @@ test('Console supported model keeps its selected effort', async () => {
  assert.equal(text(events), 'Opus reply'); assert.equal(outcome.provider, 'vault');
  assert.equal(meta(events).effort, 'high'); assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'high' });
  assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+});
+
+for (const fails of [false, true]) test(`abandoned parallel tool stream retains shutdown admission through ${fails ? 'rejected' : 'successful'} remaining tool cleanup`, async () => {
+ anthropicPlans.push({ blocks: [
+  { type: 'tool_use', id: 'fast', name: 'get_thing', inputChunks: ['{"id":"first"}'] },
+  { type: 'tool_use', id: 'slow', name: 'get_thing', inputChunks: ['{"id":"second"}'] }
+ ], stopReason: 'tool_use' });
+ let release!: () => void;
+ const work = new Promise<void>(resolve => { release = resolve; });
+ let releaseCleanup!: () => void;
+ const cleanup = new Promise<void>(resolve => { releaseCleanup = resolve; });
+ let cleaning!: () => void;
+ const cleanupStarted = new Promise<void>(resolve => { cleaning = resolve; });
+ const calls: string[] = [];
+ const generator = turn('read both', 'claude-opus-5', { deps: { runTool: async (call: ToolCallRecord) => {
+  calls.push(call.id);
+  if (call.id === 'slow') {
+   try { await work; if (fails) throw new Error('tool failed'); }
+   finally { cleaning(); await cleanup; }
+  }
+  return { ok: true, summary: 'Read once', data: {} };
+ } } });
+ for (;;) {
+  const step = await generator.next();
+  assert.equal(step.done, false);
+  if (!step.done && step.value.type === 'tool_result' && step.value.id === 'fast') break;
+ }
+ assert.deepEqual(calls, ['fast', 'slow']);
+ await generator.return(undefined as any);
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ release();
+ await cleanupStarted;
+ assert.equal(isGatewayWorkIdle(), false);
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ releaseCleanup();
+ await new Promise<void>(resolve => setImmediate(resolve));
+ assert.equal(isGatewayWorkIdle(), true);
+ assert.deepEqual(calls, ['fast', 'slow']);
+ const reservation = reserveGatewayWorkShutdown();
+ assert.ok(reservation);
+ reservation.release();
 });

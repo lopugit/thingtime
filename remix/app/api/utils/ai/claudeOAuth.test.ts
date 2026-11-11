@@ -1,3 +1,4 @@
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createClaudeOAuthClient, claudeOAuthEnvironment, requireOAuthToken } from './claudeOAuth';
@@ -190,4 +191,40 @@ test('backticks in JSON string arguments are data, including across split chunks
  const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
   tools: [{ name: 'echo', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Echo source' }] }).finalMessage();
  assert.deepEqual((result.content[1] as any).input, input);
+});
+
+for (const cleanupFails of [false, true]) test(`cancelled Claude producer retains shutdown admission through ${cleanupFails ? 'rejected' : 'successful'} cleanup`, async () => {
+ let started!: () => void;
+ const entered = new Promise<void>(resolve => { started = resolve; });
+ let release!: () => void;
+ const cleanup = new Promise<void>(resolve => { release = resolve; });
+ let cleaning!: () => void;
+ const cleanupStarted = new Promise<void>(resolve => { cleaning = resolve; });
+ const client = createClaudeOAuthClient({ token, run: async function* (_request, _credential, signal) {
+  try {
+   yield { text: 'Started' };
+   started();
+   await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
+   throw new Error('producer aborted');
+  } finally {
+   cleaning();
+   await cleanup;
+   if (cleanupFails) throw new Error('cleanup failed');
+  }
+ } });
+ const stream = client.messages.stream({ model: 'claude-opus-5', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] });
+ const result = stream.finalMessage().catch(error => error);
+ await entered;
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ stream.abort();
+ await cleanupStarted;
+ assert.equal(isGatewayWorkIdle(), false);
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ release();
+ await result;
+ await new Promise<void>(resolve => setImmediate(resolve));
+ assert.equal(isGatewayWorkIdle(), true);
+ const reservation = reserveGatewayWorkShutdown();
+ assert.ok(reservation);
+ reservation.release();
 });

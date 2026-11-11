@@ -24,7 +24,32 @@ await mkdir(output, { recursive: true });
 const log = await open(path.join(temporary, 'development.log'), 'w', 0o600);
 let phase = 'preflight', failure, cleanupFailure, receipt, launcher, api, browser, page, originalPolicy, createdWorkspace = false;
 const startedAt = new Date().toISOString(), observations = [];
+const activationDiagnostics = [];
 const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
+const persistenceReaderFiles = ['remix/app/local-workspace/editorTree.ts', 'remix/app/local-workspace/storage.ts', 'remix/app/Providers/thingtimeSerialization.ts'];
+const persistenceReaderSourceHashes = Object.fromEntries(await Promise.all(persistenceReaderFiles.map(async file => [file, hash(await readFile(path.join(repo, file)))])));
+// Read through the same integrity-checked storage adapter as the actual renderer.
+// No legacy adapter is supplied, so this task-only anonymous witness cannot
+// migrate data or write a tree. It never inspects a personal profile/account.
+const { buildSync } = require(require.resolve('esbuild', { paths: [path.join(repo, 'MCP')] }));
+const persistenceReader = buildSync({ bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent', stdin: {
+ resolveDir: repo, loader: 'ts', sourcefile: 'native-auto-persistence-reader.ts', contents: `
+ import { LocalEditorTree, decodeEditorTree } from './remix/app/local-workspace/editorTree';
+ import { WorkspaceDatabase } from './remix/app/local-workspace/storage';
+ globalThis.__nativeAutoReadPersisted = async (origin, fixturePath, expected) => {
+  const assertCurrent = () => {
+   if (location.origin !== origin || globalThis.getThingtime?.(fixturePath) !== expected) throw Error('Task persistence witness identity/value changed');
+  };
+  assertCurrent();
+  const db = new WorkspaceDatabase(indexedDB);
+  const tree = new LocalEditorTree(db, { kind: 'anonymous' }, { assertCurrent, onInvalidate: () => () => {} });
+  try {
+   const raw = await tree.getItem(tree.key); assertCurrent();
+   if (raw === null || decodeEditorTree(raw).value[fixturePath] !== expected) return null;
+   return { storageKey: tree.key, integrityChecked: true, valueMatched: true };
+  } finally { await db.close(); }
+ };`
+} }).outputFiles[0].text;
 let preparedSourceHashes = {};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const enter = value => { phase = value; console.log(`Native auto QA: ${value}`); };
@@ -77,6 +102,53 @@ async function connect() {
  page = (await browser.pages()).find(candidate => candidate.url().startsWith('http://127.0.0.1:28640/'));
  if (!page) return null;
  return page.evaluate(() => window.thingtimeDesktop?.getInfo());
+}
+async function captureActivationState() {
+ let timer;
+ try {
+  const state = await Promise.race([page.evaluate(async () => {
+   const info = await window.thingtimeDesktop.getInfo();
+   const candidates = [...document.querySelectorAll('[contenteditable="true"], .monaco-editor, .codex-editor, [role="dialog"], [aria-busy="true"], textarea, input')];
+   const blockers = candidates.filter(element => {
+    if (element.matches('[contenteditable="true"], .monaco-editor, .codex-editor, [role="dialog"], [aria-busy="true"]')) return true;
+    return !['button','submit','reset','hidden','checkbox','radio'].includes(element.type) && Boolean(element.value);
+   }).map(element => ({ tag: element.tagName, label: element.getAttribute('aria-label'), visible: Boolean(element.getClientRects().length), nonempty: Boolean(element.value) }));
+   return { pathname: location.pathname, focused: document.hasFocus(), visibility: document.visibilityState,
+    featureVersions: Object.fromEntries(Object.entries(info.nativeFeatures?.features || {}).map(([key, value]) => [key, value.version])),
+    updateStatus: info.webBundle?.update?.status, updateReleaseId: info.webBundle?.update?.releaseId || null,
+    activeReleaseId: info.webBundle?.releaseId || null, buildIdentityPresent: Boolean(info.buildIdentity?.gitCommit),
+    localRuntimeActive: info.localRuntime?.active === true, localRuntimeEnabled: info.localRuntime?.enabled === true,
+    rendererReady: typeof window.getThingtime === 'function' && Boolean(document.querySelector('#root')?.childElementCount),
+    closedDrawerEmojiFields: document.querySelectorAll('input[aria-label="Emoji"]').length,
+    blockers, receivedMessages: window.__nativeAutoQa || [] };
+  }), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Task public state observation timed out')), 4000); })]);
+  activationDiagnostics.push({ at: new Date().toISOString(), ...state });
+  await writeFile(path.join(output, 'activation-diagnostics.json'), JSON.stringify(activationDiagnostics, null, 2));
+  return state;
+ } finally { clearTimeout(timer); }
+}
+async function verifyDrawerEditor() {
+ for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+  await page.setViewport(viewport);
+  const opener = await page.$('button[aria-label="Open menu"]'); if (opener) await opener.click();
+  const add = await until(async () => {
+   for (const button of await page.$$('button')) if (await button.evaluate(element => Boolean(element.getClientRects().length) && element.textContent.trim().endsWith('Add +'))) return button;
+  }, 5000, 'Visible Add drawer item action missing');
+  await add.click();
+  await page.waitForSelector('input[aria-label="Emoji"]', { visible: true });
+  const title = await page.$('dialog input[aria-label="Title"]'); assert.ok(title, 'Normal drawer editor Title field exists');
+  await title.type('Synthetic cancelled drawer draft');
+  assert.equal(await title.evaluate(element => element.value), 'Synthetic cancelled drawer draft');
+  await page.screenshot({ path: path.join(output, `drawer-editor-${viewport.width}.png`) });
+  const dialog = await page.$('dialog[aria-label="Custom drawer item"]'); assert.ok(dialog);
+  let cancel;
+  for (const button of await dialog.$$('button')) if (await button.evaluate(element => element.textContent.trim() === 'Cancel')) cancel = button;
+  assert.ok(cancel, 'Normal Cancel drawer item action exists'); await cancel.click();
+  await page.waitForFunction(() => document.querySelectorAll('input[aria-label="Emoji"]').length === 0);
+  await page.screenshot({ path: path.join(output, `drawer-cancelled-${viewport.width}.png`) });
+  observations.push({ case: 'drawer-editor-lifecycle', ...viewport, opened: true, titleInputUsable: true, cancelled: true, closedFieldsUnmounted: true, saved: false });
+  const closer = await page.$('button[aria-label="Close menu"]'); if (closer) await closer.click();
+ }
 }
 try {
  const { assertFreePort } = require('../lib/local-runtime.cjs');
@@ -143,6 +215,10 @@ try {
  }, 120000, 'Real baseline renderer did not initialize');
  assert.equal(initial.webBundle.source, 'bundled'); assert.equal(initial.localRuntime.active, false); assert.equal(initial.localRuntime.enabled, false);
  assert.equal(new URL(initial.apiOrigin).origin, apiOrigin);
+ await page.evaluateOnNewDocument(() => {
+  window.__nativeAutoQa = [];
+  window.thingtimeDesktop?.onBundleActivation?.(message => window.__nativeAutoQa.push({ type: message.type, at: Date.now(), keepVeto: message.keepVeto === true }));
+ });
  const baselinePid = await processId(), origin = initial.origin, fixturePath = 'nativeAutoActivationFixture', value = 'Synthetic draft survives automatic native bundle activation';
  await page.goto(`${origin}/edit/${fixturePath}`, { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(() => [...document.querySelectorAll('[contenteditable="true"]')].some(element => !element.closest('.thingPathDom-raw')));
@@ -154,7 +230,7 @@ try {
  await editable.evaluate(element => { const range = document.createRange(); range.selectNodeContents(element); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); });
  await page.keyboard.type(value);
  await page.waitForFunction(expected => [...document.querySelectorAll('[contenteditable="true"]')].some(element => !element.closest('.thingPathDom-raw') && element.textContent === expected), {}, value);
- await page.evaluate(() => { window.__nativeAutoQa = []; window.thingtimeDesktop.onBundleActivation(message => window.__nativeAutoQa.push({ type: message.type, at: Date.now() })); });
+ await page.evaluate(() => { window.__nativeAutoQa ||= []; });
  await page.screenshot({ path: path.join(output, 'dirty-editor.png') });
  enter('publish-after-baseline-and-real-download'); await message(api, { type: 'publish' }, 'published');
  const staged = await until(async () => {
@@ -175,18 +251,42 @@ try {
  }
  observations.push({ case: 'dirty-background', durationMs: Date.now() - dirtyStart, processUnchanged: true, pending: true,
   checkpointRequests: await page.evaluate(() => window.__nativeAutoQa.filter(event => event.type === 'prepare').length) });
- await desktop('restore'); await desktop('focus-window'); await page.keyboard.press('Tab');
+ await desktop('restore'); await desktop('focus-window');
  enter('durable-save-and-readback');
+ // An undefined Thing uses Commander: Tab/blur leaves its creation command
+ // unsubmitted. Normal Enter commits it through the canonical editor action.
+ const commandInput = await page.$$('[contenteditable="true"]');
+ const valueInputs = [];
+ for (const candidate of commandInput) if (!await candidate.evaluate(element => Boolean(element.closest('.thingPathDom-raw')))) valueInputs.push(candidate);
+ assert.equal(valueInputs.length, 1, 'Submit only the unique task value editor');
+ await valueInputs[0].focus(); await page.keyboard.press('Enter');
+ await page.waitForFunction((fixturePath, expected) => window.getThingtime?.(fixturePath) === expected, {}, fixturePath, value);
+ await page.keyboard.press('Tab');
+ await page.evaluate(persistenceReader);
+ const persisted = await until(async () => {
+  try { return await page.evaluate((origin, fixturePath, expected) => window.__nativeAutoReadPersisted(origin, fixturePath, expected), origin, fixturePath, value); }
+  catch (error) { throw Object.assign(error, { fatal: true }); }
+ }, 30000, 'Canonical editor storage did not acknowledge the submitted value');
+ await page.evaluate(() => { delete window.__nativeAutoReadPersisted; });
+ observations.push({ case: 'submitted-and-persisted', normalEnter: true, canonicalValueMatched: true, ...persisted });
  await page.goto(`${origin}/${fixturePath}`, { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(expected => document.body.innerText.includes(expected), {}, value);
  assert.equal(await processId(), baselinePid, 'Readback is not a manual process restart');
  await page.screenshot({ path: path.join(output, 'durable-reload.png') });
  await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(() => typeof window.getThingtime === 'function');
+ const home = await captureActivationState();
+ assert.equal(home.closedDrawerEmojiFields, 0, 'Closed default drawer editor inputs must be unmounted on Home');
+ observations.push({ case: 'closed-drawer-home', defaultEmojiFieldsUnmounted: true, blockerCount: home.blockers.length });
  await desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not become quiescent');
  enter('automatic-idle-process-replacement');
  const automaticStart = Date.now();
- await until(async () => { const pid = await processId(); return pid && pid !== baselinePid; }, 150000, 'Idle native process did not automatically replace itself');
+ let lastDiagnostic = 0;
+ await until(async () => {
+  const pid = await processId(); if (pid && pid !== baselinePid) return true;
+  if (Date.now() - lastDiagnostic >= 5000) { lastDiagnostic = Date.now(); await captureActivationState().catch(error => { activationDiagnostics.push({ at: new Date().toISOString(), observationUnavailable: error.message }); }); }
+  return false;
+ }, 150000, 'Idle native process did not automatically replace itself');
  await browser?.disconnect().catch(() => {}); browser = null;
  const updated = await until(async () => {
   const info = await connect(); if (!info) return;
@@ -204,6 +304,7 @@ try {
  const stats = await message(api, { type: 'stats' }, 'stats');
  assert.deepEqual(stats.failures, []); assert.ok(stats.contentRequests > 0); assert.ok(stats.requests.every(request => !request.cookie && !request.authorization));
  assert.ok(stats.upstream.every(host => ['api.github.com', 'github.com', 'release-assets.githubusercontent.com'].includes(host)));
+ enter('drawer-editor-desktop-and-mobile'); await verifyDrawerEditor();
  receipt = { passed: true, sourceRevision: command('git', ['-C', repo, 'rev-parse', 'HEAD']).trim(), baselinePid, replacementPid: await processId(),
   installedDevelopmentApp: workspace.app, profile: workspace.profile, stableOrigin: origin, selectedSyntheticApi: apiOrigin,
   releaseId: publication.releaseId, activeReleaseId: state.active, pendingCleared: true, durableDataReadback: true,
@@ -216,6 +317,7 @@ try {
 } catch (error) {
  failure = error;
  if (page && !page.isClosed()) {
+  await captureActivationState().catch(() => {});
   await page.screenshot({ path: path.join(output, 'failure-renderer.png') }).catch(() => {});
   const diagnostic = await page.evaluate(() => ({ pathname: location.pathname,
    fields: [...document.querySelectorAll('[contenteditable],textarea,input')].map(element => ({ tag: element.tagName,
@@ -240,7 +342,7 @@ finally {
  await log.close();
 }
 const result = { ...receipt, passed: Boolean(receipt && !failure && !cleanupFailure), startedAt, finishedAt: new Date().toISOString(), phase,
- cleanupVerified: !cleanupFailure, verifierSourceHashes, preparedSourceHashes, observations, failure: failure ? { name: failure.name, message: failure.message } : undefined,
+ cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
  cleanupFailure: cleanupFailure ? { name: cleanupFailure.name, message: cleanupFailure.message } : undefined,
  ...(failure || cleanupFailure ? { retainedDiagnostics: temporary } : {}) };
 await writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2) + '\n');

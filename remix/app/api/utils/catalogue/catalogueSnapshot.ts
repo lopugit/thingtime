@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { randomUUID } from 'node:crypto';
 import { writeCatalogueStream, type CatalogueIdentity } from '../../../catalogue/catalogueStream';
 import { copyBoundedJson } from '../../../utils/boundedJson';
@@ -137,9 +138,9 @@ export function createCatalogueSnapshotService(overrides: Partial<SnapshotDepend
 			// so fence completion with one final current-authentication check too.
 			await authorized(); await writer.close();
 		};
-		void work().catch(async () => { controller.abort(incomplete()); await writer.abort(incomplete()).catch(() => {}); }).finally(() => {
+		void withGatewayWork(() => work().catch(async () => { controller.abort(incomplete()); await writer.abort(incomplete()).catch(() => {}); }).finally(() => {
 			input.signal?.removeEventListener('abort', cancel); controller.signal.removeEventListener('abort', abortWriter); writer.releaseLock();
-		});
+		})).catch(() => { input.signal?.removeEventListener('abort', cancel); controller.abort(incomplete()); });
 		return stream.readable;
 	};
 }

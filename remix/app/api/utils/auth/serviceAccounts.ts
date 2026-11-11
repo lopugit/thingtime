@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { randomUUID } from 'node:crypto';
 
 import { createEmailVerification } from './emailVerifications';
@@ -93,7 +94,7 @@ export const provisionServiceAccount = async (input: ProvisionServiceAccountInpu
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
   // Fire-and-forget so a send failure can't fail provisioning of an
   // already-created service account (the caller gets the link + token back).
-  void sendVerificationEmail({ to: created.user.email, link: verificationLink }).catch(() => {});
+  void withGatewayWork(() => sendVerificationEmail({ to: created.user.email, link: verificationLink })).catch(() => {});
 
   return {
     ok: true,

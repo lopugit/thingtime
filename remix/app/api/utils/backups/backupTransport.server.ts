@@ -1,4 +1,5 @@
 import { getCurrentUser } from '../auth/getCurrentUser';
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { EXPECTED_ACTOR_HEADER } from '../auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../../../utils/dataPlane';
 import { capabilitySatisfies } from '../capabilities/capabilityContract';
@@ -41,10 +42,10 @@ export async function runBoundedBackupRequest(context: Pick<BackupEngineContext,
 	const request = new Request(input, { signal });
 	const check = () => { if (performance.now() >= until && !deadline.signal.aborted) expire(); signal.throwIfAborted(); };
 	try {
-		check(); await awaitBackupAbort(context.guard(), signal);
+		check(); await awaitBackupAbort(withGatewayWork(() => context.guard()), signal);
 		return await context.withRequest(request, async () => {
 			check();
-			const response = await awaitBackupAbort(Promise.resolve().then(() => { check(); return handler({ request }); }), signal,
+			const response = await awaitBackupAbort(withGatewayWork(async () => { check(); return handler({ request }); }), signal,
 				late => { if (late.body) void late.body.cancel(signal.reason).catch(() => {}); });
 			let buffer = Buffer.alloc(64 * 1024), size = 0;
 			if (response.body) {
@@ -61,7 +62,7 @@ export async function runBoundedBackupRequest(context: Pick<BackupEngineContext,
 					try { reader.releaseLock(); } catch { /* pending read is already observed */ }
 				}
 			}
-			check(); await awaitBackupAbort(context.guard(), signal); check();
+			check(); await awaitBackupAbort(withGatewayWork(() => context.guard()), signal); check();
 			return new Response([204, 205, 304].includes(response.status) ? null : buffer.subarray(0, size), { status: response.status, statusText: response.statusText, headers: response.headers });
 		});
 	} finally { clearTimeout(timer); }

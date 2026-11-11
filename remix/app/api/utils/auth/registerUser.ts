@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import type { CharacterIdentity } from './characterCore';
 import { bindVaultPassword } from './vaultKeys';
 import { InviteError } from '../invites/inviteCore';
@@ -250,7 +251,7 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // Fire-and-forget: a send failure (e.g. fail-closed SES outage) must not fail
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.
-  void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
+  void withGatewayWork(() => sendVerificationEmail({ to: email, link: verificationLink })).catch(() => {});
 
 	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

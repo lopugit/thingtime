@@ -57,10 +57,17 @@ if (process.argv[2] !== '--worker') {
 	};
 	const manifest = await readJson('/.well-known/thingtime-capabilities.json');
 	const registry = await readJson('/api/v1/capabilities');
+	assert.equal(manifest.features['api.devices-sync-control']?.version, '1.6.0');
+	assert.equal(registry.features['api.devices-sync-control'], '1.6.0');
 	const lifecycle = Reflect.get(global, Symbol.for('thingtime.runtime-work.lifecycle'));
 	assert.equal(lifecycle?.version, '1.0.0', 'Compiled Nitro must register its in-process work lifecycle');
+	// Database warmup is now correctly tracked beyond these discovery responses.
+	// Let the synthetic unreachable pool settle; never treat response completion
+	// as proof that background initialization has already stopped.
+	const idleDeadline = Date.now() + 15_000;
+	while (!lifecycle.isIdle() && Date.now() < idleDeadline) await new Promise(resolve => setTimeout(resolve, 25));
 	const reservation = lifecycle.reserveShutdown();
-	assert.ok(reservation?.isCurrent(), 'Completed reads leave no active work');
+	assert.ok(reservation?.isCurrent(), 'Completed reads and startup cleanup leave no active work');
 	try {
 		const response = await app.fetch(new Request('https://thingtime.test/api/v1/capabilities'));
 		assert.equal(response.status, 503);

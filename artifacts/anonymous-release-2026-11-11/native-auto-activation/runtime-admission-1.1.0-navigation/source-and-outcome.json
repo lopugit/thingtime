@@ -1,0 +1,42 @@
+{
+  "sourceRevision": "0fecb007965f42a05fdcebe53ac704a68c0b6b5a",
+  "prepared": {
+    "main.cjs": "47603b10676a34c475acf252f8ae5d4c49af5cd5679f11d9624c747e917c11f4",
+    "preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "lib/web-bundle-activation.cjs": "bf56527ebcc568ea91d930beea32509838378835bf172f313c56cf06ce08412a",
+    "lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "dist/web/metadata.json": "b5fcc30beac022981628961c9a71a5b6c2b4961b15ea2e0c9efa00f0df20a32a"
+  },
+  "preparedSourceMatchesBuildInputs": true,
+  "verifierSha256": "d88102485d63d58ee6a398f625fdc98f638759f0f1d6e87730e885a18dc9f256",
+  "uncontendedBuildExitCode": 0,
+  "buildLogSha256": "68ba232164ee3c15ff76e91db470bf07de6a243fa5e84a5e79cbb245f1f498ac",
+  "observed": {
+    "nativeFeatureVersion": "1.1.0",
+    "closedDrawerEmojiFields": 0,
+    "rendererReady": true,
+    "failedAt": "Initial synthetic input value postcondition; expected text absent",
+    "publicationAttempted": false,
+    "activationAttempted": false,
+    "desktop390DrawerUiChecksRun": false
+  },
+  "cleanup": {
+    "verified": true,
+    "launcherAbsent": true,
+    "originalTrustPolicyRestored": true,
+    "taskListenersAbsent": [
+      28640,
+      36879,
+      36880,
+      36881
+    ],
+    "taskSnapshotRetained": true,
+    "stableAppUntouched": true
+  },
+  "limits": [
+    "This build did not reach publication, dirty refusal, or automatic process replacement",
+    "Post-success desktop/390 drawer draft/cancel checks remain unrun",
+    "No retyping, restart or further retry performed"
+  ]
+}

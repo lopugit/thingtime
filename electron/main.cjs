@@ -31,7 +31,7 @@ const { createWebBundleStore } = require('./lib/web-bundle-store.cjs');
 const { createWebBundleLaunch } = require('./lib/web-bundle-launch.cjs');
 const { createWebBundleDownload } = require('./lib/web-bundle-download.cjs');
 const { createWebBundleUpdates } = require('./lib/web-bundle-updates.cjs');
-const { queueDesktopRelaunch, sendBundleActivation, remoteAccountBundleActivationAllowed, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation } = require('./lib/web-bundle-activation.cjs');
+const { queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation } = require('./lib/web-bundle-activation.cjs');
 const { validateTrustPolicy, createElectronBundleHost, assertElectronBundleMetadata } = require('../native-bundles/host.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
@@ -122,6 +122,9 @@ function embeddedPlanRuntimeIdle() {
   return typeof idle === 'function' && idle() === true;
  } catch { return false; }
 }
+function embeddedApiRuntimeWork() {
+ return nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle')));
+}
 function desktopWindowPresentationBlocked() {
  return automaticBundleClosing || bundleClosePending || bundleCloseAccepted || desktopServicesClosing || desktopServicesClosed || authorityTransition.restarting;
 }
@@ -131,7 +134,7 @@ function presentMainWindow() {
 function embeddedShutdownIdle() {
  try {
   return bundleShutdownReservation ? bundleShutdownReservation.isCurrent() :
-    embeddedPlanRuntimeIdle() && bundledRendererServer?.isIdle?.() === true;
+    embeddedPlanRuntimeIdle() && bundledRendererServer?.isIdle?.() === true && embeddedApiRuntimeWork()?.isIdle() === true;
  } catch { return false; }
 }
 function releaseBundleShutdown() {
@@ -139,7 +142,7 @@ function releaseBundleShutdown() {
 }
 function bundleActivationEligible(allowClosing = false) {
  if (bundleCloseAccepted || (bundleClosePending && !allowClosing)) return null;
- if (!remoteAccountBundleActivationAllowed({ initialized: localRuntimeInitialized, runtime: localRuntime }) ||
+ if (!nativeBundleActivationAllowed({ initialized: localRuntimeInitialized, runtime: localRuntime, activity: embeddedApiRuntimeWork() }) ||
      !bundleAutomaticUpdates || !bundleRendererReady || !mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused() ||
      desktopServicesClosing || desktopServicesClosed || authorityTransition.active || Date.now() - bundleLastActivity < 30000 ||
      BrowserWindow.getAllWindows().some(window => window !== mainWindow) || bundleRendererRequests.size || bundleWorkAdmission.active ||
@@ -362,6 +365,11 @@ async function initializeWebBundleLaunch() {
           () => {
             const reserve = Reflect.get(globalThis, Symbol.for('thingtime.chatgpt-plan.reserve-shutdown'));
             return typeof reserve === 'function' ? reserve() : null;
+          },
+          () => {
+            const activity = embeddedApiRuntimeWork(), handle = activity?.reserveShutdown();
+            if (!handle) return null;
+            return { isCurrent: () => embeddedApiRuntimeWork() === activity && handle.isCurrent(), release: () => handle.release() };
           }
         ]);
         if (!bundleShutdownReservation) return false;

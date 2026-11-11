@@ -1,0 +1,73 @@
+{
+  "runs": [
+    {
+      "name": "sync-ts",
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/fileSync/desktopFolders.client.test.ts app/fileSync/folderBatchJournal.test.ts app/fileSync/nativeFolderEnrollment.test.ts app/fileSync/remoteSyncClient.client.test.ts app/fileSync/remoteSyncProtocol.test.ts app/fileSync/streamingMissingParent.test.ts app/fileSync/streamingUploadBatch.test.ts app/fileSync/syncEnrollmentRecovery.test.ts",
+      "passed": 57,
+      "exitCode": 0,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/pr1000-main-a505-sync-ts.log"
+    },
+    {
+      "name": "sync-mts",
+      "command": "corepack pnpm --dir remix exec node --experimental-test-module-mocks --import tsx --test app/fileSync/remoteSyncWorker.test.mts",
+      "passed": 15,
+      "exitCode": 0,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/pr1000-main-a505-sync-mts.log"
+    },
+    {
+      "name": "electron-sync",
+      "command": "node --test electron/test/folder-sync.test.cjs",
+      "passed": 48,
+      "exitCode": 0,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/pr1000-main-a505-electron-sync.log"
+    },
+    {
+      "name": "capabilities",
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "passed": 206,
+      "exitCode": 0,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/pr1000-main-a505-capabilities.log"
+    }
+  ],
+  "totalPassed": 326,
+  "contracts": {
+    "api.devices-sync-control": "1.6.0",
+    "api.passwords": "1.10.0",
+    "api.things": "1.64.0",
+    "api.search": "1.8.0"
+  },
+  "sourceHashes": {
+    "remix/app/fileSync/cloudWrite.ts": "89aa36466bf5edab68624584ed2e596f49175c8ce73705a3f2be3520eaba2b2d",
+    "remix/app/fileSync/desktopFolders.client.test.ts": "3ffed8e67a5e525bfe00cf612fd2a3581762a9971929e5c3d6852d8ebe3f812d",
+    "remix/app/fileSync/desktopFolders.client.ts": "70e0dd71854db5ce4f5b27e0c1089f33ad9d82b7f135fb5b122c8413b9ab2117",
+    "remix/app/fileSync/folderBatchJournal.test.ts": "e1c7d63d5597e509153f40f9f80dbeb2343da649153f6e0a7434d7b69ec87e8b",
+    "remix/app/fileSync/nativeFolderEnrollment.test.ts": "192d158485ccb8f10f071f0d34f783667eb3b6f52bbe3fc9e3fdc1b2220edff7",
+    "remix/app/fileSync/nativeSyncTasks.client.ts": "00c1671f3bbef6687205be2cc1d435247800fd2bff50bd2525e0c376c8edc3ec",
+    "remix/app/fileSync/pagedRunJournal.ts": "2bffcb555710d893a52a1d7528058f722bd355ce97b861fcb15b3dc8a3ff392f",
+    "remix/app/fileSync/remoteSyncClient.client.test.ts": "4357b7cc63cc35b4fc9db203d8703f5eb3a5bc135cd823c4268172f6c3a789de",
+    "remix/app/fileSync/remoteSyncClient.client.ts": "7d4c0ee26c97100e5642b086975e78e85c5b12068426c913a2e7c037b69337a7",
+    "remix/app/fileSync/remoteSyncProtocol.test.ts": "7ddd106857c3c41f117dd008e0e00be3fff9e76aa883b41211feb358b315561d",
+    "remix/app/fileSync/remoteSyncProtocol.ts": "77d33bbb9bcbfa109104beb126b62bb9a07f6244e96f2a45afddcb917ca95399",
+    "remix/app/fileSync/remoteSyncWorker.client.ts": "53c4c49ae3ff2907fef7bba365db9f9c59a1b280ecec60963e7feb8d9536ca45",
+    "remix/app/fileSync/remoteSyncWorker.test.mts": "b2102f8608437ad15973f89c6289fe205d7f861ceebbc85e7ba6dfc148f98e6d",
+    "remix/app/fileSync/streamingForegroundSync.ts": "334ae36bc31a2cc4fde241577c2739c588256b578775b346006a54baf1babd8b",
+    "remix/app/fileSync/streamingMissingParent.test.ts": "3dc9b08fa5ba5a5b81d17063fd5b9b1fce2e93ba600eea35c85462a9de62b354",
+    "remix/app/fileSync/streamingUploadBatch.test.ts": "384d78768e7c281b6b3de8ec224320156495b4ac25d2648de554ddc3891f9a3d",
+    "remix/app/fileSync/syncEnrollmentRecovery.client.ts": "0deef3ec02413c2d3c526da88129faf406aac9a0dc349006fa58c1c5d7b0dfc0",
+    "remix/app/fileSync/syncEnrollmentRecovery.test.ts": "4cdb7878edb9320e35ed5876ab9a02adab7ac767e18b4d6262107ef9cb2a4af8",
+    "electron/lib/folder-sync.cjs": "3e15ba1ad7c58c2cb1acff70b22a91d5bc532ea976e928bbbdfc98dfe7ae3772",
+    "electron/test/folder-sync.test.cjs": "7e6db79a275d5e0d1c118a4715c9cb8ea183ff048af07fb7d6c95a22df55dd17",
+    "remix/app/docs/apiDocs.ts": "c2851ffaa636faaee298ae9efaebc3a69c5e749ae960a9ba7d54153000062a51",
+    "remix/app/docs/apiCapabilities.test.ts": "4f09f9a763469de05a50598955ae36e7c13fe650802b36f90066738649e348d2",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.ts": "8829a586486e0399e85174267ce1e2b8006831e09e57306ec7ee27c2ea3a80f7",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "10493d5cc7e39d117058307794ba4aa7fdc8e2ac716a4c0b4daf971adde1f79e"
+  }
+}

@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { attachmentPhysicalObject } from '../attachments/attachmentBlobs';
 // Post-upload moderation orchestrator. Runs asynchronously after an
 // attachment reaches `ready` (fire-and-forget from completeAttachmentUpload;
@@ -231,5 +232,5 @@ export const analyzeReadyAttachment = createAnalyzeReadyAttachment();
 // Fire-and-forget hook for the upload-complete path: analysis must never
 // fail or slow the upload response.
 export const queueAttachmentModeration = (shareId: string): void => {
-	void analyzeReadyAttachment(shareId).catch(() => {});
+	void withGatewayWork(() => analyzeReadyAttachment(shareId)).catch(() => {});
 };

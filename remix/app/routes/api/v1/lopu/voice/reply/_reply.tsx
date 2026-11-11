@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, lopuAccessResponse } from '~/api/utils/lopu/access';
@@ -32,7 +33,7 @@ export const action = async ({ request }: { request: Request }) => {
 	}
 	const encoder = new TextEncoder();
 	const stream = new ReadableStream({
-		async start(controller) {
+		start: controller => withGatewayWork(async () => {
 			const send = (event: LopuVoiceEvent) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
 			try {
 				for await (const event of streamLopuVoiceReply(user.id, body, { signal: request.signal })) send(event);
@@ -42,7 +43,7 @@ export const action = async ({ request }: { request: Request }) => {
 			} finally {
 				controller.close();
 			}
-		}
+		})
 	});
 	return new Response(stream, { headers: STREAM_HEADERS });
 };
