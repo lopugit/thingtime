@@ -154,6 +154,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   with document IDs, opaque pagination, complete redacted JSON, editable action
   controls and compatible older-client projections. Real provider acceptance
   remains separate; see [PR 1464 evidence](../PRs/1464-codex-google-service-actions-current-add-scoped-google-service-actions-to-saved-authorizations.md). **Codex (AI)**
+- 2026-11-11: Make password workspace controls, structured imported fields, source
+  history and attachments individually editable with private transient values.
+  Preserve current verification, branding, generator and passkey flows. See
+  [PR 1468 evidence](../PRs/1468-codex-password-editor-current-editable-password-workspace.md). **Codex (AI)**
+
 - 2026-11-11: Stabilize editable Photos progress and expose upload speed/data
   settings. Add the explicit canonical background-file transfer contract,
   preserve automatic recovery after system interruption and saved-settings
