@@ -60,7 +60,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
-  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "photoAutomation", "ignoreRules"],
+  "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "uploadPolicy", "photoAutomation", "ignoreRules"],
   "folder": ["name", "icon", "description", "builderApp", "iconUrl", "metadata"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],

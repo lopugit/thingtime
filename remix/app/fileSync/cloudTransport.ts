@@ -32,7 +32,7 @@ export const CLOUD_TRANSFER_REQUIREMENTS = {
 	...CLOUD_FILE_REQUIREMENTS,
 	'api.files': '1.8.1',
 	'api.attachment-uploads': '1.7.0',
-	'api.attachment-upload-parts': '1.1.0',
+	'api.attachment-upload-parts': '1.3.0',
 	'api.attachment-upload-complete': '1.4.0',
 	'api.actions-run': '1.7.0'
 } as const;
@@ -418,7 +418,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						let uploaded: Awaited<ReturnType<NonNullable<FingerprintSource['uploadPart']>>>;
 						try {
 							uploaded = await source.uploadPart(
-								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
+								{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length, ...(nativeApproval ? { authorization: structuredClone(nativeApproval) } : {}) },
 								signal
 							);
 						} catch (error) {
@@ -426,7 +426,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							transferred?.(null);
 							throw error;
 						}
-						payloadBytes = source.nativePartPayloadBytes && uploaded?.payloadBytes === length ? length : null;
+						payloadBytes = source.nativePartPayloadBytes && (uploaded?.payloadBytes === length || (uploaded?.alreadyUploaded === true && uploaded.payloadBytes === 0)) ? uploaded.payloadBytes! : null;
 						check();
 						if (!checkedNativePart) await sourceCheck();
 						if (typeof uploaded?.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(uploaded.sha256)) throw Error('Invalid native upload digest.');
@@ -442,6 +442,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							partNumber = i + 1;
 						const signed = await json('/api/v1/attachments/uploads/parts', {
 							uploadId: upload.id,
+							reconcileAcceptedParts: true,
 							parts: [{ partNumber, checksumSha256: checksum }]
 						});
 						const part = signed.parts?.[0];
@@ -460,6 +461,14 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 							throw Error('Invalid cloud upload destination.');
 						await sourceCheck();
 						await runtime.authorizeMutation?.(signal);
+						if (part.alreadyUploaded !== undefined && typeof part.alreadyUploaded !== 'boolean') throw Error('Invalid cloud upload acceptance proof.');
+						if (part.alreadyUploaded === true) {
+							payloadBytes = 0;
+							digests.set(digest, i * 32);
+							transferred?.(0);
+							progress?.(offset + length, source.size);
+							continue;
+						}
 						await sourceCheck();
 						const transferAbort = new AbortController();
 						const deadline = createSyncTransferDeadline(AbortSignal.any([transferAbort.signal, ...(signal ? [signal] : [])]));

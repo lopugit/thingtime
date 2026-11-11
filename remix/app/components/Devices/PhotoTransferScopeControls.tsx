@@ -7,14 +7,14 @@ import { PhotoAutomationControls, photoUploadSaveBlocks } from './PhotoAutomatio
 import { SyncEditorBlocks } from './SyncEditorBlocks';
 import type { SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 
-type Props = { supported: boolean; ownerId: string; deviceId: string; rootId?: string; scopeKey: string;
+type Props = { generalUploads?: boolean; supported: boolean; ownerId: string; deviceId: string; rootId?: string; scopeKey: string;
  accountTransport?: SettingsDocumentHostProps['accountTransport'];
  request(owner: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult>;
  assertCurrent(): void;
  onSaved?(policy: PhotoTransferPolicy): void;
 };
 /** Persist at the native device/folder scope, never duplicate policy into configs. */
-export function PhotoTransferScopeControls({ supported, ownerId, deviceId, rootId, scopeKey, accountTransport, request, assertCurrent, onSaved }: Props) {
+export function PhotoTransferScopeControls({ generalUploads = false, supported, ownerId, deviceId, rootId, scopeKey, accountTransport, request, assertCurrent, onSaved }: Props) {
  const [policy, setPolicy] = React.useState<PhotoTransferPolicy>();
  const [draft, setDraft] = React.useState<ConfigurationDraft['photoAutomationDraft']>();
  const [candidate, setCandidate] = React.useState<PhotoTransferPolicy>();
@@ -28,10 +28,11 @@ export function PhotoTransferScopeControls({ supported, ownerId, deviceId, rootI
   setBusy(true); setError('');
   try {
    guard.current();
-   const result = await request(ownerId, { action: 'read-photo-transfer-policy', deviceId, rootId }, controller.signal);
+   const result = await request(ownerId, generalUploads ? { action: 'read-upload-policy', deviceId, rootId } : { action: 'read-photo-transfer-policy', deviceId, rootId }, controller.signal);
    controller.signal.throwIfAborted(); guard.current();
-   if (!result.photoTransferPolicy) throw Error('The device did not return its Photos transfer policy.');
-   setPolicy(result.photoTransferPolicy); saved.current?.(result.photoTransferPolicy);
+   const policy = generalUploads ? result.uploadPolicy : result.photoTransferPolicy;
+   if (!policy) throw Error('The device did not return its upload policy.');
+   setPolicy(policy); saved.current?.(policy);
   } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not load upload settings.'); }
   finally { if (!controller.signal.aborted) setBusy(false); }
  };
@@ -43,17 +44,18 @@ export function PhotoTransferScopeControls({ supported, ownerId, deviceId, rootI
   const controller = new AbortController(); abort.current?.abort(); abort.current = controller; setBusy(true); setError('');
   try {
    guard.current();
-   const result = await request(ownerId, { action: 'set-photo-transfer-policy', deviceId, rootId, photoTransferPolicy: candidate }, controller.signal);
+   const result = await request(ownerId, generalUploads ? { action: 'set-upload-policy', deviceId, rootId, uploadPolicy: candidate } : { action: 'set-photo-transfer-policy', deviceId, rootId, photoTransferPolicy: candidate }, controller.signal);
    controller.signal.throwIfAborted(); guard.current();
-   if (!result.photoTransferPolicy) throw Error('The device did not acknowledge upload settings.');
-   setPolicy(result.photoTransferPolicy); setDraft(undefined); setCandidate(undefined); saved.current?.(result.photoTransferPolicy);
+   const policy = generalUploads ? result.uploadPolicy : result.photoTransferPolicy;
+   if (!policy) throw Error('The device did not acknowledge upload settings.');
+   setPolicy(policy); setDraft(undefined); setCandidate(undefined); saved.current?.(policy);
   } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not save upload settings.'); }
   finally { if (!controller.signal.aborted) setBusy(false); }
  };
  return <section aria-label={rootId ? 'Folder upload settings' : 'Device upload settings'}>
-  <PhotoAutomationControls transferScope={rootId ? 'folder' : 'device'} policy={{ ...policy, notificationIntervalMs: DEFAULT_PHOTO_AUTOMATION.notificationIntervalMs }}
+  <PhotoAutomationControls generalUploads={generalUploads} transferScope={rootId ? 'folder' : 'device'} policy={{ ...policy, notificationIntervalMs: DEFAULT_PHOTO_AUTOMATION.notificationIntervalMs }}
    draft={draft} disabled={!supported || busy || policy === undefined} availability={!supported ? 'Update Thingtime on this iPhone to manage shared device and folder upload limits.' : error || (policy === undefined ? '' :
-    `${rootId ? 'Shared across every Photos sync config in this folder.' : 'Shared across every Photos backup on this device.'} Changes apply at the next upload admission; already-started uploads may finish.`)}
+    `${rootId ? (generalUploads ? 'Shared across uploads from every backup config in this folder.' : 'Shared across every Photos sync config in this folder.') : (generalUploads ? 'Shared across folder and Photos uploads on this device.' : 'Shared across every Photos backup on this device.')} Changes apply at the next upload admission; already-started uploads may finish.`)}
    scopeKey={scopeKey} accountTransport={accountTransport} onValidityChange={setValid} onChange={(next, parsed) => {
     setDraft(next); setCandidate(parsed ? { uploadBytesPerSecond: parsed.uploadBytesPerSecond, uploadBytesPerHour: parsed.uploadBytesPerHour } : undefined);
    }} />

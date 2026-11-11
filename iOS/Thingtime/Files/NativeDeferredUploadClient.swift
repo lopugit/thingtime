@@ -55,7 +55,7 @@ final class NativeDeferredUploadClient {
     init(record: NativeDeferredUploadRecord) {
         self.record = record
         scope = record.scope; deviceId = record.configuration.deviceId
-        minimum = record.request.publication == nil ? [1, 0, 0] : [1, 1, 0]
+        minimum = [1, 7, 0]
         let configuration = Self.configuration(allowsCellular: record.configuration.network == "any")
         session = URLSession(configuration: configuration, delegate: MobileDeviceRedirectPolicy(), delegateQueue: nil)
     }
@@ -89,6 +89,7 @@ final class NativeDeferredUploadClient {
         try await requireCapability()
         var payload: [String: Any] = ["action": action, "admissionId": record.admissionId]
         if let parts { payload["parts"] = parts }
+        if action == "parts" { payload["reconcileAcceptedParts"] = true }
         if action == "parts", backgroundFileSupported, record.photoRunId != nil { payload["transport"] = "background-file-v1" }
         let result = try await read(Self.path, body: payload)
         if action == "complete" {
@@ -130,19 +131,18 @@ final class NativeDeferredUploadClient {
         let allowsCellular = record.configuration.network == "any"
         var request = try NativeFileSession.signedUploadRequest(signed, origin: record.scope.origin, checksum: part.checksumSha256,
             length: part.length, partNumber: partNumber)
+        if try NativeFileSession.alreadyUploaded(signed) { try check(); return }
         request.allowsCellularAccess = allowsCellular
         try check()
         let configuration = Self.configuration(allowsCellular: allowsCellular)
         do {
-            if record.configuration.managedPhotos != nil {
+            do {
                 try await NativeManagedPhotoPartTransfer.shared.send(request, file: part.url, length: part.length, configuration: configuration,
                     scope: record.scope, authorization: record.request.authorization, conditions: conditions,
                     signedExpiry: try NativeFileSession.signedUploadExpiry(signed, partNumber: partNumber),
-                    background: backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
+                    background: record.configuration.managedPhotos != nil && backgroundFileSupported ? try NativeBackgroundPhotoTransport.parse(signed, request: request, partNumber: partNumber) : nil,
                     record: record, partNumber: partNumber, checksum: part.checksumSha256,
                     accountOnce: { try account($0, $1) }, account: { try account($0, nil) })
-            } else {
-                try await NativeFileUpload().send(request, file: part.url, configuration: configuration)
             }
         }
         catch let error as URLError where !allowsCellular && error.networkUnavailableReason == .cellular {

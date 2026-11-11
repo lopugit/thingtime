@@ -1,5 +1,22 @@
 # Attachments and media
 
+Ordinary iOS folder Backup uploads use independent `fileUploadPolicyVersion`
+1.1.0 and saved v5 `uploadPolicy`; they share Photos device/folder budgets without
+advertising CPU, scan or download enforcement. See
+[iOS folder upload policy](../ios-folder-upload-policy.md), `uploadPolicy.test.ts`,
+the folder cases in `photoSettingsRecovery.test.ts`, native scoped-policy tests
+and `scripts/test-folder-upload-limits-ui.mjs`.
+
+`attachments.ts` reconciles opted-in multipart retries through exact provider
+part metadata (`api.attachment-upload-parts` 1.3 / transfer-admissions 1.7).
+`privateS3.ts` uses a one-part lookup; `localAttachmentStorage.ts` exercises the
+same boundary with real stored checksums. Native `NativeFileSession`, deferred
+transport and browser `cloudTransport.ts` skip only verified accepted parts,
+retain full legacy grants and final fingerprints, and preserve all hourly
+consumption. Run attachment/provider, transport and capability tests plus native
+multipart/session-owner race tests; exercise real multi-allowance resume after
+host replacement before delivery.
+
 Photos transfer settings are visible on the saved device/folder/config cards.
 `PhotoTransferScopeControls` uses the iOS automation 1.6 native policy bridge;
 `NativePhotoTransferPolicyStore`, `NativePhotoUploadBudget` and the background
