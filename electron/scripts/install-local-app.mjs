@@ -364,7 +364,6 @@ export function installLocalApp(options = {}) {
   const verifyApp = options.verifyApp || ((appPath) => defaultVerifyApp(appPath, signatureMode));
   const copyApp = options.copyApp || defaultCopyApp;
   const companionName = 'Thingtime Passwords.app';
-  const companionIdentifier = 'com.thingtime.passwords';
   const sourceCompanion = join(sourceApp, 'Contents', 'Helpers', companionName);
   const targetCompanion = join(targetDir, companionName);
   // verifyApp validates the nested helper before it becomes the canonical
@@ -402,10 +401,17 @@ export function installLocalApp(options = {}) {
       verifyCompanion(sourceCompanion);
       if (companionExists) {
         assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
-        verifyCompanion(targetCompanion);
-        const sourceFacts = companionFactsReader(sourceCompanion);
-        preservedCompanionFacts = companionFactsReader(targetCompanion);
-        preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
+        // A failed classification cannot prove that replacement is safe either:
+        // the installed companion may be newer even when its signed facts are
+        // unreadable. Keep the existing installation intact on uncertainty.
+        try {
+          verifyCompanion(targetCompanion);
+          const sourceFacts = companionFactsReader(sourceCompanion);
+          preservedCompanionFacts = companionFactsReader(targetCompanion);
+          preserveCompanion = preserveNewerCompanion(sourceFacts, preservedCompanionFacts);
+        } catch {
+          throw new Error('Installed Password AutoFill companion identity or version is unverified; no app was replaced.');
+        }
       }
     }
     const verifyPreservedCompanion = () => {
