@@ -152,6 +152,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   creation safely. Retain earlier receipts and strict refusal on incomplete
   or conflicting inventories. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
 
+- 2026-11-11: Continue an original file-batch recovery after a proven unpublished
+  parent revision, retaining member order and receipt guards until a replacement
+  parent is confirmed. See [PR 1476](../PRs/1476-codex-sync-capability-refresh-saved-folder-recovery.md). **Codex (AI)**
+
 - 2026-11-11: Refresh a Mac folder-sync context's selected-origin capability
   manifest once when a saved operation encounters an incompatible cached
   version after deployment. Keep exact account/window fences and SemVer refusal;
