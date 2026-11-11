@@ -22,7 +22,7 @@ const matches = (doc: any, query: any): boolean =>
     if (expected && typeof expected === 'object' && '$exists' in expected) return (value !== undefined) === expected.$exists;
     if (expected === null) return value == null;
     if (expected && typeof expected === 'object' && '$lte' in expected) return value <= expected.$lte;
-    if (expected && typeof expected === 'object' && '$in' in expected) return expected.$in.includes(value);
+    if (expected && typeof expected === 'object' && '$in' in expected) return Array.isArray(value) ? value.some(entry => expected.$in.includes(entry)) : expected.$in.includes(value);
     return Array.isArray(value) ? value.includes(expected) : value === expected;
   });
 const set = (doc: any, key: string, value: any) => {
@@ -319,4 +319,45 @@ test('failed refresh revalidates a concurrent reconnect before returning credent
     assert.ok(linked.ok);
     assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
   } finally { provider.oauth!.refreshTokens = original; }
+});
+
+
+test('Facebook diagnostics bind exact owner, origin and unchanged saved credential without writes', async t => {
+  const { diagnoseConnection } = await import('./connections.ts');
+  const facebook = connectionProviderById('facebook')!;
+  const creds = (await oauthCredsFor(facebook, 'https://thingtime.test'))!;
+  const saved = { ...tokens, clientId: creds.clientId, oauthBinding: creds.binding, oauthOrigin: creds.origin,
+    oauthEnvironment: creds.environment, requestedScopes: ['public_profile', 'user_posts'], confirmedScopes: ['public_profile'] };
+  const linked = await upsertAccountAndLink(user, facebook, account('facebook-one'), saved);
+  assert.ok(linked.ok);
+  if (!linked.ok) return;
+  const id = linked.connection.id;
+  assert.deepEqual(linked.connection.authorization, { requestedScopes: saved.requestedScopes, grantedScopes: saved.confirmedScopes });
+  assert.deepEqual(linked.connection.scopes, ['public_profile']);
+  let probes = 0;
+  t.mock.method(facebook, 'diagnose', async () => { probes++; return { grantedScopes: ['public_profile'], checks: [] }; });
+  const before = JSON.stringify(docs);
+  assert.equal((await diagnoseConnection(other, id, 'https://thingtime.test')).ok, false);
+  assert.equal((await diagnoseConnection(user, id, 'https://foreign.test')).ok, false);
+  assert.equal(probes, 0);
+  assert.equal((await diagnoseConnection(user, id, 'https://thingtime.test')).ok, true);
+  assert.equal(probes, 1);
+  assert.equal(JSON.stringify(docs), before);
+  await upsertAccountAndLink(user, facebook, account('facebook-one'), { ...saved, expiresAt: new Date(0).toISOString() });
+  assert.deepEqual(await diagnoseConnection(user, id, 'https://thingtime.test'), { ok: false, status: 401, error: 'This account authorization expired. Reconnect it.' });
+  assert.equal(probes, 1);
+  await upsertAccountAndLink(user, facebook, account('facebook-one'), saved);
+  t.mock.method(facebook, 'diagnose', async () => {
+    docs = docs.filter(doc => doc.shareId !== id);
+    return { grantedScopes: ['user_posts'], checks: [] };
+  });
+  assert.deepEqual(await diagnoseConnection(user, id, 'https://thingtime.test'), { ok: false, status: 409, error: 'This connection changed or was removed.' });
+});
+
+test('legacy Facebook requested scope metadata is never projected as confirmed grants', async () => {
+  const { toPublicConnection } = await import('./connections.ts');
+  const projection = toPublicConnection({ ownerId: user.id, crystal: { provider: 'facebook' } },
+    { ownerId: user.id, crystal: { scopes: ['public_profile', 'user_posts'] } }, connectionProviderById('facebook')!);
+  assert.deepEqual(projection.scopes, []);
+  assert.deepEqual(projection.authorization, { requestedScopes: null, grantedScopes: null });
 });

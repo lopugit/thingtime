@@ -145,6 +145,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Verify actual Facebook grants for default and named OAuth; expose
+  requested/confirmed permissions separately and add exact-owner, read-only
+  Connections access diagnostics for basic posts and optional engagement fields.
+  Saved content and credentials remain untouched by inspection. **Codex (AI)**
+
 - 2026-11-11: Inspect exact TestFlight upload state and diagnostic codes when
   the build is still missing from Apple's normal build list. **Codex (AI)**
 

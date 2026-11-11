@@ -116,6 +116,7 @@ export type PublicConnection = {
   accountOnly: boolean;
   credentialStatus: 'connected' | 'reconnect' | 'public';
   scopes: string[];
+  authorization?: { requestedScopes: string[] | null; grantedScopes: string[] | null };
   named?: { name: string; requestedScopes: string[]; grantedScopes: string[] | null; allowedOperations: NamedOperation[] };
   expiresAt: string | null;
   account: {
@@ -144,7 +145,13 @@ export const toPublicConnection = (linkDoc: any, accountDoc: any, provider: Conn
   auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
   accountOnly: provider?.accountOnly === true,
   credentialStatus: !provider || provider.auth === 'none' ? 'public' : grant?.ownerId === linkDoc?.ownerId && hasConnectionTokenEnvelope(grant) ? 'connected' : 'reconnect',
-  scopes: Array.isArray(grant?.crystal?.scopes) ? grant.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
+  scopes: ['facebook', 'facebook-account'].includes(provider?.id || '')
+    ? (Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : [])
+    : Array.isArray(grant?.crystal?.scopes) ? grant.crystal.scopes.filter((scope: unknown) => typeof scope === 'string') : [],
+  ...(['facebook', 'facebook-account'].includes(provider?.id || '') ? { authorization: {
+    requestedScopes: Array.isArray(grant?.crystal?.requestedScopes) ? grant.crystal.requestedScopes : null,
+    grantedScopes: Array.isArray(grant?.crystal?.grantedScopes) ? grant.crystal.grantedScopes : null
+  } } : {}),
   ...(named ? { named: {
     name: String(linkDoc.crystal?.name || ''),
     requestedScopes: Array.isArray(linkDoc.crystal?.requestedScopes) ? linkDoc.crystal.requestedScopes : [],
@@ -250,6 +257,8 @@ export const upsertAccountAndLink = async (
               ? {
                   secure: await packConnectionTokens(user.id, accountShareId, savedTokens),
                   'crystal.scopes': savedTokens.scopes || [],
+                  'crystal.requestedScopes': savedTokens.requestedScopes ?? null,
+                  'crystal.grantedScopes': savedTokens.confirmedScopes ?? null,
                   'crystal.expiresAt': savedTokens.expiresAt || null,
                   'crystal.lastSyncError': null
                 }
@@ -713,6 +722,33 @@ export const resolveConnectionCredential = async (user: SessionUser, connectionI
   if (!await home.findOne({ shareId: connectionId, ownerId: user.id, thingtime: EXTERNAL_LINK_KIND, parentId: pair.account.shareId })) return fail(404, 'Connection not found');
   return { ok: true as const, provider, tokens, account: toPublicConnection(pair.link, pair.account, provider).account };
 };
+
+// Inspection never refreshes, rewrites credentials, syncs content or changes grants.
+export async function diagnoseConnection(user: SessionUser, id: string, origin: string) {
+  if (!id) return fail(400, 'Choose a connection.');
+  const [pair] = await linksWithAccounts(user.id, id, true);
+  if (!pair?.account || pair.account.ownerId !== user.id || pair.link.parentId !== pair.account.shareId)
+    return fail(404, 'Connection not found.');
+  const named = pair.link.thingtime?.includes(NAMED_CONNECTION_KIND);
+  const grant = named ? pair.link : pair.account;
+  const provider = connectionProviderById(pair.link.crystal?.provider);
+  if (!provider?.diagnose || !provider.oauth) return fail(400, 'This provider does not support connection diagnostics.');
+  const tokens = await unpackConnectionTokens(grant);
+  const client = await oauthCredsFor(provider, origin);
+  if (!tokens?.accessToken || !client || !oauthGrantMatches(tokens, client) || tokens.oauthOrigin !== origin ||
+      (named && (grant.crystal?.origin !== origin || grant.crystal?.environment !== client.environment)))
+    return fail(409, 'This authorization does not match the selected origin and environment.');
+  if (tokens.expiresAt && Date.parse(tokens.expiresAt) <= Date.now()) return fail(401, 'This account authorization expired. Reconnect it.');
+  const home = await getHomeThingsCollection();
+  const stillCurrent = async () => Boolean(await home.findOne({ shareId: pair.link.shareId, ownerId: user.id,
+    thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_LINK_KIND, parentId: pair.account.shareId }) &&
+    await home.findOne({ shareId: grant.shareId, ownerId: user.id, secure: grant.secure,
+      thingtime: named ? NAMED_CONNECTION_KIND : EXTERNAL_ACCOUNT_KIND }));
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  const result = await provider.diagnose(tokens);
+  if (!await stillCurrent()) return fail(409, 'This connection changed or was removed.');
+  return { ok: true as const, connectionId: id, provider: provider.id, observedAt: new Date().toISOString(), ...result };
+}
 
 export async function useNamedConnection(user: SessionUser, input: { id?: unknown; operation?: unknown }, origin: string) {
   const id = typeof input.id === 'string' ? input.id : '';
