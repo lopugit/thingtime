@@ -4,11 +4,14 @@ import OSLog
 
 @MainActor
 protocol NativeUploadBackgroundTask: AnyObject {
+    var identity: AnyObject { get }
     var expiration: (() -> Void)? { get set }
     var progress: Progress { get }
     func update(subtitle: String)
     func complete(success: Bool)
 }
+extension NativeUploadBackgroundTask { var identity: AnyObject { self } }
+
 @MainActor
 protocol NativeUploadBackgroundScheduling: AnyObject {
     func register(_ handler: @escaping (NativeUploadBackgroundTask) -> Void) -> Bool
@@ -34,11 +37,17 @@ final class NativeUploadBackgroundCoordinator {
     private var registered = false
     private var activated = false
     private var pending: NativeUploadBackgroundLease?
+    // Weak identity remembers delivery, never authority. A repeated callback
+    // after release must not complete the same OS task a second time.
+    private let delivered = NSHashTable<AnyObject>.weakObjects()
     init(scheduler: NativeUploadBackgroundScheduling?) { self.scheduler = scheduler }
     func activate() {
         guard !activated else { return }; activated = true
         registered = scheduler?.register { [weak self] task in
-            guard let lease = self?.pending else { task.complete(success: false); return }
+            guard let self else { task.complete(success: false); return }
+            guard !self.delivered.contains(task.identity) else { return }
+            self.delivered.add(task.identity)
+            guard let lease = self.pending else { task.complete(success: false); return }
             lease.accept(task)
         } ?? false
     }
@@ -97,6 +106,7 @@ final class NativeUploadBackgroundLease {
         let waiting = continuation; continuation = nil; waiting?.resume(returning: lease)
     }
     func accept(_ task: NativeUploadBackgroundTask) {
+        if state == .active, systemTask?.identity === task.identity { return }
         guard state == .waiting else {
             task.complete(success: false)
             if state == .cancelledBeforeLaunch { state = .finished; released(self) }
@@ -129,7 +139,7 @@ final class NativeUploadBackgroundLease {
         task.progress.completedUnitCount = completed
         task.update(subtitle: subtitle)
     }
-    func finish(success: Bool) {
+    func finish(success: Bool, settledSubtitle: String? = nil) {
         switch state {
         case .waiting:
             state = .cancelledBeforeLaunch; settle(nil); cancel()
@@ -138,8 +148,10 @@ final class NativeUploadBackgroundLease {
             if let task = systemTask {
                 task.expiration = nil
                 if success {
-                    if task.progress.totalUnitCount > 0 { task.progress.completedUnitCount = task.progress.totalUnitCount }
-                    task.update(subtitle: presentation.completedSubtitle)
+                    // A finite available-originals pass can settle with durable
+                    // gaps. Do not turn its measured backlog into a false 100%.
+                    if settledSubtitle == nil, task.progress.totalUnitCount > 0 { task.progress.completedUnitCount = task.progress.totalUnitCount }
+                    task.update(subtitle: settledSubtitle ?? presentation.completedSubtitle)
                 }
                 task.complete(success: success)
             }
@@ -193,6 +205,7 @@ private final class SystemNativeUploadBackgroundTask: NativeUploadBackgroundTask
             task.expirationHandler = { Task { @MainActor in callback() } }
         }
     }
+    var identity: AnyObject { task }
     var progress: Progress { task.progress }
     func update(subtitle: String) { task.updateTitle(task.title, subtitle: subtitle) }
     func complete(success: Bool) { task.setTaskCompleted(success: success) }

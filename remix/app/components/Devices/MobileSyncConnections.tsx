@@ -935,9 +935,9 @@ function Connections({
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				const photos = saved.configuration.sourceKind === 'photos' || nativeRoot?.sourceKind === 'photos';
 				const preparation = photos && running && !waiting && !task?.stopping ? photoDownloadPreparation(progress?.photoDownload) : undefined;
-				const nativeQueue = nativeProgress && (nativeProgress.pendingOriginals !== undefined || nativeProgress.unavailableOriginals !== undefined)
-					? { pending: nativeProgress.pendingOriginals ?? 0, unavailable: nativeProgress.unavailableOriginals ?? 0 } : undefined;
-				const photoQueue = photos && rootsReady && nativeRoot ? photoQueueDisplay(nativeOwns ? nativeQueue : progress?.photoQueue) : undefined;
+				const nativeQueue = { pending: nativeProgress?.pendingOriginals, unavailable: nativeProgress?.unavailableOriginals,
+					unavailableReasons: nativeProgress?.unavailableReasons };
+				const photoQueue = photos ? photoQueueDisplay(nativeOwns ? nativeQueue : progress?.photoQueue ?? {}) : undefined;
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
 				const wifiWait = waiting && saved.configuration.network === 'wifi' &&
@@ -991,8 +991,9 @@ function Connections({
                         error={runError || ''}
                         preparation={preparation}
                         photoQueue={photoQueue}
-                        photoActivity={nativeOwns && photos && rootsReady && nativeRoot ? nativePhotoActivityDisplay(nativeRun, paused) : undefined}
-                        automation={nativeOwns ? nativePhotoRunSchedule(nativeRun) : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
+                        uploadOnly={nativeOwns && photos}
+                        photoActivity={nativeOwns && photos ? nativePhotoActivityDisplay(nativeRun, paused, true) : undefined}
+                        automation={nativeOwns ? paused ? 'Automatic backup is paused.' : nativePhotoRunSchedule(nativeRun) || 'Automatic retries follow your saved transfer settings.' : automatic ? (!automaticEnabled && !paused ? 'Automatic backup is disabled in Activity manager.' : photoSyncScheduleLabel(currentJob, paused, running, !!runError)) :
                             photos && capabilities?.platform === 'ios' ? 'Update Thingtime on this iPhone to use automatic backup and upload limits.' :
                             currentJob?.state === 'attention' ? 'Automatic sync needs attention.' :
                             admitted && !paused && !running && !waiting ? automaticEnabled ? queued ? undefined : 'Automatic sync is on.' : 'Automatic sync is disabled in Activity manager.' : undefined}
@@ -1003,7 +1004,7 @@ function Connections({
                             disabled: pausing || continuation?.pending,
                             run: () => continuePhotoInBackground(saved)
                         } : undefined}
-                        continuationStatus={!nativeOwns || saved.configuration.paused || nativeProgress?.stage === 'complete' ? undefined :
+                        continuationStatus={!nativeOwns ? undefined : saved.configuration.paused ? 'Backup is paused.' : nativeProgress?.stage === 'complete' ? 'Last backup check finished.' :
                             continuationActive && !nativeRun?.stale ? 'Continuing this backup with iOS background processing.' :
                             continuationHeld ? undefined : !nativeRun?.stale && nativeProgress?.activity?.reason === 'interrupted' ?
                                 nativePhotoBackgroundLabel(nativeProgress.activity.backgroundRequest, nativeProgress.activity.reason) :
@@ -1112,7 +1113,7 @@ function Connections({
 			{connectionCursor && <Button size="sm" minHeight="44px" isDisabled={viewBusy} onClick={() => void run(() => load('connections', connectionCursor).then(() => {}))}>
 				More sync configs
 			</Button>}
-			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
+			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && roots.some(root => root.sourceKind !== 'photos' && supportsMobileFolderPublication(root, capabilities)) && (
 				<SyncDetailsSection title="Recover device files" retainChildren><NativeFileRecovery
 					roots={roots.filter((root) => supportsMobileFolderPublication(root, capabilities))}
 					busy={busy}
@@ -1275,7 +1276,7 @@ export function SyncConfigurationForm({
 				scopeKey={scopeKey ?? `${draft.id}:${c.deviceId}`} accountTransport={accountTransport}
 				onChange={ignoreRules => change({ configurationVersion: c.photoAutomation ? 4 : c.resourceLimits ? 3 : ignoreRules ? 2 : 1, ignoreRules })} />
 			</Stack></Box>
-			<Box as="details"><Box as="summary" cursor="pointer" paddingY={2}>Resource limits</Box>
+			<Box as="details" open={showPhotoControls || undefined}><Box as="summary" cursor="pointer" paddingY={2}>{showPhotoControls ? 'Upload speed, data and notifications' : 'Resource limits'}</Box>
 			{showPhotoControls ? <PhotoAutomationControls
 				policy={c.photoAutomation} draft={draft.photoAutomationDraft} disabled={disabled || !photoAutomation}
 				availability={photoAutomation ? 'Thingtime applies these limits to this Photos backup.' : 'Open the paired iPhone’s Thingtime app to edit these settings.'}

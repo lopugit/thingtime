@@ -1,5 +1,6 @@
 ## Unified folder sync configs and deduplication
 
+- [ ] With an enabled, unchanged saved Photos configuration, leave a disarmed `needs-review` run with `saved-settings` reason. Verify automatic recovery rechecks the current Photos grant and exact private saved Thing before native authorization, without Retry. Repeated foreground/network/condition wakes must retain the five-minute authority retry cooldown. Verify real denial, revoked/unavailable Photos access, saved/local/native user Pause, future retry dates and destination-review cannot be bypassed; after authority is restored, verify the checkpoint resumes without duplicate originals.
 - [ ] Add a task-owned folder, save its automatically prepared config, and reload. Confirm one source and one config with a valid cloud destination. Add a second config with a different direction/destination; edit, pause and remove each independently. Existing Downloads grants and older config labels must group under the actual source without duplicate grants/configs.
 - [ ] Inspect local and remote editors at desktop/mobile widths, scroll to the bottom, and open nested config controls. Select/edit representative nested text, controls and activity fields through Builder, save and reload. Confirm keyboard focus, no clipping/overflow and one inline busy indicator per operation.
 - [ ] Save & sync while another config runs, restart the worker, and verify durable enrollment. Exercise offline recovery, bounded interrupted strict-scan recovery, denied native writes, revoked folder access, explicit pause and account/origin changes. Never turn a refused or incomplete scan into successful sync or propagated deletion.
@@ -12396,6 +12397,40 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS deferred Photos transfers
 
+- [ ] Run `node remix/scripts/test-photo-sync-stable-ui.mjs`. At desktop and
+  mobile widths verify initial/unknown, indexing, iCloud retrieval, cloud checks,
+  uploading, publishing and stale values keep the surrounding card stable.
+  Save/reload MB/s and GB/hour controls, independently edit nested metric/event
+  blocks, and preserve customized layouts through stock-block migration.
+- [ ] Negotiate transfer admissions 1.5.0 on the built isolated server. A
+  Photos-only `transport: background-file-v1` opt-in may describe only a direct
+  canonical regional S3 grant; local/custom targets omit it. Reject another
+  bucket, lookalike host, changed part/path/owner/signature header scope, expired
+  or duplicate signed fields. Legacy grants stay at 120 seconds; background
+  grants stay within 600 seconds and both saved expiries. Revoke during signing
+  and confirm no grant is returned. Preserve canonical finalization and receipts.
+- [ ] Deliver the same continued-task object before and after completion and a
+  distinct conflicting object. Complete each at most once; never end a valid
+  active task because its callback is redelivered. A clean deferred pass keeps
+  partial counts and pending originals, without asserting the full backup is done.
+- [ ] Crash between byte-budget settlement, transfer statistics persistence and
+  daemon acknowledgement. Reopen and replay the same job UUID: neither the
+  rolling hourly allowance nor the displayed bytes may count it twice. Fail a
+  journal write after creating a suspended URLSession task; cancel that task and
+  verify relaunch discards a mismatched task ID without stranding an upload lane.
+- [ ] Put an unreadable local original beside downloadable and readable
+  originals, including a Live Photo companion. Readable work must advance while
+  deferred items retain their identity and retry fairly. Persist and reopen
+  legacy and typed reason queues; show separate Photos-download and Photos-read
+  waits, preserve receipts, and keep permission/storage failures distinct.
+- [ ] On the simulator, record actual BGTaskScheduler submission availability
+  separately from injected lifecycle tests. On a physical iPhone, observe
+  background-file PUTs after leaving the app, OS expiration, relaunch and
+  network loss. Verify exact downloaded hashes and one committed revision per
+  original. Explicit Pause/account/grant changes cancel matching queued PUTs;
+  ordinary system interruption preserves authorized transfers. No simulator
+  callback injection is proof of a real continued-task grant.
+
 - [ ] Interrupt an iPhone Photos backup after one cloud receipt and a second
   accepted write whose reply is lost. On the same Photos connection, save
   Any network and Only while charging, then tap Retry transfer. Verify it
@@ -12441,7 +12476,8 @@ transfer, whole-account snapshots or production deployment.
   locally and completion waits for the remaining originals.
 - [ ] On the mounted iPhone card, verify the first photo or video discovery
   appears while indexing, with the captured time when available. Verify the
-  subsequent indexed asset and file counts, and that unknown counts are absent.
+  subsequent indexed asset and file counts, and that unknown counts have honest
+  reserved placeholders rather than invented zeros or disappearing rows.
   On a physical device, end an iOS continued session using its system UI.
   Verify ordinary execution retries the exact saved queue without a new
   continued-task request or manual resume. Then use **Pause sync** and

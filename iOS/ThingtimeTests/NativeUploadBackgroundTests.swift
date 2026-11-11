@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import BackgroundTasks
 @testable import Thingtime
 
 @MainActor
@@ -38,6 +39,109 @@ private final class ProcessingTaskFixture: NativeDeferredUploadSystemTask {
 }
 @MainActor
 final class NativeUploadBackgroundTests: XCTestCase {
+    func testDistinctDuplicateDeliveryCannotReplaceTheActiveLease() async throws {
+        let scheduler = BackgroundSchedulerFixture()
+        let coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate()
+        let original = BackgroundTaskFixture()
+        scheduler.delivered = original
+        var expirations = 0
+        let granted = await coordinator.begin(size: 100, expired: { expirations += 1 })
+        let lease = try XCTUnwrap(granted)
+        lease.progress(30)
+
+        let duplicate = BackgroundTaskFixture()
+        scheduler.handler?(duplicate)
+        XCTAssertEqual(duplicate.completions, [false])
+        XCTAssertTrue(original.completions.isEmpty)
+        XCTAssertNil(duplicate.expiration)
+        XCTAssertTrue(lease.canContinue)
+        XCTAssertEqual(original.progress.completedUnitCount, 30)
+
+        lease.progress(100)
+        lease.finish(success: true)
+        XCTAssertEqual(original.completions, [true])
+        XCTAssertEqual(duplicate.completions, [false])
+        XCTAssertEqual(expirations, 0)
+    }
+
+    func testRepeatedDeliveryOfTheActiveTaskDoesNotCompleteItTwice() async throws {
+        let scheduler = BackgroundSchedulerFixture()
+        let coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate()
+        let original = BackgroundTaskFixture()
+        scheduler.delivered = original
+        let granted = await coordinator.begin(size: 100, expired: {
+            XCTFail("A duplicate callback must not expire the active task")
+        })
+        let lease = try XCTUnwrap(granted)
+
+        scheduler.handler?(original)
+        XCTAssertTrue(original.completions.isEmpty)
+        XCTAssertTrue(lease.canContinue)
+        lease.finish(success: true)
+        scheduler.handler?(original)
+        XCTAssertEqual(original.completions, [true])
+    }
+
+    func testSettledAvailablePassPreservesMeasuredProgressAndRetrySubtitle() async throws {
+        let scheduler = BackgroundSchedulerFixture()
+        let coordinator = NativeUploadBackgroundCoordinator(scheduler: scheduler)
+        coordinator.activate()
+        let task = BackgroundTaskFixture()
+        scheduler.delivered = task
+        let granted = await coordinator.begin(presentation: .init(title: "Photos backup", subtitle: "Preparing",
+            completedSubtitle: "Photos backup finished", bytes: nil), expired: {
+                XCTFail("A settled pass must not expire")
+            })
+        let lease = try XCTUnwrap(granted)
+        lease.work(completed: 1, total: 3, subtitle: "1 of 3 originals saved")
+        let subtitle = "Available originals saved · remaining originals will retry"
+        lease.finish(success: true, settledSubtitle: subtitle)
+        lease.finish(success: false)
+
+        XCTAssertEqual(task.completions, [true])
+        XCTAssertEqual(task.progress.completedUnitCount, 1)
+        XCTAssertEqual(task.progress.totalUnitCount, 3)
+        XCTAssertFalse(task.progress.isFinished)
+        XCTAssertEqual(task.subtitles.last, subtitle)
+        XCTAssertFalse(lease.canContinue)
+    }
+
+    func testActualSimulatorBackgroundSubmissionIsUnavailable() throws {
+        guard ProcessInfo.processInfo.environment["THINGTIME_BG_SCHEDULER_PROBE"] == "1" else {
+            throw XCTSkip("Opt in to the actual simulator scheduler probe")
+        }
+#if targetEnvironment(simulator)
+        guard #available(iOS 26.0, *) else { throw XCTSkip("Continued processing requires iOS 26") }
+        XCTAssertEqual(UIApplication.shared.applicationState, .active)
+        let bundle = try XCTUnwrap(Bundle.main.bundleIdentifier)
+        let permitted = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers") as? [String])
+        let processing = BGProcessingTaskRequest(identifier: bundle + ".file-sync-processing")
+        processing.requiresNetworkConnectivity = true
+        let continued = BGContinuedProcessingTaskRequest(identifier: bundle + ".file-upload",
+            title: "Simulator capability probe", subtitle: "Checking scheduler availability")
+        continued.strategy = .fail
+
+        for (kind, request) in [("processing", processing as BGTaskRequest), ("continued", continued as BGTaskRequest)] {
+            XCTAssertTrue(permitted.contains(request.identifier))
+            do {
+                try BGTaskScheduler.shared.submit(request)
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: request.identifier)
+                print("IOS_SIMULATOR_SCHEDULER: kind=\(kind) submit=accepted")
+                XCTFail("The simulator accepted a request that Apple documents as unavailable. Record the platform behavior before using this result.")
+            } catch {
+                let failure = error as NSError
+                print("IOS_SIMULATOR_SCHEDULER: kind=\(kind) domain=\(failure.domain) code=\(failure.code)")
+                XCTAssertEqual(failure.domain, BGTaskScheduler.errorDomain)
+                XCTAssertEqual(failure.code, BGTaskScheduler.Error.Code.unavailable.rawValue)
+            }
+        }
+#else
+        throw XCTSkip("This probe is scoped to a disposable simulator")
+#endif
+    }
+
     func testPhotoWorkerKeepsOneLeaseAcrossForegroundSystemWakeAndReturn() throws {
         var state = UIApplication.State.active
         let lease = NativePhotoExecutionLease(foregroundAllowed: true, applicationState: { state })
