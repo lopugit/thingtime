@@ -1,0 +1,69 @@
+# Image Modification Changelog
+
+## [Commander workspace merge] - 2026-08-17
+
+- Moved the complete legacy Raycast extension under `Commander/extensions/raycast/`, preserving its image tools,
+  assets, lockfile, and Open Commander command as one buildable package.
+
+## [Commander Control] - 2026-08-14
+
+- Added an Open Commander no-view command that launches or focuses the installed Commander macOS app.
+
+## [Strip EXIF Data] - 2024-01-28
+
+- Added "Strip EXIF Data" command
+- Improved selection detection when Finder/Path Finder is not the frontmost application
+- Fixed bug where converting from WebP to anything but PNG would change the file extension but not the file format
+
+## [Create Images, In-Clipboard Modification] - 2023-07-06
+
+- Added settings to individually show/hide image formats from the list of conversion formats (#7023)
+- Added settings for input source and output destination (e.g. clipboard, new file, replace original, etc.) (#6593)
+- Made all commands work as expected regardless of input/output settings (i.e. you can rotate an image in the clipboard and immediately open it in Preview) (#7296)
+- Added "Create Image" command to create image placeholders of various sizes, patterns, and colors
+- Improved error handling for all commands, including copyable error messages
+- Generally improved the code quality of the extension
+
+## [Optimize Images, SVG Conversion, More Filters] - 2023-04-03
+
+- Add "Optimize Images" command
+- Add ability to convert SVG to various image types
+- Add ability to convert images to SVG using Potrace
+- Add ability to convert PDF to various other image types
+- Add ability to rotate and flip PDFs
+- Add 13 new filters:
+  - Circular Screen
+  - Circular Wrap
+  - CMYK Halftone
+  - Dither
+  - Document Enhancement
+  - Dot Screen
+  - Hatched Screen
+  - Kaleidoscope
+  - Line Screen
+  - Maximum Component
+  - Minimum Components
+  - Posterize
+  - Sharpen Luminance
+- Fix WebP operations failing due to insufficient permission
+
+## [WebP Support] - 2023-03-29
+
+- Add WebP conversion support
+- Add support for running SIPS commands on WebP (via temp file)
+- Add Path Finder support (As preference toggle)
+
+## [Filters] - 2023-03-22
+
+- Add "Apply Image Filter" command
+
+## [Padding, Bug Fixes] - 2023-03-15
+
+- Added "Pad Images" command.
+- Fixed compatibility with HEIC images and other formats. (#5238)
+
+## [Localization Fix] - 2023-03-07
+
+- Updated the way the list of supported file types are handled.
+
+## [Initial Version] - 2023-02-23

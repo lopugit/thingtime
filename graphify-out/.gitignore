@@ -1,0 +1,14 @@
+# Machine-local interpreter & path pointers (absolute paths, not portable)
+.graphify_python
+.graphify_root
+# Internal pipeline temp files
+.graphify_*.json
+.needs_update
+# Extraction cache: mutable semantic/, ast/, and stat-index.json stay local.
+# Only semantic-cas/ is tracked: input keys and content hashes make concurrent
+# variants immutable and merge-safe while keeping fresh-clone rebuilds LLM-free.
+cache/*
+!cache/semantic-cas/
+!cache/semantic-cas/**
+# Deterministic local reflection scratch output
+reflections/

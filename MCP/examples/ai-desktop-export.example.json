@@ -1,0 +1,19 @@
+{
+  "format": "thingtime.ai-desktop-export",
+  "version": 1,
+  "app": { "name": "Example AI Desktop", "version": "1.0.0" },
+  "exportedAt": "2026-07-13T00:00:00.000Z",
+  "settings": { "theme": "dark" },
+  "conversations": [
+    {
+      "id": "conversation-1",
+      "title": "Example conversation",
+      "createdAt": "2026-07-13T00:00:00.000Z",
+      "messages": [
+        { "id": "message-1", "role": "user", "createdAt": "2026-07-13T00:00:00.000Z", "text": "Hello" },
+        { "id": "message-2", "role": "assistant", "createdAt": "2026-07-13T00:00:01.000Z", "text": "Hi!" }
+      ]
+    }
+  ],
+  "files": []
+}

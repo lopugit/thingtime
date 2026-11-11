@@ -1,0 +1,24 @@
+/.ds-sync/
+/.ds-sync/**
+/ds-bundle/
+/ds-bundle/**
+/remix/.vercel/
+/remix/.vercel/**
+/remix/dist/
+/remix/dist/**
+/remix/.functional-preview/
+/remix/.functional-preview/**
+/remix/server/assets/
+/remix/server/assets/**
+/MCP/dist-desktop/
+/MCP/dist-desktop/**
+/electron/dist/
+/electron/dist/**
+/electron/release/
+/electron/release/**
+/macos/ThingtimeNode/.build/
+/macos/ThingtimeNode/.build/**
+
+# Root agent aliases resolve to AI_ALL.md; index the canonical file once.
+/AGENTS.md
+/CLAUDE.md
