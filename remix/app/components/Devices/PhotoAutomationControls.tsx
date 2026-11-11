@@ -163,11 +163,8 @@ export function PhotoAutomationControls({ policy, draft, disabled, availability,
 		let parsed: Policy;
 		try { parsed = parseDraft(next); }
 		catch { onChange(next); return; }
-		// Unit and cadence edits should not round an untouched stored ceiling.
-		if (policy?.uploadBytesPerSecond !== undefined && next.speed === current.speed && next.speedUnit === current.speedUnit)
-			parsed.uploadBytesPerSecond = policy.uploadBytesPerSecond;
-		if (policy?.uploadBytesPerHour !== undefined && next.data === current.data && next.dataUnit === current.dataUnit)
-			parsed.uploadBytesPerHour = policy.uploadBytesPerHour;
+		// Display/unit conversion is byte-exact. Every field comes from this
+		// complete draft, including edits made before an unrelated field event.
 		onChange(next, parsed);
 	};
     const scopeBlocks = React.useMemo(() => {

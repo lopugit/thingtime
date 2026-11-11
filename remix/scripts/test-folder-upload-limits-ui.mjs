@@ -31,7 +31,7 @@ try {
   const request = async (_owner,input) => {
    const key='upload-policy:'+(input.rootId || 'device');
    if(input.action==='set-upload-policy') localStorage.setItem(key,JSON.stringify(input.uploadPolicy));
-   return {roots:[],deviceId,rootId:input.rootId,uploadPolicy:JSON.parse(localStorage.getItem(key)||'{}')};
+   return {roots:[],deviceId,rootId:input.rootId,uploadPolicy:JSON.parse(localStorage.getItem(key)||'{"uploadBytesPerSecond":750000,"uploadBytesPerHour":10000000}')};
   };
   Object.assign(window,{folderLimitsDraft:()=>draft,folderLimitsSupported:setSupported});
   return <ChakraProvider><Box maxWidth="760px" margin="auto" padding={4}>
@@ -52,27 +52,48 @@ try {
  const results=[];
  for(const [label,width,height] of [['desktop',1440,1000],['phone',390,844]]) {
   const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'}),page=await context.newPage(),errors=[];
-  page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(12000);
+  page.on('pageerror',e=>{errors.push(e.message);console.error('fixture page error:',e.message)});page.setDefaultTimeout(12000);
   await page.goto('http://127.0.0.1:'+server.address().port+'/?platform=desktop&tasks');
   const device=page.getByRole('region',{name:'Device upload settings'}),folder=page.getByRole('region',{name:'Folder upload settings'});
   const config=page.locator('[data-settings-document="sync-upload-configuration-limits"]');
-  await config.getByLabel('Average upload speed',{exact:true}).waitFor();
+  await config.getByLabel('Average upload speed',{exact:true}).waitFor().catch(async error=>{await page.screenshot({path:join(evidence,label+'-initial-failure.png'),fullPage:true});console.error('fixture initial body:',(await page.locator('body').innerText()).slice(0,2500));throw error});
   await config.getByLabel('Average upload speed',{exact:true}).fill('2');
   await config.getByLabel('Upload data per hour',{exact:true}).fill('100');
   assert.deepEqual(await page.evaluate(()=>window.folderLimitsDraft().configuration.uploadPolicy),{uploadBytesPerSecond:2000000,uploadBytesPerHour:100000000});
+  assert.equal(await page.getByLabel('Direction',{exact:true}).isDisabled(),true,'v5 iOS policy cannot enter an unsupported direction');
+  await page.getByText('This iPhone supports upload limits for Backup (keep deleted files). The saved direction and limits are retained.',{exact:true}).waitFor();
+  assert.equal((await page.evaluate(()=>window.folderLimitsDraft().configuration)).mode,'backup');
+  await config.getByLabel('Average upload speed',{exact:true}).fill('');
+  await config.getByLabel('Upload data per hour',{exact:true}).fill('');
+  assert.deepEqual(await page.evaluate(()=>window.folderLimitsDraft().configuration.uploadPolicy),{});
+  assert.equal(await page.getByLabel('Direction',{exact:true}).isDisabled(),true,'empty policy remains v5 and cannot silently discard the saved contract');
+  await config.getByLabel('Average upload speed',{exact:true}).fill('2');
+  await config.getByLabel('Upload data per hour',{exact:true}).fill('100');
   await config.getByLabel('Upload speed unit',{exact:true}).selectOption('Mbps');
   assert.equal(await config.getByLabel('Average upload speed',{exact:true}).inputValue(),'16');
   assert.equal((await page.evaluate(()=>window.folderLimitsDraft().configuration)).configurationVersion,5);
   for(const region of [device,folder]) {
    await region.getByLabel('Average upload speed',{exact:true}).fill('1');
    await region.getByLabel('Upload data per hour',{exact:true}).fill('500');
+   await region.getByLabel('Upload speed unit',{exact:true}).selectOption('MB/s');
+   await region.getByLabel('Hourly data unit',{exact:true}).selectOption('MB');
    await region.getByRole('button',{name:'Save upload settings',exact:true}).click();
    await region.getByText('Saved upload settings',{exact:true}).waitFor();
+   const storageKey=region===device?'device':'folder-root';
+   assert.deepEqual(await page.evaluate(key=>JSON.parse(localStorage.getItem('upload-policy:'+key)),storageKey),{uploadBytesPerSecond:1000000,uploadBytesPerHour:500000000},'independent edits and repeated unit events must save the displayed draft');
+   await region.getByLabel('Average upload speed',{exact:true}).fill('2.000000');
+   await region.getByLabel('Hourly data unit',{exact:true}).selectOption('MB');
+   await region.getByLabel('Upload data per hour',{exact:true}).fill('');
+   await region.getByRole('button',{name:'Save upload settings',exact:true}).click();
+   await region.getByText('Saved upload settings',{exact:true}).waitFor();
+   assert.deepEqual(await page.evaluate(key=>JSON.parse(localStorage.getItem('upload-policy:'+key)),storageKey),{uploadBytesPerSecond:2000000},'second save must retain edited speed while clearing hourly budget');
   }
   await page.getByRole('button',{name:'Save fixture configuration'}).click();
   await page.reload();await config.getByLabel('Average upload speed',{exact:true}).waitFor();
   assert.equal(await config.getByLabel('Average upload speed',{exact:true}).inputValue(),'16');
-  assert.equal(await folder.getByLabel('Average upload speed',{exact:true}).inputValue(),'1');
+  assert.equal(await folder.getByLabel('Average upload speed',{exact:true}).inputValue(),'2');
+  assert.equal(await device.getByLabel('Average upload speed',{exact:true}).inputValue(),'2');
+  assert.equal(await folder.getByLabel('Upload data per hour',{exact:true}).inputValue(),'');
   await config.getByLabel('Upload data per hour',{exact:true}).fill('0');
   await config.getByRole('alert').waitFor();
   await config.getByLabel('Upload data per hour',{exact:true}).fill('100');

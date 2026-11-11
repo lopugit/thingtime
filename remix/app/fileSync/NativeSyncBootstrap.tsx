@@ -107,7 +107,7 @@ async function discoverNativeSyncJobs(ownerId: string, generation: number, signa
 		for (const job of explicitJobs) {
 			currentScope();
 			if (nativeSyncTasks.read()?.active) break;
-            if (nativeSyncTasks.isPaused(job.scope) || !selected(job) || job.state === 'paused') continue;
+            if (nativeSyncTasks.isPaused(job.scope) || !selected(job) || !['runnable', 'scheduled'].includes(job.state)) continue;
             let reviewed = job.reviewed, policyChanged = false;
             if (supportsNativeUploadPolicy(adapter.bridge) && reviewed.configuration.sourceKind !== 'photos' && reviewed.configuration.mode === 'backup') {
                 const host = hosts.get(job.scope.deviceId)!;

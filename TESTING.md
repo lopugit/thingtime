@@ -16174,6 +16174,10 @@ never print the file-download JSON, encryption metadata or signed URL.
 - On device, folder and saved Backup config cards, independently edit upload
   speed, units and hourly allowance. Save/reload and select nested text, numeric
   input and unit blocks separately in Builder at desktop and phone widths.
+- Begin with nonempty saved limits, edit speed then hourly allowance (including
+  clearing it), repeat unchanged unit events and Save twice. Native readback
+  must match every displayed draft value. A v5 iOS Backup retains its direction
+  and policy when all limits are blank; unsupported direction changes stay disabled.
 - Compare actual native bytes/timing for concurrent configs against strictest
   device/folder/config caps. Include Photos plus folder workers, retries, partial
   failure, cancellation and relaunch. Editing limits must preserve consumed and
@@ -16184,6 +16188,9 @@ never print the file-download JSON, encryption metadata or signed URL.
 - Change only upload policy on an existing interrupted Backup job, reload, and
   verify old plan receipts and completed cloud copies survive without duplicate
   publication. Direction, destination, network and security edits stay guarded.
+- With multiple configs on the same device, a runnable config must not cause
+  policy edits to restart completed, paused or attention admissions. Only
+  runnable/scheduled admissions participate in automatic policy recovery.
 - Run `uploadPolicy.test.ts`, `photoSettingsRecovery.test.ts`,
   `mobileFolders.client.test.ts`, `syncJobJournal.test.ts`, the native
   `NativePhotoTransferPolicyTests`/`NativeFolderUploadPolicyTests`, and

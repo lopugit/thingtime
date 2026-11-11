@@ -14,6 +14,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-11-12: Harden authorized-part refusal, scoped policy-edit wake and draft-safe
   legacy recovery; hide redundant unsupported iOS resource controls.
+- 2026-11-12: Preserve all unsaved upload-policy fields across independent input
+  and unit events, keep v5 iOS Backup directions valid, and prevent policy edits
+  from reopening completed or attention jobs on a shared device. **Codex (AI)**
 - 2026-11-12: Add negotiated iOS folder Backup upload speed and hourly policy
   controls with shared persisted device/folder budgets, exact scoped native
   enforcement, legacy-part accounting and policy-only interrupted-job recovery.

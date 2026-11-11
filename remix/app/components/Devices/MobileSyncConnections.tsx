@@ -1274,6 +1274,7 @@ export function SyncConfigurationForm({
 		c = draft.configuration;
 	const selectedRoot = roots.find((root) => root.id === c.localRootId);
 	const photos = selectedRoot?.sourceKind === 'photos' || c.sourceKind === 'photos';
+	const uploadPolicyBackupOnly = iosManagedResources && !photos && c.configurationVersion === 5 && c.uploadPolicy !== undefined;
 	const showPhotoControls = photos && draft.baseUpdatedAt === null && (photoAutomation || !!c.photoAutomation);
 	const change = (patch: Partial<FileSyncConfiguration>) => onChange({ ...draft, configuration: { ...c, ...patch } });
 	const key = scopeKey ?? `${draft.id}:${c.deviceId}`;
@@ -1284,7 +1285,7 @@ export function SyncConfigurationForm({
 		name: c.name, source: c.localRootId, mode: c.mode, network: c.network, disabled,
 		paused: c.paused, 'charging-only': c.chargingOnly, 'propagate-deletes': c.propagateDeletes,
 		exclusions: draft.exclusions, roots: rootOptions, canChooseSource: !lockSource,
-		modeDisabled: disabled || photos, isBackup: c.mode === 'backup', deleteDisabled: disabled || c.mode === 'backup',
+		modeDisabled: disabled || photos || uploadPolicyBackupOnly, uploadPolicyBackupOnly, isBackup: c.mode === 'backup', deleteDisabled: disabled || c.mode === 'backup',
 		photoAccess: selectedRoot?.sourceKind === 'photos' ? photoAccessDescription(selectedRoot) + '.' : ''
 	} };
 	return (
@@ -1312,7 +1313,7 @@ export function SyncConfigurationForm({
 				scopeKey={key} accountTransport={accountTransport} scope={fieldScope} actions={{
 					mode: ({ value }) => {
 						const match = syncConfigModes.find(([mode]) => mode === value);
-						if (!disabled && !photos && match) change({ mode: match[0], ...(value === 'backup' ? { propagateDeletes: false } : {}) });
+						if (!disabled && !photos && !uploadPolicyBackupOnly && match) change({ mode: match[0], ...(value === 'backup' ? { propagateDeletes: false } : {}) });
 					}
 				}} />
 				<SyncEditorBlocks documentKey="file-sync-config-transfer" title="Transfer options" blocks={syncConfigTransferBlocks}

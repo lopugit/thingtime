@@ -7,6 +7,13 @@ per hour. Blank configuration values inherit stricter device/folder policy;
 unset ordinary-folder rates retain the legacy unlimited default. Photos keeps
 its existing 625,000 bytes/s (5 Mbps) default.
 
+Device/folder saves parse the complete current draft, so editing another field
+or repeating a unit event preserves earlier unsaved values. A saved v5 iOS
+Backup keeps its direction and upload-policy contract, including an empty
+inherited policy; unsupported direction transitions are disabled. Automatic
+policy recovery only considers runnable/scheduled admissions, so a second
+config on the same device cannot reopen completed or attention work.
+
 The independent native `fileUploadPolicyVersion` 1.0.0 capability supports only
 uploads. It does not claim CPU, scanning, download, strict watcher or two-way
 limits. Native upload 1.6 retains the old `upload-part` action: a fresh native
