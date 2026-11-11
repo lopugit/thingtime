@@ -128,6 +128,9 @@ enum ThingtimeWebDestination {
         from infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
         vercelDeployments: [DeploymentSummary] = []
     ) -> [Destination] {
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        return configuredDestination(from: infoDictionary).map { [$0] } ?? []
+        #else
         var destinations = [production]
 
         if let configuredDestination = configuredDestination(from: infoDictionary) {
@@ -141,6 +144,7 @@ enum ThingtimeWebDestination {
         }
 
         return destinations
+        #endif
     }
 
     static func startupSelection(
@@ -215,6 +219,9 @@ enum ThingtimeWebDestination {
             limit: limit,
             historyLimit: historyLimit
         )
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        return [configuredURL]
+        #else
         let productionURL = deploymentsAPIURL(
             from: nil,
             limit: limit,
@@ -222,6 +229,7 @@ enum ThingtimeWebDestination {
         )
 
         return configuredURL == productionURL ? [productionURL] : [configuredURL, productionURL]
+        #endif
     }
 
     static func deploymentGroups(from deployments: [DeploymentSummary]) -> [DeploymentGroup] {

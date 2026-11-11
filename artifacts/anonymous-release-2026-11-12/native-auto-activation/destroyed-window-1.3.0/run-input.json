@@ -1,0 +1,43 @@
+{
+  "baseRevision": "6d96a617792968e7bca0fc9d72c343ea2141310f",
+  "attribution": "Dirty working tree over baseRevision; staged session changes plus unstaged native/UI changes. Metadata Git SHA alone does not identify the built source.",
+  "sourceInventory": "artifacts/anonymous-release-2026-11-12/native-integration-build/source-inventory.json",
+  "sourceInventorySha256": "b1d0adc03fb83253831a84be4a953b05ca0de01156d4d30a29a43e56692892ab",
+  "sourceHashes": {
+    "electron/lib/renderer-server.cjs": "f4b821b727e186b86a7dfe0daa993687cd07962f480f8bf43a95668cddb09471",
+    "electron/lib/web-bundle-activation.cjs": "5c704737428fb819531b75b463ea5f5901095697336c98beabb4792ae8391e47",
+    "electron/main.cjs": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8",
+    "electron/test/renderer-server.test.cjs": "30b3e8c0dfa0b89bfed2cef6fe7a96e51d8956721ab309bd9e9f6e15e28679df",
+    "electron/test/web-bundle-activation.test.cjs": "8b338e0b2cb8290e23a255193b4a4c0abf616a8d9c227f87b962bfa48eec93a2",
+    "remix/app/api/utils/auth/sessionCore.ts": "506a059e3968ed4165a4cbde2562ecd0717dfc543dce0a308fd60091518d5e08",
+    "remix/app/api/utils/auth/sessionRepository.ts": "24bb9600e673238c568d87039187d991ff592b8a2dcce2b6aba44edf2bc565b5",
+    "remix/app/api/utils/auth/sessions.ts": "c43cb68d04c616723d0c5108537948fdbff391bd2f69abd9eb1eb0c90a82b658",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "96a3bdd00919fb81d6b95fe98e08d280ef530bb330cd921559d1c0666d8300ee",
+    "remix/app/api/utils/documentStore/nativeSessions.test.ts": "5a88366c2e36feb73c02ace7f0752e7b2620c384c238ae8e827d3c3af5f26498",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "7f66565a762e65e07bfef94f4da7f3573b3b26289019b15d44a7230a7c4bee4b",
+    "remix/app/components/Passwords/PasswordManager.tsx": "04e9f56329807859c69bd0e128a3e83628ffe63d4f41c5f623c1a82714fd5a4a",
+    "remix/scripts/authenticator-setup.browser.tsx": "5aab0e712169ecdd097400c3fd15a392c4961fb6a130f85bc25a27d2556825bd",
+    "remix/scripts/test-authenticator-setup-ui.mjs": "f21d8dad6f3dd0789644f12b4f67281e54f69c323e42588077b0cc0690e9b4c4"
+  },
+  "payloadHashes": {
+    "electron/dist/web/metadata.json": "ba2728c7c81db9b61ce2cb6b7fb8484173191d4486aac0d1b942163eacc17447",
+    "electron/dist/web-integrity.json": "cd1c3ff84d82ebb942c6e2b24ba746d880d909393b3b8bd4d60c142f85579d41",
+    "electron/dist/web/.output/server/index.mjs": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657"
+  },
+  "canonicalFreshBuild": true,
+  "webFiles": 1822,
+  "focusedTests": {
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0
+  },
+  "workspace": "native-bundle-qa-auto-pr1000-finalclose",
+  "processPreflightClear": true,
+  "ports": [
+    28640,
+    27654,
+    27655,
+    27656
+  ]
+}

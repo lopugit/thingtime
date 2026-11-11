@@ -1,0 +1,42 @@
+{
+  "canonicalIsolatedBuildExit": 0,
+  "canonicalSignedVerificationPassed": true,
+  "signingIdentity": "Apple Development",
+  "team": "6DQQ9V7C84",
+  "bundles": [
+    {
+      "bundleIdentifier": "com.thingtime.passwords.dev.nativeautopr1000",
+      "keychainGroup": "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000",
+      "team": "6DQQ9V7C84",
+      "applicationIdentifier": "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000",
+      "keychainAccessGroups": [
+        "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000"
+      ],
+      "appGroups": [],
+      "sandbox": true,
+      "autoFill": true,
+      "webUrl": "https://thingtime.com"
+    },
+    {
+      "bundleIdentifier": "com.thingtime.passwords.dev.nativeautopr1000.provider",
+      "keychainGroup": "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000",
+      "team": "6DQQ9V7C84",
+      "applicationIdentifier": "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000.provider",
+      "keychainAccessGroups": [
+        "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000"
+      ],
+      "appGroups": [],
+      "sandbox": true,
+      "autoFill": true,
+      "webUrl": null
+    }
+  ],
+  "sourceInventorySha256": "5ee9e8b1db5bc2d1153b0a0edc6e47de4dd6a250d33886311eb734916ff10a7f",
+  "privateBuildLogSha256": "da985404ce04e7d68d8b83541c3fb979e87fe39c5a1533a33041e0ee8173fcc2",
+  "helperExecuted": false,
+  "installed": false,
+  "privateGroupEmptiness": "not-observed",
+  "existingAuthorityCleared": false,
+  "sourceModified": false,
+  "stableAppOrVaultTouched": false
+}

@@ -107,6 +107,16 @@ cleanup and write lifetimes. Run the native activation/launch/runtime checks,
 notification, inventory, catalogue and overview regressions. Actual automatic
 replacement remains an independent installed-app acceptance requirement.
 
+`auth/{sessions,sessionRepository,sessionCore}.ts` now separates canonical
+session persistence from driver syntax. Mongo remains the default; the internal
+`documentStore/nativeSessions.ts` adapter requires an exact, active home scope.
+Real SQLite tests exercise the existing creation/live-read/revocation helpers,
+unique identities, restart retention and detached-scope refusal. The BSON encoder
+rejects hostile metadata before serialization. `test:document-store` includes
+these checks. Native registration, wider transactions, TTL cleanup and API
+selection remain incomplete; this module does not activate a database provider.
+[Session evidence](../../artifacts/anonymous-release-2026-11-12/sqlite-sessions/README.md).
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,
@@ -383,3 +393,13 @@ unit suite, renderer safety/persistence and ChatGPT runtime tests, then the
 separate development startup verifier. Positive remote-mode automatic activation
 still needs its own real downloader/dirty-edit/relaunch acceptance fixture; see
 `docs/native-web-bundles.md`.
+
+### Isolated iOS local-runtime app
+
+`iOS/scripts/local-development/` derives a separate simulator-only target from
+`iOS/project.yml` and guards startup with `THINGTIME_LOCAL_DEVELOPMENT`. It reuses
+the actual SwiftUI/WebView app, validated canonical Nitro payload and pinned native
+runtime/addons. Its README documents preparation, strict inventories, environment
+boundaries and cleanup. Current evidence proves native HTTP startup, not rendered
+WebView acceptance or complete SQLite account APIs; see
+`artifacts/anonymous-release-2026-11-12/ios-local-development-app/README.md`.

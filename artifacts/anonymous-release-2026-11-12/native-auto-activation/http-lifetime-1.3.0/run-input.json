@@ -1,0 +1,38 @@
+{
+  "shellRevision": "6d96a617792968e7bca0fc9d72c343ea2141310f",
+  "webPayloadSourceReceipt": "../checkpoint-1.3.0/run-input.json",
+  "webPayloadSourceRevision": "40c57f919 + recorded 1.3 renderer changes",
+  "priorWebPayloadUnchanged": true,
+  "webMetadataSha256": "3ca8f08766f5be7401bcd3d4d7163c5ebc273152ff85aa2eb47bdcd5a78cf6d8",
+  "webIntegritySha256": "8bfab7b39b9f4d51560667ab07d642e91d7a03560393a3fef75f96ae9892aa25",
+  "notFinalCombinedSourceAcceptance": true,
+  "processPreflightClear": true,
+  "ports": [
+    28640,
+    33645,
+    33646,
+    33647
+  ],
+  "sourceHashes": {
+    "electron/main.cjs": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+    "electron/lib/renderer-server.cjs": "f4b821b727e186b86a7dfe0daa993687cd07962f480f8bf43a95668cddb09471",
+    "electron/lib/web-bundle-activation.cjs": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8"
+  },
+  "focusedTests": {
+    "tests": 77,
+    "passed": 77,
+    "failed": 0,
+    "skipped": 0,
+    "command": "node --test electron/test/renderer-server.test.cjs electron/test/web-bundle-activation.test.cjs electron/test/desktop-shutdown.test.cjs electron/test/password-provider.test.cjs",
+    "logSha256": "25d51d18437604345b7944ea708dff42dac16a0b61955143819ca8c95ede3a3b"
+  },
+  "adapterProbe": {
+    "actualShippedSrvxLibrary": true,
+    "syntheticHandlers": true,
+    "getIdle": true,
+    "headIdle": true,
+    "abortedRequestHeldUntilRealHandlerSettlement": true,
+    "noAccountsOrDatabase": true
+  }
+}

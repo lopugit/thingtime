@@ -45,6 +45,10 @@ export function PasswordManager() {
 }
 export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string; localVault?: LocalPasswordVault }) {
   const lopu = useLopu();
+  // Account-password approvals belong to an account. The anonymous device
+  // vault instead uses its independent passphrase and existing lock lifecycle;
+  // mounting account settings here would send a fictitious owner to the API.
+  const hasAccountVerification = !localVault || localVault.scope.kind === 'account';
   const storage = React.useMemo(() => {
     if (!localVault) return accountPasswordStorage(ownerId);
     const device = localVault.fileStorage();
@@ -279,7 +283,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
       setOpenCount(count => count + 1);
     }} />
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
-    <Box mt={4}><PasswordVerificationSettings ownerId={ownerId} /></Box>
+    {hasAccountVerification && <Box mt={4}><PasswordVerificationSettings ownerId={ownerId} /></Box>}
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}
     <Flex gap={5} mt={6} alignItems="start" direction={{ base: 'column', md: 'row' }}>
@@ -292,7 +296,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
         <PasswordWorkspaceControls kind="entry-heading" scopeKey={ownerId} scope={workspaceScope} actions={workspaceActions} headingRef={editorHeading} />
         <PasswordEntryEditor key={`password-fields:${draft.id}`} entry={draft.entry} scopeKey={`${ownerId}:${draft.id}`} disabled={busy || iconBusy} onChange={updateEntry} />
         {draft.entry.passwordType !== 'passkey' && <PasswordGenerator key={`password-generator:${draft.id}`} ownerId={ownerId} origin={window.location.origin} targets={draft.entry.fields.filter(field => field.type === 'password').map(({ id, label }) => ({ id, label }))} disabled={busy || iconBusy} onGenerate={(value, fieldId) => setDraft(current => current?.id === draft.id && current.entry.passwordType !== 'passkey' ? { ...current, entry: { ...current.entry, fields: current.entry.fields.map(field => field.id === fieldId && field.type === 'password' ? { ...field, value } : field) } } : current)} />}
-        <PasswordVerificationSettings key={draft.id} ownerId={ownerId} entryWindow={draft.entry.verificationWindow ?? 'global'} onEntryChange={value=>updateEntry({...draft.entry,verificationWindow:value})} />
+        {hasAccountVerification && <PasswordVerificationSettings key={draft.id} ownerId={ownerId} entryWindow={draft.entry.verificationWindow ?? 'global'} onEntryChange={value=>updateEntry({...draft.entry,verificationWindow:value})} />}
         <PasswordIconEditor storage={localVault ? storage : undefined} ownerId={ownerId} entryId={draft.id} saved={draft.revision > 0} icon={draft.entry.icon} website={draft.entry.fields.find(field => field.type === 'url')?.value} disabled={busy} onBusyChange={setIconBusy} onChange={icon => setDraft(current => current?.id === draft.id ? { ...current, entry: { ...current.entry, icon } } : current)} />
         {draft.entry.onePassword && <PasswordSource ownerId={ownerId} entryId={draft.id} entry={draft.entry} />}
         {draft.revision > 0 ? <PasswordAttachments key={`password-files:${draft.id}`} ownerId={ownerId} storage={storage} entryId={draft.id} /> : <Text mt={5} fontSize="sm">Save this entry to add attachments.</Text>}

@@ -11781,6 +11781,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   cancel a blocked input and prevent subsequent stream decryption. Check desktop,
   390px and 320px layouts. Account file retention/sync requires separate coverage.
 
+- [ ] macOS companion editing shortcuts: in the signed installed companion,
+  focus a synthetic password input and verify Command-V inserts masked text.
+  Compare the field's normal context-menu Paste without reading the clipboard
+  into logs or tools. Verify Command-A, Cut/Copy and Undo/Redo in ordinary text,
+  focus switching between fields and normal login. A failed login does not
+  imply credential rejection if the password field remained empty. Menu actions
+  must use standard nil-target AppKit responder-chain selectors; no custom
+  clipboard delivery. `PasswordApplicationMenuTests` checks the menu contract.
+  After normal sign-in, setup cancel, save and reload, the native header stays
+  a neutral destination label rather than stale sign-in/review instructions.
+  A native setup/authentication failure remains visible if the web surface
+  cannot initialize; successful verified readiness restores the neutral label.
+  `AuthenticatorSetupBridgeStatusTests` exercises the actual bridge callback.
+
 - [ ] Native authenticator links: cold and warm `otpauth://totp` intake reaches
   the configured signed companion/iOS destination, using normal sign-in.
   Refuse malformed/duplicate/HOTP/migration input, iframe/wrong-origin delivery,
@@ -17797,6 +17811,15 @@ removing provenance or widening ACLs is not a workaround.
 
 ### Password confirmation preferences and device trust — 2026-11-03
 
+- [ ] Anonymous encrypted device vault: open its normal workspace and an entry
+  draft at desktop, 390px and 320px. Account-password confirmation controls must
+  not mount or send an account verification request for `local-workspace`.
+  Retain the real independent passphrase/idle lock and Lock action. Verify the
+  account workspace still renders and loads its account confirmation settings.
+  The actual-component browser regression is
+  `node remix/scripts/test-authenticator-setup-ui.mjs <new-evidence-directory>`.
+
+
 - Run `pnpm --dir remix run test:passwords` and `test:passkeys`; run
   `pnpm --dir remix run test:passwords:verification` explicitly. The latter starts
   its own disposable replica, uses real registration/login/password handlers,
@@ -19178,6 +19201,21 @@ never print the file-download JSON, encryption metadata or signed URL.
 
 ### Native update activity reservations
 
+- [ ] Closing for a bundle update must clean up using the retained WebContents
+  emitter after BrowserWindow destruction. Make the destroyed window getter
+  throw in the regression; require one relaunch and one reservation settlement.
+  Real acceptance must reach a new process and recover saved edits; a closed
+  window or passed helper test is insufficient. Internal HTTP diagnostics must
+  contain only fixed operation classes/counts, retain both middleware and
+  response lifetimes, and never affect admission when their observer fails.
+- [ ] Canonical session helpers with an explicit native home repository retain
+  expiry/revocation and vault-key removal across SQLite reopen, admit one writer
+  for a duplicate session identity, and refuse wrong/expired/detached scopes or
+  unsupported caller-owned transactions. Run `test:document-store`; then use the
+  real bundled Mongo API harness to verify the default provider. These tests do
+  not establish SQLite signup/API readiness or a native TTL cleanup worker.
+
+
 - A closed custom drawer item editor must not mount its default form fields.
   Open Add/Edit at desktop and phone widths, type a draft, hide the navigation,
   and verify the mounted unsaved editor still prevents automatic replacement.
@@ -19221,3 +19259,15 @@ never print the file-download JSON, encryption metadata or signed URL.
   response. AppID-only requests keep their independent 1.9 minimum. Run
   `remix/app/local-workspace/passwordFileTransport.test.ts` and both capability
   manifest suites; the opt-in real API file lifecycle remains separate.
+
+### Opt-in iOS embedded-runtime application acceptance
+
+- Use the isolated simulator lane in `iOS/scripts/local-development/README.md`;
+  retain full canonical/prepared/signed/installed inventories and exact input hashes.
+- Observe actual native runtime readiness separately from WebView document load.
+  A manifest/HTML/JS200 or passing rule compilation is not rendered UI acceptance.
+- Require visible New folder, Rename and same-ID reload receipts; a white page,
+  navigation timeout or absent receipt fails the UI case. Preserve its diagnostics.
+- Account readiness must remain503 until canonical repositories are integrated;
+  never substitute cloud credentials or direct database seeds. Verify exact owned
+  simulator cleanup after success and failure.

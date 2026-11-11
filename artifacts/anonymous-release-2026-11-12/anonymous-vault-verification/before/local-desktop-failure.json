@@ -1,0 +1,5 @@
+{
+  "errors": [],
+  "body": "Password manager\n\nEncrypted on this device · never uploaded\n\nAdd password\nImport\nExport\nHide values\nLock vault\nPassword confirmation\nReuse recent device verification\nDon’t ask for my Thingtime password for\nAsk every time\n5 minutes\n1 hour\n6 hours\n12 hours\n1 day\n2 days\n3 days\n14 days\n30 days\n60 days\n90 days\n1 year\nNever on this device\n\nSkip repeated Thingtime password confirmations for the selected time. Never remembers this device after one password check, including future sign-ins. Turning reuse off asks every time. Websites and macOS may still require device verification.\n\nSave preference\nClear values and end current approvals\nForget this device / require password again\n\nWrong synthetic owner.\n\nPasskeys\n\nCreate and save passkeys with Thingtime when a website or app asks you to register one.\n\nSet up passkeys\nSearch passwords\nSort passwords\nTitle\nRecently edited",
+  "message": "Expected values to be strictly equal:\n\n1 !== 0\n"
+}

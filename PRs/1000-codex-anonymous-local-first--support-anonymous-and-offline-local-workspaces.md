@@ -2,6 +2,84 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest main integration — 12 November 2026
+
+Main1125ca1a9 (PR1480 native Passwords editing/status) is integrated with the
+preserved checkpoint. Both documentation conflicts retain both contributions.
+The15 frozen web/native source hashes still match. Incoming shared Swift code
+was not in the earlier helper/iOS binaries, so their exact-source receipts are
+not new merged-app acceptance. [Integration record](../artifacts/anonymous-release-2026-11-12/main-1125-integration/README.md).
+
+## Local MongoDB and SQLite — readiness boundary
+
+Both providers are retained. The desktop package pins MongoDB Community 8.0.34
+for macOS arm64/x64 with source and license notices. Its managed runtime uses an
+authenticated loopback replica set and profile-scoped data; the fresh actual API
+receipt below covers registration, private CRUD and restart persistence. Final
+signed installed-app and OS credential-store acceptance remain open.
+
+SQLite provides the native BSON/collection, transaction, accounting and session
+foundations, with iOS simulator storage/crash evidence. It is not yet a complete
+alternative account/API backend. Selection must remain explicit per workspace,
+with separate data identities; no implicit migration, dual write or fallback.
+An iOS Mongo server is not implemented. SQLite is the mobile storage path under
+integration. Shipping both desktop foundations does not establish full offline
+feature parity or release approval.
+
+## Actual iOS development app — 12 November 2026
+
+The separate opt-in lane now builds the normal SwiftUI app and embeds the final
+canonical Node/Nitro payload. Actual simulator startup returns the local manifest,
+Vite HTML and entry JavaScript successfully. Account APIs correctly return503
+`LOCAL_API_NOT_CONFIGURED`; no cloud fallback or completed SQLite account flow is
+claimed. Full canonical payload and signed/installed app inventories match.
+
+WebView navigation to `/things` times out before rendering. The white screenshot
+and absent UI receipts mean none of the declared create/edit/reload assertions ran.
+This remains incomplete. Both disposable simulators were deleted. Imported-runtime
+source reproducibility and physical-device distribution remain separate open work.
+[Actual app evidence](../artifacts/anonymous-release-2026-11-12/ios-local-development-app/README.md).
+
+## Canonical sessions, anonymous scope and native close recovery — 12 November 2026
+
+The canonical session helpers now use typed home repositories. Mongo stays the
+default; explicit native scopes exercise real SQLite expiry/revocation, restart,
+unique identities and lifetime refusal. The canonical storage suite passes 47
+checks including ten session regressions. Shared BSON encoding rejects hostile
+metadata before serialization. Native signup/API selection and the remaining
+identity, ledger, roster, settings, notification/outbox and Timeline paths are
+still incomplete. [Session evidence](../artifacts/anonymous-release-2026-11-12/sqlite-sessions/README.md).
+
+Anonymous device vaults no longer mount global or entry account-password approval
+controls or send fictitious-owner requests. Their independent passphrase and Lock
+lifecycle remain unchanged; actual account controls still work. A before-fix
+browser assertion reproduced the defect; five after-fix rendered cases pass at
+1440/390/320px, with real encrypted device storage and editable controls.
+[UI evidence](../artifacts/anonymous-release-2026-11-12/anonymous-vault-verification/README.md).
+
+The native diagnostic run rules out busy HTTP in that run and reaches actual
+window closure without relaunch. A controlled destroyed-window getter regression
+then reproduces cleanup failure. The fix retains the original WebContents emitter.
+All 78 native/HTTP checks pass. The fresh combined-build actual run now reaches
+relaunch and password-provider disconnect, then recovers the same running bundle:
+the isolated dev bundle has no native password helper. A separately signed
+helper now builds and its read-only status proves an empty private Keychain group,
+but shared notification and URL-scheme isolation plus synthetic authority setup
+remain prerequisites. No disconnect, registration or installation was attempted.
+Do not skip credential cleanup to claim activation.
+[Actual corrected-run evidence](../artifacts/anonymous-release-2026-11-12/native-auto-activation/destroyed-window-1.3.0/README.md).
+
+A single fresh canonical build and independent inventory verification pass. The
+normal Mongo HTTP fixture passes actual registration/private CRUD, ACL/revision
+refusals and session/content recovery across API/database restart, with cleanup.
+Current TypeScript and zero-baseline gates pass; full lint has 0 errors and 372
+warnings. [Combined build/API evidence](../artifacts/anonymous-release-2026-11-12/native-integration-build/verification.json).
+
+The earlier pushed 6d96 checkpoint passed CI build/type/unit/API and its preview
+is reachable. CodeQL JavaScript analysis failed on the GitHub installation's API
+rate limit; that is neither a code finding nor a passing security analysis. New
+source commits require their own CI/preview results.
+
 ## Latest main merge — 12 November 2026
 
 Main advanced during the checkpoint to `6378ed470203c34ef7b99d29b0c685a11fdf78e7` (PR1478 sync

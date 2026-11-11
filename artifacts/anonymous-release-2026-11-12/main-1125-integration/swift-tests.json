@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T16:21:31.937441+00:00",
+  "scope": "Selected canonical Swift package unit tests in merged working tree incorporating main1125ca1a9; no signed installed helper/native keyboard or credential ceremony acceptance.",
+  "command": "swift test --package-path apple/Passwords --filter 'PasswordApplicationMenuTests|AuthenticatorSetupBridgeStatusTests'",
+  "runs": 1,
+  "exitCode": 0,
+  "tests": 8,
+  "passed": 8,
+  "failed": 0,
+  "suites": {
+    "AuthenticatorSetupBridgeStatusTests": 6,
+    "PasswordApplicationMenuTests": 2
+  },
+  "log": "swift-focused.log",
+  "originalBuildAndTestLog": "/tmp/pr1000-main1125-swift-focused.log",
+  "sourceHashes": {
+    "apple/Passwords/Package.swift": "d1964ea32f42f2681f8bc2246e63c17b3eb4b09958654d1cc1e42e90d749b756",
+    "apple/Passwords/Host/PasswordApplicationMenu.swift": "5b0f810a74fda7f6a198aa62d1c229d0b49987a38a2b57bf6662fcd7135cc339",
+    "apple/Passwords/Host/AuthenticatorSetupBridge.swift": "df1fbdfe035f23e00fbd111bee691cf0865f952012bfbefac70b53c2fb5355df",
+    "apple/Passwords/Tests/ThingtimePasswordCoreTests/PasswordApplicationMenuTests.swift": "8b9d9826576cfe9dc4cc61cc66dc9d484b02fa046c99babbcbb10607a0cf78ce",
+    "apple/Passwords/Tests/ThingtimePasswordCoreTests/AuthenticatorSetupBridgeStatusTests.swift": "ec54e2bdfafaa870ea48ee2c6a11f85d8e4b163ddee03ac05c85d8fcdf687979",
+    "macos/ThingtimePasswords/PasswordApp.swift": "b5ef9fa331571998f4e5b2b837c7fbb8beb114e07360f063a1c23a2ab236ec66",
+    "macos/ThingtimePasswords/PasswordSetupEditor.swift": "9d33b44d817857e3d3653b4522b6294d9717f9964a1e52a9b99e0fcf85e588d3",
+    "macos/ThingtimePasswords/project.yml": "2716b18f3f66223f5496477060dffda40126ffab64e2af42253a369953a73eac",
+    "apple/Passwords/Sources/ThingtimePasswordCore/AuthenticatorSetup.swift": "c79ed1d90cc75c62ecb63f7457ec29b8c4dcf3b9b9ca128bc25c508175ca2924",
+    "apple/Passwords/Sources/ThingtimePasswordCore/CatalogSelection.swift": "bc5a6b108f1b810daa0f9d37d65eeccb463cef325b0c8b85bc67350b22d2ff10",
+    "apple/Passwords/Sources/ThingtimePasswordCore/DeviceVerification.swift": "28fb6471276dddf75c71c804b68cd43558b01273094c359a47c00ae770e6a029",
+    "apple/Passwords/Sources/ThingtimePasswordCore/HostConnection.swift": "80e3e661a8bf289a5a2edbfcd1e71a1788d01c483047646ac88ac2e2ebd5e23a",
+    "apple/Passwords/Sources/ThingtimePasswordCore/IdentityIndex.swift": "b6aee6d36e523d07ed0cb59fba3a63063b05c0d53cb4ef8bdc889f451c1b721d",
+    "apple/Passwords/Sources/ThingtimePasswordCore/Passkey.swift": "4fff19701920bf9d352e7940f4a2c78f568e7c04156413428bc9093e9b35eee1",
+    "apple/Passwords/Sources/ThingtimePasswordCore/PasskeyRegistrationPolicy.swift": "d41effffa4402548fb178faac4fb39b7d2ea227f3ed424c62c6989bc6c5eaf70",
+    "apple/Passwords/Sources/ThingtimePasswordCore/PasswordClient.swift": "279e1b7e1dc7e8cb71f2e66b0b27e4aaf11e6a593e0a6e26f8c4c359786ee59b",
+    "apple/Passwords/Sources/ThingtimePasswordCore/PasswordConnectionStatus.swift": "c39f89ffaac2f78f4d58021d7a8ef2e4f6176b70a92d901a4fa52ad5fba74ed5",
+    "apple/Passwords/Sources/ThingtimePasswordCore/PasswordModels.swift": "b743f703028bffbee38c2cc1ad8b26e19b5cdee583589df4015dd17cf3bc0fc8",
+    "apple/Passwords/Sources/ThingtimePasswordCore/PasswordProviderIdentity.swift": "7352951b1032984dde728a4d3e37c33c66f2f003362aea79e327fa273cc4f8f6",
+    "apple/Passwords/Sources/ThingtimePasswordCore/ProviderFeedback.swift": "133d6cc3be5514634191629ff69080fb350a0298cb9cd1f30104a933353de2cb",
+    "apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift": "19115c9b11f91d969d88fbbde8e2f0b072ff44f4d18d9543c9186a9374c40206",
+    "apple/Passwords/Sources/ThingtimePasswordCore/TOTP.swift": "c50e2d61ef785f485829ab034eca8daf814b87c9db999f629f2d22f95a22cbdf"
+  },
+  "coverage": [
+    "Standard native Edit menu shortcuts use nil targets for focused responder routing; Quit uses normal application termination.",
+    "Consumed/cancelled setup intake and empty-inbox reload do not replay workflow instructions.",
+    "Genuine errors survive consumed/cancelled intake; verification failures clear only on verified readiness.",
+    "New accepted intake supersedes invalid/expired request feedback while malformed/duplicate offers retain the original pending request/error."
+  ],
+  "limitations": [
+    "No stable installation, signing, real credentials, physical keyboard/clipboard action or native authenticator ceremony.",
+    "Selected tests compile shared host inputs but do not validate full application packaging.",
+    "Old helper snapshot isolation/acceptance remains historical to its captured source/binary and is not promoted to this merged version."
+  ]
+}

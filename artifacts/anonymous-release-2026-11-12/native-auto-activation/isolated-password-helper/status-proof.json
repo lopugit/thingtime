@@ -1,0 +1,14 @@
+{
+  "readOnlyStatusExit": 0,
+  "privateGroupObservedEmpty": true,
+  "statusRecognized": true,
+  "syntheticMetadataOnly": true,
+  "registration": false,
+  "notification": false,
+  "installation": false,
+  "disconnect": false,
+  "existingAuthorityCleared": false,
+  "stableAppOrVaultTouched": false,
+  "applicationNetworkCall": false,
+  "basis": "Actual status exit/output plus source-audited early-exit branch; not OS packet or global-notification instrumentation."
+}

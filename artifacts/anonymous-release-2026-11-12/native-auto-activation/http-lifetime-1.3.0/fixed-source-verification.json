@@ -1,0 +1,26 @@
+{
+  "beforeFixHelperSha256": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283",
+  "afterFixSourceHashes": {
+    "electron/lib/web-bundle-activation.cjs": "5c704737428fb819531b75b463ea5f5901095697336c98beabb4792ae8391e47",
+    "electron/test/web-bundle-activation.test.cjs": "8b338e0b2cb8290e23a255193b4a4c0abf616a8d9c227f87b962bfa48eec93a2",
+    "electron/lib/renderer-server.cjs": "f4b821b727e186b86a7dfe0daa993687cd07962f480f8bf43a95668cddb09471",
+    "electron/main.cjs": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8",
+    "electron/test/renderer-server.test.cjs": "30b3e8c0dfa0b89bfed2cef6fe7a96e51d8956721ab309bd9e9f6e15e28679df"
+  },
+  "regression": {
+    "name": "accepted close cleans up retained contents when the destroyed BrowserWindow getter is unavailable",
+    "beforeFix": "failed at cleanup/onClosed with Object has been destroyed",
+    "afterFix": "passed",
+    "actualAppExceptionCaptured": false
+  },
+  "tests": {
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0,
+    "command": "node --test electron/test/renderer-server.test.cjs electron/test/web-bundle-activation.test.cjs electron/test/desktop-shutdown.test.cjs electron/test/password-provider.test.cjs",
+    "logSha256": "4c5a3eaee4e2e67bb6b9c597ae80987dcb45d30a449040d6d3ecc917f01cb71a"
+  },
+  "sourceFrozen": true,
+  "actualFinalSourceAcceptancePending": true
+}

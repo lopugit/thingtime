@@ -1,0 +1,11 @@
+# Fresh-build destroyed-window acceptance
+
+One isolated real-app run used the final canonical build from base 6d96a617792968e7bca0fc9d72c343ea2141310f plus the frozen 15-file source map referenced by run-input.json. Canonical build and independent verification passed; 1,822 web files, metadata/inventory/Nitro entry and seven prepared shell/payload hashes matched. This is the fresh combined payload, distinct from the earlier retained-payload diagnostic run.
+
+The native lifecycle correction retains WebContents before dispatch, avoiding the destroyed BrowserWindow getter during cleanup. The controlled regression failed before the correction; 78 focused HTTP/activation/shutdown/password tests pass after it.
+
+Actual signed download/staging, 70-second dirty-input refusal, normal Enter save, canonical persistence acknowledgement, reload and closed-drawer blocker check passed. HTTP samples remained idle. Normal accepted close reached window-closed, relaunch-entry, restart-check and password-disconnect-start, proving progress beyond the former failure boundary. Automatic fresh-process replacement still failed: the running bundle reopened safely. Later before-quit/service-close events are fixture cleanup, not successful replacement.
+
+The current development snapshot and canonical dist contain no native Passwords helper executable. The canonical darwin password provider requires that executable for retirement. missing-native-helper.test.cjs is a separate real-spawn regression using an empty disposable root: it passes by proving refusal, never by pretending credential cleanup happened. Actual retained logs contain only the generic reopening warning; no underlying actual exception is claimed. Native helper/keychain acceptance and positive automatic replacement remain incomplete. No post-restart drawer UI or local account API activation is claimed.
+
+cleanupVerified:true; source map unchanged after the run. Stable app, account data and vault were untouched. No manual restart, forced checkpoint or credential-cleanup bypass occurred. Raw logs remain private outside this artifact. The next requirement is a supported isolated helper/authority lane or an explicit unsupported-adapter contract before further acceptance.

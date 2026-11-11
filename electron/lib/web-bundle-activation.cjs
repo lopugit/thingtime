@@ -252,12 +252,12 @@ function createWebBundleActivation({ context, pending, checkpoint, release, clos
  * sync close-to-hide and beforeunload refusal leave the old app fully usable. */
 function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onCloseState = () => {}, observe }) {
   return new Promise((resolve, reject) => {
-    let accepted = false, started = false, settled = false;
+    let accepted = false, started = false, settled = false, contents;
     const report = stage => observeBundleLifecycle(observe, stage);
     const cleanup = () => {
       window.removeListener('closed', onClosed); window.removeListener('close', onClose);
-      window.webContents?.removeListener('will-prevent-unload', onUnloadVeto);
-      window.webContents?.removeListener('destroyed', onDestroyed);
+      contents?.removeListener('will-prevent-unload', onUnloadVeto);
+      contents?.removeListener('destroyed', onDestroyed);
       signal.removeEventListener('abort', onAbort); onCloseState(false, accepted);
     };
     // A close already dispatched into Chromium cannot be cancelled natively.
@@ -281,10 +281,12 @@ function closeForBundleActivation({ window, signal, assertCurrent, relaunch, onC
       Promise.resolve().then(() => { report('relaunch-entry'); return relaunch(); }).then(() => resolve(true), reject);
     };
     try {
-      assertCurrent(); signal.throwIfAborted();
+      // Retain the emitter before close: BrowserWindow.webContents is a native
+      // getter which is unavailable after the window has been destroyed.
+      assertCurrent(); signal.throwIfAborted(); contents = window.webContents;
       window.once('closed', onClosed); window.on('close', onClose);
-      window.webContents?.once('will-prevent-unload', onUnloadVeto);
-      window.webContents?.once('destroyed', onDestroyed);
+      contents?.once('will-prevent-unload', onUnloadVeto);
+      contents?.once('destroyed', onDestroyed);
       signal.addEventListener('abort', onAbort, { once: true });
       started = true; onCloseState(true); report('close-dispatch'); window.close();
     } catch (error) { cleanup(); reject(error); }

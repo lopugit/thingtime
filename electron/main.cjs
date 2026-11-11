@@ -118,6 +118,12 @@ function reportBundleLifecycle(stage) {
    observeBundleLifecycle(event => console.error('[thingtime:bundle-lifecycle] ' + JSON.stringify({ observedAt: Date.now(), ...event })), stage);
  } catch { /* Diagnostic transport cannot affect shutdown. */ }
 }
+function reportBundleHttpActivity() {
+ try {
+  if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending' && bundledRendererServer?.snapshotActivity)
+   console.error('[thingtime:bundle-http] ' + JSON.stringify({ observedAt: Date.now(), ...bundledRendererServer.snapshotActivity() }));
+ } catch { /* Read-only diagnostics cannot affect admission or shutdown. */ }
+}
 function handleDesktopOperation(channel, handler) {
  const discovery = ['thingtime-desktop:get-info', 'thingtime-desktop:renderer-ready', 'thingtime-desktop:bundle-update-policy', 'thingtime-desktop:bundle-activation-checkpoint'];
  ipcMain.handle(channel, discovery.includes(channel) ? handler : bundleWorkAdmission.wrap(handler));
@@ -449,7 +455,7 @@ async function initializeWebBundleLaunch() {
     bundleActivationTimer = setInterval(() => {
       // Independent main-process heartbeat also survives a renderer IPC stall
       // or an unresolved close. It never starts/reserves work of its own.
-      if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') reportBundleActivation(bundleActivationDiagnostics());
+      if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') { reportBundleActivation(bundleActivationDiagnostics()); reportBundleHttpActivity(); }
       if (!bundleClosePending) void webBundleActivation?.attempt();
     }, 30000);
     bundleActivationTimer.unref();

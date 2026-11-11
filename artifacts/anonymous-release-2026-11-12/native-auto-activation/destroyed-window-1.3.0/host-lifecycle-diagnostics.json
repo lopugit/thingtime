@@ -1,0 +1,54 @@
+[
+  {
+    "observedAt": 1794413018161,
+    "stage": "close-dispatch"
+  },
+  {
+    "observedAt": 1794413018162,
+    "stage": "close-event"
+  },
+  {
+    "observedAt": 1794413018223,
+    "stage": "close-cancel-pending"
+  },
+  {
+    "observedAt": 1794413018224,
+    "stage": "contents-destroyed"
+  },
+  {
+    "observedAt": 1794413018224,
+    "stage": "window-closed"
+  },
+  {
+    "observedAt": 1794413018224,
+    "stage": "relaunch-entry"
+  },
+  {
+    "observedAt": 1794413018224,
+    "stage": "restart-check"
+  },
+  {
+    "observedAt": 1794413018224,
+    "stage": "password-disconnect-start"
+  },
+  {
+    "observedAt": 1794413114368,
+    "stage": "before-quit"
+  },
+  {
+    "observedAt": 1794413114368,
+    "stage": "services-close-start"
+  },
+  {
+    "observedAt": 1794413114369,
+    "stage": "services-close-end"
+  },
+  {
+    "observedAt": 1794413114369,
+    "stage": "quit-retry"
+  },
+  {
+    "observedAt": 1794413114369,
+    "stage": "before-quit"
+  }
+]

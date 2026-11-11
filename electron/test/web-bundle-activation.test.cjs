@@ -450,3 +450,33 @@ test('an actual inspection deadline cannot release a dispatched close owner befo
     assert.deepEqual(stages, ['close-dispatch','close-cancel-pending','window-closed','relaunch-entry']);
   } finally { clearTimeout(watchdog); }
 });
+
+test('HTTP lifetime observer is pending-development-only and probe/transport failure cannot escape', () => {
+  const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../main.cjs'), 'utf8');
+  const report = source.match(/function reportBundleHttpActivity\(\) \{[\s\S]*?\n\}/)[0];
+  let called = 0;
+  const context = { parallelDevMode: true, webBundleUpdates: { snapshot: () => ({ status: 'pending' }) },
+    bundledRendererServer: { snapshotActivity() { called++; throw Error('PRIVATE_SENTINEL'); } }, console: { error() { throw Error('transport'); } }, Date, JSON };
+  assert.doesNotThrow(() => vm.runInNewContext(report + '; reportBundleHttpActivity()', context)); assert.equal(called, 1);
+  context.parallelDevMode = false; vm.runInNewContext(report + '; reportBundleHttpActivity()', context); assert.equal(called, 1);
+  context.parallelDevMode = true; context.webBundleUpdates.snapshot = () => ({ status: 'idle' });
+  vm.runInNewContext(report + '; reportBundleHttpActivity()', context); assert.equal(called, 1);
+  context.webBundleUpdates.snapshot = () => ({ status: 'pending' }); context.bundledRendererServer.snapshotActivity = () => ({ format: 1 });
+  assert.doesNotThrow(() => vm.runInNewContext(report + '; reportBundleHttpActivity()', context));
+});
+
+test('accepted close cleans up retained contents when the destroyed BrowserWindow getter is unavailable', async () => {
+  const window = new EventEmitter(), contents = new EventEmitter(), controller = new AbortController();
+  let destroyed = false, reads = 0, relaunches = 0, accepted = false;
+  Object.defineProperty(window, 'webContents', { get() {
+    reads++; if (destroyed) throw TypeError('Object has been destroyed'); return contents;
+  } });
+  window.close = () => {};
+  const result = closeForBundleActivation({ window, signal: controller.signal, assertCurrent() {},
+    relaunch: () => { relaunches++; }, onCloseState: (_pending, committed) => { accepted = committed === true; } });
+  contents.emit('destroyed'); destroyed = true;
+  assert.doesNotThrow(() => window.emit('closed'));
+  assert.equal(await result, true); assert.equal(accepted, true); assert.equal(relaunches, 1);
+  assert.equal(reads, 1); assert.equal(contents.listenerCount('will-prevent-unload'), 0); assert.equal(contents.listenerCount('destroyed'), 0);
+});

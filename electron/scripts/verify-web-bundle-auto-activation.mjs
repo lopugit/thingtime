@@ -25,7 +25,8 @@ const log = await open(path.join(temporary, 'development.log'), 'w', 0o600);
 let phase = 'preflight', failure, cleanupFailure, receipt, launcher, api, browser, page, originalPolicy, createdWorkspace = false;
 const startedAt = new Date().toISOString(), observations = [];
 const activationDiagnostics = [];
-let hostActivationDiagnostics = [], hostLifecycleDiagnostics = [];
+let hostActivationDiagnostics = [], hostLifecycleDiagnostics = [], hostHttpDiagnostics = [];
+const { projectHttpActivity } = require('../lib/renderer-server.cjs');
 const diagnosticTemplate = require('../lib/web-bundle-activation.cjs').projectBundleActivationEligibility({});
 const { BUNDLE_LIFECYCLE_STAGES, BUNDLE_CHECKPOINT_REASONS, BUNDLE_CANCELLATION_REASONS } = require('../lib/web-bundle-activation.cjs');
 function publicActivationDiagnostics(value) {
@@ -59,7 +60,12 @@ async function captureHostActivationLog() {
  const lines = (await readFile(path.join(temporary, 'development.log'), 'utf8')).split('\n');
  lines.pop(); // A concurrent writer may not have finished its last JSON line.
  const prefix = '[thingtime:bundle-activation] ';
- const records = [], lifecycle = [];
+ const records = [], lifecycle = [], http = [];
+ for (const line of lines) if (line.startsWith('[thingtime:bundle-http] ')) {
+  const value = JSON.parse(line.slice('[thingtime:bundle-http] '.length));
+  if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0) throw Error('Malformed HTTP observation timestamp');
+  http.push({ observedAt: value.observedAt, ...projectHttpActivity(value) });
+ }
  for (const line of lines) if (line.startsWith('[thingtime:bundle-lifecycle] ')) {
   const value = JSON.parse(line.slice('[thingtime:bundle-lifecycle] '.length));
   if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0 || !BUNDLE_LIFECYCLE_STAGES.includes(value.stage) ||
@@ -71,7 +77,8 @@ async function captureHostActivationLog() {
   if (!Number.isSafeInteger(value.observedAt) || value.observedAt < 0) throw Error('Malformed native observation timestamp');
   records.push({ observedAt: value.observedAt, ...publicActivationDiagnostics(value) });
  }
- hostActivationDiagnostics = records; hostLifecycleDiagnostics = lifecycle;
+ hostActivationDiagnostics = records; hostLifecycleDiagnostics = lifecycle; hostHttpDiagnostics = http;
+ await writeFile(path.join(output, 'host-http-diagnostics.json'), JSON.stringify(http, null, 2));
  await writeFile(path.join(output, 'host-lifecycle-diagnostics.json'), JSON.stringify(lifecycle, null, 2));
  await writeFile(path.join(output, 'host-activation-diagnostics.json'), JSON.stringify(records, null, 2));
 }
@@ -414,7 +421,7 @@ finally {
  await log.close();
 }
 const result = { ...receipt, passed: Boolean(receipt && !failure && !cleanupFailure), startedAt, finishedAt: new Date().toISOString(), phase,
- cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, hostActivationDiagnostics, hostLifecycleDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
+ cleanupVerified: !cleanupFailure, verifierSourceHashes, persistenceReaderSourceHashes, preparedSourceHashes, observations, activationDiagnostics, hostActivationDiagnostics, hostLifecycleDiagnostics, hostHttpDiagnostics, failure: failure ? { name: failure.name, message: failure.message } : undefined,
  cleanupFailure: cleanupFailure ? { name: cleanupFailure.name, message: cleanupFailure.message } : undefined,
  ...(failure || cleanupFailure ? { retainedDiagnostics: temporary } : {}) };
 await writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2) + '\n');

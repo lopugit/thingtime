@@ -181,6 +181,33 @@ Images are decoded locally and discarded; streams stop after the capture.
 screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
 
+### Native companion keyboard editing
+
+The accessory companion installs a standard AppKit Edit menu so Command-V,
+Command-A, Cut, Copy and Undo/Redo reach the focused WebKit responder. Menu
+items use standard selectors and nil targets; there is no custom clipboard
+reader, event monitor or JavaScript credential delivery.
+
+Installed acceptance on 1.0.9/build10 found that Command-V left the login
+password empty, while the password field's native context-menu Paste inserted
+masked text and normal login succeeded with the same saved credential. The
+login error handler does not itself clear the controlled password. The missing
+accessory-app Edit menu was the source defect; this does not establish a bad
+saved credential. The 1.0.10/build11 fix preserves the companion's identity,
+entitlements, destination/account checks and transient authenticator inbox.
+
+Run `swift test --package-path apple/Passwords` for the actual host menu's
+selectors, command modifiers and responder-chain targets. The macOS host compiles
+the same menu source; it is excluded from the production core library and iOS.
+After signed installation, verify Command-V into a focused synthetic password
+field, Command-A, Cut/Copy and Undo/Redo in ordinary editable text, and normal
+sign-in using supported credential delivery. Never read or log the clipboard to
+test shortcut delivery. Context-menu Paste remains a supported normal fallback.
+The native header shows only the configured destination during normal use;
+verified readiness clears stale native sign-in copy. Web review/save/cancel
+messages stay in the web surface. Native setup or authentication errors remain
+visible when the webpage cannot initialize, until verification succeeds.
+
 ### Native authenticator setup links
 
 The macOS Passwords companion and iOS shell register `otpauth` and validate only

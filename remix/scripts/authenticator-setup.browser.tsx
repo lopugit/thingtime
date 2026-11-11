@@ -23,7 +23,7 @@ const entries = new Map<string, { revision: number; entry: PasswordEntry }>([[en
   { id: 'website', label: 'Website', type: 'url', value: 'https://password-tools.invalid/' }
 ] } }]]);
 const layouts = new Map<string, any>();
-let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0; let duplicateKeyWarnings = 0;
+let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0; let duplicateKeyWarnings = 0; let verificationRequests = 0;
 const originalConsoleError = console.error;
 console.error = (...args: unknown[]) => {
   if (typeof args[0] === 'string' && /same key|unique ["']?key/i.test(args[0])) duplicateKeyWarnings++;
@@ -40,6 +40,7 @@ window.fetch = async (input, init) => {
   if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(['api.passwords', 'api.things', 'api.webpages-resolve', 'api.actions-run', 'api.mongodb-endpoint'].map(feature => [feature, { version: feature === 'api.passwords' ? '1.10.0' : '1.99.0' }])) });
   const body = init?.body ? JSON.parse(String(init.body)) : {};
   if (url.pathname === '/api/v1/passwords') {
+    if (String(body.operation).startsWith('verification-')) verificationRequests++;
     const response = (data: Record<string, unknown>) => Response.json({ ok: true, ownerId, ...data });
     if (!init?.body) return response({ configured: true, entries: Array.from(entries, ([id, record]) => metadata(id, record)), nextCursor: null });
     if (body.expectedOwnerId !== ownerId) return Response.json({ ok: false, error: 'Wrong synthetic owner.' }, { status: 403 });
@@ -75,6 +76,7 @@ window.thingtimeAuthenticatorSetup = { version: '1.0.0', postMessage(message) {
   if (message.operation === 'consume') queueMicrotask(() => emitSetup('setup', { setup: 'otpauth://totp/Synthetic?secret=' + ['GEZD','GNBV','GY3T','QOJQ','GEZD','GNBV','GY3T','QOJQ'].join('') }));
 }};
 (window as any).nativeSetupFixture = {
+  verificationRequests: () => verificationRequests,
   bridgeSnapshot: () => ({ acceptedOwners: [...bridgeAcceptedOwners], ignoredOwners: [...bridgeIgnoredOwners] }),
   offer: () => { requestId = crypto.randomUUID(); emitSetup('available'); },
   snapshot: () => ({ saves, totpEntries: (local ? [] : [...entries.values()]).filter(record => record.entry.fields.some(field => field.type === 'totp')).length }),

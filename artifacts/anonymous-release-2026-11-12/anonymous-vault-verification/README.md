@@ -1,0 +1,7 @@
+# Anonymous vault confirmation scope — 12 November 2026
+
+An anonymous encrypted device vault incorrectly mounted account-password confirmation settings with a fictitious owner. The real browser regression first reproduced the account heading and failing transport. `PasswordManagerScope` now mounts those account controls only for an account workspace. Anonymous vaults retain their independent device passphrase, five-minute idle lock and normal Lock control; no account approval policy is weakened or treated as locally granted.
+
+Five rendered cases pass: the account setup flow at 1440/390px, and the actual encrypted IndexedDB vault at 1440/390/320px. Tests open an anonymous draft, assert both global and entry account-confirmation controls are absent, verify zero account verification requests, edit the normal nested toolbar blocks, scroll top/bottom and exercise the real Lock transition. Account controls still issue their expected synthetic account request. Screenshots were inspected; the 320px layout has no horizontal overflow.
+
+`before/` preserves the failing source behavior; `after/receipt.json` records the passing checks. `verification.json` binds the final source and command results. Account transport is synthetic; there was no real account mutation or native credential ceremony. Account-scoped approval settings while disconnected remain a separate offline integration requirement.

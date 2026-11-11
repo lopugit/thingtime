@@ -314,3 +314,14 @@ export function createCollectionProvider(store: DocumentStore): CollectionProvid
   close: () => store.close(),
  };
 }
+
+/** Canonical adapters constructing BSON from data must validate before the
+ * serializer can invoke custom hooks. Derive a storage identity from one
+ * explicit field when the canonical document has no Mongo-generated _id. */
+export function encodeCollectionDocument(document: unknown, identityField?: string): Uint8Array {
+ const row = object(document); data(row);
+ const field = identityField === undefined ? '_id' : pathOf([identityField])[0];
+ const id = identity(row[field]);
+ if (own(row, '_id') && identityKey(row._id) !== identityKey(id)) return invalid('Conflicting document identity');
+ return encode({ ...row, _id: id });
+}

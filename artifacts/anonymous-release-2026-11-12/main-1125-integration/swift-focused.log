@@ -1,0 +1,30 @@
+swift test --package-path apple/Passwords --filter 'PasswordApplicationMenuTests|AuthenticatorSetupBridgeStatusTests'
+
+Test Suite 'Selected tests' started at 2026-11-12 03:20:53.556.
+Test Suite 'ThingtimePasswordCoreTests.xctest' started at 2026-11-12 03:20:53.558.
+Test Suite 'AuthenticatorSetupBridgeStatusTests' started at 2026-11-12 03:20:53.558.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testCancelledIntakeAndEmptyInboxReloadDoNotReplayWorkflowInstructions]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testCancelledIntakeAndEmptyInboxReloadDoNotReplayWorkflowInstructions]' passed (0.003 seconds).
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testConsumeCancelAndReadyClearDoNotHideGenuineErrors]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testConsumeCancelAndReadyClearDoNotHideGenuineErrors]' passed (0.001 seconds).
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testConsumedIntakeAndEmptyInboxReloadDoNotReplayWorkflowInstructions]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testConsumedIntakeAndEmptyInboxReloadDoNotReplayWorkflowInstructions]' passed (0.000 seconds).
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testMalformedAndDuplicateOffersWithPendingIntakePreserveErrorAndOriginalRequest]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testMalformedAndDuplicateOffersWithPendingIntakePreserveErrorAndOriginalRequest]' passed (0.000 seconds).
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testNewAcceptedIntakeSupersedesInvalidAndExpiredRequestErrors]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testNewAcceptedIntakeSupersedesInvalidAndExpiredRequestErrors]' passed (0.001 seconds).
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testVerificationFailureSurvivesNewIntakeAndCancelUntilActualVerifiedReadiness]' started.
+Test Case '-[ThingtimePasswordCoreTests.AuthenticatorSetupBridgeStatusTests testVerificationFailureSurvivesNewIntakeAndCancelUntilActualVerifiedReadiness]' passed (0.000 seconds).
+Test Suite 'AuthenticatorSetupBridgeStatusTests' passed at 2026-11-12 03:20:53.564.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'PasswordApplicationMenuTests' started at 2026-11-12 03:20:53.564.
+Test Case '-[ThingtimePasswordCoreTests.PasswordApplicationMenuTests testNativeEditingCommandsUseFocusedResponderAndStandardShortcuts]' started.
+Test Case '-[ThingtimePasswordCoreTests.PasswordApplicationMenuTests testNativeEditingCommandsUseFocusedResponderAndStandardShortcuts]' passed (0.068 seconds).
+Test Case '-[ThingtimePasswordCoreTests.PasswordApplicationMenuTests testQuitUsesNormalApplicationTermination]' started.
+Test Case '-[ThingtimePasswordCoreTests.PasswordApplicationMenuTests testQuitUsesNormalApplicationTermination]' passed (0.000 seconds).
+Test Suite 'PasswordApplicationMenuTests' passed at 2026-11-12 03:20:53.633.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.068 (0.069) seconds
+Test Suite 'ThingtimePasswordCoreTests.xctest' passed at 2026-11-12 03:20:53.633.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.074 (0.075) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:20:53.633.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.074 (0.076) seconds

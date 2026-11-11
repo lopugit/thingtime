@@ -1,0 +1,10 @@
+{
+  "passed": false,
+  "simulatorDeleted": false,
+  "sourceToBinaryReproducibility": "unproven",
+  "localAccountApiSupported": false,
+  "networkUnavailableScope": "development WebView external HTTP(S) only; OS networking not disabled",
+  "error": "Command failed: python3: Traceback (most recent call last):\n  File \"/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/iOS/scripts/local-development/prepare.py\", line 89, in <module>\n    prepare(p.parse_args())\n    ~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/iOS/scripts/local-development/prepare.py\", line 81, in prepare\n    if generation.returncode:raise RuntimeError('XcodeGen failed: '+generation.stderr[-1500:])\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: XcodeGen failed: Couldn't find current username\n\n",
+  "cleanup": [],
+  "observedAt": "2026-11-11T16:01:35.906983+00:00"
+}

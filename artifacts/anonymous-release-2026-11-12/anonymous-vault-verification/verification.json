@@ -1,0 +1,24 @@
+{
+  "observedAt": "2026-11-11T15:55:06.411610+00:00",
+  "sourceHashes": {
+    "remix/app/components/Passwords/PasswordManager.tsx": "04e9f56329807859c69bd0e128a3e83628ffe63d4f41c5f623c1a82714fd5a4a",
+    "remix/scripts/authenticator-setup.browser.tsx": "5aab0e712169ecdd097400c3fd15a392c4961fb6a130f85bc25a27d2556825bd",
+    "remix/scripts/test-authenticator-setup-ui.mjs": "f21d8dad6f3dd0789644f12b4f67281e54f69c323e42588077b0cc0690e9b4c4"
+  },
+  "before": {
+    "exitCode": 1,
+    "failure": "Anonymous vault rendered one account confirmation heading; expected zero.",
+    "log": "/tmp/pr1000-anonymous-verification-before.log"
+  },
+  "after": {
+    "exitCode": 0,
+    "cases": 5,
+    "widths": [
+      1440,
+      390,
+      320
+    ],
+    "log": "/tmp/pr1000-anonymous-verification-after.log"
+  },
+  "scope": "Real rendered components and encrypted IndexedDB device vault in isolated Chromium, synthetic account transport; no real account or native ceremony."
+}

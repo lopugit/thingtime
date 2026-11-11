@@ -21,6 +21,9 @@ struct WebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        if let rules = ThingtimeLocalRuntime.shared.offlineRules { configuration.userContentController.add(rules) }
+        #endif
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
@@ -54,7 +57,11 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
         context.coordinator.loadedRootURL = url
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        webView.load(URLRequest(url: url.appendingPathComponent("things")))
+        #else
         webView.load(URLRequest(url: url))
+        #endif
         return webView
     }
 
@@ -202,6 +209,9 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            #if THINGTIME_LOCAL_DEVELOPMENT
+            ThingtimeLocalRuntime.shared.observe(webView)
+            #endif
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
             if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }

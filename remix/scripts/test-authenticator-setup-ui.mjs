@@ -36,6 +36,8 @@ try {
     const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     try {
       await page.goto(origin);
+      await page.getByRole('heading', { name: 'Password confirmation', exact: true }).waitFor();
+      await page.waitForFunction(() => window.nativeSetupFixture.verificationRequests() > 0);
       const create = page.getByRole('button', { name: 'Create new entry', exact: true });
       await create.waitFor();
       await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Create new entry')?.disabled);
@@ -81,7 +83,7 @@ try {
   }
   // Full device-vault UI and actual encrypted local storage, separate contexts
   // from the account setup cases above. No real account or credential source.
-  for (const [label, width, height] of [['local-desktop', 1440, 1000], ['local-mobile', 390, 844]]) {
+  for (const [label, width, height] of [['local-desktop', 1440, 1000], ['local-mobile', 390, 844], ['local-narrow', 320, 844]]) {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
     const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     try {
@@ -92,6 +94,12 @@ try {
       const toolbar = page.locator('[data-settings-document="password-workspace-toolbar"]');
       await toolbar.getByText('Encrypted on this device · never uploaded', { exact: true }).waitFor();
       await toolbar.getByRole('button', { name: 'Lock vault', exact: true }).waitFor();
+      assert.equal(await page.getByRole('heading', { name: 'Password confirmation', exact: true }).count(), 0);
+      assert.equal(await page.getByLabel('Password confirmation interval', { exact: true }).count(), 0);
+      await toolbar.getByRole('button', { name: 'Add password', exact: true }).click();
+      await page.getByRole('button', { name: 'Save entry', exact: true }).waitFor();
+      assert.equal(await page.getByLabel('Password confirmation interval', { exact: true }).count(), 0);
+      await page.locator('[data-settings-document="password-workspace-entry-heading"]').getByRole('button', { name: 'Close', exact: true }).click();
       assert.equal(await page.getByRole('button', { name: 'Create new entry', exact: true }).count(), 0);
       assert.deepEqual(await page.evaluate(() => window.nativeSetupFixture.bridgeSnapshot().acceptedOwners), []);
       assert.ok((await page.evaluate(() => window.nativeSetupFixture.bridgeSnapshot().ignoredOwners)).includes('local-workspace'));
@@ -114,7 +122,8 @@ try {
       await page.getByRole('button', { name: 'Unlock device vault', exact: true }).waitFor();
       assert.equal(await toolbar.count(), 0);
       assert.deepEqual(await page.evaluate(() => window.nativeSetupFixture.snapshot()), { saves: 0, totpEntries: 0 });
-      results.push({ label, width, checks: ['actual anonymous LocalPasswordVault', 'device-only session label', 'actual Lock vault transition', 'editable session and lock labels', 'no account setup intake', 'top/bottom overflow'] });
+      assert.equal(await page.evaluate(() => window.nativeSetupFixture.verificationRequests()), 0);
+      results.push({ label, width, checks: ['actual anonymous LocalPasswordVault', 'device-only session label', 'actual Lock vault transition', 'editable session and lock labels', 'no account setup intake', 'no account verification controls or transport for anonymous vault/draft', 'top/bottom overflow'] });
     } catch (error) {
       await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
       await writeFile(join(evidence, `${label}-failure.json`), JSON.stringify({ errors, body: await page.locator('body').innerText().catch(() => ''), message: error.message }, null, 2));

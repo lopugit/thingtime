@@ -1,0 +1,22 @@
+[
+  {
+    "observedAt": 1794412358506,
+    "stage": "close-dispatch"
+  },
+  {
+    "observedAt": 1794412358507,
+    "stage": "close-event"
+  },
+  {
+    "observedAt": 1794412358508,
+    "stage": "close-cancel-pending"
+  },
+  {
+    "observedAt": 1794412358509,
+    "stage": "contents-destroyed"
+  },
+  {
+    "observedAt": 1794412358510,
+    "stage": "window-closed"
+  }
+]

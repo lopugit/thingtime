@@ -213,3 +213,42 @@ test('an occupied explicitly selected port fails before importing another runtim
     assert.equal(loaded, false);
     await assert.rejects(fs.readFile(path.join(directory, STATE_FILE)), { code: 'ENOENT' });
 });
+
+test('HTTP diagnostics separate completed response from retained middleware without changing admission', async t => {
+    const entered = gate(), waiting = gate();
+    const renderer = await start(t, await profile(t), async () => ({ middleware: async (_request, response) => {
+        response.end('done'); entered.release(); await waiting.promise;
+    } }));
+    const response = await fetch(renderer.origin + '/api/root-data?private=PRIVATE_SENTINEL');
+    await response.text(); await entered.promise;
+    const state = renderer.snapshotActivity();
+    assert.equal(state.requests, 1); assert.equal(state.upgradedSockets, 0);
+    assert.deepEqual(state.classes['root-data'], { requests: 1, middlewarePending: 1, responsePending: 0, oldestAgeMs: state.classes['root-data'].oldestAgeMs });
+    assert.ok(state.classes['root-data'].oldestAgeMs >= 0);
+    assert.equal(JSON.stringify(state).includes('PRIVATE_SENTINEL'), false);
+    assert.ok(Object.isFrozen(state)); assert.ok(Object.isFrozen(state.classes)); assert.ok(Object.isFrozen(state.classes['root-data']));
+    assert.throws(() => { state.classes['root-data'].requests = 0; });
+    assert.equal(renderer.reserveShutdown(), null);
+    waiting.release(); await eventuallyIdle(renderer);
+    assert.equal(renderer.snapshotActivity().requests, 0);
+    assert.equal(state.requests, 1, 'prior observation is immutable');
+    assert.ok(renderer.reserveShutdown());
+});
+
+test('HTTP diagnostics classify only fixed startup operations and never retain unknown request data', () => {
+    const { httpActivityClass, projectHttpActivity, HTTP_ACTIVITY_CLASSES } = require('../lib/renderer-server.cjs');
+    for (const [url, expected] of [
+        ['/api/root-data?secret=PRIVATE_SENTINEL', 'root-data'],
+        ['/.well-known/thingtime-capabilities.json', 'discovery'],
+        ['/api/v1/auth/me', 'auth-me'], ['/api/v1/auth/accounts', 'auth-accounts'],
+        ['/api/v1/users/profile?id=PRIVATE_SENTINEL', 'profile'],
+        ['/api/v1/settings/lopu-chat-defaults', 'settings-chat'],
+        ['/assets/PRIVATE_SENTINEL.js', 'asset'], ['/api/v1/things/PRIVATE_SENTINEL', 'other'],
+        ['/api/v1/auth/me/PRIVATE_SENTINEL', 'other'], ['/private/PRIVATE_SENTINEL', 'other']
+    ]) assert.equal(httpActivityClass({ url }), expected);
+    const state = projectHttpActivity({ format: 1, requests: 0, upgradeHandlers: 0, upgradedSockets: 0, private: 'PRIVATE_SENTINEL',
+        classes: Object.fromEntries(HTTP_ACTIVITY_CLASSES.map(name => [name, { requests: 0, middlewarePending: 0, responsePending: 0, oldestAgeMs: 0, private: 'PRIVATE_SENTINEL' }])) });
+    assert.equal(JSON.stringify(state).includes('PRIVATE_SENTINEL'), false);
+    assert.throws(() => projectHttpActivity({ ...state, requests: -1 }));
+    assert.throws(() => projectHttpActivity({ ...state, classes: {} }));
+});

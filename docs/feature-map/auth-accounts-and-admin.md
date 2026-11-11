@@ -123,6 +123,17 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
+The macOS accessory companion installs `Host/PasswordApplicationMenu.swift`
+through `PasswordApp.swift`. Its standard nil-target Edit actions send keyboard
+shortcuts to the focused WebKit responder without credential/clipboard adapters.
+The Swift test target compiles that same host source and verifies selectors,
+modifiers and targets; the menu stays outside production core and iOS. The
+shared setup bridge keeps ordinary review instructions web-only, clears stale
+native copy to a neutral destination after verified readiness, and preserves
+native errors when the web surface cannot initialize. See the native
+keyboard editing section in `password-manager.md` and the signed acceptance
+checklist in `TESTING.md`.
+
 Native authenticator link intake: shared Swift `AuthenticatorSetup.swift` and
 `Host/AuthenticatorSetupBridge.swift`; macOS `PasswordSetupEditor.swift`; iOS
 `WebView.swift`. The narrow native bridge 1.0.0 requires compatible `api.passwords`
@@ -774,3 +785,19 @@ full request hashing retains AppID in the verification/session binding.
 `browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
+
+## Native session persistence boundary
+
+`auth/sessions.ts` retains the canonical helpers and revocation exports while
+`auth/sessionRepository.ts` supplies default home-pinned Mongo persistence or an
+explicit internal home-scoped native adapter. `documentStore/nativeSessions.ts`
+uses actual collection transactions; it cannot select an API profile or create
+accounts. The normal Mongo HTTP fixture and real SQLite session module tests are
+separate acceptance layers. Native signup still requires identity/vault, tier,
+roster, notification, verification/outbox and readiness integration.
+
+Anonymous device password vaults do not have account-password approval settings:
+`PasswordManagerScope` omits both global and entry account controls for an
+anonymous vault while retaining its independent passphrase and lock lifecycle.
+The same controls remain active for account scopes. Run the actual-component
+`test-authenticator-setup-ui.mjs` account and anonymous variants.

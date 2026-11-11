@@ -145,6 +145,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Remove anonymous-vault requests for account confirmation settings;
+  retain normal account controls and independent device passphrase/locking.
+  Extract canonical session persistence behind an explicit home repository,
+  with real SQLite expiry/revocation/scope tests and unchanged default Mongo.
+  Fix native update cleanup after BrowserWindow destruction; retain bounded
+  HTTP lifetime diagnostics. Fresh canonical web build and real Mongo HTTP
+  regression pass; native/iOS acceptance remains separately recorded in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
+
 - 2026-11-12: Integrate main sync recovery and native authenticator intake while
   preserving anonymous/account vault controls and canonical storage adapters.
   Keep individually editable setup blocks and origin/owner/nonce checks; retain
@@ -197,6 +208,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Add a transactional BSON/SQLite storage primitive and real file-recovery tests;
   canonical API and iOS storage integration remain unfinished. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
+
+- 2026-11-12: Give the macOS Passwords companion standard responder-chain Edit
+  shortcuts so Command-V reaches focused web inputs. Keep credential delivery
+  native, preserve identity/entitlements, and advance companion host/extension
+  to 1.0.10/build 11. Menu contract tests pass; signed keyboard acceptance is
+  separate. Keep the native destination header neutral after verified readiness
+  while retaining initialization errors. **Codex (AI)**
 
 - 2026-11-12: Reconcile native TOTP setup-link intake with the current password
   editor and account lifecycle. Keep one-use seeds transient, require editable

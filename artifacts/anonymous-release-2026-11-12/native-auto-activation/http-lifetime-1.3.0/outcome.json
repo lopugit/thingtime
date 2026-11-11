@@ -1,0 +1,16 @@
+{
+  "verificationSha256": "7eec3a859b28f77a74d9b4b8d11e47225e8180981465e5a2504f96b8dbfb04b9",
+  "cleanupVerified": true,
+  "automaticReplacement": false,
+  "httpBlockerReproduced": false,
+  "httpSamples": 5,
+  "terminalStage": "window-closed",
+  "actualExceptionCaptured": false,
+  "subsequentControlledRegressionFailedBeforeFix": true,
+  "subsequentFocusedTests": {
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceFixedAfterRun": true
+}

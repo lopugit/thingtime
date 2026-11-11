@@ -1,0 +1,155 @@
+{
+  "passed": false,
+  "simulatorDeleted": true,
+  "sourceToBinaryReproducibility": "unproven",
+  "localAccountApiSupported": false,
+  "networkUnavailableScope": "development WebView external HTTP(S) only; OS networking not disabled",
+  "preparation": {
+    "entrySha256": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657",
+    "canonicalOutputInventory": {
+      "sha256": "4b6b215b6d4ba8abd3b2b4d294000e00b57d14d3a8fd8cf2b73a508c4a3e0e1c",
+      "files": 1821,
+      "bytes": 270026924
+    },
+    "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+    "sourceToBinaryReproducibility": "unproven",
+    "origin": "http://127.0.0.1:29741",
+    "bundleId": "com.thingtime.localdevelopment",
+    "localAccountApiSupported": false,
+    "nativeAddonSha256": {
+      ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+      ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    },
+    "toolCheckoutHead": "6d96a617792968e7bca0fc9d72c343ea2141310f"
+  },
+  "executedToolSha256": {
+    "iOS/scripts/local-development/run.py": "58027572935a3adc3b0da0e919ba24b55ee2e00686aabc7b2f27692869dd877a",
+    "iOS/scripts/local-development/prepare.py": "4e22f1bbcd028596b8ab5a0d90e22f9666790ae908c183894546605e98bf8014",
+    "iOS/scripts/local-development/entry.mjs": "3d0f97dd5ed853d18e82d68efa0afa848d5bed9db766eb3eb77ffb2f5cc6667f",
+    "iOS/scripts/local-development/acceptance.js": "4399873d50986269e5baf218e5aa1d1d7370bc82ff8b3bfd9c11c5618eb72e40",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "7a64633d5fd1aad96721ac0f81d88869c00466bc1342d658934cdf7238cd529d",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4f965422aabfcbe3144cee2f4641e26a4ea78156104821b8db500cc4f5c706e5",
+    "iOS/Thingtime/App/ThingtimeApp.swift": "c074f71d9e55944059937adb63288f8219883988ed094b145e7e29b5817d1285",
+    "iOS/Thingtime/Web/WebView.swift": "bfdbd14c0e160f45d5ffb8444fccb082a7f096922897b174e8626580da51ae48",
+    "iOS/Thingtime/Web/ThingtimeWebDestination.swift": "9d614cb1df16b9088adad18b1da4a7d0f238e182b6986378998d2cec6e0e52cd"
+  },
+  "signedPayload": {
+    "canonicalFilesMatched": 1821,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "5da6f7ec6d39215819a54f7bdd2a14777ae4835490d217467a7040eb43f6c1cd",
+      "files": 1823,
+      "bytes": 278440300
+    }
+  },
+  "signedLocalRuntimeInventory": {
+    "sha256": "8387595e9fde7a742c3f64ad84c0abe64830d11bad9313b14c6e7e8e6e66bfbb",
+    "files": 1825,
+    "bytes": 278449081
+  },
+  "signedAppInventory": {
+    "sha256": "b4c875cbb65836a9c23439dd4e5bb6c4f2fcc2b009bdcf231f3a399ad5471103",
+    "files": 1839,
+    "bytes": 408573741
+  },
+  "binarySha256": "10a4f62e88210db7d19d88d8b1c2cebec280e656ac85b1fc80388a30d7ecf227",
+  "frameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "installedAppInventory": {
+    "sha256": "b4c875cbb65836a9c23439dd4e5bb6c4f2fcc2b009bdcf231f3a399ad5471103",
+    "files": 1839,
+    "bytes": 408573741
+  },
+  "runtime.json": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "origin": "http://127.0.0.1:29741",
+    "apiStarted": true,
+    "localAccountApiSupported": false,
+    "cloudFallback": false,
+    "preservedOSKeys": [
+      "CFFIXED_USER_HOME",
+      "DYLD_ROOT_PATH",
+      "HOME",
+      "PATH",
+      "SIMULATOR_ARCHS",
+      "SIMULATOR_AUDIO_DEVICES_PLIST_PATH",
+      "SIMULATOR_AUDIO_SETTINGS_PATH",
+      "SIMULATOR_BOOT_TIME",
+      "SIMULATOR_CAPABILITIES",
+      "SIMULATOR_DEVICE_NAME",
+      "SIMULATOR_EXTENDED_DISPLAY_PROPERTIES",
+      "SIMULATOR_FRAMEBUFFER_FRAMEWORK",
+      "SIMULATOR_HID_SYSTEM_MANAGER",
+      "SIMULATOR_HOST_HOME",
+      "SIMULATOR_LEGACY_ASSET_SUFFIX",
+      "SIMULATOR_LOG_ROOT",
+      "SIMULATOR_MAINSCREEN_HEIGHT",
+      "SIMULATOR_MAINSCREEN_PITCH",
+      "SIMULATOR_MAINSCREEN_SCALE",
+      "SIMULATOR_MAINSCREEN_WIDTH",
+      "SIMULATOR_MEMORY_WARNINGS",
+      "SIMULATOR_MODEL_IDENTIFIER",
+      "SIMULATOR_PRODUCT_CLASS",
+      "SIMULATOR_ROOT",
+      "SIMULATOR_RUNTIME_BUILD_VERSION",
+      "SIMULATOR_RUNTIME_VERSION",
+      "SIMULATOR_SHARED_RESOURCES_DIRECTORY",
+      "SIMULATOR_UDID",
+      "SIMULATOR_VERSION_INFO",
+      "TMPDIR",
+      "XPC_FLAGS",
+      "XPC_SERVICE_NAME",
+      "__CF_USER_TEXT_ENCODING"
+    ],
+    "applicationConfigurationCleared": true,
+    "externalUndiciRequests": 0,
+    "externalUndiciRequestsScope": "Node startup acceptance only; not an OS or all-lifecycle network proof",
+    "manifest": {
+      "schemaVersion": 1,
+      "origin": "http://127.0.0.1:29741",
+      "features": 367,
+      "operations": 729
+    },
+    "document": {
+      "status": 200,
+      "hasViteRoot": true
+    },
+    "entryAssetPassed": true,
+    "accountApi": {
+      "status": 503,
+      "code": "LOCAL_API_NOT_CONFIGURED"
+    },
+    "ready": true
+  },
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "observedAt": "2026-11-11T16:15:32.122560+00:00"
+}

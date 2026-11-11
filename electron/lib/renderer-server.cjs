@@ -9,6 +9,55 @@ const { randomUUID } = require('node:crypto');
 const STATE_FILE = 'renderer-origin.json';
 const STATE_LIMIT = 256;
 
+// Fixed diagnostic labels only. These startup routes are registered in Nitro's
+// root-data route / api import map and apiDocs, and used by routes.tsx/useApi.
+// Unknown paths (including identifiers and queries) are never retained.
+const HTTP_ACTIVITY_ROUTES = Object.freeze({
+    '/api/root-data': 'root-data',
+    '/.well-known/thingtime-capabilities.json': 'discovery',
+    '/api/v1/auth/me': 'auth-me',
+    '/api/v1/auth/accounts': 'auth-accounts',
+    '/api/v1/users/profile': 'profile',
+    '/api/v1/settings/lopu-prompt': 'settings-prompt',
+    '/api/v1/settings/lopu-chat-defaults': 'settings-chat',
+    '/api/v1/settings/lopu-access': 'settings-access',
+    '/api/v1/themes': 'themes',
+    '/api/v1/themes/active': 'themes',
+    '/api/v1/releases/native-web': 'release-catalogue',
+    '/api/v1/releases/native-web/content': 'release-content'
+});
+const HTTP_ACTIVITY_CLASSES = Object.freeze([...new Set(Object.values(HTTP_ACTIVITY_ROUTES)), 'document', 'asset', 'other']);
+const HTTP_ACTIVITY_FIELDS = Object.freeze(['requests', 'middlewarePending', 'responsePending', 'oldestAgeMs']);
+function httpActivityClass(request) {
+    try {
+        const { pathname } = new URL(request.url, 'http://localhost');
+        if (Object.hasOwn(HTTP_ACTIVITY_ROUTES, pathname)) return HTTP_ACTIVITY_ROUTES[pathname];
+        if (pathname === '/' || pathname === '/index.html') return 'document';
+        if (pathname.startsWith('/assets/')) return 'asset';
+    } catch { /* Malformed/unknown request is still admitted and tracked. */ }
+    return 'other';
+}
+function projectHttpActivity(value) {
+    if (value?.format !== 1) throw Error('Invalid HTTP activity observation');
+    const result = { format: 1 };
+    for (const key of ['requests', 'upgradedSockets', 'upgradeHandlers']) {
+        if (!Number.isSafeInteger(value[key]) || value[key] < 0) throw Error('Invalid HTTP activity count');
+        result[key] = value[key];
+    }
+    result.classes = {};
+    for (const name of HTTP_ACTIVITY_CLASSES) {
+        const row = {};
+        for (const field of HTTP_ACTIVITY_FIELDS) {
+            const count = value.classes?.[name]?.[field];
+            if (!Number.isSafeInteger(count) || count < 0) throw Error('Invalid HTTP activity class');
+            row[field] = count;
+        }
+        result.classes[name] = Object.freeze(row);
+    }
+    Object.freeze(result.classes);
+    return Object.freeze(result);
+}
+
 async function readPort(file) {
     let handle, observed = false;
     try {
@@ -75,7 +124,8 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
     // address. Keep the older automatic-origin record untouched for recovery.
     const savedPort = selectedPort ?? await readPort(stateFile);
     let middleware, reservation = null, closed = false, active = 0;
-    const upgradedSockets = new Set();
+    const upgradedSockets = new Set(), requests = new Set();
+    let upgradeHandlers = 0;
     const isIdle = () => !closed && active === 0 && upgradedSockets.size === 0;
     const unavailable = response => {
         response.writeHead(503, { 'Cache-Control': 'no-store', 'Retry-After': '1' }); response.end();
@@ -85,16 +135,18 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
         // Middleware may return before a streamed response ends, or finish
         // durable cleanup after the client disconnects. Wait for both halves.
         active++;
+        const activity = { kind: httpActivityClass(request), startedAt: Date.now(), middlewarePending: true, responsePending: true };
+        requests.add(activity);
         let settled = false, ended = false, released = false;
-        const release = () => { if (settled && ended && !released) { released = true; active--; } };
+        const release = () => { if (settled && ended && !released) { released = true; active--; requests.delete(activity); } };
         const onEnd = () => {
-            ended = true; response.removeListener('finish', onEnd); response.removeListener('close', onEnd); release();
+            ended = true; activity.responsePending = false; response.removeListener('finish', onEnd); response.removeListener('close', onEnd); release();
         };
         response.once('finish', onEnd); response.once('close', onEnd);
         Promise.resolve().then(() => middleware(request, response)).catch(() => {
             if (!response.headersSent) response.writeHead(500, { 'Cache-Control': 'no-store' });
             response.end();
-        }).finally(() => { settled = true; release(); });
+        }).finally(() => { settled = true; activity.middlewarePending = false; release(); });
     });
     try {
         await new Promise((resolve, reject) => {
@@ -113,12 +165,24 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
         middleware = application.middleware;
         if (typeof application.handleUpgrade === 'function') server.on('upgrade', (request, socket, head) => {
             if (reservation || closed) { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nRetry-After: 1\r\n\r\n'); return; }
-            active++; upgradedSockets.add(socket);
+            active++; upgradeHandlers++; upgradedSockets.add(socket);
             socket.once('close', () => upgradedSockets.delete(socket));
             Promise.resolve().then(() => application.handleUpgrade(request, socket, head))
-                .catch(() => socket.destroy()).finally(() => { active--; });
+                .catch(() => socket.destroy()).finally(() => { active--; upgradeHandlers--; });
         });
-        return { origin, server, isIdle,
+        const snapshotActivity = () => {
+            const classes = Object.fromEntries(HTTP_ACTIVITY_CLASSES.map(name => [name,
+                { requests: 0, middlewarePending: 0, responsePending: 0, oldestAgeMs: 0 }]));
+            const now = Date.now();
+            for (const activity of requests) {
+                const row = classes[activity.kind]; row.requests++;
+                if (activity.middlewarePending) row.middlewarePending++;
+                if (activity.responsePending) row.responsePending++;
+                row.oldestAgeMs = Math.max(row.oldestAgeMs, Math.max(0, now - activity.startedAt));
+            }
+            return projectHttpActivity({ format: 1, requests: requests.size, upgradedSockets: upgradedSockets.size, upgradeHandlers, classes });
+        };
+        return { origin, server, isIdle, snapshotActivity,
             reserveShutdown: () => {
                 if (reservation || !isIdle()) return null;
                 const own = reservation = {};
@@ -140,4 +204,4 @@ async function startRendererServer({ profilePath, loadApplication, selectedPort 
     }
 }
 
-module.exports = { startRendererServer, STATE_FILE };
+module.exports = { startRendererServer, STATE_FILE, HTTP_ACTIVITY_CLASSES, httpActivityClass, projectHttpActivity };
