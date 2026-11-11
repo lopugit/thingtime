@@ -151,6 +151,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Retain editable web controls and distinguish simulator evidence from signed
   physical password/passkey/OTP acceptance. **Codex (AI)**
 
+- 2026-11-12: Preserve a verified newer signed standalone macOS Passwords
+  companion when installing an older nested companion, without stopping or
+  rolling back the standalone app. Equal or older verified companions retain
+  the quit-and-replace path. Unknown version or incompatible signing evidence
+  stops installation before staging, so an unverified newer provider cannot be
+  downgraded. Runtime native capability acceptance remains separate.
+  **Codex (AI)**, reviewed by **Lopu (AI)** and corrected by **Codex (AI)**
+
 - 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
   and saved sync cards, with native aggregate enforcement and active policy-only
   saves. Queue concurrent cloud path checks instead of rejecting a five-item
