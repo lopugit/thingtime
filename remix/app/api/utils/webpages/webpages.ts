@@ -1,4 +1,7 @@
 import { webpageComponentRefs } from '../../../timeline/componentBindings.ts';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
+import type { ThingsReads } from '../things/persistence';
+import { nativeComponentCandidates, nativeSitePageCandidates } from './componentCandidates';
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
@@ -56,7 +59,7 @@ const resolveComponents = async (
 	viewer: Viewer,
 	page: ThingDoc | null,
 	inheritAudience = true,
-	storage?: { collection: any; session: any; capture: true }
+	storage?: { collection: any; session: any; capture: true; reads?: ThingsReads }
 ): Promise<{ components: PublicThing[]; refs: Record<string, string | null> }> => {
 	const wanted = new Set<string>();
 	collectComponentRefs(page?.crystal?.blocks, wanted);
@@ -64,7 +67,8 @@ const resolveComponents = async (
 
 	const refs = [...wanted];
 	const slugRefs = refs.filter((ref) => COMPONENT_KEY_PATTERN.test(ref));
-	const collection = storage?.collection ?? await getThingsCollection();
+	const reads = storage?.reads ?? getBoundThingsPersistence(null);
+	const collection = reads ? null : storage?.collection ?? await getThingsCollection();
 	const visibility = visibilityQueryFor(viewer, []);
 	// Only a stored, authorised composition delegates its audience. The demo
 	// block-list helper has no root authority and retains viewer-local lookup.
@@ -86,7 +90,7 @@ const resolveComponents = async (
 	// Bound per identity, not by arbitrary total revisions: many versions of
 	// one component must never crowd a different required component out.
 	const exactIds = [...refs, ...slugRefs.map((ref) => `component-${ref}`)];
-	const docs = (await collection.aggregate([
+	const docs = (reads ? await nativeComponentCandidates(reads, refs, slugRefs, compositionOwnerId) : await collection.aggregate([
 		{ $match: { $and: [{ thingtime: 'component' }, { $or: arms }] } },
 		{ $sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } },
 		{ $group: { _id: { $cond: [
@@ -125,8 +129,8 @@ const resolveComponents = async (
 
 /** Same resolver and audience boundary as the live page, reading component
  * definitions in the content transaction. Only approved render fields leave. */
-export const resolvePageComponentCapture = async (collection: any, session: any, page: ThingDoc) =>
- resolveComponents(await withFriendIds({ id: page.ownerId }), page, true, { collection, session, capture: true });
+export const resolvePageComponentCapture = async (collection: any, session: any, page: ThingDoc, reads?: ThingsReads) =>
+ resolveComponents(await withFriendIds({ id: page.ownerId }), page, true, { collection, session, capture: true, reads });
 
 // Shared writers can edit the included content, but cannot use a new guessed
 // author-local ref to publish an unrelated private component. Only the owner
@@ -175,9 +179,10 @@ const findSitePage = async (
 	viewer: Viewer,
 	match: Record<string, unknown>
 ): Promise<{ doc: ThingDoc | null; source: 'user' | 'system' | null }> => {
-	const collection = await getThingsCollection();
 	const owners: string[] = viewer?.id ? [viewer.id, 'system'] : ['system'];
-	const docs = (await collection
+	const reads = getBoundThingsPersistence(null);
+	const collection = reads ? null : await getThingsCollection();
+	const docs = (reads ? await nativeSitePageCandidates(reads, owners, match) : await collection
 		.find({ ...match, thingtime: 'webpage', ownerId: { $in: owners } } as any)
 		.sort({ updatedAt: -1 })
 		.limit(8)
@@ -211,12 +216,14 @@ export const resolveWebpage = async (
 	if (!id) return fail(400, 'Pass id=<shareId>, path=</route>, or global=1');
 	if (id.length > MAX_SHARE_ID_LOOKUP_CHARS || /[$\s]/.test(id)) return fail(400, 'id must be a webpage shareId');
 
-	const collection = await getThingsCollection();
+	const reads = getBoundThingsPersistence(null);
+	const collection = reads ? null : await getThingsCollection();
 	const visibility = visibilityQueryFor(viewer, []);
 	const match = visibility
 		? withMatch({ shareId: id, thingtime: 'webpage' }, visibility)
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
-	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+	const candidate = reads ? await reads.readExact(id) : null;
+	let doc = (reads ? candidate?.thingtime?.includes('webpage') && await canViewInherited(candidate as ThingDoc, viewer) ? candidate : null : await collection.findOne(match as any)) as ThingDoc | null;
 
 	// A direct canonical id opens an unlisted page. This exact lookup never
 	// changes feed/search visibility or the separate route/page-key resolver.

@@ -1,6 +1,8 @@
 ## Native Things service integration — 12 November 2026
 
-Native Things service regressions: run `nativeOrdinaryService.test.ts`,
+Native Things service regressions: run `pnpm --dir remix test:native-things`
+(the canonical runner fixes both Mongo URI aliases to an unreachable test destination).
+It runs `nativeOrdinaryService.test.ts`,
 `persistenceContext.test.ts`, `nativeAudienceReads.test.ts` and
 `contentExecutionGate.native.test.ts`, plus normal Things, Timeline, storage and
 subspace suites. Check actual SQLite CRUD/projection, stale revisions, folder
@@ -12,6 +14,17 @@ multi-transaction folder-drain behavior; do not claim route-wide atomicity.
 The bundled Mongo HTTP fixture must also move into a valid existing folder,
 refuse a cycle, preserve/reparent children on deletion and retain them on restart.
 Generic native Things HTTP and broad capability publication remain separate gates.
+
+Native Builder services must create a Schema, stamp its authoritative provenance
+on Data, reject inaccessible schemas, retain attribution after revocation, and
+reject stale updates. Save/edit/reopen a Webpage using saved Components, verify
+exact/system/author-local precedence, null missing/private captures and immutable
+prior history. Induced capture failure must roll back content, head and charges.
+Permission reads inside a write must see that exact transaction; null-owner
+candidate cursors must survive entry/exit without losing their selection binding.
+Test after-commit reads, escaped descendants, foreign providers and parallel
+requests. Full native HTTP, picker decorations and shared-writer flows must not
+be claimed from these service fixtures.
 
 When integrating parallel API additions, reject the earlier colliding capability
 version before mutation. The combined Things 1.65 contract must refuse 1.64 for

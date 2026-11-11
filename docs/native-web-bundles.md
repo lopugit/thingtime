@@ -2,13 +2,22 @@
 
 ## Canonical native content services — 12 November 2026
 
-The canonical Things service now has a first native Data/Folder path: existing
+The canonical Things service now has native Data/Folder and saved
+Component/Schema/Webpage paths: existing
 crystal validation and public projection, exact/list reads, optimistic updates,
 folder moves/cycle refusal, child-preserving deletion, accounting and Timeline.
 The request scope binds the real provider and home identity, rejects escaped
 handles, and never selects a store from HTTP input. Friend/group membership,
 viewer subspace roles and execution-completion receipts read the selected native
 store; missing native data never borrows hosted records.
+
+Schema-stamped Data uses the canonical visible-schema lookup and authoritative
+name stamping. Page resolution uses the same Component selection and audience
+checks as Mongo. Native page history captures direct block Component definitions
+in the exact content transaction; permission and relationship reads use that
+same snapshot. Missing/inaccessible Components capture null. This deliberately
+preserves existing history semantics rather than capturing the entire recursive
+Action/Schema/Data closure. Escaped or foreign transactions fail closed.
 
 Folder deletion follows the existing Mongo drain model. Each child move and its
 history commit together, then an exact physical-root check guards final deletion.
@@ -18,8 +27,8 @@ and final deletion retain the cleanup lane. A retry cannot delete a replacement
 root that happens to reuse the same portable ID.
 
 Generic native Things HTTP remains unavailable. This service slice does not yet
-support the full `api.things` contract: app/PAT namespaces, composed hooks, schema
-provenance, managed kinds and target cascades require their canonical adapters.
+support the full `api.things` contract: app/PAT namespaces, composed hooks,
+shared writes, managed kinds and target cascades require their canonical adapters.
 Unsupported private items retain the ordinary not-found response for unauthorized
 viewers. Do not advertise the whole feature merely because its HTTP verbs could
 be dispatched. Real SQLite service tests and local Mongo HTTP regression are
@@ -44,10 +53,11 @@ projection uses the selected native identity repository without falling back to
 hosted or legacy account data.
 
 These foundations do **not** enable generic native Things HTTP routes. Remaining
-work includes broader canonical service coverage and request integration, complete saved-page component
-captures, native note/version-name writes, indexed native query planning, and
+work includes broader canonical service coverage and request integration,
+native note/version-name writes, indexed native query planning, and
 real HTTP plus desktop/mobile UI acceptance. Native Webpage after-image capture
-currently refuses before history append. Queries still use full scans and may
+now uses its protected content transaction; catalog/picker and recursive shared
+composition support remain separate. Queries still use full scans and may
 rescan rows across internal batches; there is no indexed-query or performance
 parity claim. See the
 [content/history evidence](../artifacts/anonymous-release-2026-11-12/native-content-history/README.md).

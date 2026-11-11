@@ -61,7 +61,12 @@ export function decodeThingsCursor(scope: ThingsScope, selection: Omit<ThingsSel
 }
 export function thingsWindow(scope: ThingsScope, selection: Omit<ThingsSelection, 'cursor'>, documents: StoredThing[]): ThingsWindow {
  const rows = documents.slice(0, selection.limit), last = rows[rows.length - 1];
- return { documents: rows, nextCursor: documents.length > selection.limit && last ? Buffer.from(JSON.stringify({ v: 1, key: selectionKey(scope, selection), at: date(last.createdAt).getTime(), id: last.shareId })).toString('base64url') : null };
+ return { documents: rows, nextCursor: documents.length > selection.limit && last ? encodeThingsCursor(scope, selection, { createdAt: last.createdAt, id: last.shareId }) : null };
+}
+/** Preserve the caller's selected scope when an internal transaction supplies
+ * the same semantic read. Encoding a cursor grants no data access. */
+export function encodeThingsCursor(scope: ThingsScope, selection: Omit<ThingsSelection, 'cursor'>, after: { createdAt: Date; id: string }): string {
+ return Buffer.from(JSON.stringify({ v: 1, key: selectionKey(scope, selection), at: date(after.createdAt).getTime(), id: string(after.id) })).toString('base64url');
 }
 const date = (value: unknown): Date => value instanceof Date && Number.isFinite(+value) ? value : thingsPersistenceError('invalid content timestamp');
 export const sameThingValue = (a: unknown, b: unknown) => Buffer.from(BSON.serialize({ value: a })).equals(Buffer.from(BSON.serialize({ value: b })));

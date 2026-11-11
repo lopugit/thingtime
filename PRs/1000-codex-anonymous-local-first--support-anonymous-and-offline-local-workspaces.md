@@ -2,6 +2,25 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Native Builder definitions and captures — 12 November 2026
+
+Canonical native services now admit saved Components, Schemas and Webpages and
+schema-stamped Data. Permission and receipt reads share the exact content
+transaction. Direct Component captures, history heads and storage commit together;
+foreign transaction inputs and failed captures roll back. Hidden permalink and
+Component selection behavior use the existing authorization/resolver semantics.
+Generic Things HTTP, shared writes, catalog/picker services, namespaces, managed
+kinds and actual native Builder UI remain open.
+
+All 17 applicable commands pass (three unchanged initial suites plus 14 after a
+test-only correction): 1,883 passes, zero failures, eight explicit skips;
+TypeScript/ratchet, full lint (0 errors/375 warnings), packaged build/inventory and
+actual Mongo/SQLite HTTP restart fixtures. Only two test files changed between
+inventories. The initial brittle source-inspection failure is retained.
+Nitro: `e84fb066c4bded7d5c5680a7b0c1bcac5d2625abf5c9bdb88c7bfe08a49c4371`.
+No new iOS compile, installed UI or production/connected-host acceptance claimed.
+[Evidence and limitations](../artifacts/anonymous-release-2026-11-12/native-builder-services/README.md).
+
 ## Final main refresh — 12 November 2026
 
 Main moved during validation; also integrated

@@ -1,13 +1,24 @@
 # Things and folders
 
 The native service integration uses `things/persistenceContext.ts` for protected
-request lifetime and `nativeOrdinaryPersistence.ts` for Data/Folder writes and
+request lifetime and `nativeOrdinaryPersistence.ts` for Data/Folder and saved
+Component/Schema/Webpage writes and
 canonical Timeline. `nativeAudienceReads.ts` supplies real friend/group/role
 candidates; `contentExecutionGate.ts` uses native receipt reads. Generic native
 HTTP remains unavailable until the declared Things contract is implemented.
-Service regressions: `nativeOrdinaryService.test.ts`, `persistenceContext.test.ts`,
+Service regressions: `test:native-things` (also in `test:unit`) runs
+`nativeOrdinaryService.test.ts`, `persistenceContext.test.ts`,
 `nativeAudienceReads.test.ts`, `contentExecutionGate.native.test.ts`; the bundled
 Mongo HTTP fixture covers valid folder moves and child-preserving deletion.
+
+Native Builder definitions reuse canonical crystal validators and schema
+provenance. `webpages/componentCandidates.ts` provides semantic candidates to
+the normal page resolver; `timeline/componentBindings.ts` captures approved
+direct block Component definitions using the exact content transaction. Bound
+permission reads share that transaction, with scope-bound cursor translation.
+Missing or inaccessible Components retain explicit null captures; this is not a
+snapshot of the full Action/Schema/Data dependency closure. Catalog decorations,
+shared-writer additions, app/token namespaces and HTTP activation remain separate.
 
 Native persistence foundation (12 November 2026):
 `things/persistence.ts` defines internal semantic content reads/transactions,
@@ -72,7 +83,7 @@ Archive and Restore use the shared Thing action registry, `PersistedThingContext
 and exact-subject `/things/actions` availability/mutation contract. The canonical
 server predicate owns authorization; a page, content kind or stale parent projection
 must not independently decide permission. Batch library operations reuse that predicate.
-Extended reads require `LIBRARY_ARCHIVE_READ_REQUIREMENTS` (`api.things` 1.64),
+Extended reads require `LIBRARY_ARCHIVE_READ_REQUIREMENTS` (`api.things` 1.65),
 independent of Component argument bindings at their existing 1.63 floor. The shared Archive checker
 negotiates both the origin manifest and fixed active API source; action/search/
 bulk gates retain their own 1.1/1.8/1.9 contracts.

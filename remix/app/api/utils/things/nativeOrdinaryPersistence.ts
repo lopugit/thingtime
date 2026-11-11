@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '../../../schemas/builderThing';
 import { createNativeTimelinePersistence } from '../documentStore/nativeTimelinePersistence';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { currentContentStorageSizeBytes, StorageMutationError } from '../storage/storageCore';
@@ -7,8 +8,10 @@ import { getThingsTransactionBinding, matchesThingVersion, type StoredThing, typ
 /** Temporary admission boundary for the first canonical service vertical slice.
  * Unsupported composition/namespace families remain unavailable until their
  * canonical dependencies have semantic ports; they never fall through to Mongo. */
+export const NATIVE_ORDINARY_CONTENT_KINDS = ['data', 'folder', 'component', 'schema', 'webpage'] as const;
 export function nativeOrdinaryThingSupported(row: StoredThing): boolean {
- return Array.isArray(row.thingtime) && row.thingtime.length === 1 && ['data', 'folder'].includes(row.thingtime[0]) &&
+ const contentKinds = Array.isArray(row.thingtime) ? row.thingtime.filter((kind: string) => kind !== BUILDER_THING_KIND) : [];
+ return contentKinds.length === 1 && NATIVE_ORDINARY_CONTENT_KINDS.some(kind => kind === contentKinds[0]) &&
   row.appId == null && row.sandboxSpace == null && row.sandboxExpiresAt == null && row.targetId == null &&
   row.executionHold == null && row.creationCheckpoint == null && row.libraryArchived !== true && row.subspacePrivate !== true &&
   row.extended?.serviceWorkspaceId == null && row.crystal?.workspaceId == null &&
@@ -29,7 +32,7 @@ export async function insertNativeOrdinaryThing(repository: ThingsPersistence, d
   const { port, session } = history(tx, document.ownerId);
   await applyUserStorageDelta(document.ownerId, document.sizeBytes, session);
   const inserted = await tx.insert(document);
-  await recordThingMutation(port, null, inserted, capture, session);
+  await recordThingMutation(port, null, inserted, capture, session, tx);
   return inserted;
  });
 }
@@ -43,7 +46,7 @@ export async function updateNativeOrdinaryThing(repository: ThingsPersistence, b
   if (previousBytes === null) throw new StorageMutationError(503, 'accounting_unavailable', 'Thing requires the current storage migration before it can be updated');
   await applyUserStorageDelta(before.ownerId, after.sizeBytes - previousBytes, session);
   if (!await tx.compareAndSwap(version(before), after)) return conflict();
-  await recordThingMutation(port, before, after, capture, session);
+  await recordThingMutation(port, before, after, capture, session, tx);
   return after;
  });
 }
@@ -81,7 +84,7 @@ export async function deleteNativeOrdinaryThing(repository: ThingsPersistence, b
    const after = { ...child, folderId: before.folderId ?? null, updatedAt: new Date(Math.max(+child.updatedAt + 1, +move.now)) };
    if (!await tx.compareAndSwap(version(child), after)) return conflict();
    const { port, session } = history(tx, before.ownerId);
-   await recordThingMutation(port, child, after, move, session);
+   await recordThingMutation(port, child, after, move, session, tx);
   });
  }
  return repository.transaction('delete', async tx => {
@@ -94,6 +97,6 @@ export async function deleteNativeOrdinaryThing(repository: ThingsPersistence, b
   // Canonical History marks unknown baselines for reconciliation; no guessed
   // refund makes an unavailable ledger appear ready.
   if (bytes !== null) await applyUserStorageDelta(before.ownerId, -bytes, session);
-  await recordThingMutation(port, before, null, capture, session);
+  await recordThingMutation(port, before, null, capture, session, tx);
  });
 }

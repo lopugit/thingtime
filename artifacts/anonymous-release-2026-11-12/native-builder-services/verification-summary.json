@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "completedCommands": 17,
+  "testPasses": 1883,
+  "testFailures": 0,
+  "testSkips": 8,
+  "reusedChecks": [
+    "native-things-services",
+    "document-store",
+    "things"
+  ],
+  "runtimeSourceUnchangedBetweenRuns": true,
+  "changedTestFiles": [
+    "remix/app/api/utils/webpages/componentCandidates.test.ts",
+    "remix/app/api/utils/webpages/hiddenPageContract.test.ts"
+  ],
+  "skippedChecks": [
+    "\ufe63 native post and Thing permalinks preserve audience context and reachable composer controls (0.412875ms) # SKIP",
+    "\ufe63 513 MiB of real Blob files collect, export and import with independent exact digests (0.38925ms) # SKIP",
+    "\ufe63 real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte (0.351167ms) # SKIP",
+    "\ufe63 real demo installation preserves customized parts and saves private records (0.337666ms) # SKIP",
+    "\ufe63 shared page audience includes its author components, never a foreign private component (0.326125ms) # SKIP",
+    "\ufe63 Builder independently loads, retries and paginates content on mobile without leaking an old identity (0.319291ms) # SKIP",
+    "\ufe63 anonymous page sources execute locally, refresh, and retire at workspace boundaries (0.307875ms) # SKIP",
+    "\ufe63 webpage drafts retain transient failures but isolate identity changes and stale landings (1.003584ms) # SKIP"
+  ],
+  "nitroSha256": "e84fb066c4bded7d5c5680a7b0c1bcac5d2625abf5c9bdb88c7bfe08a49c4371",
+  "lint": {
+    "errors": 0,
+    "warnings": 375
+  },
+  "nativeThingsHttpEnabled": false
+}

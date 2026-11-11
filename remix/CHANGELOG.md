@@ -160,6 +160,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Extend native content services to saved Component/Schema/Webpage
+  definitions and canonical schema provenance. Capture page Component history
+  in the actual SQLite content transaction, preserving permission reads and
+  cursor scopes. Generic Things HTTP remains gated. See
+  [PR #1000's note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  **Codex (AI)**
+
 - 2026-11-12: Integrate main `762afab2` and `426fbef9` into the offline-workspace branch,
   retaining iOS folder-upload policy and multipart recovery alongside native
   database contracts. Give their combined Things contract a distinct 1.65

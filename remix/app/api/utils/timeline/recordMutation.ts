@@ -1,4 +1,5 @@
 import { timelinePersistence } from './persistence';
+import type { ThingsReads } from '../things/persistence';
 import { assertUserVaultMutationIntegrity } from '../lopu/userVaultIntegrity';
 import { thingContentSnapshot } from '../../../timeline/thingContent.ts';
 import { recordCreationContentEpoch } from '../things/contentExecutionGate';
@@ -75,14 +76,14 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 
 /** Call within the content transaction after its successful CAS. A thrown
  * append/accounting error rolls back the content and head as one operation. */
-export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
+export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any, compositionReads?: ThingsReads) {
 	return timelinePersistence(things, session).guard((after ?? before)?.ownerId, session, async () => {
 		await recordCreationContentEpoch(things, before, after, session);
 		const prepared = prepareThingMutation(before, after, capture);
 		if (!prepared) return null;
 		await assertUserVaultMutationIntegrity(things, before, after, session);
 		const { parts } = prepared;
-		const event = await recordPageComponentBindings(things, session, before, after, prepared.event);
+		const event = await recordPageComponentBindings(things, session, before, after, prepared.event, compositionReads);
 		// An untrusted legacy byte stamp must not prevent deletion. The old payload
 		// moves into a fully stamped history record; the existing delete path and
 		// this append fence the ledger for exact reconciliation, never guess a delta.

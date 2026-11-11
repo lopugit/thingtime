@@ -1,5 +1,5 @@
 import { getBoundThingsPersistence } from './persistenceContext';
-import { nativeOrdinaryThingSupported, nativeOrdinaryUnavailable, insertNativeOrdinaryThing, updateNativeOrdinaryThing, deleteNativeOrdinaryThing } from './nativeOrdinaryPersistence';
+import { NATIVE_ORDINARY_CONTENT_KINDS, nativeOrdinaryThingSupported, nativeOrdinaryUnavailable, insertNativeOrdinaryThing, updateNativeOrdinaryThing, deleteNativeOrdinaryThing } from './nativeOrdinaryPersistence';
 import { withGatewayWork } from '../deployment/environmentGateway';
 import { currentUserIdentityRepository } from '../auth/userIdentityRepository';
 import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
@@ -1474,7 +1474,7 @@ export const createThing = async (
   if (isProtectedThingtime(validated.thingtime)) {
     return fail(403, `${validated.thingtime.join('+')} things are managed by their own endpoints`);
   }
-  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => key !== 'timelineCapture') || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }) || validated.crystal.schemaId !== undefined)) return nativeOrdinaryUnavailable();
+  if (nativeRepository && (app || viewer?.pat || Object.keys(hooks).some(key => key !== 'timelineCapture') || !nativeOrdinaryThingSupported({ thingtime: validated.thingtime }))) return nativeOrdinaryUnavailable();
 
   // saves (the user's personal library) and shares (public social reposting)
   // are first-party surfaces — an app acting as the user must not write into
@@ -4210,7 +4210,7 @@ export const listThings = async (
     if (!viewer?.id) return fail(401, 'Unauthorized');
     if (app || viewer.pat || query.targetId || query.appId || query.offset !== undefined || query.libraryArchive || query.builderAppOnly || query.commentProjection) return nativeOrdinaryUnavailable();
     const kinds = query.thingtime?.length ? query.thingtime : undefined;
-    if (kinds?.some(kind => !['data', 'folder'].includes(kind))) return nativeOrdinaryUnavailable();
+    if (kinds?.some(kind => kind !== 'builder-thing' && !NATIVE_ORDINARY_CONTENT_KINDS.some(supported => supported === kind))) return nativeOrdinaryUnavailable();
     const schemaFilter = listSchemaIdMatch(query.schemaId), parentFilter = listCrystalIdMatch('parentId', query.parentId);
     if (isFail(schemaFilter)) return schemaFilter; if (isFail(parentFilter)) return parentFilter;
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
@@ -5866,7 +5866,6 @@ export const updateThing = async (
     typeof (crystalOf(doc) as Record<string, unknown>)?.schemaId === 'string'
       ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
       : undefined;
-  if (nativeRepository && validated.crystal.schemaId !== undefined) return nativeOrdinaryUnavailable();
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
     const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer, options.transaction);
     if (isFail(provenance)) return provenance;

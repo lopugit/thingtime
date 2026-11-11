@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BSON } from 'mongodb';
-import { createNativeThingsPersistenceContext, getBoundThingsPersistence } from './persistenceContext';
+import { createNativeThingsPersistenceContext, getBoundThingsPersistence, withBoundTimelineRead } from './persistenceContext';
 import { createNativeHomeAuthRepositories } from '../documentStore/nativeUserIdentities';
 import { createCollectionProvider } from '../documentStore/collectionProvider';
 import { openSqliteDocumentStore } from '../documentStore/sqliteStore';
@@ -13,6 +13,13 @@ import { buildUserSecure } from '../auth/users';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry';
 import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS } from '../storage/storageCore';
 import { subscriptionShareId } from '../subscriptions/subscriptionIdentity';
+import { resolveWebpage } from '../webpages/webpages';
+import { createNativeTimelinePersistence } from '../documentStore/nativeTimelinePersistence';
+import { getThingsTransactionBinding, type ThingsReads, type ThingsTransaction } from './persistence';
+import { recordPageComponentBindings } from '../timeline/componentBindings';
+import { newThingMutationCapture, prepareThingMutation } from '../timeline/recordMutation';
+import { readTimelineEntries } from '../timeline/repository';
+import { readComponentBinding } from '../../../timeline/componentBindings';
 import { createThing, getThing, getThings, listThings, updateThing, deleteThing } from './things';
 const ownerId = 'abcdef0123456789abcdef01', at = new Date('2026-11-12T00:00:00Z');
 const document = (id: string) => ({ _id: id, shareId: id, ownerId, thingtime: ['data'], crystal: {}, createdAt: at, updatedAt: at });
@@ -68,7 +75,7 @@ test('native canonical ACL never exposes foreign private content; unsupported op
 
 test('private unsupported Things remain indistinguishable from absent records', async t => {
  const f = await fixture(t);
- await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).insert(BSON.serialize({ _id: 'unsupported-private', shareId: 'unsupported-private', ownerId, thingtime: ['webpage'], crystal: {}, acl: [ACL_OWNER], createdAt: at, updatedAt: at })));
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).insert(BSON.serialize({ _id: 'unsupported-private', shareId: 'unsupported-private', ownerId, thingtime: ['action'], crystal: {}, acl: [ACL_OWNER], createdAt: at, updatedAt: at })));
  for (const viewer of [null, { id: 'other' }]) {
   const found = await f.run(() => getThing(viewer, 'unsupported-private'));
   const absent = await f.run(() => getThing(viewer, 'missing'));
@@ -129,4 +136,114 @@ test('protected history and archived rows are excluded before paging and every s
  assert.deepEqual(second.things.map(row => row.id), ['eligible-c']); assert.equal(second.nextCursor, null);
  const changedFilter = await f.run(() => listThings(ownerId, { limit: 2, cursor: first.nextCursor })); assert.equal(changedFilter.ok, false); if (!changedFilter.ok) assert.equal(changedFilter.status, 400);
  const all = await f.run(() => listThings(ownerId, { limit: 2 })); assert.equal(all.ok, true); if (all.ok) assert.deepEqual(all.things.map(row => row.id), ['eligible-a', 'archived']);
+});
+
+test('native Builder schema provenance uses canonical validation, live visibility and stale CAS', async t => {
+ const f = await fixture(t);
+ const schema = await f.run(() => createThing(ownerId, { shareId: 'builder-schema', thingtime: ['schema'], crystal: { name: 'Tasks', fields: [{ name: 'title', type: 'string' }] }, visibility: 'private' }, { id: ownerId }));
+ assert.equal(schema.ok, true); if (!schema.ok) return;
+ assert.ok(schema.doc.thingtime.includes('builder-thing'));
+ const data = await f.run(() => createThing(ownerId, { shareId: 'typed-data', thingtime: ['data'], crystal: { title: 'Editable', schemaId: 'builder-schema', schema: 'Forged name' }, visibility: 'private' }, { id: ownerId }));
+ assert.equal(data.ok, true); if (!data.ok) return; assert.equal(data.doc.crystal.schema, 'Tasks');
+ const listed = await f.run(() => listThings(ownerId, { schemaId: 'builder-schema' })); assert.equal(listed.ok, true); if (listed.ok) assert.deepEqual(listed.things.map(row => row.id), ['typed-data']);
+ const first = await f.run(() => getThing(ownerId, 'typed-data')); assert.equal(first.ok, true); if (!first.ok) return;
+ const edited = await f.run(() => updateThing(ownerId, 'typed-data', { crystal: { title: 'Changed' } }, { expectedUpdatedAt: first.thing.updatedAt })); assert.equal(edited.ok, true);
+ const stale = await f.run(() => updateThing(ownerId, 'typed-data', { crystal: { title: 'Stale' } }, { expectedUpdatedAt: first.thing.updatedAt })); assert.equal(stale.ok, false); if (!stale.ok) assert.equal(stale.status, 409);
+ const foreignId = 'abcdef0123456789abcdef02';
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).insert(BSON.serialize({ _id: 'foreign-schema', shareId: 'foreign-schema', ownerId: foreignId, thingtime: ['schema'], crystal: { name: 'Private foreign', fields: [] }, acl: [ACL_OWNER], createdAt: at, updatedAt: at })));
+ const privateSchema = await f.run(() => createThing(ownerId, { shareId: 'forbidden-typed-data', thingtime: ['data'], crystal: { schemaId: 'foreign-schema' } }, { id: ownerId })); assert.equal(privateSchema.ok, false); if (!privateSchema.ok) assert.equal(privateSchema.status, 400);
+ const replaced = await f.run(() => updateThing(ownerId, 'typed-data', { crystal: { schemaId: 'foreign-schema' } })); assert.equal(replaced.ok, false);
+ assert.equal((await f.run(() => deleteThing(ownerId, 'builder-schema'))).ok, true);
+ // Unchanged validated provenance remains editable after schema revocation.
+ assert.equal((await f.run(() => updateThing(ownerId, 'typed-data', { crystal: { title: 'After schema removal' } }))).ok, true);
+ const invalid = await f.run(() => createThing(ownerId, { shareId: 'invalid-schema', thingtime: ['schema'], crystal: { name: 'Bad', fields: [{ name: 'unsafe.path', type: 'string' }] } }, { id: ownerId })); assert.equal(invalid.ok, false);
+ await f.run(async () => { assert.equal(await getBoundThingsPersistence(null)!.readExact('forbidden-typed-data'), null); assert.equal(await getBoundThingsPersistence(null)!.readExact('invalid-schema'), null); });
+});
+
+const fixtureRows = async (f: Awaited<ReturnType<typeof fixture>>) => f.run(async () => {
+ const rows: any[] = []; let cursor: string | null = null;
+ do { const page = await getBoundThingsPersistence(null)!.readWindow({ ownerId, limit: 128, cursor }); rows.push(...page.documents); cursor = page.nextCursor; } while (cursor);
+ return rows;
+});
+const pageCaptures = async (f: Awaited<ReturnType<typeof fixture>>, headId: string) => f.run(async () => {
+ const entries = await withBoundTimelineRead(ownerId, port => readTimelineEntries(port, ownerId, [headId]));
+ assert.equal(entries?.length, 1);
+ const dependencies = entries![0].event.dependencies;
+ return await withBoundTimelineRead(ownerId, port => readTimelineEntries(port, ownerId, dependencies.map(item => item.eventId)));
+});
+
+test('native Builder Component and Webpage services capture actual definitions, inaccessible nulls, edits and reopen', async t => {
+ const f = await fixture(t);
+ const component = await f.run(() => createThing(ownerId, { shareId: 'builder-component', thingtime: ['component'], visibility: 'private', crystal: { name: 'Editable card', componentKey: 'editable-card', version: 1, render: { tag: 'p', text: 'Original card' } } }, { id: ownerId })); assert.equal(component.ok, true); if (!component.ok) return;
+ assert.ok(component.doc.thingtime.includes('builder-thing'));
+ const foreignId = 'abcdef0123456789abcdef02';
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).insert(BSON.serialize({ _id: 'foreign-component', shareId: 'foreign-component', ownerId: foreignId, thingtime: ['component'], crystal: { name: 'Private foreign', render: { tag: 'p', text: 'Must stay private' } }, acl: [ACL_OWNER], createdAt: at, updatedAt: at })));
+ const page = await f.run(() => createThing(ownerId, { shareId: 'builder-page', thingtime: ['webpage'], visibility: 'private', crystal: { name: 'Editable page', blocks: [{ id: 'owned', type: 'component', component: 'editable-card' }, { id: 'foreign', type: 'component', component: 'foreign-component' }] } }, { id: ownerId })); assert.equal(page.ok, true); if (!page.ok) return;
+ const rendered = await f.run(() => resolveWebpage({ id: ownerId }, { id: 'builder-page' })); assert.equal(rendered.ok, true); if (!rendered.ok) return;
+ assert.equal(rendered.refs['editable-card'], 'builder-component'); assert.equal(rendered.refs['foreign-component'], null);
+ assert.deepEqual(rendered.components.map(row => row.id), ['builder-component']);
+ const first = await pageCaptures(f, page.doc.timelineHeadId!);
+ const bindings = first!.map(entry => readComponentBinding(entry.event));
+ assert.equal(bindings.find(row => row?.ref === 'editable-card')?.component?.crystal.render.text, 'Original card');
+ assert.equal(bindings.find(row => row?.ref === 'foreign-component')?.component, null);
+ assert.ok(first!.every(entry => !JSON.stringify(entry.event).includes('Must stay private')));
+ const updatedComponent = await f.run(() => updateThing(ownerId, 'builder-component', { crystal: { render: { tag: 'p', text: 'Changed card' }, version: 2 } })); assert.equal(updatedComponent.ok, true);
+ const updatedPage = await f.run(() => updateThing(ownerId, 'builder-page', { crystal: { name: 'Edited page' } }, { expectedUpdatedAt: page.doc.updatedAt.toISOString() })); assert.equal(updatedPage.ok, true); if (!updatedPage.ok) return;
+ const next = await pageCaptures(f, updatedPage.thing.timelineHeadId!);
+ assert.equal(next!.map(entry => readComponentBinding(entry.event)).find(row => row?.ref === 'editable-card')?.component?.crystal.render.text, 'Changed card');
+ // The earlier page still holds its own immutable render definition.
+ assert.equal((await pageCaptures(f, page.doc.timelineHeadId!))!.map(entry => readComponentBinding(entry.event)).find(row => row?.ref === 'editable-card')?.component?.crystal.render.text, 'Original card');
+ const stale = await f.run(() => updateThing(ownerId, 'builder-page', { crystal: { name: 'Stale page' } }, { expectedUpdatedAt: page.doc.updatedAt.toISOString() })); assert.equal(stale.ok, false); if (!stale.ok) assert.equal(stale.status, 409);
+ const reopened = createCollectionProvider(await openSqliteDocumentStore(join(f.directory, 'home.sqlite'))), auth = await createNativeHomeAuthRepositories(reopened, 'home'), context = createNativeThingsPersistenceContext(reopened, 'home');
+ try { const after = await auth.run(() => context.run(() => resolveWebpage({ id: ownerId }, { id: 'builder-page' }))); assert.equal(after.ok, true); if (after.ok) { assert.equal(after.page?.crystal.name, 'Edited page'); assert.equal(after.components[0].crystal.render.text, 'Changed card'); } } finally { context.close(); await reopened.close(); }
+ // Unsupported shared writes remain refused even for readable Builder data.
+ const sharedWrite = await f.run(() => updateThing(foreignId, 'builder-page', { crystal: { name: 'Unauthorized' } })); assert.equal(sharedWrite.ok, false);
+ const rows = await fixtureRows(f), ledger = rows.find(row => row.shareId === subscriptionShareId('user', ownerId));
+ assert.equal(ledger.crystal.storageUsedBytes, rows.filter(row => row.storageClass === 'content').reduce((total, row) => total + row.sizeBytes, 0));
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).updateOne({ op: 'eq', path: ['shareId'], value: subscriptionShareId('user', ownerId) }, [{ op: 'set', path: ['crystal', 'tierQuotas', 'userStorageBytes'], value: 0 }]));
+ const deleted = await f.run(() => deleteThing(ownerId, 'builder-page')); assert.equal(deleted.ok, true);
+ assert.equal((await f.run(() => getThing(ownerId, 'builder-page'))).ok, false);
+ assert.equal((await pageCaptures(f, updatedPage.thing.timelineHeadId!))!.map(entry => readComponentBinding(entry.event)).find(row => row?.ref === 'editable-card')?.component?.crystal.render.text, 'Changed card');
+});
+
+test('native Builder capture quota failure rolls back page content, head, captures and charges', async t => {
+ const f = await fixture(t);
+ const component = await f.run(() => createThing(ownerId, { shareId: 'capture-component', thingtime: ['component'], visibility: 'private', crystal: { name: 'Card', render: { tag: 'p', text: 'Small' } } }, { id: ownerId })); assert.equal(component.ok, true, JSON.stringify(component));
+ const page = await f.run(() => createThing(ownerId, { shareId: 'capture-page', thingtime: ['webpage'], visibility: 'private', crystal: { name: 'Page', blocks: [{ id: 'card', type: 'component', component: 'capture-component' }] } }, { id: ownerId })); assert.equal(page.ok, true); if (!page.ok) return;
+ assert.equal((await f.run(() => updateThing(ownerId, 'capture-component', { crystal: { render: { tag: 'p', text: 'Long capture '.repeat(1000) } } }))).ok, true);
+ const before = await fixtureRows(f), oldPage = before.find(row => row.shareId === 'capture-page'), used = before.find(row => row.shareId === subscriptionShareId('user', ownerId)).crystal.storageUsedBytes;
+ await f.provider.transaction(collections => collections.collection(physicalCollectionName('things')).updateOne({ op: 'eq', path: ['shareId'], value: subscriptionShareId('user', ownerId) }, [{ op: 'set', path: ['crystal', 'tierQuotas', 'userStorageBytes'], value: used + 1000 }]));
+ const refused = await f.run(() => updateThing(ownerId, 'capture-page', { crystal: { name: 'This edit must roll back' } })); assert.equal(refused.ok, false);
+ const after = await fixtureRows(f), newPage = after.find(row => row.shareId === 'capture-page');
+ assert.deepEqual(newPage, oldPage); assert.equal(after.length, before.length); assert.equal(after.find(row => row.shareId === subscriptionShareId('user', ownerId)).crystal.storageUsedBytes, used);
+ const captureIdsBefore = before.filter(row => row.thingtime.includes('timeline-event')).map(row => row.shareId).sort();
+ assert.deepEqual(after.filter(row => row.thingtime.includes('timeline-event')).map(row => row.shareId).sort(), captureIdsBefore);
+});
+
+test('native page captures reject arbitrary readers and live foreign-provider transactions before effects', async t => {
+ const f = await fixture(t), other = await fixture(t), before = await fixtureRows(f);
+ const page = { shareId: 'guarded-page', ownerId, thingtime: ['webpage'], crystal: { name: 'Guarded', blocks: [] }, createdAt: at, updatedAt: at };
+ const event = prepareThingMutation(null, page, newThingMutationCapture(ownerId))!.event;
+ const fake: ThingsReads = { readExact: async () => { throw Error('Untrusted reader must not execute'); }, readBatch: async () => { throw Error('Untrusted reader must not execute'); }, readWindow: async () => { throw Error('Untrusted reader must not execute'); } };
+ await f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => {
+  const binding = getThingsTransactionBinding(tx, ownerId); assert.equal(binding.kind, 'native'); if (binding.kind !== 'native') return;
+  const port = createNativeTimelinePersistence(binding.collections, { ownerId, session: binding.session });
+  await assert.rejects(recordPageComponentBindings(port, binding.session, null, page, event, fake), /unknown transaction/);
+ }));
+ let foreign!: ThingsTransaction, ready!: () => void, release!: () => void;
+ const started = new Promise<void>(resolve => { ready = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+ const operation = other.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => { foreign = tx; ready(); await held; }));
+ // Attach rejection handling before the foreign transaction is deliberately
+ // invalidated, so the poison cannot become an unhandled promise rejection.
+ const foreignResult = operation.then(() => null, error => error);
+ await started;
+ try {
+  await f.run(() => getBoundThingsPersistence(ownerId)!.transaction('write', async tx => {
+   const binding = getThingsTransactionBinding(tx, ownerId); assert.equal(binding.kind, 'native'); if (binding.kind !== 'native') return;
+   const port = createNativeTimelinePersistence(binding.collections, { ownerId, session: binding.session });
+   await assert.rejects(recordPageComponentBindings(port, binding.session, null, page, event, foreign), /foreign transaction|request scope/);
+  }));
+ } finally { release(); }
+ assert.ok(await foreignResult);
+ assert.deepEqual(await fixtureRows(f), before);
 });

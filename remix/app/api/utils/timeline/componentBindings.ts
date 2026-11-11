@@ -1,5 +1,6 @@
 import { isTimelinePersistence } from './persistence';
 import { StorageMutationError } from '../storage/storageCore';
+import { getThingsTransactionBinding, type ThingsReads, type ThingsTransaction } from '../things/persistence';
 import { createHash } from 'node:crypto';
 import { captureComponentBindings, COMPONENT_BINDING_PREFIX, type ComponentBindings } from '../../../timeline/componentBindings.ts';
 import type { TimelineEvent } from '../../../timeline/contract.ts';
@@ -8,7 +9,7 @@ import { appendTimelineEvent, readTimelineEntries } from './repository.ts';
 
 /** Definitions and page revision commit atomically. Reuse unchanged bindings
  * from the preceding version; never read another account's private Timeline. */
-export async function recordPageComponentBindings(things: any, session: any, before: any, after: any, event: TimelineEvent) {
+export async function recordPageComponentBindings(things: any, session: any, before: any, after: any, event: TimelineEvent, reads?: ThingsReads) {
 	if (!after && before?.thingtime?.includes('webpage') && before.timelineHeadId) {
 		const prior = (await readTimelineEntries(things, event.ownerId, [before.timelineHeadId], session))[0];
 		if (!prior || prior.event.thingId !== event.thingId) throw new Error("The deleted page's saved version is unavailable");
@@ -17,8 +18,13 @@ export async function recordPageComponentBindings(things: any, session: any, bef
 		return { ...event, dependencies: prior.event.dependencies };
 	}
 	if (!after?.thingtime?.includes('webpage')) return event;
-	if (isTimelinePersistence(things)) throw new StorageMutationError(503, 'storage_invariant', 'This native Timeline provider cannot resolve saved page component captures yet');
-	const resolved = await resolvePageComponentCapture(things, session, after);
+	if (isTimelinePersistence(things)) {
+		if (!reads) throw new StorageMutationError(503, 'storage_invariant', 'Native page capture requires its active content transaction');
+		const binding = getThingsTransactionBinding(reads as ThingsTransaction, event.ownerId);
+		if (binding.kind !== 'native' || binding.session !== session) throw new StorageMutationError(503, 'storage_invariant', 'Page capture requires the exact native content session');
+		things.assertTransaction(binding.session);
+	}
+	const resolved = await resolvePageComponentCapture(things, session, after, reads);
 	const byId = new Map(resolved.components.map((component) => [component.id, component]));
 	const bindings: ComponentBindings = Object.create(null);
 	for (const [ref, id] of Object.entries(resolved.refs)) bindings[ref] = id ? byId.get(id) ?? null : null;

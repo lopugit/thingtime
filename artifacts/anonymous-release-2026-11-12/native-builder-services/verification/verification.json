@@ -1,0 +1,76 @@
+{
+  "status": "failed",
+  "baseCommit": "9b2fe56ed1f8459568d032cf82709f28bb0b3bce",
+  "attribution": "Base commit plus frozen source inventory, not a clean-commit build",
+  "startedAt": "2026-11-11T23:47:13.597744+00:00",
+  "endedAt": "2026-11-11T23:47:30.646916+00:00",
+  "checks": [
+    {
+      "name": "native-things-services",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:native-things"
+      ],
+      "startedAt": "2026-11-11T23:47:13.611063+00:00",
+      "endedAt": "2026-11-11T23:47:15.512536+00:00",
+      "exitCode": 0,
+      "log": "native-things-services.log"
+    },
+    {
+      "name": "document-store",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:document-store"
+      ],
+      "startedAt": "2026-11-11T23:47:15.512604+00:00",
+      "endedAt": "2026-11-11T23:47:20.390718+00:00",
+      "exitCode": 0,
+      "log": "document-store.log"
+    },
+    {
+      "name": "things",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:things"
+      ],
+      "startedAt": "2026-11-11T23:47:20.390784+00:00",
+      "endedAt": "2026-11-11T23:47:25.944188+00:00",
+      "exitCode": 0,
+      "log": "things.log"
+    },
+    {
+      "name": "webpages",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:webpages"
+      ],
+      "startedAt": "2026-11-11T23:47:25.944264+00:00",
+      "endedAt": "2026-11-11T23:47:30.235615+00:00",
+      "exitCode": 1,
+      "log": "webpages.log"
+    }
+  ],
+  "sourceUnchanged": true,
+  "sourceChanges": [],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "4ae9238068bb5bf4c0516e8af1eca3af9daad9df176473383f3081c9b9ece00a",
+    "electron/dist/web-integrity.json": "62b240c358d6dc2e564ce3bda908af0be9843ebff3402ff759c74f9649628d6f",
+    "electron/dist/web/metadata.json": "7a8d9a97ba93406e28ef487ff42b47614da6906888850a1918e5b79a7fb729ea"
+  }
+}
