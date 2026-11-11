@@ -3,7 +3,7 @@ import { parseSymbolicLink } from './symbolicLink';
 import { emptySyncDirections, parseSyncDirections, addSyncDirection, removeUnconfirmedSyncDirection, type SyncDirectionalTotals } from './directionalProgress';
 import { eligibleFolderBatchWrite, parseFolderBatchDescriptor, type FolderBatchDescriptor, type FolderParentRef } from './folderBatch';
 import type { FolderBatchGate, PriorityReadiness } from './priorityReadiness';
-import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor } from './uploadBatch';
+import { eligibleUploadBatchWrite, parseUploadBatchDescriptor, UPLOAD_BATCH_FILES, UPLOAD_BATCH_BYTES, UPLOAD_BATCH_DESCRIPTOR_BYTES, type UploadBatchDescriptor, type UploadBatchFailure } from './uploadBatch';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { validIndexProvenance, type NativeIndexChange } from './streamingIndex';
 import { SYNC_PRIORITY_STORE, parseSyncPriorityPreferences } from './syncPriorityJournal';
@@ -1257,7 +1257,7 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 							check(); const m = get.result;
 							if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.operationId !== operationId || m.ordinal !== p.ordinal || m.batchId !== recovery.id || m.confirmed || m.retired)
 								throw Error('Unpublished member recovery evidence changed.');
-						if (m.canonicalDispatched && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
+						if (m.canonicalDispatched !== false && !terminal) throw Error('A canonical write may still be in flight. Preserve its original operation for reconciliation.');
 						if (!terminal) r.canonicalDispatched = false;
 						m.retired = true; review.put(m, memberKey); review.delete([key, spec.id, 'batch-operation', operationId]); recovery.remaining--;
 							if (!recovery.remaining) {
@@ -1764,6 +1764,92 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 				h.revision++; save(h, tx); done(undefined);
 			});
 		},
+		/** Native source-change results can release only exact members proven never
+		 * dispatched. Every marked or ambiguous member keeps its original receipt-first
+		 * recovery, including when a reply was lost after canonical publication. */
+		async retireUndispatchedUploadBatchFailures(value: PagedRunSpec, supplied: UploadBatchDescriptor, failures: UploadBatchFailure[]): Promise<number> {
+			const spec = parsePagedRunSpec(value), batch = parseUploadBatchDescriptor(supplied);
+			const ordinals = failures.filter(f => f.status === 'failed' && f.code === 'source-changed' && f.retryable === false).map(f => f.ordinal);
+			if (!ordinals.length) return 0;
+			if (ordinals.length > UPLOAD_BATCH_FILES || new Set(ordinals).size !== ordinals.length ||
+				ordinals.some(n => !Number.isInteger(n) || n < 0 || n >= batch.members.length)) throw Error('Invalid source-changed batch members.');
+			return withHeader<number>(spec, 'readwrite', (h, tx, done, fail) => {
+				const schedule = h.scheduling, recovery = schedule?.recovery;
+				if (!h.stream || spec.streaming?.source !== 'local' ||
+					!sameSyncScope(batch.scope, scope) || JSON.stringify(batch.configuration.configuration) !== JSON.stringify(spec.configuration))
+					throw Error('Original upload batch recovery changed.');
+				const review = tx.objectStore(REVIEW_STORE), ops = tx.objectStore(PAGED_RUN_STORES[1]);
+				const verifyRetired = (ordinal: number, next: () => void) => {
+					const member = batch.members[ordinal], get = review.get([key, spec.id, 'history', member.write.operation.id]);
+					get.onsuccess = () => { try {
+						check(); const saved = get.result;
+						if (!saved || saved.scope !== key || saved.run !== spec.id || saved.operation?.id !== member.write.operation.id ||
+							saved.canonicalDispatched !== false || saved.receipt !== null || saved.operation.confirmed ||
+							JSON.stringify(saved.cloud?.write) !== JSON.stringify(member.write) ||
+							JSON.stringify(saved.sourceChanged) !== JSON.stringify({ batchId: batch.batchId, ordinal, instance: h.instance }))
+							throw Error('Retired source-change evidence changed.');
+						next();
+					} catch (error) { fail(error); } };
+				};
+				if (!recovery) {
+					// An interrupted reply may arrive after the last retirement removed
+					// the batch metadata. Only its exact retained history permits a no-op.
+					let verified = 0;
+					const next = () => verified === ordinals.length ? done(0) : verifyRetired(ordinals[verified++], next);
+					next(); return;
+				}
+				if (recovery.kind || schedule?.batch || schedule?.reserved !== null || recovery.id !== batch.batchId || recovery.count !== batch.members.length)
+					throw Error('Original upload batch recovery changed.');
+				let index = 0, retired = 0;
+				const finish = () => {
+					if (!recovery.remaining) {
+						review.delete(batchMembersRange(spec, recovery.id)); review.delete([key, spec.id, 'batch-meta', recovery.id]);
+						delete schedule.recovery;
+					}
+					if (retired) {
+						h.confirmedThrough = null;
+						if (h.stream!.terminal && h.operations === h.confirmed) h.phase = 'complete';
+						h.revision++; save(h, tx);
+					}
+					done(retired);
+				};
+				const next = () => { try {
+					check(); if (index === ordinals.length) { finish(); return; }
+					const ordinal = ordinals[index++], member = batch.members[ordinal], operationId = member.write.operation.id;
+					const memberKey = [key, spec.id, 'batch-member', recovery.id, ordinal], get = review.get(memberKey);
+					get.onsuccess = () => { try {
+						check(); const m = get.result;
+						if (!m || m.scope !== key || m.run !== spec.id || m.instance !== h.instance || m.batchId !== recovery.id ||
+							m.ordinal !== ordinal || m.operationId !== operationId || m.deferred) throw Error('Source-changed member recovery evidence changed.');
+						if (m.retired) { verifyRetired(ordinal, next); return; }
+						const pointer = review.get([key, spec.id, 'batch-operation', operationId]);
+						pointer.onsuccess = () => { try {
+							check(); const p = pointer.result;
+							if (!p || p.instance !== h.instance || p.batchId !== recovery.id || p.ordinal !== ordinal)
+								throw Error('Source-changed member lost its original batch pointer.');
+							const rowGet = ops.index('operation').get([key, operationId]);
+							rowGet.onsuccess = () => { try {
+								check(); const r = row(rowGet.result, spec);
+								if (r.operation.id !== operationId || !r.cloud || JSON.stringify(r.cloud.write) !== JSON.stringify(member.write))
+									throw Error('Source-changed member lost its immutable cloud binding.');
+								if (m.confirmed || r.operation.confirmed || r.receipt !== null || m.canonicalDispatched !== false || r.canonicalDispatched !== false) { next(); return; }
+								review.add({ ...r, unpublished: true, conflict: false, sourceChanged: { batchId: batch.batchId, ordinal, instance: h.instance } }, [key, spec.id, 'history', operationId]);
+								ops.delete([key, spec.id, ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending', ...orderKey(r.operation, spec)]);
+								review.delete([key, spec.id, 'pending-path', r.path]);
+								review.delete([key, spec.id, 'batch-operation', operationId]);
+								m.retired = true; review.put(m, memberKey);
+								if (h.directions) removeUnconfirmedSyncDirection(h.directions, r.operation);
+								h.operations--; h.cloud!.prepared--; recovery.remaining--; retired++;
+								if (!h.operations) h.cloud!.after = null;
+								next();
+							} catch (error) { fail(error); } };
+						} catch (error) { fail(error); } };
+					} catch (error) { fail(error); } };
+				} catch (error) { fail(error); } };
+				next();
+			});
+		},
 		async claimUploadBatch(value: PagedRunSpec, configuration: SavedFileSyncConfiguration): Promise<UploadBatchDescriptor | null> {
 			const batch = await this.claimTransferBatch(value, configuration, false);
 			return batch && !('kind' in batch) ? batch : null;
@@ -1892,14 +1978,14 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 						if (bytes(chosen) + 2 > INVENTORY_PAGE_BYTES) throw Error('Sync operation exceeds its byte bound.');
 						// Planned ancestor copies must be acknowledged before their child.
 						const parts = chosen.mutation.path.split('/'), ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join('/'));
-						const finish = (operation: SyncOperation) => {
+						const finish = (operation: SyncOperation, preserveUnknownDispatch = false) => {
 							// A new input may arrive between the bulk probe and this fallback
 							// claim. Leave eligible unreserved work for the next bulk probe.
 							// A full preparation queue still frees one ordinary slot.
 							if (deferBatchEligible && !candidate.rebindPending && operation.id === chosen.id && h.operations - h.confirmed < preparationCapacity &&
 								candidate.cloud && (eligibleUploadBatchWrite(candidate.cloud.write, scope) || deferFolderBatchEligible && eligibleFolderBatchWrite(candidate.cloud.write, scope))) { done(null); return; }
 							if (operation.id === chosen.id) advance?.();
-							if (operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
+							if (!preserveUnknownDispatch && operation.id === chosen.id && candidate.canonicalDispatched === undefined && schedule.reserved === null && !schedule.batch && !schedule.recovery) {
 								candidate.canonicalDispatched = false; ops.put(candidate, [key, spec.id, ...orderKey(chosen, spec)]);
 							}
 							schedule.reserved = operation.id; schedule.canonical = canonical; delete schedule.streamScan; schedule.legacy = false; persist(); done(operation);
@@ -1920,11 +2006,33 @@ export function pagedRunJournal(db: IDBDatabase, access: JournalAccess, keyRange
 									throw Error('Upload ancestor requires canonical sync order.');
 								if (!first && candidate.cloud && ancestors.length && parents.at(-1) === null && identifier(candidate.cloud.write.folderId)) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { done(null); return; } finish(chosen); } catch (e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										if (supersession.result) {
+											const mutation = chosen.mutation, write = rebindWrite(candidate, spec);
+											// A sealed feed cannot receive its replacement parent. Reserve
+											// this original solely for receipt-first target recovery. An
+											// unknown historical dispatch marker must remain unknown.
+											if (spec.streaming?.source === 'local' && h.stream?.terminal &&
+												(h.stream.indexedSequence ?? h.stream.sequence) === h.stream.sequence &&
+												['backup', 'upload'].includes(spec.configuration!.mode) &&
+												write && mutation.kind === 'copy' && mutation.from === 'local' &&
+												mutation.expectedTarget === null && write.before === null && write.folderId === candidate.cloud!.write.folderId) {
+												finish(chosen, true); return;
+											}
+											done(null); return;
+										}
+										finish(chosen);
+									} catch (e) { fail(e); } }; return;
 								}
 								if (!first && candidate.cloud && parents.at(-1)?.confirmed && candidate.cloud.write.folderId !== parents.at(-1)!.id) {
 									const supersession = tx.objectStore(REVIEW_STORE).get([key, spec.id, 'folder-supersession', candidate.cloud.write.folderId!]);
-									supersession.onsuccess = () => { try { check(); if (supersession.result) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation, spec)]); } finish(chosen); } catch(e) { fail(e); } }; return;
+									supersession.onsuccess = () => { try {
+										check();
+										const replaced = !!supersession.result;
+										if (replaced) { candidate.rebindPending = true; ops.put(candidate, [key, spec.id, ...orderKey(candidate.operation, spec)]); }
+										finish(chosen, replaced);
+									} catch(e) { fail(e); } }; return;
 								}
 								finish(first ?? chosen);
 							} catch (error) { fail(error); } };

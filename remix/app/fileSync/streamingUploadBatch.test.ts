@@ -23,7 +23,7 @@ const deferred = () => {
 	return { promise, resolve };
 };
 
-async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false, finishBackup = false, replaceIdentity = false) {
+async function run(count: number, bulk: boolean, firstBeforeCompletion = false, nested = false, finishBackup = false, replaceIdentity = false, failedAfterPut = false) {
 	const f = await foregroundFixture(),
 		controller = new AbortController(),
 		timer = setTimeout(() => controller.abort(Error('Isolated streaming batch test deadline')), 30000),
@@ -137,13 +137,20 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 			assert.equal(source.kind, 'copy');
 			if (source.kind !== 'copy') throw Error('copy');
 			oldOperationId = member.write.operation.id;
+			if (failedAfterPut) {
+				const prepared = await api({ phase: 'prepare', ...input, checksums: [{ ordinal: 0, sha256: raw }] });
+				assert.equal(prepared.results[0].status, 'prepared');
+				counts.puts++; // The native PUT finished, then its final source check failed.
+				const upload = prepared.results[0].upload;
+				await api({ phase: 'verify', ...input, uploads: [{ ordinal: 0, uploadId: upload.id }] });
+			}
 			const current = local.get(source.path)!;
 			local.set(source.path, { ...current, id: 'replacement-inode', version: 'replacement-version' });
 			firstFailed.resolve();
 			return {
 				ok: true, version: 1, batchId: input.descriptor.batchId, digest: input.digest,
 				results: [{ ordinal: 0, status: 'failed', statusCode: 409, code: 'source-changed', retryable: false }],
-				payloads: [{ ordinal: 0, bytes: 0 }]
+				payloads: [{ ordinal: 0, bytes: failedAfterPut ? 4 : 0 }]
 			};
 		}
 		if (replaceIdentity) {
@@ -315,11 +322,11 @@ async function run(count: number, bulk: boolean, firstBeforeCompletion = false, 
 	}
 	assert.equal(files.size, count);
 	assert.equal(counts.confirmed, count);
-	assert.equal(counts.puts, count);
+	assert.equal(counts.puts, count + (failedAfterPut ? 1 : 0));
 	if (replaceIdentity) {
 		assert.ok(oldOperationId);
 		assert.ok(newOperationId);
-		assert.ok(oldReceiptLookups >= 1, 'the historical original is checked for a receipt before retirement');
+		assert.equal(oldReceiptLookups, 0, 'the original was affirmatively never dispatched, so no cloud receipt lookup is needed');
 		assert.equal(newSourceId, 'replacement-inode');
 		assert.ok(counts.scans >= 1, 'the current source must come from the sealed full-tree scan');
 		assert.equal(files.has(oldOperationId), false, 'the replaced source never publishes under its old operation');
@@ -375,4 +382,10 @@ test('a replaced local file retires its original batch identity and publishes on
 	assert.equal(result.bulkCalls, 1, 'the stale batch is not regrouped; its fresh replacement may use the scalar path');
 	assert.equal(result.confirmed, 1);
 	assert.equal(result.puts, 1);
+});
+
+test('a changed source after native staging retains its draft but cannot publish the old file identity', async () => {
+	const result = await run(1, true, true, false, true, true, true);
+	assert.equal(result.confirmed, 1);
+	assert.equal(result.puts, 2, 'staging before the refusal and fresh publication are separate byte transfers');
 });
