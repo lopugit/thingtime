@@ -32,7 +32,7 @@ const fieldStyles = {
 const emptyVault: VaultPayload = { vaultConfigured: false, groups: [], entries: [], providerTemplates: [] };
 
 const postVault = async (body: Record<string, unknown>) => {
-	await requireThingtimeCapability('api.lopu-vault', body.action === 'move-entry' ? '1.2.0' : '1.1.0');
+	await requireThingtimeCapability('api.lopu-vault', body.provider === 'anthropic-api-key' ? '1.3.0' : body.action === 'move-entry' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/lopu/vault', {
 		method: 'POST',
 		credentials: 'include',
@@ -162,7 +162,9 @@ export const SecureVault = () => {
 					{providerModel === CUSTOM_MODEL || !templateModels.length ? (
 						<Input {...fieldStyles} value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder="Provider model id" aria-label="Provider model id" />
 					) : null}
-					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (encrypted)" aria-label="Provider token" />
+					<Text as="label" htmlFor="vault-provider-token" fontSize="sm">{selectedTemplate?.tokenLabel ?? 'Provider token'}</Text>
+     {templateId === 'anthropic-api-key' ? <Text id="vault-provider-token-help" fontSize="xs">Uses the Anthropic Messages API and separate Console billing. Claude subscriptions and Claude Code setup tokens do not apply.</Text> : null}
+     <Input id="vault-provider-token" aria-describedby={templateId === 'anthropic-api-key' ? 'vault-provider-token-help' : undefined} {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (encrypted)" aria-label="Provider token" />
 					<Select {...fieldStyles} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Provider environment">
 						<option value="">Ungrouped</option>
 						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
