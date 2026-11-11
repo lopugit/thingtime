@@ -21,6 +21,7 @@ try {
   await mkdir(evidence, { recursive: true });
   await esbuild.build({
     entryPoints: [join(root, 'scripts/connections-oauth-tab.browser.tsx')], bundle: true, format: 'esm',
+    nodePaths: process.env.THINGTIME_TEST_NODE_MODULES ? [process.env.THINGTIME_TEST_NODE_MODULES] : [],
     platform: 'browser', target: 'esnext', outfile: join(work, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error'
   });
@@ -35,7 +36,7 @@ try {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+  browser = await chromium.launch({ headless: true, chromiumSandbox: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 
   for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]]) {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
@@ -159,6 +160,16 @@ try {
       }
       if (url.pathname === endpoint + '/named') {
         const body = route.request().postDataJSON();
+        if (body.id === 'service-docs') {
+          assert.deepEqual(body, { id: 'service-docs', operation: 'docs.get-document', resourceId: 'doc_fixture-123', expectedOwnerId: firstOwner });
+          return json(route, { ok: true, result: { documentId: 'doc_fixture-123', title: 'Known fixture document', tabs: [{ text: 'Full fixture content' }] } });
+        }
+        if (body.id === 'service-drive') {
+          assert.equal(body.operation, 'drive.list-files'); assert.equal(body.expectedOwnerId, firstOwner);
+          assert.ok(body.pageToken === undefined || body.pageToken === 'opaque/next+page');
+          return json(route, { ok: true, result: { files: [{ id: body.pageToken ? 'second' : 'first', name: 'A long Drive filename '.repeat(30) }],
+            ...(body.pageToken ? {} : { nextPageToken: 'opaque/next+page' }) } });
+        }
         assert.deepEqual(body, { id: 'named-1', operation: 'google.profile', expectedOwnerId: firstOwner });
         return json(route, { ok: true, result: { name: 'Named profile result' } });
       }
@@ -400,6 +411,35 @@ try {
       await second.getByRole('button', { name: 'Reconnect', exact: true }).click();
       assert.equal(await namedHost.getByText('name: Named profile result').count(), 0);
       await namedHost.getByRole('button', { name: 'Cancel', exact: true }).click();
+      // Exercise real rendered service controls with independent synthetic grant rows.
+      for (const [id, provider, operation, scope] of [
+        ['service-drive', 'google-drive', 'drive.list-files', 'drive.metadata.readonly'],
+        ['service-docs', 'google-docs', 'docs.get-document', 'documents.readonly']
+      ]) namedRows.push({ ...account(id, id), id, provider, providerName: provider,
+        named: { name: id, requestedScopes: ['https://www.googleapis.com/auth/' + scope], grantedScopes: ['https://www.googleapis.com/auth/' + scope], allowedOperations: [operation] } });
+      await refreshWithoutRemount();
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('service-docs');
+      const documentId = namedHost.getByRole('textbox', { name: 'Document ID', exact: true });
+      await documentId.fill('doc_fixture-123');
+      await namedHost.getByRole('button', { name: 'Read a Google Doc', exact: true }).click();
+      const payload = namedHost.locator('[data-block-id="named-result"]');
+      await payload.filter({ hasText: 'Known fixture document' }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).tabs[0].text, 'Full fixture content');
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('service-drive');
+      assert.equal(await payload.textContent(), '', 'Changing grants clears prior document content');
+      assert.equal(await documentId.count(), 0);
+      await namedHost.getByRole('button', { name: 'List Drive files', exact: true }).click();
+      await namedHost.getByRole('button', { name: 'Read next page', exact: true }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).files[0].id, 'first');
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      await page.screenshot({ path: join(evidence, label + '-google-service-actions.png'), fullPage: true });
+      await namedHost.getByRole('button', { name: 'Read next page', exact: true }).click();
+      await payload.filter({ hasText: 'second' }).waitFor();
+      assert.equal(JSON.parse(await payload.textContent()).files[0].id, 'second');
+      assert.equal(await namedHost.getByRole('button', { name: 'Read next page', exact: true }).count(), 0);
+      await namedHost.getByRole('combobox', { name: 'Connection', exact: true }).selectOption('named-1');
+      assert.equal(await payload.textContent(), '');
       if (label === 'desktop') {
         holdList = undefined;
         await page.close();
