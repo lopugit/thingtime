@@ -53,7 +53,18 @@ final class NativePhotoRunActivity: @unchecked Sendable {
     private var previousInspection = 0
     private var indexedFiles = 0
 
-    init(_ saved: Snapshot? = nil) { value = saved ?? .init() }
+    static func restoringLastDiscovery(_ saved: Snapshot) -> Snapshot {
+        var restored = saved
+        if restored.latestFound == nil, let indexing = restored.indexing, indexing.unit == .assets, indexing.completed > 0,
+           let event = restored.events.first(where: { $0.phase == .indexing && $0.discovered == indexing.completed && $0.item != nil }) {
+            restored.latestFound = event.item
+        }
+        return restored
+    }
+    init(_ saved: Snapshot? = nil) {
+        value = Self.restoringLastDiscovery(saved ?? .init())
+        if let indexing = value.indexing, indexing.unit == .assets { previousInspection = indexing.completed }
+    }
 
     func snapshot() -> Snapshot {
         lock.lock(); defer { lock.unlock() }
@@ -99,14 +110,17 @@ final class NativePhotoRunActivity: @unchecked Sendable {
             switch progress {
             case .enumerating(let discovery):
                 setPhase(.indexing)
-                if discovery.inspected > previousInspection, let item = discovery.latest {
-                    inspectedAssets += discovery.inspected - previousInspection
+                let restartedPass = discovery.inspected < previousInspection
+                let priorInspected = restartedPass ? 0 : previousInspection
+                if discovery.inspected > priorInspected, let item = discovery.latest {
+                    inspectedAssets += discovery.inspected - priorInspected
                     append(.init(phase: .indexing, at: Date(), discovered: discovery.inspected, item: item))
                 }
                 previousInspection = discovery.inspected
                 value.indexing = .init(unit: .assets, completed: discovery.inspected, total: discovery.total)
                 value.indexed = discovery.inspected > 0 || discovery.total == 0 ? discovery.indexed : nil
-                value.latestFound = discovery.latest
+                if discovery.total == 0 || restartedPass { value.latestFound = nil }
+                if let latest = discovery.latest { value.latestFound = latest }
             case .hashing(let completed, let total):
                 setPhase(.indexing)
                 indexedFiles = max(indexedFiles, completed)

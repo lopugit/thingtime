@@ -481,7 +481,7 @@ final class NativeDeferredUpload {
         if let unavailable = run.unavailableOriginals { result["unavailableOriginals"] = unavailable }
         if let reasons = run.unavailableReasons { result["unavailableReasons"] = reasons }
         if continuedRun?.sameRun(run) == true && executionLease?.continuedActive == true { result["continuation"] = "active" }
-        if var activity = activity(for: run)?.snapshot() ?? run.activity {
+        if var activity = activity(for: run)?.snapshot() ?? run.activity.map(NativePhotoRunActivity.restoringLastDiscovery) {
             if activePhotoRun?.sameRun(run) != true { activity.cloudPreparationFraction = nil }
             if ["waiting", "paused", "needs-review"].contains(stage) {
                 activity.phase = .waiting

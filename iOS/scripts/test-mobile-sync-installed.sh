@@ -93,6 +93,7 @@ fixture=json.load(open(sys.argv[1]));products=pathlib.Path(sys.argv[2])/'Build/P
 source=max(products.glob('Thingtime_iphonesimulator*.xctestrun'),key=lambda p:p.stat().st_mtime)
 data=plistlib.load(source.open('rb'))
 data['ThingtimeTests'].setdefault('EnvironmentVariables',{}).update({
+ 'THINGTIME_PHOTO_NEW_INDEX_TEST':os.environ.get('THINGTIME_PHOTO_NEW_INDEX_TEST','0'),
  'THINGTIME_PHOTO_INDEX_TEST':os.environ.get('THINGTIME_PHOTO_INDEX_TEST','0'),
  'THINGTIME_PHOTO_UI_AUTOMATION':os.environ.get('THINGTIME_PHOTO_UI_AUTOMATION','0'),
  'THINGTIME_PHOTO_DEFERRED_TEST':os.environ.get('THINGTIME_PHOTO_DEFERRED_TEST','0'),
@@ -129,5 +130,5 @@ data['ThingtimeTests']['EnvironmentVariables']['THINGTIME_PHOTO_PREPARE_ONLY']='
 with open(p,'wb') as target:plistlib.dump(data,target)
 PYRUN
 fi
-run_verified_test originals "ThingtimeTests/$test_class"
+run_verified_test originals "${THINGTIME_MOBILE_TEST_SELECTOR:-ThingtimeTests/$test_class}"
 if [ "${THINGTIME_PHOTO_UI_AUTOMATION:-0}" = "1" ]; then verify_storage_ready after-originals; fi

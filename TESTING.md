@@ -16226,6 +16226,10 @@ never print the file-download JSON, encryption metadata or signed URL.
 
 ### Incremental Photos source index (12 November 2026)
 
+- At terminal or resumed nonempty nil progress, retain the last actual indexed
+  item and counts. Empty/new-pass state resets it; matching same-run history can
+  restore a pre-fix journal. Count and retain the first item of a restarted pass.
+
 - Negotiate transfer-admissions1.8.0 on the exact origin; older origins retain
   the outbox and report unavailable indexing. Discover the newest asset and
   inspect the private server index before any original publication.
