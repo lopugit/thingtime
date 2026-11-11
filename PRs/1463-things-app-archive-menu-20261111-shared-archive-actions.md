@@ -109,3 +109,9 @@ Graphify: scoped semantic extraction of the four changed Markdown documents
 was bounded at 60 seconds while the healthy local proxy was occupied; it did
 not complete. The final structural snapshot is refreshed, but this round does
 not claim new semantic indexing of those documents.
+
+Final reconciliation also includes main 5809d02e's independent provider-error
+diagnostics update. Archive source, shared capability checker implementation and
+embed imports are unchanged; both capability suites pass together (179 tests).
+The full unit/type/embed and real API/browser evidence above remains applicable
+to those unchanged paths. Changelog entries from both branches are preserved.

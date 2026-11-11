@@ -154,6 +154,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and provide protected metadata-only restoration; verify exact app-card paths
   and stale-menu races through isolated real API/Chrome checks. See
   [PR 1463](../PRs/1463-things-app-archive-menu-20261111-shared-archive-actions.md). **Codex (AI)**
+- 2026-11-11: Classify recognized Console billing, spend-limit, model-access and
+  unsupported-parameter responses into fixed safe chat diagnostics. Unknown
+  responses retain status-only messages; upstream text and credential/request
+  echoes remain private. Reply capability 1.23.2; live rejection cause remains
+  unverified until the authorized real-account retry. **Codex (AI)**
+- 2026-11-11: Explain Facebook's exact New Pages Experience endpoint/account
+  restriction with fixed safe copy while preserving confirmed grants and
+  permission-denied diagnostics. Feed 2.0.2 / diagnostics 1.0.1. **Codex (AI)**
+
 - 2026-11-11: Consolidate the reviewed Connections, password editor, Facebook
   grant diagnostics and Claude effort corrections into one release; negotiate
   personal replies against the active same-origin API before sending. **Codex (AI)**

@@ -1,4 +1,4 @@
-import { safeProviderError } from './providerErrors';
+import { FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR, safeProviderError } from './providerErrors';
 import { oauthClientConfig } from './oauthConfig';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -1716,7 +1716,7 @@ export async function readConnectionFacebookPermissions(tokens: OAuthTokens): Pr
 
 const facebookCheck = (name: string, result: { ok: true; data: any } | Fail): ConnectionDiagnostics['checks'][number] => ({
   name, status: result.ok === true ? (Array.isArray(result.data?.data) ? 'available' : 'unavailable') :
-    result.error === 'Facebook denied this operation. Check the app’s posts permission and account access.' ? 'permission-denied' :
+    (result.error === FACEBOOK_NEW_PAGES_UNSUPPORTED_ERROR || result.error === 'Facebook denied this operation. Check the app’s posts permission and account access.') ? 'permission-denied' :
     result.error === 'Facebook authorization is invalid or expired. Reconnect this account.' ? 'unauthorized' : 'unavailable'
 });
 
