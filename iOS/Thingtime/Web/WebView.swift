@@ -25,6 +25,7 @@ struct WebView: UIViewRepresentable {
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
         configuration.userContentController.addUserScript(AuthenticatorSetupBridge.script)
+        configuration.userContentController.addUserScript(PasswordProviderBridge.script)
         configuration.userContentController.add(context.coordinator, name: AuthenticatorSetupBridge.handler)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
         configuration.userContentController.addUserScript(MobileDeviceLocationBridge.script)
@@ -60,7 +61,7 @@ struct WebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let rootChanged = context.coordinator.loadedRootURL != url
-        if rootChanged { context.coordinator.authenticatorSetup.cancel() }
+        if rootChanged { context.coordinator.authenticatorSetup.cancel(); context.coordinator.passwordProvider.invalidate() }
         // Consume a pending widget request even when it cannot resolve, so a stale
         // value cannot suppress the teardown for a later destination change.
         var widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
@@ -120,6 +121,7 @@ struct WebView: UIViewRepresentable {
             configuration.userContentController.addUserScript(ShareComposerBridge.script(origin: origin))
         }
         let authenticatorSetup = AuthenticatorSetupBridge()
+        let passwordProvider = PasswordProviderBridge()
         let lidar = LiDARBridge()
         let mobileDevice = MobileDeviceBridge()
         let mobileLocation = MobileDeviceLocationBridge()
@@ -175,6 +177,7 @@ struct WebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             authenticatorSetup.navigationStarted()
+            passwordProvider.invalidate()
             lidar.invalidate()
             // A background refresh may construct the initial web scene. Only a
             // foreground navigation invalidates its persisted approval here.
@@ -222,6 +225,7 @@ struct WebView: UIViewRepresentable {
                 "fileReplicaVersion": FileReplicaBridge.version,
                 "lidarVersion": LiDARBridge.version,
                 "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
+                "passwordsVersion": PasswordProviderBridge.version,
                 "watchNotifications": true
             ]
             capabilities["filePhotoContinuationVersion"] = MobileFolderBridge.photoContinuationVersion
@@ -244,6 +248,12 @@ struct WebView: UIViewRepresentable {
                 else if type == "widget-snapshot", let payload = body["payload"] as? [String: Any] {
                     WidgetStore.save(payload, origin: root.absoluteString)
                 }
+                return
+            }
+            if type == "password-provider" {
+                guard let webView, let root = loadedRootURL else { return }
+                passwordProvider.handle(message, web: webView, root: root,
+                    currentRoot: { [weak self] in self?.loadedRootURL })
                 return
             }
             switch type {

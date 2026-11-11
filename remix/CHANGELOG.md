@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Embed the shared Apple credential provider in the existing iOS app,
+  with a fenced native Password AutoFill connection bridge, isolated shared
+  Keychain, scoped Apple App ID/profile bootstrap and release-package validation.
+  Retain editable web controls and distinguish simulator evidence from signed
+  physical password/passkey/OTP acceptance. **Codex (AI)**
+
 - 2026-11-12: Label current sync attempt bytes separately from the most recent
   measured saved attempt in loaded activity history. Keep unknown bytes unknown,
   preserve zero and per-attempt receipts, and clear old history synchronously

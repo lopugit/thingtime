@@ -7,6 +7,7 @@ require "tempfile"
 require "tmpdir"
 require "yaml"
 require_relative "lib/release_version"
+require_relative "lib/password_provider_signing"
 require_relative "lib/testflight_upload_status"
 
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
@@ -64,7 +65,8 @@ def manual_profile_signing?
   !ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
     !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
     !ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
-    !ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+    !ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
 end
 
 def distribution_profile_suffix
@@ -102,6 +104,19 @@ def share_profile_name
   ENV.fetch("SHARE_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Share App Store #{share_bundle_identifier}#{distribution_profile_suffix}")
 end
 
+def password_provider_bundle_identifier
+  "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.password-provider"
+end
+
+def password_provider_profile_name
+  ENV.fetch("PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Password Provider App Store #{password_provider_bundle_identifier}#{distribution_profile_suffix}")
+end
+
+# Both containing app and extension require Apple's AutoFill capability.
+def prepare_password_provider_bundle_identifiers
+  PasswordProviderSigning.prepare(ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER'))
+end
+
 # Public Connect API can register/enable the extension App ID. The App Group
 # association itself is made by Xcode automatic provisioning, not a guessed API.
 def prepare_share_bundle_identifier
@@ -121,6 +136,7 @@ def xcodebuild_xcargs
     args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
     args << "THINGTIME_LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(lopu_widget_profile_name)}"
     args << "THINGTIME_SHARE_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(share_profile_name)}"
+    args << "THINGTIME_PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(password_provider_profile_name)}"
   else
     args << api_key_xcargs
   end
@@ -150,7 +166,8 @@ def export_options(destination: "export")
       ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
       ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name,
       lopu_widget_bundle_identifier => lopu_widget_profile_name,
-      share_bundle_identifier => share_profile_name
+      share_bundle_identifier => share_profile_name,
+      password_provider_bundle_identifier => password_provider_profile_name
     }
   )
 end
@@ -244,16 +261,18 @@ platform :ios do
     unless ENV["SKIP_PROFILE_SYNC"] == "1"
       app_store_api_key
       prepare_share_bundle_identifier
+      changed_password_app_ids = prepare_password_provider_bundle_identifiers
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
         app_identifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
         provisioning_name: ios_provisioning_profile_name,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
-        force: false,
+        force: changed_password_app_ids.include?(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER")),
         output_path: OUTPUT_DIRECTORY
       )
       ENV["PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      ios_profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
 
       get_provisioning_profile(
         api_key: app_store_api_key,
@@ -287,10 +306,26 @@ platform :ios do
         output_path: OUTPUT_DIRECTORY
       )
       ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      share_profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: password_provider_bundle_identifier,
+        provisioning_name: password_provider_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: changed_password_app_ids.include?(password_provider_bundle_identifier),
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      password_verifier = File.expand_path("../scripts/verify-password-profile.py", __dir__)
+      sh("python3", password_verifier, ios_profile_path, ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"), ENV.fetch("DEVELOPMENT_TEAM"), ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+      sh("python3", password_verifier, lane_context[SharedValues::SIGH_PROFILE_PATH], password_provider_bundle_identifier, ENV.fetch("DEVELOPMENT_TEAM"), ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+
+
       verifier = File.expand_path("../scripts/verify-share-profile.py", __dir__)
       group = File.read(File.expand_path("../config/Base.xcconfig", __dir__))[/^THINGTIME_WIDGET_GROUP\s*=\s*(\S+)/, 1]
       UI.user_error!("Missing canonical App Group setting") unless group
-      sh("python3", verifier, lane_context[SharedValues::SIGH_PROFILE_PATH], share_bundle_identifier, ENV.fetch("DEVELOPMENT_TEAM"), group)
+      sh("python3", verifier, share_profile_path, share_bundle_identifier, ENV.fetch("DEVELOPMENT_TEAM"), group)
     end
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))

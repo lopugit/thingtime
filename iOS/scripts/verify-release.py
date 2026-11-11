@@ -16,9 +16,12 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
         (app / 'Watch/ThingtimeWatch.app', bundle_id + '.watchkitapp'),
         (app / 'PlugIns/ThingtimeLopuWidget.appex', bundle_id + '.lopu-widget'),
         (app / 'PlugIns/ThingtimeShare.appex', bundle_id + '.share'),
+        (app / 'PlugIns/ThingtimePasswordProvider.appex', bundle_id + '.password-provider'),
     ]
     group = phone.get('ThingtimeWidgetGroup')
     assert isinstance(group, str) and group.startswith('group.') and '$' not in group, 'Missing resolved widget App Group'
+    password_group = phone.get('ThingtimePasswordKeychainGroup')
+    assert isinstance(password_group, str) and password_group.endswith('.' + bundle_id + '.passwords') and '$' not in password_group, 'Missing isolated iOS password Keychain group'
     for target, identifier in targets:
         info = read(target / 'Info.plist')
         assert info['CFBundleIdentifier'] == identifier, 'Unexpected bundle identifier'
@@ -26,9 +29,17 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
         assert info['CFBundleShortVersionString'] == phone['CFBundleShortVersionString'], 'Mismatched marketing version'
         assert (target / info['CFBundleExecutable']).is_file(), 'Missing executable'
         if target.suffix == '.appex':
-            expected_point = 'com.apple.share-services' if identifier.endswith('.share') else 'com.apple.widgetkit-extension'
+            is_provider = identifier.endswith('.password-provider')
+            expected_point = 'com.apple.authentication-services-credential-provider-ui' if is_provider else ('com.apple.share-services' if identifier.endswith('.share') else 'com.apple.widgetkit-extension')
             assert info['NSExtension']['NSExtensionPointIdentifier'] == expected_point, 'Wrong extension point'
-            assert info.get('ThingtimeWidgetGroup') == group, 'Extension App Group differs from host'
+            if is_provider:
+                assert info.get('ThingtimePasswordKeychainGroup') == password_group, 'Provider Keychain group differs from host'
+                extension = info['NSExtension']
+                assert extension.get('NSExtensionPrincipalClass', '').endswith('.CredentialProviderViewController'), 'Missing credential provider controller'
+                capabilities = extension.get('NSExtensionAttributes', {}).get('ASCredentialProviderExtensionCapabilities', {})
+                assert all(capabilities.get(key) is True for key in ['ProvidesPasswords', 'ProvidesPasskeys', 'ProvidesOneTimeCodes']), 'Missing provider capability'
+            else:
+                assert info.get('ThingtimeWidgetGroup') == group, 'Extension App Group differs from host'
             if identifier.endswith('.share'):
                 assert info.get('CFBundleDisplayName') == 'Thingtime', 'Wrong share extension display name'
                 attributes = info['NSExtension'].get('NSExtensionAttributes', {})
@@ -43,7 +54,10 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
             assert entitlements.get('com.apple.developer.team-identifier') == team_id, 'Wrong signing team'
             assert entitlements.get('application-identifier') == team_id + '.' + identifier, 'Wrong signed application identity'
             assert not entitlements.get('get-task-allow', False), 'Development signing is not a release'
-            if target == app or target.suffix == '.appex':
+            if target == app or identifier.endswith('.password-provider'):
+                assert entitlements.get('com.apple.developer.authentication-services.autofill-credential-provider') is True, 'Missing signed AutoFill capability'
+                assert password_group in entitlements.get('keychain-access-groups', []), 'Missing shared password Keychain entitlement'
+            if target == app or (target.suffix == '.appex' and not identifier.endswith('.password-provider')):
                 assert group in entitlements.get('com.apple.security.application-groups', []), 'Missing signed App Group'
     return True
 
@@ -52,7 +66,7 @@ if __name__ == '__main__':
     import sys
     try:
         verify_bundle(Path(sys.argv[1]), os.environ['EXPECTED_BUILD_NUMBER'], os.environ['PRODUCT_BUNDLE_IDENTIFIER'], os.environ['DEVELOPMENT_TEAM'])
-        print('Verified phone, Watch, widget and share release bundles and signed App Groups.')
+        print('Verified phone, Watch, widget, share and password-provider release bundles and signed App Groups.')
     except Exception:
         # Do not log subprocess errors or signing data.
         sys.exit('Release package verification failed; upload is blocked.')

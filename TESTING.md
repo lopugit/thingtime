@@ -10942,6 +10942,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] iOS embedded provider: build the final host+extension, verify exact bundle IDs,
+  shared iOS-only Keychain group, both AutoFill entitlements, Face ID usage text
+  and matching versions. Run Swift host-scope/commit-fence tests, release/profile
+  Python tests and registry helper Ruby tests. In the signed physical app,
+  connect/decline enablement, verify the account, fill a password on an independent
+  HTTPS site, register/use a passkey, and test OTP on iOS 18+. Exercise logout,
+  owner/origin switches during document/cookie awaits, parallel status requests,
+  stale same-URL documents, wrong verification, Disconnect/reload and OS-disabled
+  state. Busy requests receive correlated retry feedback; no old completion or
+  cookie enters the new document. Simulator/build evidence is not device acceptance.
+
 - [ ] With a signed newer standalone `Thingtime Passwords.app` running, install
   a verified Thingtime bundle whose nested companion is older. Confirm the
   standalone path, inode, version, signature, Keychain group and running PID

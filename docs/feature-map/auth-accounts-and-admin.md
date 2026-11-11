@@ -567,3 +567,13 @@ full request hashing retains AppID in the verification/session binding.
 `browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
+
+### iOS credential-provider host
+
+`iOS/project.yml` embeds the shared `apple/PasswordProvider` controller in the
+main iOS app. `iOS/Thingtime/Web/PasswordProviderBridge.swift` handles canonical
+native password messages without exposing session cookies. The shared
+`PasswordHostRequestScope` and `PasswordHostCommitFence` gate exact origins,
+unique secure cookies and asynchronous document/account changes. Run the Swift
+core tests, iOS release/profile Python tests and `password_provider_signing_test.rb`;
+see the iOS README for simulator builds and separate physical acceptance.

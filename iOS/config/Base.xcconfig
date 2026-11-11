@@ -14,3 +14,7 @@ WATCHOS_DEPLOYMENT_TARGET = 10.0
 THINGTIME_WEB_URL = https:/$()/thingtime.com
 
 THINGTIME_WIDGET_GROUP = group.com.thingtime.widgets
+
+// Shared only by the iOS host and its embedded credential provider.
+THINGTIME_PASSWORD_KEYCHAIN_GROUP = $(AppIdentifierPrefix)$(THINGTIME_IOS_BUNDLE_IDENTIFIER).passwords
+THINGTIME_PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER =
