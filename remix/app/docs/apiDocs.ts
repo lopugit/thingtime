@@ -14700,7 +14700,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-feed', contractVersion: '2.0.0', featureVersion: '2.0.0',
+    id: 'connections-feed', contractVersion: '2.0.1', featureVersion: '2.0.1',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -14710,7 +14710,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'external-post things, and returns them newest-first in the standard post shape — so Thingtime comments and ' +
       'reactions attach natively via /api/v1/things/comment and /api/v1/things/react, and /post/<id> permalinks ' +
       'resolve. Personal-algorithm providers grant each linked user individually; public providers publish tt:all ' +
-      'posts. The caller’s enabled AI feed filters annotate each post via feedFilterMatches.',
+      'posts. The caller’s enabled AI feed filters annotate each post via feedFilterMatches. ' +
+      'synced[].error and connections[].lastSyncError contain fixed redacted diagnostics for known provider errors; ' +
+      'unknown errors remain generic. YouTube distinguishes API activation, permission, quota and authorization; ' +
+      'Facebook distinguishes request, permission and authorization failures without upstream messages. ' +
+      'Total YouTube uploads-playlist request failure reports a sync error rather than successful emptiness.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'

@@ -1121,7 +1121,7 @@ test('owner-private connections publish their breaking vault contract on both ma
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const manifest = thingtimeCapabilityManifest('https://connections.example');
   const versions = { connections: '2.1.0', 'connections-providers': '2.0.0', 'connections-unlink': '2.1.0',
-    'connections-feed': '2.0.0', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
+    'connections-feed': '2.0.1', 'connections-filters': '2.0.0', 'connections-oauth-begin': '2.1.0',
     'connections-oauth-callback': '2.1.0', 'connections-named': '1.0.0' };
   for (const [id, version] of Object.entries(versions)) {
     const doc = apiEndpointDocs.find(doc => doc.id === id)!;
