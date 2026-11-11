@@ -19,6 +19,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { PAT_SCOPE_CATALOG, PAT_VISIBILITY_CATALOG } from '~/api/utils/auth/patScopes';
+import { mintSelectedPatScopes } from './tokenScopesCore';
 import type { PatVisibilityMode } from '~/api/utils/auth/patScopes';
 
 // Settings → Token minter: mint scoped, revocable API tokens to hand to an AI
@@ -267,7 +268,7 @@ export const TokenMinter = (props: { userId: string }) => {
     expiresInMs === null ? 'This token never expires ∞' : `Expires ${new Date(Date.now() + expiresInMs).toLocaleString()}`;
 
   const handleMint = async () => {
-    const scopes = fullAccess ? ['things'] : selectedScopes;
+    const scopes = mintSelectedPatScopes(selectedScopes);
     if (!scopes.length) {
       lopu({
         title: 'Pick at least one permission 🔐',
