@@ -15306,6 +15306,19 @@ the isolated real-API/browser command and the metadata-only session boundary.
 - From the real iOS system share sheet, select Thingtime for a link, text, photo,
   Live Photo, PDF, video, audio, ZIP, custom UTI and mixed files/folders. The first
   screen is New post with the content prefilled; no Saved locally dead end.
+- In the native iOS app, leave an unfinished share and tap the close control on
+  **Continue shared draft**. Only the reminder disappears: background/foreground
+  and relaunch must keep it dismissed. Open the native drawer → **Shared drafts**
+  and resume it; compare its text/attachments with the original. A new share must
+  still show a reminder; switching destinations must not show another origin's
+  drafts. Check VoiceOver's dismiss label/hint, the 44pt target, large Dynamic
+  Type, narrow screens and the empty Shared drafts list. A failed dismissal must
+  keep the reminder and offer a clear error without deleting anything.
+  For repeatable synthetic native acceptance, boot a dedicated simulator named
+  `Thingtime shared draft dismiss QA`, then run
+  `SHARED_DRAFT_SIMULATOR_ID=<uuid> iOS/scripts/test-shared-draft-reminder.sh`.
+  The script refuses other simulator names, seeds only local synthetic content,
+  and retains the installed app and simulator for screenshot review.
 - Verify image previews separately from original upload bytes. Live Photo
   resources, unknown binary bytes, names, nested paths and empty folders survive.
   Repeat with more than 25 items and identical names in different folders.
