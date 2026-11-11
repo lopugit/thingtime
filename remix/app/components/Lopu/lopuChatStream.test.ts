@@ -87,7 +87,7 @@ test('unknown or explicit personal chat providers reject pre-fix origins before 
  });
  try {
   for (const selection of [{}, { providerId: 'saved-console-provider' }]) {
-   await assert.rejects(postLopuReply({ text: 'Synthetic contract probe', ...selection }), (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
+   await assert.rejects(postLopuReply({ text: 'Synthetic contract probe', requestId: 'effort-contract-probe', ...selection }), (error: unknown) => error instanceof Error && error.name === 'IncompatibleThingtimeCapabilityError');
   }
   assert.equal(posts, 0);
  } finally {
