@@ -1,0 +1,60 @@
+{
+  "baseRevision": "c039dee857dcd3558192111e956921395648cd69",
+  "runtimeArtifact": "frozen85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d; does not include later backend edits",
+  "crashReportSha256": "67348a70243f635fd20449f494c8e98e15c2f7938ea76b810fe056684e979d91",
+  "hostOSReportedByCrash": {
+    "train": "macOS 27.0",
+    "build": "26A5378j",
+    "releaseType": "User"
+  },
+  "simulatorRuntime": {
+    "identifier": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+    "version": "27.0",
+    "build": "24A5355p"
+  },
+  "module": {
+    "name": "LinguisticData",
+    "sha256": "387d4fe040f08df8e50be5d4eb4577ba6601009b14e869e6242de2e5815c3db9",
+    "uuid": "87e8002e-3282-3615-8d6f-f6d57096da11",
+    "bundleVersion": "483.10",
+    "uuidMatchVerifiedByDwarfdump": true
+  },
+  "matchingModuleDisassembly": [
+    "0000000000002724\tadrp\tx0, 2 ; 0x4000",
+    "0000000000002728\tadd\tx0, x0, #0xf9e ; literal pool for: \"IPHONE_SIMULATOR_ROOT\"",
+    "000000000000272c\tbl\t0x588c ; symbol stub for: _getenv",
+    "0000000000002730\tcbz\tx0, 0x2b1c",
+    "0000000000002734\tmov\tx1, x0",
+    "0000000000002b1c\tadrp\tx0, 2 ; 0x4000",
+    "0000000000002b20\tadd\tx0, x0, #0xfb4 ; literal pool for: \"createSystemRootPath\"",
+    "0000000000002b24\tadrp\tx1, 2 ; 0x4000",
+    "0000000000002b28\tadd\tx1, x1, #0xfc9 ; literal pool for: \"LDUtils.cpp\"",
+    "0000000000002b2c\tadrp\tx3, 2 ; 0x4000",
+    "0000000000002b30\tadd\tx3, x3, #0xfd5 ; literal pool for: \"simulatorRoot\"",
+    "0000000000002b34\tmov\tw2, #0x1e",
+    "0000000000002b38\tbl\t0x57cc ; symbol stub for: ___assert_rtn",
+    "0000000000002b3c\tbrk\t#0x1"
+  ],
+  "assertion": {
+    "function": "createSystemRootPath",
+    "file": "LDUtils.cpp",
+    "line": 30,
+    "expression": "simulatorRoot",
+    "getenvKey": "IPHONE_SIMULATOR_ROOT",
+    "nullBranch": "0x2730 cbz x0 to0x2b1c",
+    "assertCall": "0x2b38",
+    "crashFrameReturnOffset": "0x2b3c"
+  },
+  "entrySourceSha256": "59dc38d410cabc6ff1b064fdf836fc6123ea64ca4d857ace0640cd66827c4f96",
+  "sourceCause": "entry.mjs removes all process.env keys except namedOSkeys/SIMULATOR_*/OS_ACTIVITY_*; IPHONE_SIMULATOR_ROOT is excluded. Embedded Node modifies the same native process getenv environment.",
+  "retainedNativeLog": "LinguisticData asset enumeration begins after reload; sandbox-extension request succeeds; no assertion message retained.",
+  "additionalSupportedLogCheck": {
+    "command": "log show --style json --start2026-11-12 04:36:00 --end2026-11-12 04:36:03 --predicate processID==99998",
+    "exitCode": 0,
+    "matchingRows": 0
+  },
+  "proposedMinimalCorrection": "Preserve only additional nonsensitive OS launch key IPHONE_SIMULATOR_ROOT; retain all account/provider/API clearing and bridge/origin fences.",
+  "proposedControl": "Fresh task-owned simulator, one minimal WKWebView with ordinary editable input/focus/edit/reload plus public UITextChecker spellcheck. Two bounded independent launches differing only in whether they preserve or unset IPHONE_SIMULATOR_ROOT. Capture own PID, environment-key presence boolean only, WK navigation/reload completion, and matching crash assertion. Do not alter spellchecking or simulator settings. Negative control stops at first crash; positive requires reload survival. Parent review before executing.",
+  "noNewRunExecuted": true,
+  "underlyingLimits": "Matching module proves null-environment assertion condition. A control is still required to reproduce the causal path and verify the correction before another full-app acceptance."
+}

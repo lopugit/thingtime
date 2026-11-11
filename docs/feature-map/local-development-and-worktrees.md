@@ -427,3 +427,16 @@ runtime/addons. Its README documents preparation, strict inventories, environmen
 boundaries and cleanup. Current evidence proves native HTTP startup, not rendered
 WebView acceptance or complete SQLite account APIs; see
 `artifacts/anonymous-release-2026-11-12/ios-local-development-app/README.md`.
+
+
+### Frozen native reuse and foreground acceptance
+
+The development iOS runner can reuse a verified built app only with exact signed
+and installed inventory equality. A separately pinned full native-source inventory
+covers staged native inputs absent from the short runner-tool list; changed source
+or digest refuses reuse. Harness-only exceptions remain explicit. Verify actual
+Simulator foreground/active scene before claiming WK/create/edit/reload acceptance;
+`simctl launch` and a healthy native URLSession alone do not establish that state.
+The run08 foreground-controlled device-home flow passes creation, rename and
+native reload with the same ID/value, while account APIs still refuse with503.
+This is existing local-workspace UI persistence, not SQLite HTTP activation.

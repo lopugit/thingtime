@@ -18,11 +18,12 @@ struct NativePhotoTransferBytes: Codable, Equatable, Sendable {
 final class NativeManagedPhotoPartTransfer {
     static let shared = NativeManagedPhotoPartTransfer(budget: .init())
     private let budget: NativePhotoUploadBudget
+    private let calendar = NativeBackgroundUploadCalendar()
     private var active: [UUID: (scope: FileSyncOwnerScope, config: String, root: String, device: String, admission: String?, sender: NativeFileUpload)] = [:]
     init(budget: NativePhotoUploadBudget) { self.budget = budget }
 
     func send(_ request: URLRequest, file: URL, length: Int64, configuration: URLSessionConfiguration,
-              scope: FileSyncOwnerScope, authorization: NativeUploadAuthorization, conditions: NativePhotoDownloadConditions,
+              scope: FileSyncOwnerScope, authorization: NativeUploadAuthorization, conditions: NativePhotoDownloadConditions, signedExpiry: Date,
               sender: NativeFileUpload = NativeFileUpload(),
               background: NativeBackgroundPhotoTransport? = nil, record: NativeDeferredUploadRecord? = nil,
               partNumber: Int = 0, checksum: String = "",
@@ -30,14 +31,21 @@ final class NativeManagedPhotoPartTransfer {
               account: (NativePhotoTransferBytes) throws -> Void = { _ in }) async throws {
         guard let policy = authorization.configuration.managedPhotos, policy.valid else { throw MobileFolderStore.Failure.invalid }
         try conditions.verify(authorization)
-        if let background, let record, Double(length) / Double(policy.rate) + 15 < background.expiry.timeIntervalSinceNow {
+        let limits = try NativePhotoTransferPolicyStore().limits(scope: scope, authorization: authorization)
+        let rate = limits.rate
+        if let background, let record {
             let daemon = NativeBackgroundPhotoUpload.shared
             let ticket = try await daemon.prepare(record: record, part: partNumber, checksum: checksum, length: length, file: file, transport: background)
-            if try daemon.isAccounted(ticket), ticket.settled { _ = try await daemon.send(ticket, request: request, rate: policy.rate); return }
+            try conditions.verify(authorization)
+            let limits = try NativePhotoTransferPolicyStore().limits(scope: scope, authorization: authorization)
+            let rate = limits.rate
+            if try daemon.isAccounted(ticket), ticket.settled { _ = try await daemon.send(ticket, request: request, rate: rate); return }
             let lease = try budget.reserve(scope: scope, deviceId: authorization.scope.deviceId, bytes: length,
-                cap: policy.uploadBytesPerHour, duration: 600, reservationId: ticket.id, retaining: daemon.retainedReservationIds)
+                cap: policy.uploadBytesPerHour, rootId: authorization.configuration.localRootId, configurationId: authorization.id,
+                deviceCap: limits.device.uploadBytesPerHour, folderCap: limits.folder.uploadBytesPerHour,
+                duration: max(600, background.expiry.timeIntervalSinceNow + 600), reservationId: ticket.id, retaining: daemon.retainedReservationIds)
             let outcome: Result<NativeBackgroundPhotoUpload.Result, Error>
-            do { outcome = .success(try await daemon.send(ticket, request: request, rate: policy.rate, foregroundCount: { self.active.count })) }
+            do { outcome = .success(try await daemon.send(ticket, request: request, rate: rate, foregroundCount: { self.active.count })) }
             catch { outcome = .failure(error) }
             // An unsettled daemon task keeps its full reserved budget.
             if let result = try daemon.settledMeasurement(ticket) {
@@ -55,16 +63,22 @@ final class NativeManagedPhotoPartTransfer {
         }
         guard active.count + NativeBackgroundPhotoUpload.shared.activeCount < 5 else { throw NativePhotoUploadBudget.Wait(retryAt: Date(timeIntervalSinceNow: 5)) }
         let lease = try budget.reserve(scope: scope, deviceId: authorization.scope.deviceId, bytes: length,
-            cap: policy.uploadBytesPerHour, duration: NativeFileUpload.timeout(length: length, rate: policy.rate), retaining: NativeBackgroundPhotoUpload.shared.retainedReservationIds)
+            cap: policy.uploadBytesPerHour, rootId: authorization.configuration.localRootId, configurationId: authorization.id,
+                deviceCap: limits.device.uploadBytesPerHour, folderCap: limits.folder.uploadBytesPerHour, duration: 600 + NativeFileUpload.timeout(length: length, rate: rate), retaining: NativeBackgroundPhotoUpload.shared.retainedReservationIds)
         let id = UUID()
         active[id] = (scope, authorization.id, authorization.configuration.localRootId, authorization.scope.deviceId, record?.admissionId, sender)
         defer { active.removeValue(forKey: id) }
         let path = conditions.snapshot()
         let outcome: Result<Void, Error>
         do {
-            try await sender.send(request, file: file, configuration: configuration, rate: policy.rate, length: length,
+            let key = NativePhotoTransferPolicyStore.key(scope: scope, deviceId: authorization.scope.deviceId)
+            _ = try calendar.admit(key: key, bytes: length, constraints: limits.rates, expiry: signedExpiry,
+                requiresCompletionBeforeExpiry: false, deferFutureAdmission: true)
+            try conditions.verify(authorization)
+            guard signedExpiry.timeIntervalSinceNow > 0 else { throw NativePhotoUploadBudget.Wait(retryAt: Date(timeIntervalSinceNow: 1)) }
+            try await sender.send(request, file: file, configuration: configuration, rate: rate, length: length,
                                   pace: { bytes, rate in
-                                      try await NativePhotoUploadPacer.shared.consume(key: [scope.origin.absoluteString, scope.ownerId, authorization.scope.deviceId].joined(separator: "\n"), bytes: bytes, rate: rate)
+                                      try await NativePhotoUploadPacer.shared.consume(key: NativePhotoTransferPolicyStore.key(scope: scope, deviceId: authorization.scope.deviceId), bytes: bytes, constraints: limits.rates)
                                   }, check: { try conditions.verify(authorization) })
             outcome = .success(())
         } catch { outcome = .failure(error) }
@@ -106,12 +120,20 @@ actor NativePhotoUploadPacer {
     static let shared = NativePhotoUploadPacer()
     private var next: [String: UInt64] = [:]
     func consume(key: String, bytes: Int64, rate: Int64) async throws {
+        try await consume(key: key, bytes: bytes, constraints: [.init(key: "device", rate: rate)])
+    }
+    func consume(key: String, bytes: Int64, constraints: [NativePhotoRateConstraint]) async throws {
         try Task.checkCancellation()
-        guard bytes > 0, rate > 0 else { throw MobileFolderStore.Failure.invalid }
+        guard bytes > 0, !constraints.isEmpty, constraints.allSatisfy({ $0.rate > 0 }) else { throw MobileFolderStore.Failure.invalid }
         let now = DispatchTime.now().uptimeNanoseconds
-        let duration = UInt64((Double(bytes) / Double(rate) * 1_000_000_000).rounded(.up))
-        let end = max(now, next[key] ?? now) + duration
-        next[key] = end
+        var end = now
+        for constraint in constraints {
+            let duration = UInt64((Double(bytes) / Double(constraint.rate) * 1_000_000_000).rounded(.up))
+            let lane = key + "\n" + constraint.key
+            let candidate = max(now, next[lane] ?? now) + duration
+            next[lane] = candidate
+            end = max(end, candidate)
+        }
         try await Task.sleep(nanoseconds: end - now)
         try Task.checkCancellation()
     }

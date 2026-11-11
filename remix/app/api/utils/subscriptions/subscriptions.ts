@@ -1,9 +1,10 @@
+import { currentAccountCreationRepository, nativeAccountUnsupported } from '../auth/accountCreationRepository';
 import { characterEntitlementSource, characterEntitlementSources, withCharacterEntitlement } from '../auth/characterEntitlements';
 // Subscription/billing ledgers are identity-plane objects: they live on the
 // HOME deployment only, regardless of any data-plane endpoint override — the
 // same pinning as users/sessions (see endpoint.ts). Callers passing a session
 // must therefore be inside a withHomeMongoTransaction.
-import { getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getMongoThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, APP_STORAGE_ACCOUNTING_VERSION, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '~/schemas/registry';
 import {
   DEFAULT_SUBSCRIPTION_TIER,
@@ -23,6 +24,11 @@ import {
 	userSubscriptionLedgerMatch
 } from './subscriptionIdentity';
 import { USER_STORAGE_ACCOUNTING_VERSION, USER_STORAGE_STATUS, normalizedStorageUsage, type UserStorageUsage } from '../storage/storageCore';
+
+const getThingsCollection: typeof getMongoThingsCollection = () => {
+ if (currentAccountCreationRepository()) nativeAccountUnsupported();
+ return getMongoThingsCollection();
+};
 
 // Subscription assignments (FUNDAMENTALS.md: everything is a thing). USER
 // assignments are deterministic protected `subscription` Things; generic
@@ -337,7 +343,55 @@ export type SetSubscriptionInput = {
 	session?: any;
 };
 
+// Shared initial-ledger admission and protected envelope. Mongo and native
+// account creation must not construct different ready/zero usage policies.
+const buildInitialUserSubscription = (input: SetSubscriptionInput, snapshot: TierSnapshot, overrides: QuotaOverrides | null, note: string | null, now: Date): {ok:true;document:Record<string,any>} | Fail => {
+ const initialStorageUsedBytes = Number.isSafeInteger(input.initialStorageUsedBytes) && Number(input.initialStorageUsedBytes) >= 0 ? Number(input.initialStorageUsedBytes) : null;
+ if (initialStorageUsedBytes === null) return fail(503, 'Account storage accounting must be initialized before creating this subscription assignment');
+ const nextAllowanceBytes = resolveQuotas(snapshot.quotas, overrides).userStorageBytes;
+ if (nextAllowanceBytes !== null && initialStorageUsedBytes > nextAllowanceBytes) return fail(409, `The account already uses ${initialStorageUsedBytes} bytes, above that plan's allowance`);
+ const document: Record<string, any> = {
+		shareId: subscriptionShareId(input.subjectType, input.subjectId),
+      schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+      thingtime: [SUBSCRIPTION_KIND],
+		crystal: {
+			quotaKind: SUBSCRIPTION_KIND,
+			subjectType: input.subjectType,
+			subjectId: input.subjectId,
+			tier: snapshot.tierId,
+			tierVersionId: snapshot.versionId,
+			tierVersion: snapshot.version,
+			tierName: snapshot.title,
+			tierMetered: snapshot.metered,
+			tierQuotas: snapshot.quotas,
+			overrides: overrides,
+			note,
+			updatedBy: input.updatedBy,
+			isDefaultAssignment: input.isDefaultAssignment === true,
+			...(initialStorageUsedBytes !== null
+				? {
+						storageUsedBytes: initialStorageUsedBytes,
+						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+						storageLedgerStatus: USER_STORAGE_STATUS.ready,
+						storageReconciledAt: now,
+						storageUpdatedAt: now
+					}
+				: {})
+		},
+		ownerId: input.subjectId,
+      acl: [ACL_OWNER],
+      targetId: null,
+      tags: [],
+		storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION,
+		createdAt: now,
+		updatedAt: now
+  };
+ return {ok:true,document};
+};
+
 export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok: true; subscription: SubscriptionInfo } | Fail> => {
+  const native = currentAccountCreationRepository();
+  native?.assertInitialSubscription(input);
   let selectedTier = await getLiveSubscriptionTier(input.tier, input.tierVersionId);
   let archivedExpectedVersionId: string | null = null;
   if (!selectedTier && input.tierVersionId) {
@@ -362,6 +416,13 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
 
   const note = typeof input.note === 'string' && input.note.trim() ? input.note.trim().slice(0, 500) : null;
   const now = new Date();
+  if (native) {
+   if (hasOwn(sanitized.overrides, 'appStorageBytes')) return fail(400, 'appStorageBytes applies to app subscriptions, not user subscriptions');
+   const initial = buildInitialUserSubscription(input, snapshot, sanitized.overrides, note, now);
+   if (initial.ok === false) return initial;
+   await native.insertInitialSubscription(initial.document, input.session);
+   return { ok: true, subscription: toInfo('user', input.subjectId, initial.document) };
+  }
   const things = await getThingsCollection();
 	const mongoOptions = input.session ? { session: input.session } : {};
 
@@ -550,42 +611,9 @@ export const setSubscription = async (input: SetSubscriptionInput): Promise<{ ok
 		return fail(409, `The account already uses ${initialStorageUsedBytes} bytes, above that plan's allowance`);
 	}
 
-	const insertDoc: any = {
-		shareId: subscriptionShareId(input.subjectType, input.subjectId),
-      schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-      thingtime: [SUBSCRIPTION_KIND],
-		crystal: {
-			quotaKind: SUBSCRIPTION_KIND,
-			subjectType: input.subjectType,
-			subjectId: input.subjectId,
-			tier: snapshot.tierId,
-			tierVersionId: snapshot.versionId,
-			tierVersion: snapshot.version,
-			tierName: snapshot.title,
-			tierMetered: snapshot.metered,
-			tierQuotas: snapshot.quotas,
-			overrides: sanitized.overrides,
-			note,
-			updatedBy: input.updatedBy,
-			isDefaultAssignment: input.isDefaultAssignment === true,
-			...(initialStorageUsedBytes !== null
-				? {
-						storageUsedBytes: initialStorageUsedBytes,
-						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-						storageLedgerStatus: USER_STORAGE_STATUS.ready,
-						storageReconciledAt: now,
-						storageUpdatedAt: now
-					}
-				: {})
-		},
-		ownerId: input.subjectId,
-      acl: [ACL_OWNER],
-      targetId: null,
-      tags: [],
-		storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION,
-		createdAt: now,
-		updatedAt: now
-  };
+	const initial = buildInitialUserSubscription(input, snapshot, sanitized.overrides, note, now);
+	if (initial.ok === false) return initial;
+	const insertDoc = initial.document;
   try {
 		await things.insertOne(insertDoc, mongoOptions);
   } catch (err: any) {

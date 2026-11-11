@@ -1,0 +1,26 @@
+{
+  "builtAt": "2026-11-11T18:19:37.526Z",
+  "desktopEndpoints": {
+    "defaultId": "production",
+    "options": []
+  },
+  "desktopRelease": null,
+  "gitBranch": "codex/anonymous-release",
+  "gitCommit": "c039dee857dcd3558192111e956921395648cd69",
+  "nitroPreset": "node_middleware",
+  "nativeBundle": {
+    "target": {
+      "platform": "darwin",
+      "arch": "arm64"
+    },
+    "runtime": {
+      "id": "electron-node-middleware-v1",
+      "nativeAbi": "electron-43.1.0-node-24.18.0-modules-148",
+      "shellVersion": "0.1.2"
+    },
+    "entrypoints": {
+      "renderer": ".output/public/index.html",
+      "server": ".output/server/index.mjs"
+    }
+  }
+}

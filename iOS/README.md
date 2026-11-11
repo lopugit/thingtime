@@ -558,11 +558,26 @@ among equally eligible items. Wi-Fi-only policy permits a local recheck after
 Photos has made an original available. Completion requires resolving all
 deferred originals visible to the current Photos grant.
 
-Managed original uploads are paced in small writes, 625,000 bytes/s (5 Mbps)
-by default. An optional hourly budget uses the measured payload bytes from all
-managed Photos transfers on that account/origin/device, including failed
-attempts. Each capped connection checks that shared usage against its own cap;
-an uncapped connection does not inherit another connection's cap. If a single
+Photos automation 1.6.0 exposes upload settings on the device, Photo library
+folder, and each saved sync config without opening its Edit form. Device and
+folder policies are stored by the native app for the exact origin, owner,
+paired device and folder grant; the config policy remains part of its ordinary
+saved Thing. Changing a limit does not reset recorded usage. Device and folder
+ceilings are shared across their configs, and each config also enforces its own
+ceiling. Blank device/folder fields add no ceiling; a blank config speed retains
+625,000 bytes/s (5 Mbps). MB/s and Mbps are explicit, convertible display units.
+
+Hourly allowances include observed payload bytes from failed attempts and
+uncertain reservations after interruption. Existing unscoped usage is charged
+conservatively until its original window expires. Limits are checked before
+new admissions; already-admitted transfers may finish. Foreground writes are
+paced and background URLSession transfers use a persistent average admission
+schedule, which cannot guarantee an instantaneous wire-speed ceiling. Up to five
+durable daemon jobs can reserve future starts within their signed URL lifetime,
+so a paced batch does not depend on the app waking between parts. Foreground
+retries preserve a known pacing deadline instead of extending it to five minutes;
+unknown transient failures retain the five-minute backoff. iOS still controls
+background scheduling. If a single
 required provider part is larger than the allowance, the connection reports
 the minimum part size instead of exceeding the budget. A file may span multiple
 budget windows at its confirmed part boundaries. iCloud downloads use Apple's
@@ -592,6 +607,15 @@ unit-test fixture first verifies its disposable loopback account, then reuses
 that same account/origin's actual native grant for original-byte verification.
 It neither injects a grant nor changes Simulator privacy settings. Without the
 flag, the existing visible manual-consent fixture remains available.
+
+Add `THINGTIME_PHOTO_POLICY_TEST=1` to exercise the installed native bridge's
+device and folder policy set/read/clear operations after ordinary consent and
+pairing. The fixture checks exact scope and values, refuses an unpaired device,
+and keeps high fixture-only limits for the subsequent original-byte test. Its
+policy pass marker does not establish upload success; the original-byte phase
+must independently finish and verify published bytes. Local storage fixtures do
+not advertise the direct S3 background transport, and Simulator scheduling
+refusals are not physical-device background acceptance.
 
 Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
 compares downloaded cloud hashes and reopens the same saved backup.

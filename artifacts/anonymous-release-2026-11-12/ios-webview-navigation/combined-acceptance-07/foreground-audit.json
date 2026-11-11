@@ -1,0 +1,57 @@
+{
+  "classification": "Foreground/admission prerequisite failure, not product reload failure",
+  "nativeLifecycle": [
+    {
+      "applicationState": "inactive",
+      "at": 1794421974.4095411,
+      "originMatched": true,
+      "path": "other",
+      "stage": "scene-initial-inactive"
+    },
+    {
+      "applicationState": "inactive",
+      "at": 1794421980.386487,
+      "originMatched": true,
+      "path": "/things",
+      "stage": "native-urlsession-things-200"
+    }
+  ],
+  "retainedProcessEvidence": {
+    "pid": 69954,
+    "nativeLogTimestamp": "2026-11-12 05:35:20.470",
+    "event": "Loading PDFKit",
+    "logSha256": "fb498e3cd0c547362c3da66ec2a7e2ed7f7872ea427bb803ed5c0e26a238f712",
+    "captureLimitation": "App-only final3minute log excludes SpringBoard/FrontBoard and most initial launch context; cannot establish OS activation refusal cause"
+  },
+  "visualEvidence": {
+    "startup": "startup.png shows SpringBoard/task app icon",
+    "end": "rendered.png shows SpringBoard/task app icon",
+    "appForegroundObserved": false
+  },
+  "runnerLaunchCommands": [
+    [
+      "xcrun",
+      "simctl",
+      "launch",
+      "C29D462D-4EDA-4897-8036-42E0188917B4",
+      "com.thingtime.localdevelopment"
+    ]
+  ],
+  "runnerForegroundPrerequisite": "Runner boots/bootstatus/installs/simctl-launches; never opens/selects Simulator GUI or verifies task app foreground. simctl launch returns process launch, not separately retained activation evidence.",
+  "supportedLaunchContract": "simctl help launch describes launching by bundle identifier and stdout/stderr redirection; it does not return an affirmative scene-active/foreground receipt.",
+  "conclusion": "Actual native app/runtime ran while its scene remained inactive. No recorded point establishes foreground activation. Missing GUI selection/normal foreground handoff is a plausible harness prerequisite; root cause unproven.",
+  "recoveryProposal": {
+    "purpose": "Discriminate launch/display prerequisite using same exact verified built app without source or payload changes",
+    "steps": [
+      "Wait for parent authorization and desktop acceptance completion",
+      "Validate run07 full built inventory/exact binary and frozen ef8123 payload; use a new owned simulator/profile",
+      "Open/select only owned simulator in normal Simulator.app, observe matching device/window and ready SpringBoard",
+      "Install exact verified app; use ordinary task app icon to open it in that observed simulator, retaining process/foreground evidence and app stdout/stderr",
+      "Retain existing180s active admission and120s UI phase limits; stop without another retry if inactive",
+      "If admitted, execute unchanged Work on device/New/Rename/reload test once; independent sameID/name readback and full installed inventory; delete only own simulator"
+    ],
+    "noProtectionOrSettingChange": true,
+    "noClockWidening": true,
+    "noAdditionalLaunchPerformed": true
+  }
+}

@@ -12,7 +12,9 @@ assert(selected.port&&Number(selected.port)>1024&&!selected.username&&!selected.
 assert.equal(parser,'1','Pinned mobile runtime bootstrap parser setting required');
 // Node shares this native app process: retain only nonsensitive OS launch context.
 // Clear all application/provider/account/API configuration, including fallback env.
-const osKeys=new Set(['HOME','TMPDIR','PATH','USER','LOGNAME','LANG','LC_ALL','LC_CTYPE','SHELL','__CF_USER_TEXT_ENCODING','CFFIXED_USER_HOME','XPC_SERVICE_NAME','XPC_FLAGS','DYLD_ROOT_PATH','DYLD_LIBRARY_PATH','DYLD_FRAMEWORK_PATH','__XPC_DYLD_FRAMEWORK_PATH','__XPC_DYLD_LIBRARY_PATH']);
+// LinguisticData uses this exact Simulator launch key during native spellchecking.
+// Do not widen it to IPHONE_*: Node and UIKit share the same process environment.
+const osKeys=new Set(['HOME','TMPDIR','PATH','USER','LOGNAME','LANG','LC_ALL','LC_CTYPE','SHELL','__CF_USER_TEXT_ENCODING','CFFIXED_USER_HOME','XPC_SERVICE_NAME','XPC_FLAGS','DYLD_ROOT_PATH','IPHONE_SIMULATOR_ROOT','DYLD_LIBRARY_PATH','DYLD_FRAMEWORK_PATH','__XPC_DYLD_FRAMEWORK_PATH','__XPC_DYLD_LIBRARY_PATH']);
 for(const key of Object.keys(process.env))if(!osKeys.has(key)&&!key.startsWith('SIMULATOR_')&&!key.startsWith('OS_ACTIVITY_'))delete process.env[key];
 const preservedOSKeys=Object.keys(process.env).sort();
 fs.mkdirSync(work,{recursive:true});process.chdir(work);

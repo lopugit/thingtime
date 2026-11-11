@@ -2,6 +2,67 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Latest actual native results — 12 November 2026
+
+The foreground-controlled iOS simulator now passes ordinary device-home
+initialization, New folder, Rename and real WKWebView reload, with the same local
+ID/value in a fresh document. The exact ef8123 payload and all1,840 signed/copied/
+installed files match. Cleanup passes. This proves existing device-home/IndexedDB
+page-reload persistence, not full SQLite account HTTP, process restart, physical
+device or production distribution. Account APIs still correctly return503.
+[Run08 outcome](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/foreground-acceptance-08/outcome.json).
+
+The corrected desktop library run also stops safely before replacement: a mounted
+SECTION role=dialog remains in the protection scan despite no visible modal. Its
+component owner is not yet established. Account/Mongo/safeStorage startup,
+private CRUD/ACLs, signed staging, dirty refusal and editor persistence/reload
+pass; automatic process/account recovery remains unverified. Prior45-second HTTP
+work evidence belongs to the separate Home run. Both test processes clean up.
+[Library outcome](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-library/outcome.json).
+
+## Local database integration — 12 November 2026
+
+Main c9e1bf9c (PR1481 Photos recovery/scoped limits and PR1482 mobile password
+layout) is merged into the working tree. Conflicts preserve the branch's higher
+contracts and authored styles; both manifest suites pass 206 checks and icons
+pass 8. [Integration evidence](../artifacts/anonymous-release-2026-11-12/main-c9e-integration/README.md).
+
+Canonical SQLite `createUserAccount` now atomically creates the identity and
+initial trusted zero ledger through one home/provider-bound transaction. The
+existing tiers and admission policy are reused. Duplicate races, rollback,
+caught errors, cross-profile/expired handles and reopening pass in real files.
+68 document-store, 15 subscription and 41 storage checks pass. Full HTTP signup
+remains disabled pending vault/outbox/roster/entitlement/readiness adapters.
+[Account transaction evidence](../artifacts/anonymous-release-2026-11-12/sqlite-account-creation/README.md).
+
+The fresh combined payload passes canonical typecheck, zero-baseline ratchet,
+full lint (0 errors, 374 warnings), build/inventory verification and genuine Mongo
+HTTP registration/private CRUD/restart checks. All 5,422 source hashes match before
+and after; Nitro entry SHA is ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50.
+[Build/API evidence](../artifacts/anonymous-release-2026-11-12/local-account-build/README.md).
+
+Managed-local desktop acceptance tooling now requires actual safeStorage,
+ordinary browser login, private API data and fresh app/Mongo processes across
+automatic replacement. Its 47 focused controls pass; real app acceptance requires
+the new combined build. The separate HTTPS-only native provider contract stays
+unchanged. [Fixture scope](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-fixture/README.md).
+
+The actual managed-local run passes real safeStorage, browser registration/login,
+private CRUD/ACLs, canonical account-scoped editor persistence/reload, a 70.55s
+dirty refusal and 45.306s real HTTP-write refusal followed by commit/readback.
+Automatic replacement fails: the account Home renderer refuses its checkpoint
+for unknown-draft/recent activity; no automatic close/relaunch occurs. Cleanup,
+empty helper authority and released ports pass. This does not prove post-restart
+account recovery. Source attribution is c039 plus the frozen merged/dirty inputs.
+[Actual partial receipt](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-account/verification.json).
+
+The iOS development filter removed the OS-owned IPHONE_SIMULATOR_ROOT key. The
+original matching framework disassembly identifies its missing-key assertion;
+an exact-key preservation fix passes actual-filter regressions. A positive native
+edit/reload control passes; the paired negative launch times out before a receipt.
+This is not complete causal A/B proof or corrected full-app acceptance.
+[Diagnosis](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/reload-crash-diagnosis/filter-regression.json).
+
 ## Native checkpoint — 12 November 2026
 
 The helper-inclusive isolated desktop app now passes actual automatic bundle
@@ -73,7 +134,7 @@ independent CI results. Hosted activation also requires released adapter
 source and a worker matching the final renderer; the prior snapshot differs from
 the current built renderer and is not being re-provisioned prematurely.
 
-## Latest main integration — 12 November 2026
+## Earlier main integration — 12 November 2026
 
 Main1125ca1a9 (PR1480 native Passwords editing/status) is integrated with the
 preserved checkpoint. Both documentation conflicts retain both contributions.
@@ -6696,3 +6757,16 @@ The held-feed proof uses a real server response containing the deleted parent wh
 [Evidence index](../artifacts/anonymous-post-delete-2026-10-27/README.md) preserves fixture corrections, accepted r8/r10 behavior, r11/r12 shared-VM OOM failures, r13 anonymous acceptance and r14 quote-reopen failure. The sanitized build passes; typecheck matches all 91 existing diagnostics. Prior pushed `5c6d6df8d` passed Web CI/CodeQL and public preview shell/assets/manifest checks. Final account and anonymous acceptance pass on the same `e5ca5891` package: one test each, zero skips/errors/OOM, all owned runtime resources released. Hosted head checks remain separate and are recorded in the PR. No merge, manual deployment, existing-account write, shared service/proxy/key or VM change was made.
 
 The post-deletion fixture correction preserves conditional-write safety: child creation updates the canonical parent version, so native setup now awaits the child receipt and exact refreshed parent basis before going offline. A 26-test synchronization suite includes stale-basis conflict, refreshed cascade success and a genuine later-edit conflict. No automatic rebasing or forced deletion was added.
+
+
+### Fresh combined iOS runtime acceptance — 12 November 2026
+
+The run07 app builds/installs the exact ef8123 payload and preserves the required
+OS variable in its actual runtime. Local manifest/root/assets succeed; account
+APIs refuse with LOCAL_API_NOT_CONFIGURED and no cloud fallback. All 125 native
+source hashes remain stable. The app never reaches an active scene, however:
+both screenshots show SpringBoard and no WK/UI operations start before the
+180-second admission deadline. The process is still alive; this is not another
+reload crash. Owned resources are cleaned. The runner did not independently
+foreground the Simulator/app. One normal-control foreground recovery is prepared
+against the exact verified app; its success is not yet claimed.

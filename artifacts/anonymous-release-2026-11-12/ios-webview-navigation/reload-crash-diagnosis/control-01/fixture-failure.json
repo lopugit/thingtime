@@ -1,0 +1,65 @@
+{
+  "originalCrashSha256": "870f7edd323afb03d85103caad03f44d56fc6bb0e41bc0a5c2db8372c1fbeac1",
+  "pid": 12591,
+  "exception": {
+    "codes": "0x0000000000000001, 0x000000018a31c7b0",
+    "rawCodes": [
+      1,
+      6613485488
+    ],
+    "type": "EXC_BREAKPOINT",
+    "signal": "SIGTRAP"
+  },
+  "termination": {
+    "flags": 0,
+    "code": 5,
+    "namespace": "SIGNAL",
+    "indicator": "Trace/BPT trap: 5",
+    "byProc": "exc handler",
+    "byPid": 12591
+  },
+  "triggeredFrames": [
+    {
+      "symbol": "___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke",
+      "module": "UIKitCore",
+      "moduleUuid": "db7f31d7-2702-3782-8987-aaaab107bf9f"
+    },
+    {
+      "symbol": "_dispatch_client_callout",
+      "module": "libdispatch.dylib",
+      "moduleUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2"
+    },
+    {
+      "symbol": "_dispatch_once_callout",
+      "module": "libdispatch.dylib",
+      "moduleUuid": "afc23f9e-c92f-36ef-b766-7f170100e0a2"
+    },
+    {
+      "symbol": "-[UIApplication workspace:didCreateScene:withTransitionContext:completion:]",
+      "module": "UIKitCore",
+      "moduleUuid": "db7f31d7-2702-3782-8987-aaaab107bf9f"
+    },
+    {
+      "symbol": "-[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]",
+      "module": "UIKitCore",
+      "moduleUuid": "db7f31d7-2702-3782-8987-aaaab107bf9f"
+    },
+    {
+      "symbol": "__95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke",
+      "module": "FrontBoardServices",
+      "moduleUuid": "9609fb52-e86d-3fe9-b0b1-ffbb15ce0227"
+    },
+    {
+      "symbol": "-[FBSScene _callOutQueue_maybeCoalesceClientSettingsUpdates:]",
+      "module": "FrontBoardServices",
+      "moduleUuid": "9609fb52-e86d-3fe9-b0b1-ffbb15ce0227"
+    },
+    {
+      "symbol": "-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]",
+      "module": "FrontBoardServices",
+      "moduleUuid": "9609fb52-e86d-3fe9-b0b1-ffbb15ce0227"
+    }
+  ],
+  "outcome": "Fixture rejected by iOS27 scene lifecycle requirement before viewDidLoad; no environment mutation or spellchecking trial occurred. Negative launch skipped. Product unchanged.",
+  "proposedCorrection": "Add canonical UIKit scene manifest and UIWindowSceneDelegate to fixture; parent review required before bounded recovery."
+}

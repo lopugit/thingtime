@@ -141,10 +141,10 @@ final class PhotoBackupInstalledTests: XCTestCase {
             return
         }
         _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button,a')).find(b=>b.textContent.trim()==='Device setup')?.click()")
-        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||b.textContent.trim()==='Choose folder')")
+        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||['Add folder','Choose folder'].includes(b.textContent.trim()))")
         _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Add this device')?.click()")
-        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)")
-        if prior == nil { _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Choose folder').click()") }
+        try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>['Add folder','Choose folder'].includes(b.textContent.trim())&&!b.disabled)")
+        if prior == nil { _ = try await web.evaluateJavaScript("Array.from(document.querySelectorAll('button')).find(b=>['Add folder','Choose folder'].includes(b.textContent.trim())).click()") }
         print("IOS_PHOTO_READY: In Things choose folder, Photo library (backup), then choose photo access. Use full access in this disposable simulator.")
         var selected: MobileFolderStore.Grant?
         for _ in 0..<1200 {
@@ -154,6 +154,55 @@ final class PhotoBackupInstalledTests: XCTestCase {
         }
         let grant = try XCTUnwrap(selected)
         print("IOS_PHOTO_NATIVE_GRANT: \(grant.id)")
+        if env["THINGTIME_PHOTO_POLICY_TEST"] == "1" {
+            let device = try XCTUnwrap(MobileDeviceKeychain.load(scope)?.deviceId)
+            func policyRequest(_ action: String, rootId: String?, policy: [String: Int64]? = nil, targetDevice: String? = nil) async throws -> [String: Any] {
+                var payload: [String: Any] = ["action": action, "ownerId": owner, "deviceId": targetDevice ?? device,
+                    "requestId": UUID().uuidString]
+                if let rootId { payload["rootId"] = rootId }
+                if let policy { payload["photoTransferPolicy"] = policy }
+                let value = try await web.callAsyncJavaScript("""
+                return await new Promise((resolve,reject)=>{
+                  const timer=setTimeout(()=>{window.removeEventListener('thingtime:native-message',receive);reject(Error('Native policy reply timed out'));},30000);
+                  function receive(event){if(event.detail?.type!=='mobile-files-result'||event.detail?.payload?.requestId!==payload.requestId)return;
+                    clearTimeout(timer);window.removeEventListener('thingtime:native-message',receive);resolve(event.detail.payload);}
+                  window.addEventListener('thingtime:native-message',receive);
+                  window.thingtimeNativeBridge.postMessage({type:'mobile-files',payload});
+                });
+                """, arguments: ["payload": payload], in: nil, contentWorld: .page)
+                return try XCTUnwrap(value as? [String: Any])
+            }
+            func assertPolicy(_ reply: [String: Any], rootId: String?, expected: [String: Int64]) throws {
+                let actual = reply["photoTransferPolicy"] as? NSDictionary
+                let exactRoot = rootId.map { reply["rootId"] as? String == $0 } ?? !reply.keys.contains("rootId")
+                guard reply["error"] == nil, reply["ownerId"] as? String == owner,
+                      reply["origin"] as? String == scope.origin.absoluteString,
+                      reply["deviceId"] as? String == device, exactRoot,
+                      (reply["roots"] as? [Any])?.isEmpty == true,
+                      actual == (expected as NSDictionary) else {
+                    XCTFail("The native policy receipt did not match its exact scope and requested values")
+                    throw NSError(domain: "PhotoBackupAcceptance", code: 8,
+                        userInfo: [NSLocalizedDescriptionKey: "Native policy receipt mismatch"])
+                }
+            }
+            let devicePolicy: [String: Int64] = ["uploadBytesPerSecond": 8_388_608, "uploadBytesPerHour": 2_147_483_648]
+            let folderPolicy: [String: Int64] = ["uploadBytesPerSecond": 16_777_216, "uploadBytesPerHour": 1_073_741_824]
+            for rootId: String? in [nil, grant.id] {
+                try assertPolicy(try await policyRequest("set-photo-transfer-policy", rootId: rootId, policy: [:]), rootId: rootId, expected: [:])
+                try assertPolicy(try await policyRequest("read-photo-transfer-policy", rootId: rootId), rootId: rootId, expected: [:])
+                let expected = rootId == nil ? devicePolicy : folderPolicy
+                try assertPolicy(try await policyRequest("set-photo-transfer-policy", rootId: rootId, policy: expected), rootId: rootId, expected: expected)
+                try assertPolicy(try await policyRequest("read-photo-transfer-policy", rootId: rootId), rootId: rootId, expected: expected)
+            }
+            let refused = try await policyRequest("read-photo-transfer-policy", rootId: nil, targetDevice: "unpaired-fixture-device")
+            guard refused["error"] is String, refused["photoTransferPolicy"] == nil else {
+                XCTFail("An unpaired device must receive a refusal without private policy data")
+                throw NSError(domain: "PhotoBackupAcceptance", code: 9,
+                    userInfo: [NSLocalizedDescriptionKey: "Unpaired device policy refusal was not preserved"])
+            }
+            try assertPolicy(try await policyRequest("read-photo-transfer-policy", rootId: nil), rootId: nil, expected: devicePolicy)
+            print("IOS_PHOTO_POLICY_BRIDGE_PASS: real owner/device authorization, independent device/folder save/read/clear, exact replies and unpaired-device refusal")
+        }
         let provider = SystemPhotoResources()
         XCTAssertEqual(provider.access(), "full")
         let initialLibrary = try provider.inventory()
@@ -373,7 +422,10 @@ final class PhotoBackupInstalledTests: XCTestCase {
                     try await Task.sleep(for: .milliseconds(250))
                 }
                 let progress = try XCTUnwrap(NativeDeferredUpload.shared.photoRunProgress(scope: scope, configurationId: connection, rootId: grant.id, deviceId: device))
-                XCTAssertEqual(progress["stage"] as? String, "complete")
+                guard progress["stage"] as? String == "complete" else {
+                    XCTFail("The native backup remains incomplete")
+                    throw NSError(domain: "PhotoBackupAcceptance", code: 7, userInfo: [NSLocalizedDescriptionKey: "Native backup did not reach a completed checkpoint"])
+                }
                 let scans = try await web.evaluateJavaScript("window.__photoScans"), stats = try await web.evaluateJavaScript("window.__nativeUploadStats")
                 XCTAssertEqual(scans as? Int, 0)
                 XCTAssertEqual((stats as? [String: Int])?["files"], 0)

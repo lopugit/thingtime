@@ -1,0 +1,22 @@
+[
+  {
+    "observedAt": 1794422441029,
+    "stage": "before-quit"
+  },
+  {
+    "observedAt": 1794422441029,
+    "stage": "services-close-start"
+  },
+  {
+    "observedAt": 1794422441247,
+    "stage": "services-close-end"
+  },
+  {
+    "observedAt": 1794422441247,
+    "stage": "quit-retry"
+  },
+  {
+    "observedAt": 1794422441247,
+    "stage": "before-quit"
+  }
+]

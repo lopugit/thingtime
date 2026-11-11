@@ -1,0 +1,29 @@
+{
+  "agentDesktopFirst": true,
+  "permissions": {
+    "accessibility": "granted",
+    "screenRecording": "granted"
+  },
+  "ownWindow": {
+    "id": "w-4043",
+    "title": "Thingtime actual local development PR1000",
+    "simulatorUdid": "E826AE47-5223-4AC7-8121-D73879D8EA02"
+  },
+  "controlsActuallyInvoked": [
+    "agent-desktop launch Simulator --activate",
+    "agent-desktop move-window --window-id w-4043 --x100 --y70",
+    "agent-desktop focus-window --window-id w-4043",
+    "closed only previous task-owned ReloadControl crash-report tab via its observed Close tab AXPress (no Send)",
+    "reobserved own focused Simulator and SpringBoard task icon",
+    "agent-desktop --headed mouse-click --xy468,390 on observed own app icon"
+  ],
+  "controlEvidence": "Agent-desktop verified window move/focus; click delivered_unverified. Independent native sceneactive+WK commits and rendered UI prove eventual app activation and acceptance.",
+  "screenshotFallback": "agent-desktop screenshot timed out; normal screencapture own-window region used transiently for grounded physical click; retained simctl device-only screenshots avoid unrelated desktop contents.",
+  "otherSimulatorWindows": "Preserved pre-existing iPhone17 and Thingtime Folder sync QA62 windows; own window disappeared after own simulator deletion.",
+  "timing": {
+    "iconClickAfterScreenshotUnix": 1794422819.296025,
+    "nativeActivationUnix": 1794422840.9968228,
+    "nativeReloadCommitUnix": 1794422855.900913
+  },
+  "noProtectionChanges": true
+}

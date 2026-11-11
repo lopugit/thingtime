@@ -1,0 +1,38 @@
+
+> @1.0.0 test:subscriptions /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --import tsx --test app/api/utils/subscriptions/tierCatalog.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/subscriptions/tierCatalogStore.test.mts
+
+✔ speed-test comparison and enforcement agree for current and historical tiers (1.077541ms)
+✔ catalog: four tiers, free is the default and mirrors the legacy caps (1.766ms)
+✔ catalog: payg is metered with no hard caps (0.28875ms)
+✔ isKnownSubscriptionTier rejects unknown values (0.119167ms)
+✔ sanitizeQuotaOverrides: null/undefined mean no overrides (0.107667ms)
+✔ sanitizeQuotaOverrides: unknown fields fail loudly (0.127917ms)
+✔ sanitizeQuotaOverrides: clamps to bounds, floors decimals, keeps explicit null (0.310417ms)
+✔ sanitizeQuotaOverrides: non-numeric values fail (0.682ms)
+✔ resolveTierQuotas: overrides win per-field, absent fields inherit (0.152959ms)
+✔ resolveTierQuotas: no overrides returns a copy of the tier quotas (0.16025ms)
+✔ computeTierDiscounts: resolves all six annualized renewal comparisons (0.158083ms)
+✔ computeTierDiscounts: custom values win while blank/zero comparisons stay unavailable (0.096833ms)
+✔ currencyMinorUnitFactor follows zero-, two-, and three-decimal currencies (4.742958ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 489.252542
+(node:15823) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15823) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ historical PAYG revisions without a speed allowance remain readable and unchanged (1.442ms)
+✔ metered revisions still reject an explicitly finite speed allowance (0.302375ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 461.429667

@@ -1,0 +1,117 @@
+{
+  "attribution": "base commit plus frozen dirty tracked/untracked source, not a clean commit build",
+  "baseCommit": "c039dee857dcd3558192111e956921395648cd69",
+  "checks": [
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "endedAt": "2026-11-11T18:16:53.410760+00:00",
+      "exitCode": 0,
+      "log": "typecheck.log",
+      "name": "typecheck",
+      "startedAt": "2026-11-11T18:15:43.207590+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "endedAt": "2026-11-11T18:18:08.003075+00:00",
+      "exitCode": 0,
+      "log": "ratchet.log",
+      "name": "ratchet",
+      "startedAt": "2026-11-11T18:16:53.411019+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "endedAt": "2026-11-11T18:19:05.490539+00:00",
+      "errors": 0,
+      "exitCode": 0,
+      "log": "lint.log",
+      "name": "lint",
+      "startedAt": "2026-11-11T18:18:08.003397+00:00",
+      "warnings": 374
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "endedAt": "2026-11-11T18:19:38.362948+00:00",
+      "exitCode": 0,
+      "log": "build.log",
+      "name": "build",
+      "startedAt": "2026-11-11T18:19:05.491899+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "endedAt": "2026-11-11T18:19:39.148735+00:00",
+      "exitCode": 0,
+      "log": "verify.log",
+      "name": "verify",
+      "startedAt": "2026-11-11T18:19:38.363199+00:00"
+    },
+    {
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "endedAt": "2026-11-11T18:19:48.307585+00:00",
+      "exitCode": 0,
+      "log": "mongo-http.log",
+      "name": "mongo-http",
+      "startedAt": "2026-11-11T18:19:39.148990+00:00"
+    }
+  ],
+  "endedAt": "2026-11-11T18:19:48.863633+00:00",
+  "sourceChanges": {},
+  "sourceUnchanged": true,
+  "startedAt": "2026-11-11T18:15:43.207402+00:00",
+  "status": "passed",
+  "outputHashes": {
+    "electron/dist/web/metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "electron/dist/web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322",
+    "electron/dist/web/.output/server/index.mjs": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50"
+  },
+  "mergedMain": "c9e1bf9c438dc9e11da5b5072e95324e244e8c8e",
+  "artifactHashes": {
+    "ratchet.log": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+    "verify.log": "5f2aa8f5faa0716f6c3bb9ad9773dd115b420f2356cbc84a00718c7d90e16127",
+    "lint.log": "ceeab6b2ebbb616fbbb6489423af6da1360f8ab63fc93afd616a60e17c1abe6c",
+    "source-before.json": "fbd56fd07f793e04c6295457189e9a9031da41987035295a9671e52f4ce410c4",
+    "source-after.json": "1451617a1ae1e6b605caee0136e247950c7655290d8b7e4e768811dbb4547fe0",
+    "typecheck.log": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+    "metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322",
+    "mongo-http.log": "52309932e138bb8e6ceff88df99c5b3b716d9e973d73392bfe67d022667bcd27",
+    "build.log": "368c1212bf69a13103bf45b60ee5b1bfee1c8ddb1293d2005c18de2373927bd2"
+  }
+}

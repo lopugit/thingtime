@@ -39,7 +39,7 @@ test('automatic saved-settings recovery revalidates authority and backs off refu
 	Object.defineProperty(globalThis, 'IDBKeyRange', { configurable: true, value: IDBKeyRange });
 	Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (_key: string, _options: object, run: () => Promise<unknown>) => run() } } });
 	let now = Date.now(); t.mock.method(Date, 'now', () => now);
-	for (const scenario of ['recover', 'denied', 'native-pause', 'revoked', 'saved-pause', 'local-pause', 'destination-review', 'future-retry'] as const) {
+	for (const scenario of ['recover', 'denied', 'native-pause', 'revoked', 'saved-pause', 'local-pause', 'destination-review', 'transfer-expired', 'transfer-missing', 'transfer-permission', 'transfer-state', 'grant-changed', 'queue-changed', 'future-retry'] as const) {
 		const reviewed = { ...saved, id: 'authority-' + scenario, configuration: { ...saved.configuration, localRootId: rootId, sourceKind: 'photos' as const } };
 		const binding = { ...scope, rootId: reviewed.id }, actions: string[] = [], checks: string[] = [];
 		const target = Object.assign(new EventTarget(), { location: { origin: scope.origin }, thingtimeNativeBridge: {
@@ -53,7 +53,7 @@ test('automatic saved-settings recovery revalidates authority and backs off refu
 					if (type === 'mobile-device') extra = { state: 'paired', deviceId: scope.deviceId };
 					else if (payload.action === 'photo-run-status') extra = { ...extra, rootId: photoRoot.id, configurationId: reviewed.id,
 						deviceId: scope.deviceId, configurationRevision: reviewed.updatedAt, photoRunProgress: {
-							stage: scenario === 'native-pause' ? 'paused' : 'needs-review', activity: { phase: 'waiting', reason: scenario === 'destination-review' ? 'destination-review' : 'saved-settings' },
+							stage: scenario === 'native-pause' ? 'paused' : 'needs-review', activity: { phase: 'waiting', reason: ['destination-review', 'transfer-expired', 'transfer-missing', 'transfer-permission', 'transfer-state', 'grant-changed', 'queue-changed'].includes(scenario) ? scenario : 'saved-settings' },
 							...(scenario === 'future-retry' ? { retryAt: new Date(now + 600_000).toISOString() } : {}),
 							confirmed: { photos: 0, videos: 0, other: 0, wifiBytes: 0, mobileBytes: 0, unknownBytes: 0 }
 						} };
@@ -81,7 +81,7 @@ test('automatic saved-settings recovery revalidates authority and backs off refu
 		const run = () => armNativePhotoRun({ reviewed, scope: binding, generation: rootIdentity.read().generation,
 			adapter: getNativeSyncAdapter()!, automatic: true, isPaused: () => scenario === 'local-pause', resumeScope: () => assert.fail('automatic recovery cannot resume a user pause') });
 		if (['denied', 'native-pause', 'revoked', 'saved-pause'].includes(scenario)) await assert.rejects(run()); else await run();
-		if (scenario === 'recover' || scenario === 'denied') {
+		if (['recover', 'denied', 'transfer-expired', 'transfer-missing', 'transfer-permission', 'transfer-state'].includes(scenario)) {
 			assert.deepEqual(checks, ['saved', 'arm']);
 			assert.ok(actions.indexOf('list') < actions.indexOf('arm-photo-run'));
 			await run(); assert.deepEqual(checks, ['saved', 'arm'], 'condition wakes retain cooldown after refusal');

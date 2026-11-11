@@ -1,0 +1,20 @@
+{
+  "outcome": "Exact-key development filter correction verified; full app not rerun",
+  "sourceHashes": {
+    "iOS/scripts/local-development/entry.mjs": "55278dd7c2ab84a9056998279e7ca0f32c79cf89f0895e9df4561c782bfcc69e",
+    "iOS/scripts/local-development/test-environment.mjs": "de0ba9457738b304ef6a840f4ea2b4b937d6b010296236ac0547f2628c3100f5",
+    "iOS/scripts/local-development/reload-control/main.swift": "25dd504c349b6caa4ccb0c40b32c1c052107a3102218183828c5db105d453880",
+    "iOS/scripts/local-development/reload-control/run.py": "ff9f1d8b0f3856f63fdb2139a0e80718103a338179d7bb1c6160e2726c647c4b"
+  },
+  "testCommand": "node --test iOS/scripts/local-development/test-environment.mjs",
+  "testExitCode": 0,
+  "testOutput": "\u2714 native Simulator root survives actual filter; account/API and lookalike keys do not (1.344625ms)\n\u2714 filter does not synthesize a missing OS root or application configuration (0.466375ms)\n\u2139 tests 2\n\u2139 suites 0\n\u2139 pass 2\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 45.592084\n",
+  "preFixRegression": {
+    "revision": "c039dee857dcd3558192111e956921395648cd69",
+    "result": "Pre-fix actual filter reproduces missing OS key"
+  },
+  "scope": "Adds exact IPHONE_SIMULATOR_ROOT only; no prefix expansion, synthesized value, account/API/provider retention or cloud fallback",
+  "causalEvidenceBoundary": "Matching UUID and exact getenv-null assertion plus positive native reload control support correction. Negative launch timed out; no causal paired A/B proof claimed.",
+  "nextStep": "Await parent-supplied fresh canonical web payload before one coordinated full app acceptance.",
+  "noAdditionalSimulatorLaunch": true
+}

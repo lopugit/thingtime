@@ -10,6 +10,27 @@
 
 ## Bundled local MongoDB and portable storage — 2026-11-12
 
+- Run the canonical SQLite account transaction tests: require one complete identity
+  plus initial ledger or neither, including caught malformed admissions, scope
+  exit, borrowed/cross-profile handles, duplicate races and reopen accounting.
+  Valid persisted published tier bodies remain authoritative. Native HTTP signup
+  must still refuse while its completion adapters are missing.
+- Run the managed-local automatic replacement fixture only against its fresh
+  combined build and disposable profile. Require actual Electron safeStorage,
+  ordinary browser login, pending real HTTP work, new native/Mongo PIDs, retained
+  sessions/private data/revision and unchanged isolated helper authority. Synthetic
+  HTTP fixture tests alone do not satisfy this acceptance.
+- Reusing a native iOS build requires the pinned complete native-source inventory,
+  unchanged source bytes and exact signed/installed app inventory. Reject a bad
+  inventory digest or changed source before launching. Observe the actual task
+  app foreground/active scene through normal controls; native HTTP success does
+  not prove web-view admission. Then verify create/rename/native reload retains
+  the exact local identity and value, with cleanup and API-refusal evidence.
+- For iOS development environment filtering, execute the actual filter regression:
+  preserve IPHONE_SIMULATOR_ROOT exactly; remove lookalike/account/API/provider
+  keys and never synthesize a missing OS value. Verify actual edited WKWebView
+  reload separately from this regression and retain matching crash evidence.
+
 - After building the desktop artifacts, run
   `node electron/scripts/test-bundled-local-runtime.cjs`. It must exercise the
   actual socket owner around `node_middleware`, not assume the imported bundle
@@ -13328,6 +13349,63 @@ transfer, whole-account snapshots or production deployment.
 
 ### iOS deferred Photos transfers
 
+- [ ] Cold-launch with an already-armed native queue, then verify its owner
+  after the app's active notification. The due queue must start once without
+  another navigation, activation or manual arm request. Explicitly paused,
+  future-due and other-owner queues must not start. Verify actual fresh bytes
+  and checkpoint timestamps rather than trusting a retained uploading label.
+- [ ] Reserve five native Photos originals concurrently through the real HTTP
+  API. Exact-path snapshot work must queue in FIFO order with at most two
+  active observations; capacity alone must not return 503 or cancel admitted
+  siblings. Cancel a queued and a running request, revoke queued access, and
+  exhaust the original deadline; no database/scratch work or slot may leak.
+- [ ] Open the actual saved Photos cards with their details collapsed. At
+  desktop and phone widths, device, folder and config speed/hourly inputs must
+  remain visible. Save and reload all three scopes through their real adapters;
+  verify byte-unit conversion, inheritance, native acknowledgement, retained
+  unsaved inputs and account/origin changes. Older native builds show the fields
+  with an update explanation. A direct editor-only fixture is insufficient.
+- [ ] With two configs in one folder and another folder on the same device,
+  enforce aggregate device/folder allowances and independent config allowances.
+  Change limits during active uploads and reopen after an uncertain transfer;
+  usage must persist, exact settlement must count once, and old admitted work
+  must not grant a new over-budget upload. Preserve explicit user Pause. Check
+  legacy unscoped usage, an indivisible provider part, and average scheduling
+  independently from a strict instantaneous speed claim.
+- [ ] In a concurrent batch, make one original wait for its hourly allowance
+  while an admitted sibling finishes. Keep the sibling's durable receipt,
+  stop refilling the batch, and defer before acknowledging the queue. Retry
+  without uploading the completed original again; fatal authority/source
+  refusals must still cancel sibling work.
+- [ ] A saved upload-limit wait may finish the current iOS processing slice
+  successfully only after the exact armed run's waiting checkpoint is saved
+  and read back. Show that progress is saved and uploads are waiting for limits;
+  keep remaining originals pending. Cancellation, expired/revoked authority,
+  network failure and checkpoint-write failure must never claim success.
+- [ ] Preserve a known short pacing deadline through durable save/readback and
+  foreground wake-up instead of stretching it to five minutes. A fresh known
+  deadline supersedes an older retry delay; hourly waits retain their deadline,
+  unknown transient failures keep the five-minute backoff, and stale deadlines
+  have a one-second floor. Background scheduling remains controlled by iOS.
+- [ ] Bound both foreground and daemon admission by the actual signed-part
+  expiry. Queue five durable daemon jobs with future earliest-start dates so
+  paced transfers do not require an app wake-up between parts. Foreground work
+  must respect those shared slots. A start beyond the signed expiry must defer
+  without consuming another calendar slot; repeated retries must converge on
+  the original deadline. Exercise a
+  rate whose part duration exceeds the signer lifetime without switching off
+  background file transport or claiming a strict instantaneous wire cap.
+- [ ] On a fresh same-revision authorization after an authority refusal, retain
+  the exact native queue epoch/capture, clear the old attention stage/backoff,
+  and allow a new continuation request. User Pause and changed grants still
+  refuse automatic resume. Exercise expired/missing/permission and unknown
+  transfer conflicts with the normal bounded reauthorization cooldown.
+- [ ] Verify closed failure reason plus operation (permission check, reservation,
+  upload part, completion/publication, local grant, queue) in the exact native
+  journal/status. Only verified configuration refusals say saved settings;
+  permission, expiry and generic conflicts stay distinct. Raw server text,
+  handles, paths and credentials must never enter these diagnostics.
+
 - [ ] Run `node remix/scripts/test-photo-sync-stable-ui.mjs`. At desktop and
   mobile widths verify initial/unknown, indexing, iCloud retrieval, cloud checks,
   uploading, publishing and stale values keep the surrounding card stable.
@@ -17957,6 +18035,10 @@ removing provenance or widening ACLs is not a workaround.
 - [ ] Final installed acceptance: compare native link target bytes, per-folder directions/rates, device aggregate measurements and Timeline restore with independent local/cloud evidence. Keep Home paused and DJ DODA automatic sync off. Production must advertise the required link/device-control capabilities before dependent work starts.
 
 - Signed Mac build prerequisites: verify a missing or incomplete `electron-builder` is repaired once with the exact pinned pnpm and frozen lockfile before web/native resource builds begin. A healthy install must not reinstall; failed or ineffective repair must stop immediately. `electron/test/build-dependencies.test.cjs` covers the boundary.
+### Password entry icon mobile layout
+
+- At320px,375px and desktop widths, open an existing entry and the Entry icon URL controls. Keep every button and file picker inside the fieldset content box before and after selecting a long filename. Verify the URL field, enabled/disabled controls and keyboard focus without horizontal overflow. Existing saved default layouts migrate; authored CSS and deleted controls remain unchanged.
+
 ### Password preview Website icons
 
 - Save two Website/URL fields: first missing/broken icon, second usable public

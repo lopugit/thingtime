@@ -1,0 +1,21 @@
+{
+  "passed": false,
+  "phase": "automatic-idle-process-replacement",
+  "receiptSha256": "aa8f4b8852f299ec66bc6d313a1d3d68e0a6933b22c1b177bb4556ebe74c6ce7",
+  "cleanupVerified": true,
+  "independentNoOwnedProcesses": true,
+  "independentRequiredPortsFree": true,
+  "nativeActivationCloseObserved": false,
+  "finalQuitMilestonesAreHarnessCleanup": true,
+  "sourceStillFrozen": true,
+  "copiedHelperExecutableSha256": "542b8ff8af8cd23f1b784379180ce42defb0ca40b4482e390c0ddfc63133bbcf",
+  "matchesIndependentlyVerifiedInstalledHelper": true,
+  "privateHelperGroupEmptyBeforeAndAfter": true,
+  "actualRetainedFailedQaApp": "/Users/lopu/Applications/Thingtime Dev native-bundle-qa-auto-local-pr1000.app",
+  "retainedDiagnosticProfile": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-local-pr1000/profile",
+  "retainedVerifiedDevAppUntouched": "/Users/lopu/Applications/Thingtime Dev native-bundle-dev-pr1000.app",
+  "sourceEditsAfterRun": false,
+  "automaticProcessReplacementVerified": false,
+  "mongoColdRestartAndAccountRetentionVerified": false,
+  "rootCauseStatus": "Host eligible; renderer refused unknown-draft/recent-activity. Captured SECTION lacks role/aria-busy attributes, so exact element and activity source are not proven."
+}

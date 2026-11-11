@@ -1,0 +1,112 @@
+{
+  "passed": false,
+  "launches": [
+    {
+      "mode": "preserve",
+      "launchOutput": "com.thingtime.reloadenvcontrol: 20469",
+      "events": [
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "created",
+          "time": 1794420263.614445
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "visible",
+          "time": 1794420263.7231941
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "provisional",
+          "time": 1794420267.97538
+        },
+        {
+          "mode": "preserve",
+          "number": 1,
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "finished",
+          "time": 1794420267.98703
+        },
+        {
+          "javascriptError": false,
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "edited",
+          "time": 1794420268.300561,
+          "valueMatched": true
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "before-spellcheck",
+          "time": 1794420268.3013911
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "resultLocation": 9223372036854775807,
+          "simulatorRootPresent": true,
+          "stage": "spellcheck-returned",
+          "time": 1794420268.3020139
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "reload-requested",
+          "time": 1794420268.302598
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "provisional",
+          "time": 1794420268.316885
+        },
+        {
+          "mode": "preserve",
+          "number": 2,
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "finished",
+          "time": 1794420268.3326359
+        },
+        {
+          "mode": "preserve",
+          "pid": 20469,
+          "simulatorRootPresent": true,
+          "stage": "passed",
+          "time": 1794420268.333544
+        }
+      ],
+      "terminateReturncode": 0
+    }
+  ],
+  "cleanup": [
+    {
+      "operation": "shutdown",
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "returncode": 0
+    }
+  ],
+  "sourceHashes": {
+    "main.swift": "25dd504c349b6caa4ccb0c40b32c1c052107a3102218183828c5db105d453880",
+    "run.py": "ff9f1d8b0f3856f63fdb2139a0e80718103a338179d7bb1c6160e2726c647c4b"
+  },
+  "binarySha256": "66205c544a448b5fa935d02edc1d15a7c57d848184c0b15f19311d75046dd918",
+  "ownSimulator": "D92E13C3-3CB1-46E1-AF7E-78565453C01D",
+  "error": "Command '['xcrun', 'simctl', 'launch', 'D92E13C3-3CB1-46E1-AF7E-78565453C01D', 'com.thingtime.reloadenvcontrol', 'remove']' timed out after 60 seconds",
+  "observedAt": "2026-11-11T18:05:33.144632+00:00"
+}

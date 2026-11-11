@@ -1,0 +1,839 @@
+[
+  {
+    "observedAt": 1794421392400,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421422402,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421452405,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421482407,
+    "format": 1,
+    "requests": 1,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 1,
+        "middlewarePending": 1,
+        "responsePending": 1,
+        "oldestAgeMs": 19907
+      }
+    }
+  },
+  {
+    "observedAt": 1794421512409,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421542413,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421572415,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421602428,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  },
+  {
+    "observedAt": 1794421632431,
+    "format": 1,
+    "requests": 0,
+    "upgradedSockets": 0,
+    "upgradeHandlers": 0,
+    "classes": {
+      "root-data": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "discovery": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-me": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "auth-accounts": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "profile": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-prompt": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-chat": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "settings-access": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "themes": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-catalogue": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "release-content": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "document": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "asset": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      },
+      "other": {
+        "requests": 0,
+        "middlewarePending": 0,
+        "responsePending": 0,
+        "oldestAgeMs": 0
+      }
+    }
+  }
+]

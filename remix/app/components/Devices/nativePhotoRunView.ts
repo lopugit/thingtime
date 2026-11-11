@@ -157,6 +157,12 @@ const reasonLabels: Record<NonNullable<NativePhotoRunActivity['reason']>, string
 	'photo-read': 'An original could not be read from the Photos library.',
 	'cloud-request': 'The cloud request could not finish.',
 	'saved-settings': 'Waiting for the current saved backup settings.',
+	'transfer-permission': 'The paired device could not authorize the cloud transfer. The current connection will be checked again.',
+	'transfer-expired': 'Cloud transfer authorization expired or was revoked. The current connection will be checked again.',
+	'transfer-missing': 'The exact cloud transfer authorization is no longer available. The current connection will be checked again.',
+	'transfer-state': 'The cloud transfer state changed. Its saved checkpoint was kept and the current connection will be checked again.',
+	'grant-changed': 'The selected Photos permission changed. Review access to this library.',
+	'queue-changed': 'The prepared Photos queue changed. Its saved checkpoint was kept for review.',
 	'destination-review': 'Review the backup’s cloud destination.',
 	retry: 'Waiting to retry the backup.'
 };
@@ -171,6 +177,13 @@ export function nativePhotoBackgroundLabel(status?: NativePhotoRunActivity['back
 		default: return '';
 	}
 }
+
+const failureOperationLabels: Record<NonNullable<NativePhotoRunActivity['failureOperation']>, string> = {
+    manifest: 'Checking server support', 'check-photo-run': 'Checking backup permission',
+    'reserve-photo-original': 'Reserving an original', parts: 'Preparing an upload part',
+    complete: 'Verifying uploaded bytes', publish: 'Saving the cloud file', revoke: 'Stopping an upload',
+    'revoke-photo-run': 'Stopping backup authorization', 'local-grant': 'Checking Photos access', queue: 'Checking the prepared queue'
+};
 
 const count = (value: number, singular: string, plural = singular + 's') =>
 	`${value.toLocaleString()} ${value === 1 ? singular : plural}`;
@@ -192,7 +205,8 @@ export function nativePhotoActivityDisplay(view?: NativePhotoRunView, paused = f
 	const fraction = !paused && !view.stale && continuation !== 'held' ? activity.downloadFraction ?? activity.cloudPreparationFraction : undefined;
 	return {
 		phase: view.stale ? `Last reported · ${phase}` : phase,
-		reason: activity.reason ? reasonLabels[activity.reason] : 'No additional details reported.',
+		reason: (activity.reason ? reasonLabels[activity.reason] : 'No additional details reported.') +
+			(activity.failureOperation ? ` ${failureOperationLabels[activity.failureOperation]}.` : ''),
 		indexed: indexed ? `${count(indexed.photos, 'photo')} · ${count(indexed.videos, 'video')} · ${count(indexed.files, 'file')}` : 'Not reported yet',
 		indexing: !paused && !view.stale && activity.phase === 'indexing' && indexing ?
 			`${indexing.completed.toLocaleString()} of ${indexing.total.toLocaleString()} ${indexing.unit === 'assets' ? 'assets found' : 'original records indexed'}` : 'Index progress not reported for this phase',

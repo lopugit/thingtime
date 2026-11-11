@@ -1,0 +1,9 @@
+{
+  "command": "python3 -B iOS/scripts/local-development/test-reuse-inventory.py",
+  "exitCode": 0,
+  "stdout": "",
+  "stderr": "..\n----------------------------------------------------------------------\nRan 2 tests in 0.002s\n\nOK\n",
+  "sourceSha256": "b21a117cba8ba46d8b39b32f4842e1d5df698a1a17b6f74ebe39cd2476e4a684",
+  "runnerSourceSha256": "d4e7c87847b12b68758c745eafccb33137f1cea919b3435534ea6fbbb9b7c306",
+  "scope": "Runs exact AST guard from actual runner; wrong digest and changed source both refused, no commands/build/app/simulator launch."
+}

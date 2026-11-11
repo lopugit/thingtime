@@ -1,0 +1,5 @@
+
+> thingtime-electron@0.1.2 verify:web /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron
+> node scripts/verify-web-build.mjs
+
+Electron web bundle verified.

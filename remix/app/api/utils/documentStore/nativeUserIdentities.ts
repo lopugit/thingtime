@@ -5,11 +5,13 @@ import type { CollectionFilter, CollectionProvider, CollectionTransaction } from
 import { encodeCollectionDocument } from './collectionProvider';
 import { createNativeSessionRepository } from './nativeSessions';
 import { defineNativeThingsCollection } from './nativeThingsCollection';
+import { insertNativeAccountIdentity } from './nativeAccountTransaction';
 
 /** Identity + sessions share one already-open native home provider. Canonical
  * insertUser builds every account envelope. This does not create a signup path:
- * subscriptions, vault/roster/verification/outbox, request readiness and wider
- * signup transactions are not adapted. No runtime selects this repository.
+ * this identity-only factory has no subscription or account transaction scope.
+ * The separate account-creation adapter binds those explicitly. Vault, roster,
+ * verification/outbox and HTTP readiness remain absent. No runtime selects it.
  * Lookups scan stored rows, with processing batches rather than row caps.
  * Batch reads use one scan/transaction; OR-filter evaluation still costs up to
  * O(rows * requested keys), not an indexed lookup. */
@@ -59,11 +61,20 @@ export async function createNativeHomeAuthRepositories(provider: CollectionProvi
   homePlaneId,
   async insertUserThing(thing, callerTransaction?: unknown) {
    assertUserIdentityRepositoryScope(identities);
-   if (callerTransaction !== undefined && callerTransaction !== null) throw new UserIdentityRepositoryError('USER_IDENTITY_TRANSACTION_UNSUPPORTED', 'Native signup-wide transactions are not implemented');
-   // Validation runs before serialization, which must not execute BSON hooks.
-   const bytes = encodeCollectionDocument(thing, 'shareId');
-   validateIdentity(BSON.deserialize(bytes));
-   await transaction(s => s.collection(namespace).insert(bytes));
+   // Admission/encoding belongs inside the account poison boundary too: a
+   // caught malformed second insert must roll back a completed user+ledger.
+   const encode = () => {
+    const bytes = encodeCollectionDocument(thing, 'shareId');
+    validateIdentity(BSON.deserialize(bytes));
+    return bytes;
+   };
+   if (callerTransaction !== undefined && callerTransaction !== null) {
+    try { insertNativeAccountIdentity(provider, identities, callerTransaction, encode); }
+    catch(error) { if ((error as {code?:string}).code === 'ACCOUNT_CREATION_SCOPE') throw new UserIdentityRepositoryError('USER_IDENTITY_TRANSACTION_UNSUPPORTED', 'Native account transaction does not match this identity provider'); throw error; }
+   } else {
+    const bytes = encode();
+    await transaction(s => s.collection(namespace).insert(bytes));
+   }
   },
   findUserThingByUsername: async username => read({ op: 'eq', path: ['crystal', 'username'], value: username }),
   findUserThingByEmailKey: async key => read({ op: 'contains', path: ['uniqueKeys'], value: key }),

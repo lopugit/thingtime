@@ -1,4 +1,5 @@
 import { passwordHelperOptions } from './password-helper-identity.mjs';
+import { verifyIsolatedPasswordFixture } from './verify-password-provider.mjs';
 // Opt-in native acceptance. Uses the actual app/renderer and signed delivery;
 // remote bootstrap and GitHub publication are isolated synthetic fixtures.
 import assert from 'node:assert/strict';
@@ -18,8 +19,15 @@ const output = path.resolve(process.argv.find(arg => arg.startsWith('--output=')
 if (!name?.startsWith('native-bundle-qa-auto-') || !process.argv.some(arg => arg.startsWith('--output='))) throw Error('Require a dedicated native-bundle-qa-auto-* workspace and --output');
 const workspace = retainedWorkspace(name), require = createRequire(import.meta.url);
 const passwordHelper = passwordHelperOptions(process.argv);
+const localApi = process.argv.includes('--local-api');
+if (localApi && process.env.THINGTIME_NATIVE_LOCAL_BUILD_READY !== '1') throw Error('Managed-local QA requires the parent-confirmed fresh combined build (THINGTIME_NATIVE_LOCAL_BUILD_READY=1).');
+const passwordFixture = process.argv.find(arg => arg.startsWith('--password-fixture-app='))?.slice(23);
+if (localApi && (!passwordHelper || !path.isAbsolute(passwordFixture || ''))) throw Error('Local-account QA requires a verified isolated helper and --password-fixture-app.');
+const appOrigin = `http://127.0.0.1:${localApi ? workspace.apiPort : 28640}`;
+const { assertRuntime, createLocalAccountFixture, readIdleBlockers, installActivityObserver } = require('../test/fixtures/native-auto-local.cjs');
+let localAccount, accountScope = { kind: 'anonymous' }, baselineMongoPid, localAccountProof, activeWorkProof, encryptedProfileSha256, helperExecutableSha256;
 const reusePrepared = process.argv.includes('--reuse-prepared');
-if (passwordHelper && reusePrepared) throw Error('A signed helper requires a fresh canonical snapshot.');
+if ((passwordHelper || localApi) && reusePrepared) throw Error('A signed helper requires a fresh canonical snapshot.');
 const previousReceiptPath = process.argv.find(arg => arg.startsWith('--previous-receipt='))?.slice(19);
 const puppeteer = require('puppeteer-core'), hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'thingtime-native-auto-'));
@@ -85,26 +93,34 @@ async function captureHostActivationLog() {
  await writeFile(path.join(output, 'host-lifecycle-diagnostics.json'), JSON.stringify(lifecycle, null, 2));
  await writeFile(path.join(output, 'host-activation-diagnostics.json'), JSON.stringify(records, null, 2));
 }
-const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
+const verifierSourceHashes = Object.fromEntries(await Promise.all(['scripts/verify-web-bundle-auto-activation.mjs', 'test/fixtures/native-web-auto-api.mts', 'test/fixtures/configure-native-auto-qa.cjs', 'test/fixtures/native-auto-local.cjs'].map(async file => [file, hash(await readFile(path.join(electronDir, file)))])));
 const persistenceReaderFiles = ['remix/app/local-workspace/editorTree.ts', 'remix/app/local-workspace/storage.ts', 'remix/app/Providers/thingtimeSerialization.ts'];
 const persistenceReaderSourceHashes = Object.fromEntries(await Promise.all(persistenceReaderFiles.map(async file => [file, hash(await readFile(path.join(repo, file)))])));
 // Read through the same integrity-checked storage adapter as the actual renderer.
-// No legacy adapter is supplied, so this task-only anonymous witness cannot
+// No legacy adapter is supplied, so this task-only scoped witness cannot
 // migrate data or write a tree. It never inspects a personal profile/account.
 const { buildSync } = require(require.resolve('esbuild', { paths: [path.join(repo, 'MCP')] }));
 const persistenceReader = buildSync({ bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent', stdin: {
  resolveDir: repo, loader: 'ts', sourcefile: 'native-auto-persistence-reader.ts', contents: `
  import { LocalEditorTree, decodeEditorTree } from './remix/app/local-workspace/editorTree';
  import { WorkspaceDatabase } from './remix/app/local-workspace/storage';
- globalThis.__nativeAutoReadPersisted = async (origin, fixturePath, expected) => {
+ globalThis.__nativeAutoReadPersisted = async (origin, fixturePath, expected, scope) => {
   const assertCurrent = () => {
    if (location.origin !== origin || globalThis.getThingtime?.(fixturePath) !== expected) throw Error('Task persistence witness identity/value changed');
   };
-  assertCurrent();
+  const assertOwner = async () => {
+   if (scope.kind !== 'account') return;
+   const response = await fetch('/api/root-data', { credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(15000) });
+   if (!response.ok) throw Error('Task account persistence identity unavailable');
+   const root = await response.json();
+   if (root.user?.id !== scope.ownerId || root.dataPlane !== scope.dataPlane || scope.origin !== origin) throw Error('Task account persistence identity changed');
+   assertCurrent();
+  };
+  assertCurrent(); await assertOwner();
   const db = new WorkspaceDatabase(indexedDB);
-  const tree = new LocalEditorTree(db, { kind: 'anonymous' }, { assertCurrent, onInvalidate: () => () => {} });
+  const tree = new LocalEditorTree(db, scope, { assertCurrent, onInvalidate: () => () => {} });
   try {
-   const raw = await tree.getItem(tree.key); assertCurrent();
+   const raw = await tree.getItem(tree.key); assertCurrent(); await assertOwner();
    if (raw === null || decodeEditorTree(raw).value[fixturePath] !== expected) return null;
    return { storageKey: tree.key, integrityChecked: true, valueMatched: true };
   } finally { await db.close(); }
@@ -159,9 +175,23 @@ async function desktop(action) {
 async function processId() { return JSON.parse(await readFile(path.join(workspace.root, 'launcher.json'), 'utf8')).childPid; }
 async function connect() {
  if (!browser?.connected) browser = await puppeteer.connect({ browserURL: `http://127.0.0.1:${workspace.inspectorPort}`, defaultViewport: null });
- page = (await browser.pages()).find(candidate => candidate.url().startsWith('http://127.0.0.1:28640/'));
+ page = (await browser.pages()).find(candidate => candidate.url().startsWith(appOrigin + '/'));
  if (!page) return null;
  return page.evaluate(() => window.thingtimeDesktop?.getInfo());
+}
+function mongoProcessId() {
+ const pids = command('/usr/sbin/lsof', ['-nP', `-iTCP:${workspace.databasePort}`, '-sTCP:LISTEN', '-t']).trim().split(/\s+/).map(Number);
+ assert.equal(new Set(pids).size, 1, 'Require one task Mongo listener');
+ assert.ok(Number.isSafeInteger(pids[0]) && pids[0] > 0);
+ assert.equal(command('/bin/ps', ['-p', String(pids[0]), '-o', 'comm=']).trim(), path.join(workspace.source, 'dist/database/mongodb/bin/mongod'), 'Require the task-owned bundled Mongo executable');
+ return pids[0];
+}
+async function assertEmptyHelper() {
+ if (!localApi) return;
+ await verifyIsolatedPasswordFixture(passwordFixture, passwordHelper.identity, passwordHelper.signingIdentity);
+ const result = spawnSync(path.join(passwordFixture, 'Contents/MacOS/Thingtime Password Fixture'), ['--assert-empty'],
+  { env: developmentEnvironment(), timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
+ assert.ok(!result.error && result.status === 0, 'Preserve nonempty or unavailable helper authority; no local test may start');
 }
 async function captureActivationState() {
  let timer;
@@ -172,7 +202,7 @@ async function captureActivationState() {
    const blockers = candidates.filter(element => {
     if (element.matches('[contenteditable="true"], .monaco-editor, .codex-editor, [role="dialog"], [aria-busy="true"]')) return true;
     return !['button','submit','reset','hidden','checkbox','radio'].includes(element.type) && Boolean(element.value);
-   }).map(element => ({ tag: element.tagName, label: element.getAttribute('aria-label'), visible: Boolean(element.getClientRects().length), nonempty: Boolean(element.value) }));
+   }).map(element => ({ tag: element.tagName, role: element.getAttribute('role'), ariaBusy: element.getAttribute('aria-busy'), contenteditable: element.getAttribute('contenteditable') }));
    return { pathname: location.pathname, focused: document.hasFocus(), visibility: document.visibilityState,
     featureVersions: { 'native.web-bundle-activation': info.nativeFeatures?.features?.['native.web-bundle-activation']?.version },
     featureOriginMatches: info.nativeFeatures?.origin === location.origin,
@@ -182,7 +212,7 @@ async function captureActivationState() {
     localRuntimeActive: info.localRuntime?.active === true, localRuntimeEnabled: info.localRuntime?.enabled === true,
     rendererReady: typeof window.getThingtime === 'function' && Boolean(document.querySelector('#root')?.childElementCount),
     closedDrawerEmojiFields: document.querySelectorAll('input[aria-label="Emoji"]').length,
-    blockers, receivedMessages: window.__nativeAutoQa || [] };
+    blockers, activity: (window.__nativeAutoActivity || []).slice(-100), receivedMessages: window.__nativeAutoQa || [] };
   }), new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Task public state observation timed out')), 4000); })]);
   const nativeVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(state.featureVersions['native.web-bundle-activation'] || '');
   if (!state.featureOriginMatches || !nativeVersion || Number(nativeVersion[1]) < 3) throw Error('Current origin requires native activation diagnostics 1.3.0');
@@ -217,7 +247,8 @@ async function verifyDrawerEditor() {
 }
 try {
  const { assertFreePort } = require('../lib/local-runtime.cjs');
- for (const port of [28640, workspace.apiPort, workspace.databasePort, workspace.inspectorPort]) await assertFreePort(port);
+ for (const port of new Set([...(localApi ? [] : [28640]), workspace.apiPort, workspace.databasePort, workspace.inspectorPort])) await assertFreePort(port);
+ await assertEmptyHelper();
  if (reusePrepared) {
   enter('verify-owned-prepared-snapshot');
   assert.ok(previousReceiptPath, 'Reuse requires the previous task receipt');
@@ -250,6 +281,16 @@ try {
   const releaseClaim = await claimWorkspace(workspace); createdWorkspace = true;
   try { await prepareWorkspace(workspace, electronDir, require('electron'), { passwordHelper }); } finally { await releaseClaim(); }
  }
+ if (!reusePrepared) for (const file of ['main.cjs','preload.cjs','lib/web-bundle-activation.cjs','lib/web-bundle-updates.cjs','lib/web-bundle-download.cjs','lib/renderer-server.cjs','scripts/dev-workspace.mjs','scripts/verify-password-provider.mjs','scripts/password-helper-identity.mjs','dist/web/metadata.json','dist/web-integrity.json']) {
+  const bytes = await readFile(path.join(workspace.source, file));
+  assert.deepEqual(bytes, await readFile(path.join(electronDir, file)), 'Prepared source must match canonical input'); preparedSourceHashes[file] = hash(bytes);
+ }
+ if (passwordHelper) {
+  const file = 'dist/native/Thingtime Passwords.app/Contents/MacOS/Thingtime Passwords';
+  const actual = await readFile(path.join(workspace.source, file));
+  assert.deepEqual(actual, await readFile(path.join(passwordHelper.app, 'Contents/MacOS/Thingtime Passwords')), 'Embedded helper must match the verified installed helper');
+  helperExecutableSha256 = hash(actual);
+ }
  const web = path.join(workspace.source, 'dist/web'), metadata = JSON.parse(await readFile(path.join(web, 'metadata.json'), 'utf8'));
  const built = metadata.nativeBundle;
  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -268,9 +309,10 @@ try {
   { cwd: path.join(repo, 'remix'), env: developmentEnvironment(), stdio: ['ignore', 'ignore', log.fd, 'ipc'] });
  const { origin: apiOrigin } = await message(api, null, 'ready');
  const bootstrapConfig = path.join(temporary, 'bootstrap.json'), bootstrapReceipt = path.join(temporary, 'bootstrap-receipt.json');
- await writeFile(bootstrapConfig, JSON.stringify({ ...workspace, origin: apiOrigin, receipt: bootstrapReceipt }));
+ await writeFile(bootstrapConfig, JSON.stringify({ ...workspace, mode: localApi ? 'managed-local' : 'remote', origin: apiOrigin, receipt: bootstrapReceipt }));
  command(path.join(workspace.runtime, 'Contents/MacOS/Electron'), [path.join(electronDir, 'test/fixtures/configure-native-auto-qa.cjs'), bootstrapConfig]);
- const configured = JSON.parse(await readFile(bootstrapReceipt, 'utf8')); assert.equal(configured.enabled, false); assert.equal(configured.origin, apiOrigin + '/');
+ const configured = JSON.parse(await readFile(bootstrapReceipt, 'utf8')); assert.equal(configured.enabled, localApi); assert.equal(configured.origin, apiOrigin + '/');
+ if (localApi) { assert.equal(configured.encryptionAvailable, true); assert.equal(configured.bundledMongoSelected, true); }
  enter('baseline-startup');
  launcher = spawn(process.execPath, [path.join(electronDir, 'scripts/dev-parallel.mjs'), `--workspace=${name}`, '--use-staged'], { env: developmentEnvironment(), stdio: ['ignore', 'ignore', log.fd] });
  const initial = await until(async () => {
@@ -278,12 +320,21 @@ try {
   if (!info || !await page.evaluate(() => typeof window.setThingtime === 'function' && document.querySelector('#root')?.childElementCount > 0)) return;
   return info;
  }, 120000, 'Real baseline renderer did not initialize');
- assert.equal(initial.webBundle.source, 'bundled'); assert.equal(initial.localRuntime.active, false); assert.equal(initial.localRuntime.enabled, false);
- assert.equal(new URL(initial.apiOrigin).origin, apiOrigin);
+ assert.equal(initial.webBundle.source, 'bundled');
+ assertRuntime(initial, { local: localApi, origin: appOrigin, releaseOrigin: apiOrigin });
+ if (localApi) {
+  enter('canonical-local-account-and-private-thing');
+  baselineMongoPid = mongoProcessId();
+  encryptedProfileSha256 = hash(await readFile(path.join(workspace.profile, 'local-runtime/settings.enc')));
+  localAccount = await createLocalAccountFixture(appOrigin); accountScope = await localAccount.loginBrowser(page);
+  await page.waitForFunction(() => typeof window.getThingtime === 'function');
+  observations.push({ case: 'managed-local-bootstrap', realElectronSafeStorage: true, canonicalRegistration: true, ordinaryBrowserLogin: true, privateThingEdited: true, independentPrivateAcl: true, nativeAutoFillBound: false });
+ }
  const diagnosticVersion = /^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(initial.nativeFeatures?.features?.['native.web-bundle-activation']?.version || '');
  assert.equal(initial.nativeFeatures?.origin, initial.origin);
  assert.ok(diagnosticVersion && Number(diagnosticVersion[1]) >= 3, 'Negotiate native diagnostics 1.3.0 before depending on them');
  publicActivationDiagnostics(initial.webBundle?.activation);
+ await page.evaluateOnNewDocument(installActivityObserver);
  await page.evaluateOnNewDocument(() => {
   window.__nativeAutoQa = [];
   window.thingtimeDesktop?.onBundleActivation?.(message => window.__nativeAutoQa.push({ type: message.type, at: Date.now(), keepVeto: message.keepVeto === true }));
@@ -345,7 +396,7 @@ try {
  await page.keyboard.press('Tab');
  await page.evaluate(persistenceReader);
  const persisted = await until(async () => {
-  try { return await page.evaluate((origin, fixturePath, expected) => window.__nativeAutoReadPersisted(origin, fixturePath, expected), origin, fixturePath, value); }
+  try { return await page.evaluate((origin, fixturePath, expected, scope) => window.__nativeAutoReadPersisted(origin, fixturePath, expected, scope), origin, fixturePath, value, accountScope); }
   catch (error) { throw Object.assign(error, { fatal: true }); }
  }, 30000, 'Canonical editor storage did not acknowledge the submitted value');
  await page.evaluate(() => { delete window.__nativeAutoReadPersisted; });
@@ -359,7 +410,31 @@ try {
  const home = await captureActivationState();
  assert.equal(home.closedDrawerEmojiFields, 0, 'Closed default drawer editor inputs must be unmounted on Home');
  observations.push({ case: 'closed-drawer-home', defaultEmojiFieldsUnmounted: true, blockerCount: home.blockers.length });
+ let work;
+ if (localApi) {
+  enter('ordinary-library-idle-navigation');
+  await page.goto(origin + '/things', { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('button[aria-label="Things settings"]', { visible: true, timeout: 30000 });
+  await page.waitForFunction(() => typeof window.getThingtime === 'function');
+  await until(async () => (await page.evaluate(readIdleBlockers)).length === 0, 30000, 'Account library still has protected draft/busy/media blockers');
+  await captureActivationState();
+  await page.screenshot({ path: path.join(output, 'library-idle.png') });
+  observations.push({ case: 'library-idle-page', pathname: '/things', blockersCleared: true, ordinaryNavigation: true, homeAutomaticActivationVerified: false });
+ }
+ if (localApi) { enter('admit-canonical-local-http-work'); work = localAccount.startWork();
+  await until(async () => { work.assertPending(); return (await page.evaluate(() => window.thingtimeDesktop.getInfo())).webBundle.activation.idle.http === 'busy'; }, 10000, 'Real HTTP work was not observed'); }
  await desktop('minimize'); await until(() => page.evaluate(() => !document.hasFocus()), 5000, 'Task app did not become quiescent');
+ if (localApi) {
+  enter('active-http-work-remains-pending'); const heldAt = Date.now();
+  while (Date.now() - heldAt < 45000) {
+   work.assertPending(); assert.equal(await processId(), baselinePid, 'Admitted work must preserve the process');
+   const info = await page.evaluate(() => window.thingtimeDesktop.getInfo());
+   assert.equal(info.webBundle.update.status, 'pending'); assert.equal(info.webBundle.releaseId, null);
+   assert.equal(info.webBundle.activation.idle.http, 'busy'); await wait(1000);
+  }
+  await localAccount.finishWork(); activeWorkProof = { actualCanonicalHttpMutation: true, heldMs: Date.now() - heldAt, processUnchanged: true, pending: true, completedAndReadBack: true };
+  observations.push({ case: 'active-local-work', ...activeWorkProof });
+ }
  enter('automatic-idle-process-replacement');
  const automaticStart = Date.now();
  let lastDiagnostic = 0;
@@ -378,7 +453,12 @@ try {
   const current = JSON.parse(await readFile(path.join(cacheDirectory, 'state.json'), 'utf8'));
   return current.active === publication.releaseId && !current.pending ? current : null;
  }, 60000, 'Automatic trial did not durably confirm');
- assert.equal(updated.origin, origin); assert.equal(updated.localRuntime.active, false); assert.equal(new URL(updated.apiOrigin).origin, apiOrigin);
+ assertRuntime(updated, { local: localApi, origin, releaseOrigin: apiOrigin });
+ if (localApi) {
+  const replacementMongoPid = mongoProcessId(); assert.notEqual(replacementMongoPid, baselineMongoPid, 'Managed Mongo must actually restart');
+  assert.equal(hash(await readFile(path.join(workspace.profile, 'local-runtime/settings.enc'))), encryptedProfileSha256, 'Retain the actual encrypted runtime profile');
+  localAccountProof = { ...await localAccount.verifyAfterRestart(page), baselineMongoPid, replacementMongoPid, managedMongoRestarted: true, realElectronSafeStorage: true, encryptedProfileRetained: true, nativeAutoFillBound: false, activeWork: activeWorkProof };
+ }
  await page.goto(`${origin}/${fixturePath}`, { waitUntil: 'domcontentloaded' });
  await page.waitForFunction(expected => document.body.innerText.includes(expected), {}, value);
  await page.screenshot({ path: path.join(output, 'automatically-confirmed.png') });
@@ -391,7 +471,7 @@ try {
   releaseId: publication.releaseId, activeReleaseId: state.active, pendingCleared: true, durableDataReadback: true,
   manualRestartCalled: false, automaticCheck: true, automaticActivation: true, idleReplacementMs: Date.now() - automaticStart,
   syntheticSigner: true, realRenderer: true, canonicalReleaseServiceAndHandlers: true, productionProviderOrPublication: false,
-  localAccountApiActivationSupported: false, observations, delivery: { fileRequests: stats.contentRequests, bytes: stats.contentBytes, credentialFree: true },
+  localAccountApiActivationSupported: localApi, homeAutomaticActivationVerified: false, idlePage: localApi ? '/things' : '/', localAccount: localAccountProof, helperExecutableSha256, emptyHelperGroupVerified: localApi, observations, delivery: { fileRequests: stats.contentRequests, bytes: stats.contentBytes, credentialFree: true },
   implementation: Object.fromEntries(await Promise.all(['main.cjs','preload.cjs','lib/web-bundle-activation.cjs','lib/web-bundle-updates.cjs','lib/renderer-server.cjs'].map(async file => [file, hash(await readFile(path.join(workspace.source, file)))]))),
   rendererMetadataSha256: hash(await readFile(path.join(web, 'metadata.json'))) };
  enter('cleanup');
@@ -404,18 +484,21 @@ try {
    fields: [...document.querySelectorAll('[contenteditable],textarea,input')].map(element => ({ tag: element.tagName,
     editable: element.getAttribute('contenteditable'), label: element.getAttribute('aria-label'),
     visible: Boolean(element.getClientRects().length), text: element.textContent?.slice(0, 160),
-    value: element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value.slice(0, 160) : undefined })) })).catch(() => null);
+    value: element instanceof HTMLInputElement && element.type === 'password' ? '[redacted]' : element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value.slice(0, 160) : undefined })) })).catch(() => null);
   await writeFile(path.join(output, 'failure-renderer.json'), JSON.stringify(diagnostic, null, 2));
  }
 }
 finally {
  try {
+  localAccount?.dispose();
   await browser?.disconnect().catch(() => {});
   if (launcher) {
    const owner = JSON.parse(await readFile(path.join(workspace.root, 'launcher.json'), 'utf8')).pid;
    assert.equal(owner, launcher.pid, 'Preserve another launcher owner'); await stopWorkspace(workspace);
    await until(() => launcher.exitCode !== null || launcher.signalCode, 20000, 'Task launcher did not finish cleanup');
   }
+  if (localApi && launcher) { await require('../lib/local-runtime.cjs').assertFreePort(workspace.apiPort); await require('../lib/local-runtime.cjs').assertFreePort(workspace.databasePort); }
+  await assertEmptyHelper();
   if (api?.connected) await message(api, { type: 'stop' }, 'stopped');
   if (originalPolicy) await writeFile(path.join(workspace.source, 'native-web-policy.json'), originalPolicy);
   if (receipt && createdWorkspace) { await rm(workspace.app, { recursive: true }); await rm(workspace.root, { recursive: true }); }

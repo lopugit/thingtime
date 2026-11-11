@@ -812,3 +812,14 @@ Unsupported native user mutations refuse. Batch reads use one scan/transaction.
 `nativeUserIdentities.test.ts` covers scope, persistence, uniqueness, Mongo
 compatibility and same-provider accounting. This does not activate SQLite signup;
 the wider registration/readiness chain remains required.
+
+### Native account creation transaction
+
+`auth/accountCreationRepository.ts` and
+`documentStore/nativeAccount{Creation,Transaction}.ts` connect existing
+`createUserAccount` to the native home provider. Identity and initial trusted
+zero ledger commit together; scopes, handles and failed admissions fence commit.
+Canonical tiers bootstrap per provider without overwriting valid published bodies.
+Run `test:document-store`, `test:subscriptions`, `test:storage`, and the fresh built
+Mongo HTTP fixture after changes. `registerUser` refuses native activation until
+vault, outbox, notification, roster, entitlement and readiness adapters exist.

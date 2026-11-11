@@ -273,11 +273,13 @@ Normal signup still needs tier/subscription, vault, roster, verification/outbox,
 transaction and Nitro readiness integration. No account selects SQLite implicitly.
 [Identity evidence](../artifacts/anonymous-release-2026-11-12/sqlite-identities/README.md).
 
-The next bounded integration is the existing `createUserAccount` path: introduce
-an explicit home-account transaction for identity plus initial subscription/ledger,
-reuse canonical tier descriptors/admission, and scope tier bootstrap per provider.
-Test actual `createUserAccount` with rollback, duplicate races and reopening before
-attempting HTTP activation. Normal `/auth/register` still requires every vault,
+The existing `createUserAccount` path now uses an explicit home-account transaction
+for identity plus initial subscription/ledger. It reuses canonical tier descriptors
+and admission, scopes tier bootstrap per provider and preserves existing published
+bodies. Actual real-file tests cover rollback, duplicate races, reopening,
+caught-error poisoning and expired/cross-profile handles: the aggregate document
+suite passes 68 checks. [Account transaction evidence](../artifacts/anonymous-release-2026-11-12/sqlite-account-creation/README.md).
+HTTP activation is still disabled. Normal `/auth/register` still requires every vault,
 outbox/verification, notification, roster, resolver and readiness effect; do not
 turn on a partially adapted registration route.
 
@@ -291,8 +293,11 @@ edit/reload acceptance remain separate. [Browser evidence](../artifacts/anonymou
 The actual development app subsequently passed Work on this device, New folder
 and Rename with the same local item ID. Active-scene admission removed the
 observed provisional timeout in that run. Reload then preceded a task-app SIGABRT
-in Apple LinguisticData/ProofReader by about182ms; the underlying assertion cause
-is not established. The full acceptance receipt remains false, and the isolated
+in Apple LinguisticData/ProofReader by about182ms. Matching framework disassembly
+identifies its missing `IPHONE_SIMULATOR_ROOT` assertion; the development filter
+removed that key. An exact-key preservation fix and actual-filter regressions
+pass. A positive native editing/reload control passes, but the paired negative
+launch timed out, so causal A/B proof and the corrected full-app rerun remain open. The full acceptance receipt remains false, and the isolated
 simulator was deleted. [Actual partial result and crash evidence](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/ui-followup/outcome.json).
 
 
@@ -442,3 +447,30 @@ background execution. Bundled offline execution and downloadable web assets must
 be assessed separately from downloadable Node/server code. The App Store release
 lane needs a compliant, reviewed update policy; the technical protocol does not
 claim distribution approval or bypass native signing/security restrictions.
+
+
+### Fresh combined iOS runtime acceptance — 12 November 2026
+
+The run07 app builds/installs the exact ef8123 payload and preserves the required
+OS variable in its actual runtime. Local manifest/root/assets succeed; account
+APIs refuse with LOCAL_API_NOT_CONFIGURED and no cloud fallback. All 125 native
+source hashes remain stable. The app never reaches an active scene, however:
+both screenshots show SpringBoard and no WK/UI operations start before the
+180-second admission deadline. The process is still alive; this is not another
+reload crash. Owned resources are cleaned. The runner did not independently
+foreground the Simulator/app. One normal-control foreground recovery is prepared
+against the exact verified app; its success is not yet claimed.
+
+
+The subsequent foreground-controlled run08 reuses the exact verified app and
+passes Work on this device, New folder, Rename and native WK reload with the same
+local ID/value in a new document. Signed/copied/installed inventory equality and
+cleanup pass. This is existing device-home/IndexedDB page-reload retention;
+SQLite account HTTP remains503, and process restart/physical-device/distribution
+acceptance remains separate. [Run08 evidence](../artifacts/anonymous-release-2026-11-12/ios-webview-navigation/foreground-acceptance-08/outcome.json).
+
+The managed-local desktop library retry captures a SECTION role=dialog blocker
+without a visible modal. It does not establish the component owner or actual
+activity source. Preserve this unresolved protection/state boundary; neither
+native run proves automatic local-account replacement or post-restart recovery.
+[Exact library result](../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-library/outcome.json).

@@ -145,6 +145,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-12: Add canonical SQLite account creation with atomic identity/initial
+  ledger, provider-scoped tiers and caught-error/scope rollback. Preserve local
+  MongoDB and hosted behavior. Add managed-local automatic-update acceptance
+  tooling; preserve the exact iOS Simulator OS key required by spellchecking.
+  Full SQLite HTTP activation remains unfinished. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-11-12: Add explicit first-launch device-home recovery with version, origin,
   cookie/profile and live-document fences. Verify helper-inclusive automatic
   native bundle replacement without discarding unsaved edits; isolate signed
@@ -221,6 +228,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Add a transactional BSON/SQLite storage primitive and real file-recovery tests;
   canonical API and iOS storage integration remain unfinished. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
   **Codex (AI)**
+
+- 2026-11-12: Expose Photos upload speed and hourly limits on device, folder
+  and saved sync cards, with native aggregate enforcement and active policy-only
+  saves. Queue concurrent cloud path checks instead of rejecting a five-item
+  Photos batch when two checks are active. Clear stale authority holds after
+  fresh authorization, wake saved work after late foreground identity verification,
+  preserve short pacing deadlines, queue paced background
+  tasks within signed URL lifetimes, checkpoint expected upload-limit waits,
+  and report closed failure reasons and operations. Physical background
+  acceptance remains a separate release gate. See [PR1481 evidence](../PRs/1481-codex-ios-photos-recovery-limits-fix-ios-sync-recovery-and-expose-scoped-upload-limits.md). **Codex (AI)**
 
 - 2026-11-12: Give the macOS Passwords companion standard responder-chain Edit
   shortcuts so Command-V reaches focused web inputs. Keep credential delivery

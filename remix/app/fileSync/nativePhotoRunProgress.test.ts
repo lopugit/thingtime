@@ -26,3 +26,15 @@ test('invalid additive Photos reason telemetry cannot discard a valid scoped run
   unavailableReasons: { 'cloud-download': 2, 'photo-read': 1 } }).photoRunProgress?.unavailableReasons, undefined);
  assert.throws(() => parseNativePhotoRunStatus(revision, { ...progress, configurationRevision: '2026-11-10T00:00:00Z' }));
 });
+
+
+test('closed failure operation telemetry identifies the refusal without retaining raw server text', () => {
+ for (const failureOperation of ['manifest', 'check-photo-run', 'reserve-photo-original', 'parts', 'complete', 'publish', 'local-grant', 'queue']) {
+  const activity = parseNativePhotoRunStatus(revision, { ...progress,
+   activity: { phase: 'waiting', reason: 'transfer-expired', failureOperation } }).photoRunProgress?.activity;
+  assert.equal(activity?.reason, 'transfer-expired'); assert.equal(activity?.failureOperation, failureOperation);
+ }
+ const unknown = parseNativePhotoRunStatus(revision, { ...progress,
+  activity: { phase: 'waiting', reason: 'private server error', failureOperation: 'raw private path' } }).photoRunProgress?.activity;
+ assert.equal(unknown?.reason, undefined); assert.equal(unknown?.failureOperation, undefined);
+});

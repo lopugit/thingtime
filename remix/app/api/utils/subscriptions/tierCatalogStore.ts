@@ -1,9 +1,10 @@
+import { currentAccountCreationRepository, nativeAccountUnsupported } from '../auth/accountCreationRepository';
 import { randomBytes } from 'node:crypto';
 
 // The subscription-tier catalog is platform configuration: revisions and the
 // tier settings pointer live on the HOME deployment only, never on a
 // data-plane endpoint override (a foreign DB must not answer entitlements).
-import { ensureIndexes, getSettingsCollection, getHomeThingsCollection as getThingsCollection } from '../mongodb/collections';
+import { ensureIndexes, getSettingsCollection as getMongoSettingsCollection, getHomeThingsCollection as getMongoThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
   EMPTY_TIER_INCLUSIONS,
@@ -25,6 +26,10 @@ import {
   type TierPrices,
   type TierQuotas
 } from './tierCatalog';
+
+const assertMongoTierPersistence = () => { if (currentAccountCreationRepository()) nativeAccountUnsupported(); };
+const getThingsCollection: typeof getMongoThingsCollection = () => { assertMongoTierPersistence(); return getMongoThingsCollection(); };
+const getSettingsCollection: typeof getMongoSettingsCollection = () => { assertMongoTierPersistence(); return getMongoSettingsCollection(); };
 
 // Mongo-backed tier catalog. Every published revision is immutable: editing a
 // live/archived tier first creates a draft with the next integer version, and
@@ -329,6 +334,18 @@ const descriptorFromDoc = (doc: any): SubscriptionTierDescriptor | null => {
 let bootstrapPromise: Promise<void> | null = null;
 
 export const ensureBuiltInSubscriptionTiers = async (): Promise<void> => {
+  const native = currentAccountCreationRepository();
+  if (native) {
+   const now = new Date();
+   // Match Mongo bootstrap semantics: an existing parsed id/version is the
+   // authoritative published body (including historical quotas/metadata), not
+   // a byte-for-byte copy of today's built-in descriptors. Never overwrite it.
+   await native.bootstrapTiers(SUBSCRIPTION_TIER_CATALOG.map(descriptor => descriptorToInsert(descriptor, 'system', now)), (stored, expected) => {
+    const tier = descriptorFromDoc(stored);
+    return !!tier && tier.id === (expected.crystal as any).tierId && tier.version === (expected.crystal as any).version;
+   });
+   return;
+  }
   if (bootstrapPromise) return bootstrapPromise;
   bootstrapPromise = (async () => {
     // The warmup is deliberately fire-and-forget; first catalog access must
@@ -363,6 +380,7 @@ export const ensureBuiltInSubscriptionTiers = async (): Promise<void> => {
 };
 
 export const listSubscriptionTierVersions = async (statuses?: SubscriptionTierStatus[]): Promise<SubscriptionTierDescriptor[]> => {
+  assertMongoTierPersistence();
   await ensureBuiltInSubscriptionTiers();
   await recoverInterruptedTierPublishes();
   const things = await getThingsCollection();
@@ -377,6 +395,7 @@ export const listSubscriptionTierVersions = async (statuses?: SubscriptionTierSt
 };
 
 export const listLiveSubscriptionTiers = async (): Promise<SubscriptionTierDescriptor[]> => {
+  assertMongoTierPersistence();
   const live = await listSubscriptionTierVersions(['live']);
   const things = await getThingsCollection();
   const transitions = await things
@@ -417,6 +436,8 @@ export const getSubscriptionTierVersion = async (versionId: unknown): Promise<Su
   const id = typeof versionId === 'string' ? versionId.trim() : '';
   if (!id) return null;
   await ensureBuiltInSubscriptionTiers();
+  const native = currentAccountCreationRepository();
+  if (native) return descriptorFromDoc(await native.findTierVersion(id));
   await recoverInterruptedTierPublishes();
   const doc = await (
     await getThingsCollection()
@@ -432,6 +453,8 @@ export const getLiveSubscriptionTier = async (tierIdInput: unknown, versionIdInp
   const versionId = typeof versionIdInput === 'string' ? versionIdInput.trim() : '';
   if (!tierId) return null;
   await ensureBuiltInSubscriptionTiers();
+  const native = currentAccountCreationRepository();
+  if (native) return descriptorFromDoc(await native.findLiveTier(tierId, versionId));
   await recoverInterruptedTierPublishes();
   const doc = await (
     await getThingsCollection()
@@ -475,6 +498,7 @@ export const createSubscriptionTierDraft = async (
   input: TierMutationInput,
   actorId: string
 ): Promise<{ ok: true; tier: SubscriptionTierDescriptor } | Fail> => {
+  assertMongoTierPersistence();
   const sanitized = sanitizeTierContent(input);
   if (sanitized.ok === false) return sanitized;
   await ensureBuiltInSubscriptionTiers();
@@ -506,6 +530,7 @@ export const createSubscriptionTierDraftVersion = async (
   sourceVersionId: unknown,
   actorId: string
 ): Promise<{ ok: true; tier: SubscriptionTierDescriptor } | Fail> => {
+  assertMongoTierPersistence();
   const source = await getSubscriptionTierVersion(sourceVersionId);
   if (!source) return fail(404, 'Tier version not found');
   const things = await getThingsCollection();
@@ -546,6 +571,7 @@ export const updateSubscriptionTierDraft = async (
   input: TierMutationInput,
   actorId: string
 ): Promise<{ ok: true; tier: SubscriptionTierDescriptor } | Fail> => {
+  assertMongoTierPersistence();
   const versionId = typeof versionIdInput === 'string' ? versionIdInput.trim() : '';
   if (!versionId) return fail(400, 'versionId is required');
   const sanitized = sanitizeTierContent(input);
@@ -807,6 +833,7 @@ export const publishSubscriptionTierDraft = async (
   versionIdInput: unknown,
   actorId: string
 ): Promise<{ ok: true; tier: SubscriptionTierDescriptor } | Fail> => {
+  assertMongoTierPersistence();
   const versionId = typeof versionIdInput === 'string' ? versionIdInput.trim() : '';
   if (!versionId) return fail(400, 'versionId is required');
   await ensureBuiltInSubscriptionTiers();
@@ -840,6 +867,7 @@ export const archiveSubscriptionTierVersion = async (
   versionIdInput: unknown,
   actorId: string
 ): Promise<{ ok: true; tier: SubscriptionTierDescriptor } | Fail> => {
+  assertMongoTierPersistence();
   const versionId = typeof versionIdInput === 'string' ? versionIdInput.trim() : '';
   if (!versionId) return fail(400, 'versionId is required');
   const existing = await getSubscriptionTierVersion(versionId);

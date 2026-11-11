@@ -59,12 +59,21 @@ def run(args):
    changed=command(['git','diff','--name-only',previous['preparation']['toolCheckoutHead'],'--',*roots]).splitlines()
    changed+=command(['git','ls-files','--others','--exclude-standard','--',*roots]).splitlines()
    known={**previous['executedToolSha256'],'apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift':previous['sharedPasswordCoreSha256']}
+   if args.verified_native_source_inventory:
+    if sha(args.verified_native_source_inventory)!=args.native_source_inventory_sha256:raise RuntimeError('Frozen native source inventory digest mismatch')
+    frozen=json.loads(args.verified_native_source_inventory.read_text())
+    for path,digest in frozen.items():
+     target=ROOT/path
+     if not target.resolve().is_relative_to(ROOT):raise RuntimeError('Invalid frozen source path')
+     if path not in exceptions and sha(target)!=digest:raise RuntimeError('Frozen source changed: '+path)
+    known.update(frozen)
+
    for path in set(changed):
     if Path(path).suffix in ['.swift','.m','.mm','.h','.hpp','.c','.cpp','.rs'] and (path not in known or sha(ROOT/path)!=known[path]):raise RuntimeError('Unattributed native source prevents reuse: '+path)
    app.parent.mkdir(parents=True);shutil.copytree(source,app,symlinks=False)
    if inventory(app)!=previous['signedAppInventory']:raise RuntimeError('Native artifact changed during copy')
    shutil.copyfile(HERE/'acceptance.js',app/'LocalRuntime/acceptance.js')
-   report['nativeBuildReuse']={'verifiedSourceCacheReceiptSha256':sha(args.reuse_verified_cache/'verification.json'),'originalBinarySha256':previous['binarySha256'],'originalSignedAppInventory':previous['signedAppInventory'],'productSourceHashesMatched':True,'onlyResourceReplacement':'LocalRuntime/acceptance.js','budgetInheritedFromOriginalCache':True}
+   report['nativeBuildReuse']={'verifiedSourceCacheReceiptSha256':sha(args.reuse_verified_cache/'verification.json'),'originalBinarySha256':previous['binarySha256'],'originalSignedAppInventory':previous['signedAppInventory'],'productSourceHashesMatched':True,'onlyResourceReplacement':'LocalRuntime/acceptance.js','budgetInheritedFromOriginalCache':True,'frozenNativeSourceInventorySha256':args.native_source_inventory_sha256}
   else:
    command(['xcodebuild','-project',args.cache/'ThingtimeLocalDevelopment.xcodeproj','-scheme','ThingtimeLocalDevelopment','-configuration','Debug','-sdk','iphonesimulator','-destination','generic/platform=iOS Simulator','-derivedDataPath',args.cache/'DerivedData','ARCHS=arm64','ONLY_ACTIVE_ARCH=YES','CODE_SIGNING_ALLOWED=NO','build'],limit=1200,log=args.cache/'build.local.log')
    if sha(shared_core)!=report['sharedPasswordCoreSha256']:raise RuntimeError('Shared native password core changed during build')
@@ -134,6 +143,8 @@ if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__)
  for name in ['cache','web-output','runtime-cache','native-app']:p.add_argument('--'+name,required=True,type=lambda x:Path(x).resolve())
  p.add_argument('--reuse-verified-cache',type=lambda x:Path(x).resolve())
+ p.add_argument('--verified-native-source-inventory',type=lambda x:Path(x).resolve())
+ p.add_argument('--native-source-inventory-sha256')
  p.add_argument('--resume-preparation',action='store_true')
  p.add_argument('--entry-sha256',required=True);p.add_argument('--runtime',required=True);p.add_argument('--port',default=29741,type=int)
  run(p.parse_args())
