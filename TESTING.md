@@ -10941,6 +10941,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] macOS companion editing shortcuts: in the signed installed companion,
+  focus a synthetic password input and verify Command-V inserts masked text.
+  Compare the field's normal context-menu Paste without reading the clipboard
+  into logs or tools. Verify Command-A, Cut/Copy and Undo/Redo in ordinary text,
+  focus switching between fields and normal login. A failed login does not
+  imply credential rejection if the password field remained empty. Menu actions
+  must use standard nil-target AppKit responder-chain selectors; no custom
+  clipboard delivery. `PasswordApplicationMenuTests` checks the menu contract.
+
 - [ ] Native authenticator links: cold and warm `otpauth://totp` intake reaches
   the configured signed companion/iOS destination, using normal sign-in.
   Refuse malformed/duplicate/HOTP/migration input, iframe/wrong-origin delivery,
