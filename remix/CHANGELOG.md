@@ -145,6 +145,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-11-11: Correct AppID compatibility to WebAuthn's documented same-site
+  browser rule using one private-PSL-aware validator in the hook and provider;
+  accept parent paths and same-host ports while preserving RP-bound signing,
+  allowlists, verification and appid:false. Add closed rejection diagnostics.
+  Adapter 0.5.1 / passwords 1.9.1; live AWS acceptance remains separate. **Codex (AI)**
+
 - 2026-11-11: Recover an exact saved automatic folder intent after an idle
   strict scanner using the original job identity and a separately advertised
   worker contract (`api.devices-sync-control` 1.6.0). Defer one-way child hints
