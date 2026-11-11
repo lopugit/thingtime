@@ -69,7 +69,15 @@ when disabled, for unsupported request types/options, or after an explicit provi
 choice. Late responses and mismatched provider documents are ignored.
 
 Supported basic registration/assertion options are serialized with BufferSources
-as base64url. Creation supports `credProps: true`. Conditional mediation, other extension inputs (including PRF/largeBlob),
+as base64url. Creation supports `credProps: true`. Adapter 0.5.0 supports assertion `appid`
+only when empty/default or an exact-origin, credential-free HTTPS URL without a
+fragment. It uses FIDO's no-fetch facet authorization subset and preserves the
+normal RP-bound credential and RP hash; `getClientExtensionResults()` and JSON
+return `{appid:false}`. The hosted provider requires both modern and active
+same-origin `api.passwords` 1.9.0 before AppID vault operations. Other origins or
+legacy AppID-bound credentials require the native provider; no AppID URL is fetched.
+This is reusable protocol support, not an AWS-specific credential exception.
+Conditional mediation, other extension inputs (including PRF/largeBlob),
 hints, unsupported algorithms (no ES256 offer), non-none attestation, cross-platform
 authenticator attachment, unknown option fields and mixed credential requests
 delegate to native WebAuthn before opening the provider. Returned credentials

@@ -133,8 +133,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
-  assert.equal(manifest.features['api.passwords']?.version, '1.8.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.8.0');
+  assert.equal(manifest.features['api.passwords']?.version, '1.9.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.9.0');
   assert.equal(capabilitySatisfies('1.6.1', '1.6.1'), true);
   assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
   for (const version of [undefined, '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.6.1'), false);

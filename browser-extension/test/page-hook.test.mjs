@@ -6,14 +6,14 @@ import {webcrypto} from 'node:crypto';
 const code = await readFile(new URL('../page-hook.js', import.meta.url), 'utf8');
 class CustomEvent extends Event { constructor(type, options) { super(type); this.detail = options.detail; } }
 function setup(options = {}) {
-  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.PublicKeyCredential = options.api === false ? undefined : class {};
+  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.location = {origin: 'https://rp.example'}; window.PublicKeyCredential = options.api === false ? undefined : class {};
   const calls = [], requests = [], cancels = [];
   const navigator = {credentials: {create: async options => { calls.push(['create', options]); return 'native'; }, get: async options => { calls.push(['get', options]); return 'native'; }}};
   const dispatch = (name, detail) => document.dispatchEvent(new CustomEvent(name, {detail: JSON.stringify(detail)}));
   document.addEventListener('thingtime:extension-state-request', () => { if (options.state !== false) dispatch('thingtime:extension-state', {version: 1, enabled: options.enabled !== false}); });
   document.addEventListener('thingtime:extension-request', e => requests.push(JSON.parse(e.detail)));
   document.addEventListener('thingtime:extension-cancel', e => cancels.push(JSON.parse(e.detail)));
-  vm.runInNewContext(code, {window, document, navigator, CustomEvent, crypto: webcrypto, ArrayBuffer, Uint8Array, btoa, atob, DOMException, structuredClone, setTimeout, clearTimeout});
+  vm.runInNewContext(code, {window, document, navigator, URL, CustomEvent, crypto: webcrypto, ArrayBuffer, Uint8Array, btoa, atob, DOMException, structuredClone, setTimeout, clearTimeout});
   return {navigator, document, dispatch, calls, requests, cancels};
 }
 const options = () => ({publicKey: {challenge: new Uint8Array([1, 2, 3]), rpId: 'rp.example'}});
@@ -117,4 +117,26 @@ test('the observed GitHub assertion shape routes to Thingtime and diagnostics co
  assert.equal(JSON.stringify(diagnostics(env)).includes('github.com'),false);
  assert.equal(JSON.stringify(diagnostics(env)).includes('challenge'),false);
  controller.abort();await assert.rejects(pending,error=>error.name==='AbortError');
+});
+
+test('same-origin AppID input and false extension output survive the browser serialization boundary', async () => {
+  for (const appid of ['', 'https://rp.example/legacy-app-id.json']) {
+    const env = setup(); const input = options(); input.publicKey.extensions = {appid};
+    const promise = env.navigator.credentials.get(input); await tick();
+    assert.equal(env.requests[0].publicKey.extensions.appid, appid);
+    const reply = {id:'AQ',rawId:'AQ',type:'public-key',response:{clientDataJSON:'Ag',authenticatorData:'Aw',signature:'BA',userHandle:null},clientExtensionResults:{appid:false}};
+    env.dispatch('thingtime:extension-response', {version:1,id:env.requests[0].id,response:reply});
+    const result = await promise;
+    assert.deepEqual(result.getClientExtensionResults(), {appid:false}); assert.deepEqual(result.toJSON().clientExtensionResults, {appid:false});
+    assert.equal(env.calls.length, 0);
+  }
+});
+
+test('unhandled AppID authorization and mixed extensions preserve native options unchanged', async () => {
+  for (const appid of ['https://other.example/app','https://rp.example.evil.test/app','http://rp.example/app','https://user:secret@rp.example/app','https://rp.example/app#fragment','https://rp.example:444/app','bad',null,{}]) {
+    const env = setup(), input = options(); input.publicKey.extensions = {appid};
+    assert.equal(await env.navigator.credentials.get(input), 'native'); assert.equal(env.calls[0][1], input); assert.equal(env.requests.length, 0);
+  }
+  const env = setup(), input = options(); input.publicKey.extensions = {appid:'https://rp.example/app',prf:{}};
+  assert.equal(await env.navigator.credentials.get(input), 'native'); assert.equal(env.calls[0][1], input); assert.equal(env.requests.length, 0);
 });
