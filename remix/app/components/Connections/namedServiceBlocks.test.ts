@@ -11,5 +11,10 @@ test('service block upgrades remain valid authored JSON and idempotent', () => {
   const migrated = migrateNamedServiceBlocks(legacy);
   assert.ok(settingsDocumentBlocks(migrated));
   assert.equal(migrated[0].children![1].text, 'Custom read');
+  const prior = [{ id: 'named-consumer', type: 'element' as const, tag: 'section', children: [...legacy, { id: 'named-result', type: 'element' as const, tag: 'p', props: { role: 'status' } }] }];
+  const priorUpgrade = migrateNamedServiceBlocks(prior);
+  assert.ok(settingsDocumentBlocks(priorUpgrade));
+  assert.equal(priorUpgrade[0].children!.filter(child => child.id === 'named-operation-busy').length, 1);
+  assert.deepEqual(migrateNamedServiceBlocks(priorUpgrade), priorUpgrade);
   assert.deepEqual(migrateNamedServiceBlocks([]), []);
 });
