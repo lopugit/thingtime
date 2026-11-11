@@ -64,3 +64,13 @@ menus, private message metadata, refusal/retry and delayed-response cases pass.
 
 Posting independent of draft completion is already in main through PR #999;
 renderer foundations came through PR #998. This checkpoint preserves both.
+
+## Final documentation-only main refresh
+
+Main advanced to `4650f5af2ebeb7e32d7e9e58339b0b3a8bf851d1` while this
+integration was verified. PR #1474 adds encrypted attachment download CORS
+guidance and a synthetic browser test. Both testing sections are retained.
+The added script passes syntax checking; its browser scenario was not rerun here.
+Application runtime source hashes remain identical to the accepted checkpoint
+above, so those results are reused by exact parity, not described as new runs.
+[Final refresh receipt](main4650.json). Production bucket settings are unchanged.

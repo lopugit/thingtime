@@ -286,3 +286,10 @@ Fixture phase evidence uses `FixtureReceiptObservations` and request timing in
 `Tests/MacFolderSyncFixture` executable (`--self-test-timing`). Proof observers
 must drain before success/resume while leaving the consumer unblocked. Shipping
 Swift sources, authorization, rates and native active-slot policy are unchanged.
+
+## Encrypted attachment download CORS regression
+
+`remix/scripts/test-password-file-download.mjs` exercises the real password
+attachment UI against a separate synthetic storage origin. It rejects missing
+GET CORS, then verifies an exact-origin response downloads decrypted bytes at
+desktop and mobile widths. See TESTING.md for invocation and production checks.

@@ -1,7 +1,7 @@
 {
-  "observedAt": "2026-11-11T10:23:55.836Z",
+  "observedAt": "2026-11-11T10:31:13.741Z",
   "source": "docs/progress/anonymous-local-first.html",
-  "sourceSha256": "a8f23549743ff107cbfbc94eb24c26c9f5cee6fe2ceae88149ec3ad969d65f5e",
+  "sourceSha256": "925f06989ee6d26f180ccdd94536110000934c9b8e9b074158825fc68a3ce50b",
   "scope": "Read-only progress-plan HTML layout, derived counts, filters, search and in-page navigation",
   "chromiumSandbox": true,
   "viewports": [
@@ -39,7 +39,7 @@
     },
     {
       "width": 390,
-      "height": 68933,
+      "height": 68954,
       "bottomReached": true,
       "positionsChecked": 103,
       "maxWidth": 390,
@@ -71,7 +71,7 @@
     },
     {
       "width": 320,
-      "height": 86190,
+      "height": 86211,
       "bottomReached": true,
       "positionsChecked": 128,
       "maxWidth": 320,
@@ -103,15 +103,15 @@
     }
   ],
   "requests": [
-    "http://127.0.0.1:63087/plan.html"
+    "http://127.0.0.1:63670/plan.html"
   ],
   "blockedRequests": [],
   "errors": [],
   "artifacts": [
     {
       "name": "plan-1440-top.png",
-      "bytes": 251380,
-      "sha256": "ecfebdad624ebd03dd9b664d2ba043bcdd3b59d65dd4ee367304ab47a674de04"
+      "bytes": 254077,
+      "sha256": "2b3c899228d9d35b00ebcec74b037e36c5080d021d234af92520d9aca1f24c65"
     },
     {
       "name": "plan-1440-bottom.png",
@@ -120,38 +120,38 @@
     },
     {
       "name": "plan-1440-counts.png",
-      "bytes": 251338,
-      "sha256": "93934380fe78e33b95b153a913b6e98789bc9e6e89cfa81b6de0e8f4fc29bf6d"
+      "bytes": 254038,
+      "sha256": "24561c17d355509b9517c78e633a3d8447b5ca1c649071ea569c8ec54cf9e39f"
     },
     {
       "name": "plan-390-top.png",
-      "bytes": 85018,
-      "sha256": "03625bc724c69b82b2930699f39432d7825b5e29e2519d700c60940eb91a2958"
+      "bytes": 88096,
+      "sha256": "1511bd0aac5568a681ba42c1b5a8bee60bf4bf4d163cd48b0eb0a9e1b587721e"
     },
     {
       "name": "plan-390-bottom.png",
-      "bytes": 63221,
-      "sha256": "304982234e0abb9b727ded4da65ded0c09d71a781869186b13d91348ec4088c2"
+      "bytes": 63194,
+      "sha256": "1c0b600dc74b24447b45a419714310bd49e54a4b2c4229c0bb70bbe9e9f92297"
     },
     {
       "name": "plan-390-counts.png",
-      "bytes": 76959,
-      "sha256": "6f5a9696307c96f0e38fdec1c926f8eaa81e0e49a5f7d819e284756ede020c0f"
+      "bytes": 77109,
+      "sha256": "c91430d13bcfec77be240cd7f2aa9b69f4c8c45f23a45fea822cdfec2f37c088"
     },
     {
       "name": "plan-320-top.png",
-      "bytes": 88160,
-      "sha256": "73ab5e78931ef894992141cd49082be8ef080d6438ab2affb1f3fbbd2ac10756"
+      "bytes": 88395,
+      "sha256": "4d6084325483420db6c525d8796a5a93967e4805a9e86d616f68f878ac97f238"
     },
     {
       "name": "plan-320-bottom.png",
-      "bytes": 58876,
-      "sha256": "c3d9b777bf5479ecde1561f17134adfb82543614d35af4e0e2e40e8af65145fb"
+      "bytes": 58869,
+      "sha256": "0d12eb95955efeaea3d40d432d5ccea68238295b87f42ccfc73681e43df6d4ba"
     },
     {
       "name": "plan-320-counts.png",
-      "bytes": 71413,
-      "sha256": "cceda79b9f751ccae3f9fde443afd06444feacde240725eb18365e9ea54f6004"
+      "bytes": 70932,
+      "sha256": "32683b39f914848147f9af9781567aa0d4aeadea169b0ceb454b555b20dc1cee"
     }
   ],
   "ok": true,

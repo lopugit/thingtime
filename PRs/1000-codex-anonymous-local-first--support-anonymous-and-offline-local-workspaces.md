@@ -2,6 +2,14 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
+## Final documentation-only refresh — 11 November 2026
+
+Also merge fetched main `4650f5af2ebeb7e32d7e9e58339b0b3a8bf851d1` (PR #1474):
+CORS guidance and a synthetic encrypted-download browser test. Application runtime
+sources are byte-identical to the accepted `18a2646b8` checkpoint; no repeated
+runtime acceptance is claimed. Script syntax passes; production bucket settings
+remain unchanged. [Parity receipt](../artifacts/anonymous-release-2026-11-11/main-eab/main4650.json).
+
 ## Latest main sync — 11 November 2026
 
 Integration target: freshly fetched main `eab8158055d8f9f9dabe22eafeac7f051a5ab901`.
