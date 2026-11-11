@@ -58,3 +58,25 @@ For the correction refresh, the local semantic proxy at 127.0.0.1:4768 was
 unavailable (connection refused, no registered PM2 proxy/listener). Graphify
 therefore uses the supported structural fallback; changed-document semantic
 coverage is not claimed.
+
+## CI unit regression correction
+
+The build reached unit tests, where `postInteractiveThing.test.ts` still required
+`thing` to be the first JSX attribute on the generic ThingView fallback. Adding
+the explicit saved `subjectId` changed attribute order without changing the
+presentation behavior. The test now inspects TypeScript syntax rather than JSX
+text order: it verifies the generic-kind guard, one ThingView delegation, the
+canonical crystal presentation helper, exact saved-root identity, compact prop,
+and the dedicated Component/Webpage branches. Runtime checks preserve plain
+data, legacy nested payloads and explicit render-pointer precedence, including
+invalid/null declarations. Product source and API behavior are unchanged.
+
+The exact CI command `corepack pnpm --dir remix run test:unit` is run locally
+for this correction, rather than only the previously focused menu suites. It passes in full after both test repairs; focused regressions pass 9/9.
+Evidence is retained in the task artifact folder under `unit-fix/`.
+
+The full run also found an old recording-handoff fixture advertising Thing
+actions 1.0 after the shared contract moved to 1.1. Its valid fixture now uses
+1.1, restoring positive/cancellation/account-change coverage. Separate old,
+missing, prerelease and breaking action-contract cases verify refusal before
+consent reads, confirmation or writes; a compatible newer minor remains accepted.
