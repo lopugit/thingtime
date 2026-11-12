@@ -1,7 +1,7 @@
 import React from 'react';
 import { getNativeBridge, nativeBridgeMessageEvent, nativeBridgeReadyEvent } from '../../utils/nativeBridge';
 import { rootIdentity } from '../../utils/rootIdentity';
-import { createLidarScanClient, lidarAppLink, supportsLidarScan, type LidarScanSnapshot } from './lidarScanBridge';
+import { createLidarScanClient, lidarAppLink, supportsLidarScan, supportsLidarLibrary, type LidarSaveDestination, type LidarScanSnapshot } from './lidarScanBridge';
 
 type Activation = (viewerId?: string) => string | null;
 type Controls = {
@@ -9,6 +9,8 @@ type Controls = {
 	generation: number;
 	mode: 'native' | 'browser' | 'outdated';
 	snapshot: LidarScanSnapshot;
+	library: boolean;
+	save: (scanId: string, destination: LidarSaveDestination) => boolean;
 	handoff: boolean;
 	start: Activation;
 	check: () => boolean;
@@ -61,7 +63,7 @@ export function LidarScanProvider({ ownerId, generation, children }: {
 		};
 		const isCurrent = () => sameAccount() && window.location.origin === origin && getNativeBridge() === bridge;
 		const next = createLidarScanClient({
-			scope,
+			scope, library: supportsLidarLibrary(bridge),
 			send: message => bridge.postMessage(message),
 			isCurrent,
 			update: snapshot => setSession({ ownerId, generation, host, snapshot }),
@@ -105,10 +107,11 @@ export function LidarScanProvider({ ownerId, generation, children }: {
 		if (!host || host.origin !== window.location.origin) return 'The scanner is unavailable on this page.';
 		if (navigator.userActivation?.isActive === false) return 'Select the scanner button to open Thingtime.';
 		if (supportsLidarScan(host.bridge)) {
+			if (!supportsLidarLibrary(host.bridge)) return 'Update the Thingtime iOS app to choose Device only or Cloud saving.';
 			if (client.current?.request('start')) return null;
-			if (snapshot.result?.state === 'pending') return 'Your earlier scan is saved on this device. Open Things to retry its upload.';
+			if (snapshot.result?.state === 'pending') return 'Your earlier scan is saved on this device. Open LiDAR scans to choose where to save it.';
 			if (snapshot.result?.supported === false) return 'LiDAR scanning requires a supported iPhone or iPad.';
-			return 'Open Things to check the scanner’s current status.';
+			return 'Open LiDAR scans to check the scanner’s current status.';
 		}
 		if (host.bridge?.platform === 'ios') return 'Update the Thingtime iOS app to use LiDAR scanning.';
 		if (!host.appLink) return 'Open Thingtime on an iPhone or iPad with LiDAR to scan.';
@@ -118,7 +121,8 @@ export function LidarScanProvider({ ownerId, generation, children }: {
 	}, []);
 	const mode = supportsLidarScan(host?.bridge) ? 'native' : host?.appLink ? 'browser' : host?.bridge?.platform === 'ios' ? 'outdated' : null;
 	const controls: Controls | null = ownerId && mode ? {
-		ownerId, generation, mode, snapshot, handoff: handoffGeneration === generation,
+		ownerId, generation, mode, snapshot, library: supportsLidarLibrary(host?.bridge),
+		save: (scanId, destination) => client.current?.request('save', { scanId, destination }) ?? false, handoff: handoffGeneration === generation,
 		start, check, retry: () => client.current?.request('retry') ?? false
 	} : null;
 

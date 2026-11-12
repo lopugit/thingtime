@@ -16051,7 +16051,7 @@ private readback while an unrelated Home fixture remains paused.
   a 512 MiB native indexer budget from missing readings. The iOS browser fixture
   deliberately supplies stale policy-like readings to verify they stay hidden.
 
-## iOS LiDAR capture and automatic Things save
+## iOS LiDAR capture and explicit Things save
 
 - Recover a valid sparse archive larger than 6 GB and compare frame counts and
   original bytes. Inject an invalid early header and interrupt before the first
@@ -16314,3 +16314,34 @@ never print the file-download JSON, encryption metadata or signed URL.
   verify index children and their accounted bytes cascade without orphaning.
 - Run native outbox/discovery tests, parser/manifests and built HTTP transfer
   fixture. Simulator/build evidence does not establish physical background work.
+
+
+### Compact devices and explicit scan library saves — 2026-11-12
+
+- At desktop/mobile widths, confirm Things breadcrumbs have no LiDAR panel,
+  Device setup or Unfiled files button. Reach LiDAR scans and Unfiled files from
+  the touch/keyboard and background menus; reach Show Folder from the device menu.
+- Fresh device details start with all sections collapsed. Expand every available
+  section and menu, scroll to the bottom, and check focus, wrapping and overflow.
+  Preserve deliberate remembered choices and account isolation.
+- Paired and unknown native status hide Device setup. Unpaired/pending/revoked
+  status shows setup below its device card (a compact This device entry when no
+  registered item exists); successful pairing hides it immediately.
+- Compare location rows with an independent authorized API read. Initially show
+  the newest ten; inline Show more immediately below the list appends ten more
+  without duplicates and disappears at the end. Test filters, refresh, failure,
+  retry, and identity/device changes during reads. Preserve all stored history.
+- In the dedicated LiDAR page, inspect device and unsaved/partial scan Things.
+  Exercise Save to Thingtime via both button and context menu. Device only must
+  survive restart with no cloud write; Cloud must save the exact chosen scan and
+  verify the File/attachment receipt. Preserve originals and prior explicit
+  upload intents; old hosts must show the update requirement.
+- Physical LiDAR iPhone/iPad acceptance covers capture, device-only restart,
+  cloud save, cancellation and account changes. Simulator/fixture checks do not
+  establish sensor capture or real upload. Edit a nested label/control in Builder,
+  save/reload and recheck its behavior independently.
+
+- Focused rendered regressions: `cd remix && node scripts/device-details.browser.mjs`
+  and `node scripts/lidar-scan.browser.mjs`. These use isolated Chromium with
+  synthetic HTTP/native data; keep their evidence separate from deployed data
+  and physical LiDAR acceptance.

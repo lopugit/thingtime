@@ -4,6 +4,12 @@ import XCTest
 final class LiDARLaunchRouteTests: XCTestCase {
     private let origin = URL(string: "https://thingtime.com")!
 
+    func testLibraryNavigationUsesSelectedOriginWithoutStartingCapture() {
+        XCTAssertEqual(LiDARLaunchRoute.libraryURL(origin: origin)?.absoluteString, "https://thingtime.com/things?lidar=1")
+        XCTAssertEqual(LiDARLaunchRoute.libraryURL(origin: URL(string: "https://preview.test:444/old?start=1#old")!)?.absoluteString,
+                       "https://preview.test:444/things?lidar=1")
+    }
+
     func testColdHandoffWaitsForSelectedPageAndCannotCrossDestination() {
         XCTAssertFalse(LiDARLaunchRoute.canConsume(pendingOrigin: origin, selectedOrigin: origin, currentURL: origin, isLoading: true))
         XCTAssertFalse(LiDARLaunchRoute.canConsume(pendingOrigin: origin, selectedOrigin: origin, currentURL: nil, isLoading: false))
