@@ -1,5 +1,6 @@
 import { registerGatewayDrain, requireGatewayDatabaseAccess } from '../deployment/environmentGateway';
 import type * as MongoDb from 'mongodb';
+import { assertMongoProviderAllowed } from '../documentStore/nativeHomeSelection';
 
 const clients = new Set<MongoDb.MongoClient>();
 registerGatewayDrain(async () => {
@@ -9,10 +10,14 @@ registerGatewayDrain(async () => {
 });
 
 let modulePromise: Promise<typeof MongoDb> | undefined;
-export const getMongoDb = async () => modulePromise ??= import('mongodb').then(mod => {
+export const getMongoDb = async () => {
+ assertMongoProviderAllowed();
+ return modulePromise ??= import('mongodb').then(mod => {
   class GatewayMongoClient extends mod.MongoClient {
     override async connect() {
+      assertMongoProviderAllowed();
       await requireGatewayDatabaseAccess();
+      assertMongoProviderAllowed();
       await super.connect();
       clients.add(this);
       return this;
@@ -24,3 +29,4 @@ export const getMongoDb = async () => modulePromise ??= import('mongodb').then(m
   }
   return { ...mod, MongoClient: GatewayMongoClient } as typeof mod;
 });
+};

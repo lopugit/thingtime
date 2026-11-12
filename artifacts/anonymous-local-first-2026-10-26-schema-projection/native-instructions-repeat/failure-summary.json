@@ -1,0 +1,29 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Native multiline paste took 8182 ms",
+  "phase": "12000-hard-line native paste and undo",
+  "phaseMarks": [
+    {
+      "phase": "oversized Settings input readiness",
+      "elapsedMs": 287283
+    },
+    {
+      "phase": "oversized paragraph Settings save",
+      "elapsedMs": 290091
+    },
+    {
+      "phase": "12000-hard-line native paste and undo",
+      "elapsedMs": 291185
+    }
+  ],
+  "elapsedMs": 300766,
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "screenshotCaptured": true,
+  "bodyReadable": true
+}

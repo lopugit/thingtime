@@ -1,0 +1,62 @@
+{
+  "observedAt": "2026-11-11T15:26:04.686419+00:00",
+  "featureBeforeMerge": "b301f41b2bad06e89e990523fd94be34fe02bc68",
+  "integratedMain": "6378ed470203c34ef7b99d29b0c685a11fdf78e7",
+  "scope": "Combined main sync/authenticator integration. Existing actual native/database receipts keep their earlier source hashes; no new installed or device acceptance.",
+  "checks": [
+    {
+      "name": "types",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main6378-types.log",
+      "diagnostics": 0
+    },
+    {
+      "name": "ratchet",
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main6378-ratchet.log",
+      "diagnostics": 0
+    },
+    {
+      "name": "lint",
+      "command": "corepack pnpm --dir remix run lint",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main6378-lint.log",
+      "errors": 0,
+      "warnings": 372
+    }
+  ],
+  "syncTests": {
+    "command": "corepack pnpm --dir remix exec node --import tsx --test app/fileSync/folderBatchJournal.test.ts app/fileSync/uploadBatchJournal.test.ts app/fileSync/streamingPriorityPreparation.test.ts app/fileSync/streamingUploadBatch.test.ts app/components/Devices/syncProgressBlocks.test.ts",
+    "exitCode": 0,
+    "log": "/tmp/pr1000-main6378-sync-tests.log",
+    "tests": 72,
+    "passed": 72,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceHashes": {
+    "remix/app/components/Passwords/PasswordWorkspaceControls.tsx": "1ed1617de60cdf0ebfe180dd3b49ad3d75660e7a8bb9e75209d22b4c7be2bb13",
+    "remix/app/components/Passwords/PasswordManager.tsx": "056c8cbea8a75d73c0746d992a17b51f6b6c0be2ee941918e9e4d763dc61caa7",
+    "remix/app/fileSync/pagedRunJournal.ts": "37f2e05c73a40588864d527e51bae0c07b3284178f3722ae2a139b0d15cda1d2",
+    "remix/app/fileSync/streamingForegroundSync.ts": "341e2e329e5376ea1477693f9f5667d2f0980ef5e4c0b9d70417a2821378ea2b",
+    "remix/app/components/Devices/syncProgressBlocks.ts": "b646d5ac20a2a7372cf2208def966461ccdd12a02eb22a679909dd77bbd076f2"
+  },
+  "finalFixtureTypeVerification": {
+    "reason": "Final test fixture is included in the TypeScript file list and changed after the earlier app checks.",
+    "commands": [
+      "corepack pnpm --dir remix run typecheck",
+      "corepack pnpm --dir remix run typecheck:ratchet"
+    ],
+    "combinedShellExitCode": 0,
+    "ratchetExitCode": 0,
+    "diagnostics": 0,
+    "logs": [
+      "/tmp/pr1000-main6378-final-types.log",
+      "/tmp/pr1000-main6378-final-ratchet.log"
+    ],
+    "fixtureSha256": "be37cc6d0fe88866f7eb1741b8e2d6e70ebe49cacfda709615c01906842ab704",
+    "observedAt": "2026-11-11T15:32:58.469497+00:00"
+  }
+}

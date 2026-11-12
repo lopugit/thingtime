@@ -1,0 +1,17 @@
+{
+  "scope": "Test executions across eight commands; some suites may repeat coverage",
+  "passed": 1300,
+  "failed": 0,
+  "skipped": 3,
+  "skippedChecks": [
+    "native post and Thing permalinks preserve audience context and reachable composer controls",
+    "513 MiB of real Blob files collect, export and import with independent exact digests",
+    "real 4GiB+1 sparse file exports ZIP64 and Python independently checks every byte"
+  ],
+  "sourceFileCount": 5257,
+  "sourceFilesCanonicalJsonSha256": "f46d956dd477943f8b398e79594f1e053299a1eecba1b7cf313db2709742b285",
+  "fullLint": {
+    "errors": 0,
+    "warnings": 374
+  }
+}

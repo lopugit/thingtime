@@ -1,0 +1,15 @@
+{
+  "outputRoot": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron/dist/web/",
+  "serverEntry": "electron/dist/web/.output/server/index.mjs",
+  "entrySha256": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657",
+  "metadataPath": "electron/dist/web/metadata.json",
+  "metadataSha256": "ba2728c7c81db9b61ce2cb6b7fb8484173191d4486aac0d1b942163eacc17447",
+  "inventoryPath": "electron/dist/web-integrity.json",
+  "inventoryFileSha256": "cd1c3ff84d82ebb942c6e2b24ba746d880d909393b3b8bd4d60c142f85579d41",
+  "inventoryCanonicalSha256": "6aa0968451b50e00c9bb3e4a6fcac0b01cfc7283dcc37453cbcde801098b73a0",
+  "inventoryFiles": 1822,
+  "sourceInventoryPath": "artifacts/anonymous-release-2026-11-12/native-integration-build/source-inventory.json",
+  "sourceInventorySha256": "b1d0adc03fb83253831a84be4a953b05ca0de01156d4d30a29a43e56692892ab",
+  "sourceRevision": "6d96a617792968e7bca0fc9d72c343ea2141310f",
+  "dirtyAttribution": "Dirty working tree over baseRevision; staged session changes plus unstaged native/UI changes. Metadata Git SHA alone does not identify the built source."
+}

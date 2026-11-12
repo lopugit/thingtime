@@ -1,0 +1,26 @@
+{
+  "runId": "43278cb8-6333-486d-9f86-f364eab1f88e",
+  "packageSha256": "15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7",
+  "screenshots": [
+    {
+      "path": "final/offline-copy-1440.png",
+      "width": 1440,
+      "visuallyReviewed": true
+    },
+    {
+      "path": "final/offline-copy-390.png",
+      "width": 390,
+      "visuallyReviewed": true
+    },
+    {
+      "path": "final/offline-copy-320.png",
+      "width": 320,
+      "visuallyReviewed": true
+    }
+  ],
+  "findings": "Cards, labels and menu controls remain visible. Desktop and 390px show separate cards; 320px stacks cards. Floating launchers do not overlap cards. No horizontal overflow.",
+  "fixture": {
+    "path": "remix/app/local-workspace/accountFileCopy.browser.test.ts",
+    "sha256": "2ce0382a576c3c6f5a571d02c6a32dfd3329ac633949e8c0174b84fea03ad87a"
+  }
+}

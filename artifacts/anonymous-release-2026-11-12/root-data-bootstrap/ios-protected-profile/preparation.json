@@ -1,0 +1,19 @@
+{
+  "entrySha256": "5617e642b47a394b354effc21c3f36e0acfb00ccbdc24db421b4d25a204c058f",
+  "canonicalOutputInventory": {
+    "sha256": "84179f25782f069170c2b92cc7fc77fa9bb2d8d19212de4caa20aa38e838f978",
+    "files": 1836,
+    "bytes": 270284368
+  },
+  "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+  "sourceToBinaryReproducibility": "unproven",
+  "origin": "http://127.0.0.1:29741",
+  "bundleId": "com.thingtime.localdevelopment",
+  "nativeAccountsRequested": true,
+  "localAccountApiSupported": "pending-runtime-validation",
+  "nativeAddonSha256": {
+    ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+    ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+  },
+  "toolCheckoutHead": "e603402b50350c0370aa1142271edc60c7f87d74"
+}

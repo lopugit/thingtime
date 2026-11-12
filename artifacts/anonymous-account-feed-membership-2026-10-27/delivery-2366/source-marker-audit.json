@@ -1,0 +1,17 @@
+{
+  "observedAt": "2026-10-26T20:00:40.401648+00:00",
+  "scope": "Read-only source audit of branch frontend and trusted github-actions deployment workflow",
+  "findings": [
+    "Frontend index/bootstrap and health/frontend do not expose a Git source SHA.",
+    "Trusted prebuilt workflow passes VERCEL_GIT_COMMIT_SHA and publisher records githubCommitSha in deployment metadata.",
+    "Public asset reachability is not direct source-marker proof; use exact-commit GitHub status/deployment association with this limitation explicit."
+  ],
+  "paths": [
+    "remix/index.html",
+    "remix/app/routes/api/v1/health/frontend/_frontend.tsx",
+    "scripts/vercel-build.mjs",
+    ".github/workflows/deploy-vercel-prebuilt.yml@github-actions",
+    ".github/scripts/deploy-vercel-prebuilt.mjs@github-actions"
+  ],
+  "changes": "none"
+}

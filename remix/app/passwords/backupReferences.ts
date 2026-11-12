@@ -1,4 +1,4 @@
-import type { SavedPasswordFile } from './files.client';
+import type { SavedPasswordFile } from './storage';
 
 export function backupFilePath(file: SavedPasswordFile) {
   const original = file.metadata.archivePath?.split('/').at(-1);

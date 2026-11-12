@@ -17,3 +17,7 @@ graphify-out/snapshots/** -diff linguist-generated
 
 # Preserve the upstream third-party notice byte-for-byte, including whitespace.
 remix/public/platform/magick-wasm-NOTICE.txt -whitespace
+
+# Lossless graph snapshots exceed GitHub's 100 MiB Git blob limit.
+# Keep the JSON available through standard Git LFS without text merging.
+graphify-out/snapshots/**/graph.json filter=lfs -diff -merge

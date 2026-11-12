@@ -1,0 +1,6 @@
+2026-11-12 03:12:54.499 Df ThingtimeLocalDevelopment[90470:890bb2] [com.apple.CFNetwork:Default] Task <task>.<1> received response, status 200 content C
+2026-11-12 03:12:54.499 Df ThingtimeLocalDevelopment[90470:890bf0] [com.apple.CFNetwork:Default] Task <task>.<1> finished successfully
+2026-11-12 03:12:54.693 Df ThingtimeLocalDevelopment[90470:890bea] [com.apple.CFNetwork:Default] Task <task>.<1> received response, status 503 content C
+2026-11-12 03:12:54.721 Df ThingtimeLocalDevelopment[90470:890bb5] [com.apple.CFNetwork:Default] Task <task>.<1> finished successfully
+2026-11-12 03:14:01.449 E  ThingtimeLocalDevelopment[90470:890a24] [com.apple.WebKit:Process] <address> - [pageProxyID=17, webPageID=18, PID=91062] WebPageProxy::didFailProvisionalLoadForFrame: frameID=4294967297, isMainFrame=1, domain=NSURLErrorDomain, code=-1001, isMainFrame=1, willInternallyHandleFailure=0
+2026-11-12 03:14:01.796 Df ThingtimeLocalDevelopment[90470:890a24] [com.apple.WebKit:ViewState] <address> (pageProxyID=17) -[WKWebView _didCommitLayerTree:] - finally received commit 67.21s after visible content rect update request; transactionID 1

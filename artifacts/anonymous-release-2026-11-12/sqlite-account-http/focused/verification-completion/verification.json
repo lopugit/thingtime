@@ -1,0 +1,35 @@
+{
+  "sourceFrozen": true,
+  "observedAt": "2026-11-11T20:34:46.459351+00:00",
+  "ownedSourceHashes": {
+    "remix/app/api/utils/auth/emailVerifications.ts": "c083ce410848947c41426754a06d7b71fd7d3a282b2b11bd7b8e680f5cd50106",
+    "remix/app/api/utils/auth/singleUseTokenRepository.ts": "aed9ccb11c142305aa2fe9cf24ef2158b1ad42f3b5e3cf9fbf4be775afb615f5",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.ts": "a1bd320f869dc3a60ca9424a426f2da81f0c4a3353bd536d36fad29f542b054f",
+    "remix/app/api/utils/documentStore/nativeVerificationCompletion.test.ts": "b73da1581490704b6fbe30d7ee7e6fbf12b30399328bbaa6aa5635439460484c",
+    "remix/app/api/utils/documentStore/nativeVerificationCompletion.mongo.fixture.mts": "940537888d302b79eb40171a50de2225705189aaf3cd335cdf5136d1e0f0daed"
+  },
+  "observedCanonicalUserHelperSha256": "924fd0d718ff35345018bff4992a76372ba97194835ac20547c0371712d16ebc",
+  "export": "completeEmailVerification(token):Promise<ConsumeResult>",
+  "nativeProtocol": "Original-expiry admission -> durable pending with same hashed proof/bound owner+email -> canonical markEmailVerified(userId,expectedEmail) outside token transaction -> one completed finalization. Canonical user failure or expired request scope leaves pending retryable by same proof until original expiry. No nested transaction or handwritten secure user mutation.",
+  "ttlBoundary": "Every new/retry admission checks original expiresAt against live clock inside queued transaction. Work admitted before expiry may finish that operation afterward, as original consume-before-mark semantics allowed. Completed/legacy consume-only burns return used; pending after deadline returns expired.",
+  "tests": {
+    "command": "cd remix && node --import tsx --test app/api/utils/documentStore/nativeVerificationCompletion.test.ts app/api/utils/documentStore/nativeSingleUseTokens.test.ts",
+    "passed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "completionCoverage": [
+      "canonical user write failure after proof admission; pending survives SQLite reopen and same-proof retry",
+      "concurrent completions one success; completed replay refusal",
+      "missing native user false under native global Mongo fence; no Mongo attempt",
+      "stale proof address and actual canonical secureCAS retry under fixture-only concurrent address change",
+      "original TTL expires pending proof; legacy consumed tokens never resurrected",
+      "same-label wrong provider and absent identity scope refused",
+      "email scope exit after actual canonical user commit leaves resumable pending proof",
+      "hosted consume->mark order and original failure/replay behavior unchanged via explicit contract fixture"
+    ]
+  },
+  "lint": "Focused five owned files passed; only ESLint-config deprecation notice",
+  "hostedEvidenceBoundary": "Hosted fixture is query/call-order regression only; no Mongo server or real hosted user update run by this task",
+  "remaining": "Parent-owned route integration, consolidated gates and compiled runtime acceptance; no build/server/simulator/Graphify/commit performed in this fix",
+  "reporting": "Parent-reported; no child binding invented"
+}

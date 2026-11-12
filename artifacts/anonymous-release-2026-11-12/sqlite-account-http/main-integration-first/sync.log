@@ -1,0 +1,13 @@
+✔ an unmeasured live attempt keeps the latest measured saved attempt separate (2.677459ms)
+✔ unknown stays unavailable, zero remains measured, and the latest saved row is not repeated (0.196458ms)
+✔ a changed account, origin, device or config identity synchronously hides retained history (0.551334ms)
+✔ saved local strict recovery is shown as queued only with exact saved policy, journal and foreign active lane (2.249292ms)
+✔ a delayed exact cloud reply cannot prove an old queued revision after a newer list arrives (0.428083ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2188.829292

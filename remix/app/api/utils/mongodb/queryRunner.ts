@@ -1,4 +1,5 @@
 import { getThingtimeDb } from './collections';
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { physicalCollectionName } from './collectionNames';
 import { MONGO_QUERY_LIMITS, type MongoQueryRequest, type MongoQuerySuccess } from './queryContract';
 import {
@@ -34,7 +35,7 @@ const collectValues = async (
   let truncated = false;
   const closeable = values as { close?: () => Promise<void> | void };
   const abort = () => {
-    void closeable.close?.();
+    void withGatewayWork(async () => { await closeable.close?.(); }).catch(() => {});
   };
   signal?.addEventListener('abort', abort, { once: true });
 

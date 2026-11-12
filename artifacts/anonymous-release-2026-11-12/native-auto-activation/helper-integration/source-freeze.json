@@ -1,0 +1,36 @@
+{
+  "baseRevision": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "sourceHashes": {
+    "electron/scripts/build-native-passwords.mjs": "9e2a356c654a155f6ecdc630c8e24d974c197695aa8be50ec6fe12c99c03c3b8",
+    "electron/scripts/verify-password-provider.mjs": "7b4219f7ad57cc518430d310be038aeebda61aae51c3fc422adb7bd6ef7217d4",
+    "electron/scripts/password-helper-identity.mjs": "6d3e7951a6ba5b3ebb0d61e48c9d6fe087fce17da8c24d443d97273ab7583e0c",
+    "electron/scripts/verify-isolated-password-helper.mjs": "c39348e977e6026bf1d0353d69bb5923e5c35883464aba8a5dfd2bece5eebcdc",
+    "electron/scripts/dev-workspace.mjs": "06677ab9809baefc10e55289cef3f1a81f621616c87f7e1a0b8002b4ea5d427a",
+    "electron/scripts/dev-parallel.mjs": "ca2a0ee1ae93eecb94b8c70f89a6bcd9e9bc6606f33e646ca86870d7523e9a3a",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "1cceef45314b35a9cf2d235e8085ded1961309e5d97ff6f107040afa9a446f2f",
+    "electron/test/password-helper-identity.test.cjs": "173a26f22875f0b4862811c3007d617d36a0f3082032261af89a2ff2bb8e0ae6",
+    "macos/ThingtimePasswords/PasswordApp.swift": "f8ae0178a45ece4506ebc0751d4f99a79b1937dd210bb278c856d3f4dad99d70",
+    "macos/ThingtimePasswords/PasswordSetupEditor.swift": "5c821fdd9ec30ff81973f9216bf3fba2e0f0f552f54bb88ba781a3c72cd0fdd9",
+    "macos/ThingtimePasswords/PasswordHostIdentity.swift": "b89278df59611e1070f6421cc3ff5b01b04381637876f1db4f9ed7ee4c4b8dc4",
+    "macos/ThingtimePasswords/PasswordFixture.swift": "45b3060e0e68f601e6fb491bf1598486a65ae7d14e66d8096042d244dfa69678",
+    "macos/ThingtimePasswords/project.yml": "c2b509b5a19b69c6892169d792f902d2a49ba83b62fcb49cbd8f54ad776a4d54",
+    "macos/ThingtimePasswords/Resources/Info.plist": "dbcce5ffca3ea2da9d19ff0886442921c17bb5171e791f54c971394ba9263d97",
+    "apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c",
+    "apple/Passwords/Tests/ThingtimePasswordCoreTests/SaveIfAbsentTests.swift": "45c508cf6f90326d9c6994cb38df14082cc61e94251238e30945a4555e017b7b"
+  },
+  "electronTests": {
+    "passed": 96,
+    "failed": 0,
+    "skipped": 0,
+    "logSha256": "396366e819064ffdd8552331773f49ef5e8382b1e32d3eb7c9b3117ebe8feb46"
+  },
+  "swiftTests": {
+    "executed": 68,
+    "skipped": 2,
+    "failed": 0,
+    "newAtomicInsertTestsPassed": 4,
+    "logSha256": "61be7a0f58effa53fbdb19f6514d92cf39d128449e98ee4463c55c768849f3a6"
+  },
+  "sourceFrozen": true,
+  "buildLogSha256": "1efc30a59c469de9f43e089646d8527571f8c73f95eda9ad17a762eecfd5c998"
+}

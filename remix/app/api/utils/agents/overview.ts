@@ -1,4 +1,5 @@
 import { searchThings, type SearchQuery, type SearchResult } from '../things/search';
+import { withGatewayWork } from '../deployment/environmentGateway';
 import type { Viewer, AppLens } from '../things/things';
 import { buildOverview, decodeOverviewCursor, overviewCursor, OverviewError, OVERVIEW_ROLES, type OverviewInput, type OverviewRole, type OverviewThing } from './overviewCore';
 
@@ -33,7 +34,7 @@ export async function readAgentOverview(viewer: Viewer, input: OverviewInput, ap
 				const abort = () => { clearTimeout(timer); reject(options.signal?.reason); };
 				const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(null); }, Math.max(1, deadline - now()));
 				options.signal?.addEventListener('abort', abort, { once: true });
-				void search(viewer, query, app).then(value => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve(value); }, error => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); reject(error); });
+				void withGatewayWork(() => search(viewer, query, app)).then(value => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve(value); }, error => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); reject(error); });
 			});
 			options.signal?.throwIfAborted();
 			if (!result) { complete = false; break; }

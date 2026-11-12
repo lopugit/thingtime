@@ -1,0 +1,83 @@
+{
+  "observedAt": "2026-11-11T10:54:00.453676+00:00",
+  "baseCommit": "830da4a56f78c01da411281db733b8259527d73d",
+  "mainIntegrated": "4650f5af2ebeb7e32d7e9e58339b0b3a8bf851d1",
+  "sourceSha256": {
+    "electron/lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "electron/lib/web-bundle-activation.cjs": "2e7574616912f296d9b2056b69ae9cb649edf9358bad6479c7fd61867f0f8ebe",
+    "electron/lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "electron/main.cjs": "b28d8086844105b681e5ac2422f03dde6df279f11b9d4c3fee1de9fe8e73c36e",
+    "electron/preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "electron/scripts/verify-web-bundle-startup.mjs": "08c1a60b4dd7c79a5215a1098bb1239ba7c8aacfa1b106bd3fbf2d926cc3b05d",
+    "electron/test/desktop-shutdown.test.cjs": "abed043fdef46f2a184a9b62aeee0f5f5d37a2da107be0e05417251b3c6a67a1",
+    "electron/test/password-provider.test.cjs": "f3861d015f4661cee59afff6aa8626491987ec210fdd2034506c428faa4a2143",
+    "electron/test/renderer-server.test.cjs": "09cd82e8a7687341501c753f3f726bcfc076c6998f4f485aeddda89af4ad5c58",
+    "electron/test/web-bundle-activation.test.cjs": "d63936697a8b1b21f645890d9fc566699fdca4c8a99a75836f8692892e03d0c2",
+    "electron/test/web-bundle-updates.test.cjs": "c2f0e0f6ba6d85251750f6a2a96619413292ab921f607c0290cd59e8eed905ba",
+    "iOS/scripts/native-image-probe/README.md": "0d72b52a547feb633a1675a4387db58566c34a6dcd4ff319fda0dacef5d322ad",
+    "iOS/scripts/native-image-probe/build-sharp.py": "13184265e89f5736cd18dab8fc5304246ce449a17491b7bd76da7939796eb631",
+    "iOS/scripts/native-image-probe/http-probe.mjs": "75bc8671d0b4a7e398f91012a0be55f4a0ef19d7c03de5d73beb300c993b047a",
+    "iOS/scripts/native-image-probe/inputs.json": "8a6cf01bd3a4d4b8e1106115e1ab7f9bbd26e056d46d2c50106ec0bcd93acbfe",
+    "iOS/scripts/native-image-probe/probe.mjs": "52c06309bf66356cbbb88eda279a2c52b0efdda5e063c0a9247b0c712abb9468",
+    "iOS/scripts/native-image-probe/recover-link.py": "2b8df103fe000f06abbdc9e539ae166017112e5c88183d8acc13773b856399d1",
+    "iOS/scripts/native-image-probe/run-simulator.py": "3342bb4df0292ed82cca038f0b7d9f6ce7d33d1c465728b16b2e056987541535",
+    "iOS/scripts/native-image-probe/run.py": "137b7119382565bb319f9543e6938e011f431dc5d1abd4e8d192ac0bb337535c",
+    "iOS/scripts/native-runtime-probe/README.md": "c3690b44361a85a26f31e124a572e50dce88e64b90d4c1dcfc9e552ed4a1ac05",
+    "iOS/scripts/native-runtime-probe/main.mm": "e03af67c0f03997ce9d73f10d467f15ae8ab8fac679c74a7e2b42ebff545cd6f",
+    "iOS/scripts/native-runtime-probe/run.py": "c160e804ff02caf24562c31e5242311c2e32f17ad83f329724c8e5e4fe343b3e",
+    "remix/app/Providers/ThingtimeProvider.tsx": "0846ceb8d79304094f4f33fa27641ceeb5fcd7c0876251d6444d703fe839b95f",
+    "remix/app/api/utils/ai/chatgptPlanRuntime.test.ts": "7f639b3cc9db60a20bba1948e8fc939d745a6fb38da06830dd8d1da010996388",
+    "remix/app/api/utils/ai/chatgptPlanRuntime.ts": "132c7059b1143b0801819e6d9597366df23993731918cf8d6889ce86ae0c7c6c",
+    "remix/app/components/Lopu/LopuVoiceControls.tsx": "62c9b3394c6fc3c42cf3b3e0955009abb045122afc544402e88e1d3cfe3e19df",
+    "remix/app/components/Messenger/Composer.tsx": "d183169f0bec8a3ec011eb909b918eb3022645eb916846585bcc749750082ed7",
+    "remix/app/entry.client.tsx": "e2a5ccc25b76049c134bbda6e9d6d0e1b0e5b6f034428e1e2cc696e72ff91596",
+    "remix/app/utils/desktopBundleActivation.test.ts": "6743f6ff13d8ad3b9edf69d5fca604e735ce9e2035ad3be8cf92a9d2dc42159f",
+    "remix/app/utils/desktopBundleActivation.ts": "22b5e24d0345dbc08794ac27f63141ff00bc925e615c8465fdd4e1ebd916db3e",
+    "remix/app/utils/desktopBundleSafety.test.ts": "a3d60ce47d609a7c83c0737fa23759b3e113ca5330b95350446a882d7cdbf708",
+    "remix/app/utils/desktopBundleSafety.ts": "f99a2f65a708d7518a54926b202d2967966c7280d67f5df163577d4d7937634b",
+    "remix/app/utils/electronBridge.ts": "eaf4835ee0a91c1069937e27c048f3aeb1117fec66ff76c968d14adbc6dc885f",
+    "remix/app/utils/useDesktopUpdateBlocker.ts": "4dfa31cc5bb58b997ff60e3d3c93bb28f7086c83fe5360d1e7a6897f4903d216",
+    "remix/server/plugins/chatgpt-plan-runtime.ts": "bd9ab99d500c3afd887693bf76af62f306647c9761fe9993fcffeb278bed326f"
+  },
+  "checks": {
+    "electron": {
+      "command": "node --test electron/test/*.test.cjs",
+      "passed": 523,
+      "failed": 0,
+      "skipped": 5
+    },
+    "rendererSafetyPersistence": {
+      "passed": 13,
+      "failed": 0
+    },
+    "chatgptRuntime": {
+      "passed": 22,
+      "failed": 0
+    },
+    "rendererServer": {
+      "passed": 23,
+      "failed": 0,
+      "includedInElectron": true
+    },
+    "rawTypecheck": {
+      "errors": 0
+    },
+    "typecheckRatchet": {
+      "errors": 0
+    },
+    "fullLint": {
+      "errors": 0,
+      "warnings": 370
+    },
+    "electronBuildWeb": "passed",
+    "installedStartupRollback": "startup/verification.json",
+    "planBrowser": "plan/verification.json"
+  },
+  "liveAutomaticActivationVerified": false,
+  "fullLocalApiAutomaticActivation": false,
+  "localApiReason": "Detached transcript/accounting and notification/background work needs explicit admission lifecycle",
+  "productionActivated": false,
+  "stableAppModified": false,
+  "ci": "Separate remote checks; prior head830da4a56 PR handoff failed with GitHub API rate-limit HTTP403 while build/security work continued",
+  "connectedHostArtifactToolAvailable": false
+}

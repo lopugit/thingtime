@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-11-11T19:11:05.707434+00:00",
+  "baseCommit": "5a03111cdda16a8d4af3385fb3fec5f0f010259c",
+  "attribution": "base commit plus exact working source hashes",
+  "sourceHashes": {
+    "remix/app/api/utils/auth/accounts.ts": "03ec67026ddba7595242f0f47d32e208b2e20df818986daf1f9ef1ff334baff0",
+    "remix/app/api/utils/auth/rosterRepository.ts": "a5a5b3bcf9565d924d604e945afa7f27e43e0da4973dbafdc1bc829225312589",
+    "remix/app/api/utils/documentStore/nativeRosters.ts": "2b96b004640888b20603629de79bdb23ccd6141d4b345e439e9924b305ed3ffc",
+    "remix/app/api/utils/documentStore/nativeRosters.test.ts": "f7267f1675d974f4c2e5261fe8bdad6df8f9043277912eb508ecd2f097819043",
+    "remix/app/api/utils/documentStore/nativeRosters.mongo.fixture.mts": "4e1dc64ea694ea7dcc369a18d84f6da8e71ff7ce5cd1d8268261ad948e3841eb",
+    "remix/app/api/utils/auth/homeRepositoryScope.ts": "ac1334fc9b4a2ac170fccb2399210a5eff42612fa083957940274f7e14d495da"
+  },
+  "command": "node --import tsx --test app/api/utils/documentStore/nativeRosters.test.ts",
+  "cwd": "remix",
+  "tests": 10,
+  "passed": 10,
+  "failed": 0,
+  "skipped": 0,
+  "scope": "Canonical roster helpers and real SQLite files, plus controlled Mongo persistence contract subprocess",
+  "notVerified": [
+    "Full authenticated account switching and HTTP registration",
+    "Native profile runtime selection",
+    "Native TTL cleanup",
+    "Hosted Mongo database execution for this boundary"
+  ]
+}

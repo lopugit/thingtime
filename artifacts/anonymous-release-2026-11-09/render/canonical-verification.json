@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "canonicalSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "rendererHash": "ca0f7c236cba1bad9a64ca1214f68bb8d3ad26c5be1d4dae7fca5a30ce9b2a2b",
+  "parser": true,
+  "serializerByteRoundTrip": true,
+  "nativeDraftValidation": true,
+  "dependencyClosure": true,
+  "portableFieldsOnly": true,
+  "editableArgumentsAndBlocks": true,
+  "exactText": true,
+  "noOverflow": true,
+  "artifacts": [
+    {
+      "file": "viewport-1440x1000.png",
+      "width": 1440,
+      "height": 1000,
+      "bytes": 116094,
+      "sha256": "37130b20fdd314190ee1e1d57123fcaa6c771d69283686d3a1f39c456851c26c"
+    },
+    {
+      "file": "viewport-390x844.png",
+      "width": 390,
+      "height": 844,
+      "bytes": 79632,
+      "sha256": "a69f0becd48ecfed25d10ddec052cf8020bf24046062512ac14da978453335bf"
+    },
+    {
+      "file": "viewport-320x844.png",
+      "width": 320,
+      "height": 844,
+      "bytes": 57347,
+      "sha256": "251fc49417d9aa728e4e46db593659e2a035c393dd92eaf94ad95573c381e353"
+    },
+    {
+      "file": "card.png",
+      "width": 400,
+      "height": 560,
+      "bytes": 96582,
+      "sha256": "5a94c5b9f6a6d9fce3bfc01f6911dea28d36a9ffc2067548852c45f62de0946c"
+    }
+  ]
+}

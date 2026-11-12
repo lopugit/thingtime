@@ -1,0 +1,68 @@
+{
+  "observedAt": "2026-11-11T13:15:42.604276+00:00",
+  "sourceBase": "8c9d2e392c2bd4f0af2f42f3f0012a6dd58599a4",
+  "fixtureModified": true,
+  "artifactHashes": {
+    "electron/scripts/test-bundled-local-runtime.cjs": "04c1a24952d1f5635628c8a9c2d9f5ecf752d4509a2880535768149426993e03",
+    "electron/lib/local-runtime.cjs": "b5fe8abca96af9d5b2dca7104ee6c77839bc05318b9a50d45a7b966da557c17c",
+    "electron/lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "electron/lib/bundled-mongodb.cjs": "26cee3457d88e58a36578541696cb8bae1a3adc2dbd3c32d04006a8bb4adcafc",
+    "remix/.output/server/index.mjs": "3c3e53f2d6e1887a50fe4a38b6bce91ff436aa61a6a14c316ac51d1ebd59a383",
+    "electron/dist/database/mongodb/bin/mongod": "28970ead361992123ddfa02a53bd69be3326802b84d8985849ed4779023cf8d5",
+    "electron/dist/database/mongodb/manifest.json": "780af80c26b14f90304d044f7910c74929c3bc7c7494d0e139f35d692b5524d6"
+  },
+  "logs": {
+    "private-crud": {
+      "sha256": "52309932e138bb8e6ceff88df99c5b3b716d9e973d73392bfe67d022667bcd27",
+      "result": [
+        "PASS bundled MongoDB default bootstrap, authenticated replica, normal API registration/private CRUD/session retention across restart, cross-account ACL and stale-revision refusal, denied anonymous DB reads, and deliberate offline network boundary."
+      ]
+    },
+    "packaging-lifecycle": {
+      "sha256": "0fce4aa04149392ee064c4beb76b7b1cf67e6088bed4342dcf866ba97b3ba829",
+      "result": [
+        "\u2139 tests 30",
+        "\u2139 suites 0",
+        "\u2139 pass 30",
+        "\u2139 fail 0",
+        "\u2139 cancelled 0",
+        "\u2139 skipped 0",
+        "\u2139 todo 0",
+        "\u2139 duration_ms 429.470167"
+      ]
+    },
+    "renderer-owner": {
+      "sha256": "1e602cd1fff7d4bb055d213941d3cbdb3049d14a8c47d9eb8d3304b9f1329b8d",
+      "result": [
+        "\u2139 tests 23",
+        "\u2139 suites 0",
+        "\u2139 pass 23",
+        "\u2139 fail 0",
+        "\u2139 cancelled 0",
+        "\u2139 skipped 0",
+        "\u2139 todo 0",
+        "\u2139 duration_ms 252.645875"
+      ]
+    }
+  },
+  "scope": "Actual bundled mongod with compiled node_middleware and canonical socket owner; isolated disposable profile, API-only account/content mutations. Test encryption adapter, not installed Electron safeStorage. Exact compiled bytes are hashed; no claim that this is a fresh final-source signed app.",
+  "cleanup": "19881 and 19882 have no remaining listeners; temporary profile removed by fixture finally.",
+  "finalChecks": {
+    "ratchet": {
+      "sha256": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+      "exitCode": 0,
+      "errors": 0
+    },
+    "lint": {
+      "sha256": "0429c5d5346c25ecc03ee8165cd581f04bd5a3ef4bb73afcdf5804fd9a557af1",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 372
+    },
+    "plan": {
+      "sha256": "85203507b67f89e753d057186da27428665f3b312742104c6c1f61af5a051b73",
+      "exitCode": 0
+    },
+    "scope": "Final MagicInput source after historical-reset correction; earlier native build/run remains separately attributed."
+  }
+}

@@ -22,7 +22,7 @@ function inspect(value: unknown, depth = 0, budget = { left: DRAFT_LIMITS.values
   if (--budget.left < 0 || depth > DRAFT_LIMITS.depth) fail('Draft complexity limit exceeded');
   if (!value || typeof value !== 'object') return;
   for (const [key, child] of Object.entries(value)) {
-    if (['source','ttAction','ttActionRefs','ttActionInputs','ttMediaRefs','href','src','poster','html','rawChildren','chakra','forkOf','schemaId','targetId','folderId','extended','acl','author','ownerId','secure','userId'].includes(key) || /^on[A-Z]|^data-tt-action/i.test(key)) fail(`Unsupported draft field: ${key}; drafts cannot access accounts, Actions or assets`);
+    if (['source','activationAction','ttAction','ttActionRefs','ttActionInputs','ttMediaRefs','href','src','poster','html','rawChildren','chakra','forkOf','schemaId','targetId','folderId','extended','acl','author','ownerId','secure','userId'].includes(key) || /^on[A-Z]|^data-tt-action/i.test(key)) fail(`Unsupported draft field: ${key}; drafts cannot access accounts, Actions or assets`);
     if (key === 'tag' && (typeof child !== 'string' || !HTML_ALLOWED_TAGS.has(child) || child.startsWith('tt-') || ['a','img','video','audio','input','select','textarea','button','form','details','summary'].includes(child))) fail(`Unsupported draft tag: ${String(child)}`);
     if ((key === 'style' && record(child)) || key === 'css') checkStyle(child);
     inspect(child, depth + 1, budget);

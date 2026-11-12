@@ -6,6 +6,7 @@ let prefs: any = { masters: { push: false, email: false } };
 let prefsFailure = false;
 let pushes = 0;
 let emails = 0;
+let emailGate: (() => Promise<void>) | null = null;
 const lifetimes: Promise<unknown>[] = [];
 mock.module('@vercel/functions', { namedExports: { waitUntil: (task: Promise<unknown>) => lifetimes.push(task) } });
 const collection = {
@@ -19,13 +20,13 @@ const collection = {
 };
 mock.module('../mongodb/collections.ts', { namedExports: { getHomeThingsCollection: async () => collection, getUsersCollection: async () => collection } });
 mock.module('../auth/users.ts', { namedExports: { getUserNotificationPrefs: async () => { if (prefsFailure) throw new Error('settings unavailable'); return prefs; } } });
-mock.module('./emails.ts', { namedExports: { maybeEmailNotification: async () => { emails++; }, emailNotificationsBulk: async () => { emails++; } } });
+mock.module('./emails.ts', { namedExports: { maybeEmailNotification: async () => { emails++; await emailGate?.(); }, emailNotificationsBulk: async () => { emails++; await emailGate?.(); } } });
 mock.module('./apns.ts', { namedExports: { sendNotificationPush: async () => { pushes++; } } });
 
 const { emitNotification, emitSystemNotification, emitNotificationsBulk } = await import('./notifications.ts');
 const { recordNotificationMessage } = await import('./recordMessage.ts');
 
-beforeEach(() => { lifetimes.length = 0; stored.clear(); pushes = 0; emails = 0; prefsFailure = false; prefs = { masters: { push: false, email: false } }; });
+beforeEach(() => { emailGate = null; lifetimes.length = 0; stored.clear(); pushes = 0; emails = 0; prefsFailure = false; prefs = { masters: { push: false, email: false } }; });
 
 test('single-recipient history is saved even with all delivery disabled or preferences unavailable', async () => {
   const event = { recipientId: 'recipient', type: 'comment' as const, actor: { id: 'actor' } };
@@ -88,4 +89,24 @@ test('bulk push respects muted channel and unread deduplication', async () => {
   prefs = { masters: { push: true, email: false } };
   await emitNotificationsBulk([{ recipientId: 'recipient', type: 'friend-request' }], { actor: { id: 'actor' } }, { dedupeUnread: true });
   assert.equal(pushes, 0);
+});
+
+
+for (const bulk of [false, true]) test(`${bulk ? 'bulk' : 'single'} nested email keeps shutdown busy after notification acknowledgment`, async () => {
+  const { isGatewayWorkIdle, reserveGatewayWorkShutdown } = await import('../deployment/environmentGateway');
+  let release!: () => void, started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  emailGate = async () => { started(); await blocked; };
+  try {
+    if (bulk) await emitNotificationsBulk([{ recipientId: 'recipient', type: 'comment' }], { actor: { id: 'actor' } });
+    else await emitNotification({ recipientId: 'recipient', type: 'comment', actor: { id: 'actor' } });
+    await ready;
+    assert.equal(lifetimes.length, 1, 'retain the existing outer waitUntil contract');
+    assert.equal(stored.size, 1);
+    assert.equal(isGatewayWorkIdle(), false);
+    assert.equal(reserveGatewayWorkShutdown(), null);
+    release(); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(isGatewayWorkIdle(), true);
+  } finally { release(); emailGate = null; }
 });

@@ -35,18 +35,18 @@ export function createBackupDispatcher(overrides:Partial<Dependencies>={}){
  const dispatch=async(jobId:string,origin:string,recoverExpired=false,deadlineMs=30_000):Promise<DispatchResult>=>{
   if(new URL(origin).origin!==origin || deadlineMs<1 || deadlineMs>30_000)throw Error('Invalid backup dispatch boundary');
   const signal=AbortSignal.timeout(deadlineMs);
-  const reservation=await awaitBackupAbort(deps.jobs.reserveDispatch(jobId,origin,recoverExpired),signal);
+  const reservation=await awaitBackupAbort(withGatewayWork(()=>deps.jobs.reserveDispatch(jobId,origin,recoverExpired)),signal);
   if(!reservation.start || !reservation.dispatchId)return 'not-started';
   const dispatchId=reservation.dispatchId;
   try{
-   const run=await awaitBackupAbort(deps.start(jobId,dispatchId),signal,late=>{
-    // Late accepted receipt is useful, but never restarts or overrides a newer
-    // attempt. The coordinator still checks the exact current session+attempt.
-    void deps.jobs.attachWorkflow(jobId,dispatchId,late.runId).catch(()=>{});
-   });
-   return await awaitBackupAbort(deps.jobs.attachWorkflow(jobId,dispatchId,run.runId),signal)?'attached':'superseded';
+   return await awaitBackupAbort(withGatewayWork(async()=>{
+    const accepted=await deps.start(jobId,dispatchId);
+    // Own the SDK acceptance and its exact fenced attachment as one lifetime.
+    // A response deadline cannot abandon a receipt between promise turns.
+    return await deps.jobs.attachWorkflow(jobId,dispatchId,accepted.runId)?'attached':'superseded';
+   }),signal);
   }catch{
-   await awaitBackupAbort(deps.jobs.markDispatchUnconfirmed(jobId,dispatchId),AbortSignal.timeout(5000)).catch(()=>{});
+   await awaitBackupAbort(withGatewayWork(()=>deps.jobs.markDispatchUnconfirmed(jobId,dispatchId)),AbortSignal.timeout(5000)).catch(()=>{});
    return 'unconfirmed';
   }
  };
@@ -63,8 +63,8 @@ export function createBackupDispatcher(overrides:Partial<Dependencies>={}){
     catch{
      // Only positive invalidity can retire; transient auth/database failures
      // remain queued and the stable keyset continues to later healthy jobs.
-     const retired=await awaitBackupAbort(deps.jobs.retireInvalidAuthorization(id,origin),AbortSignal.timeout(5000)).catch(()=>false);
-     if(retired)result.retired++;else{result.unavailable++;await awaitBackupAbort(deps.jobs.deferDispatch(id,origin),AbortSignal.timeout(5000)).catch(()=>{});}
+     const retired=await awaitBackupAbort(withGatewayWork(()=>deps.jobs.retireInvalidAuthorization(id,origin)),AbortSignal.timeout(5000)).catch(()=>false);
+     if(retired)result.retired++;else{result.unavailable++;await awaitBackupAbort(withGatewayWork(()=>deps.jobs.deferDispatch(id,origin)),AbortSignal.timeout(5000)).catch(()=>{});}
     }
    }
    if(!page.next)break;

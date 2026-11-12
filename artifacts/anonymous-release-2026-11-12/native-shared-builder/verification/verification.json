@@ -1,0 +1,213 @@
+{
+  "status": "stopped-for-main-refresh",
+  "baseCommit": "1266b73879fe9e6cebbb15038418da3c971e925c",
+  "attribution": "Base commit plus frozen source inventory, not a clean-commit build",
+  "startedAt": "2026-11-12T00:15:56.376511+00:00",
+  "endedAt": "2026-11-12T00:17:23.688603+00:00",
+  "checks": [
+    {
+      "name": "native-things-services",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:native-things"
+      ],
+      "startedAt": "2026-11-12T00:15:56.389193+00:00",
+      "endedAt": "2026-11-12T00:15:59.197915+00:00",
+      "exitCode": 0,
+      "log": "native-things-services.log"
+    },
+    {
+      "name": "native-host",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "--test",
+        "server/utils/nativeHomeRuntime.test.ts",
+        "server/utils/nativeHomeDispatch.test.ts"
+      ],
+      "startedAt": "2026-11-12T00:15:59.198155+00:00",
+      "endedAt": "2026-11-12T00:16:00.638558+00:00",
+      "exitCode": 0,
+      "log": "native-host.log"
+    },
+    {
+      "name": "document-store",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:document-store"
+      ],
+      "startedAt": "2026-11-12T00:16:00.638633+00:00",
+      "endedAt": "2026-11-12T00:16:06.398901+00:00",
+      "exitCode": 0,
+      "log": "document-store.log"
+    },
+    {
+      "name": "things",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:things"
+      ],
+      "startedAt": "2026-11-12T00:16:06.398968+00:00",
+      "endedAt": "2026-11-12T00:16:12.939513+00:00",
+      "exitCode": 0,
+      "log": "things.log"
+    },
+    {
+      "name": "actions",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:actions"
+      ],
+      "startedAt": "2026-11-12T00:16:12.939580+00:00",
+      "endedAt": "2026-11-12T00:16:15.054189+00:00",
+      "exitCode": 0,
+      "log": "actions.log"
+    },
+    {
+      "name": "webpages",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:webpages"
+      ],
+      "startedAt": "2026-11-12T00:16:15.054249+00:00",
+      "endedAt": "2026-11-12T00:16:19.017167+00:00",
+      "exitCode": 0,
+      "log": "webpages.log"
+    },
+    {
+      "name": "schemas",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:schemas"
+      ],
+      "startedAt": "2026-11-12T00:16:19.017298+00:00",
+      "endedAt": "2026-11-12T00:16:21.072915+00:00",
+      "exitCode": 0,
+      "log": "schemas.log"
+    },
+    {
+      "name": "subspaces",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:subspaces"
+      ],
+      "startedAt": "2026-11-12T00:16:21.072981+00:00",
+      "endedAt": "2026-11-12T00:16:21.882773+00:00",
+      "exitCode": 0,
+      "log": "subspaces.log"
+    },
+    {
+      "name": "timeline",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:timeline"
+      ],
+      "startedAt": "2026-11-12T00:16:21.882868+00:00",
+      "endedAt": "2026-11-12T00:16:32.132324+00:00",
+      "exitCode": 0,
+      "log": "timeline.log"
+    },
+    {
+      "name": "storage",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:storage"
+      ],
+      "startedAt": "2026-11-12T00:16:32.132413+00:00",
+      "endedAt": "2026-11-12T00:16:32.711106+00:00",
+      "exitCode": 0,
+      "log": "storage.log"
+    },
+    {
+      "name": "root-data",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:root-data"
+      ],
+      "startedAt": "2026-11-12T00:16:32.711209+00:00",
+      "endedAt": "2026-11-12T00:16:33.404517+00:00",
+      "exitCode": 0,
+      "log": "root-data.log"
+    },
+    {
+      "name": "capabilities",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:api-capabilities"
+      ],
+      "startedAt": "2026-11-12T00:16:33.404585+00:00",
+      "endedAt": "2026-11-12T00:16:34.223928+00:00",
+      "exitCode": 0,
+      "log": "capabilities.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "startedAt": "2026-11-12T00:16:34.223991+00:00",
+      "endedAt": "2026-11-12T00:17:22.936458+00:00",
+      "exitCode": 2,
+      "log": "typecheck.log"
+    }
+  ],
+  "sourceUnchanged": true,
+  "sourceChanges": [],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "e84fb066c4bded7d5c5680a7b0c1bcac5d2625abf5c9bdb88c7bfe08a49c4371",
+    "electron/dist/web-integrity.json": "989f82d8f9b531e7045f3bc64ed3e5135aaf51da598de4e9eaa6e2de919f06e9",
+    "electron/dist/web/metadata.json": "f2597bedb85fb8c195126df690b63880334a0bc441534bbda9e9870bfd605bfb"
+  },
+  "observedHarnessStatus": "failed",
+  "stopReason": "Parent requested integration of frozen origin/main f2538e192; current typecheck completed with exit 2 before stopping."
+}

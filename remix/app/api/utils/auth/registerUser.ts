@@ -1,3 +1,6 @@
+import { currentAccountCreationRepository } from './accountCreationRepository';
+import { nativeAccountCompletionAvailable } from './nativeAccountCompletion';
+import { withGatewayWork } from '../deployment/environmentGateway';
 import type { CharacterIdentity } from './characterCore';
 import { bindVaultPassword } from './vaultKeys';
 import { InviteError } from '../invites/inviteCore';
@@ -32,7 +35,8 @@ export type RegisterInput = {
 
 export type RegisterResult =
   | { ok: false; status: number; error: string }
-  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string };
+  | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string;
+      verificationDelivery?: { status: 'queued' | 'failed'; delivered: false } };
 
 export type CreateUserAccountInput = {
   // Internal-only: never accepted from public signup metadata.
@@ -77,6 +81,9 @@ const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
 // Single insertion path for user accounts. Browser registration, service
 // account provisioning, and seeding share this validation + schema path.
 export const createUserAccount = async (input: CreateUserAccountInput): Promise<CreateUserAccountResult> => {
+  const native = currentAccountCreationRepository();
+  // Refuse unsupported side effects before tier/bootstrap or identity writes.
+  if (native && (input.onCreated !== undefined || input.character !== undefined || (input.accountKind !== undefined && input.accountKind !== 'user'))) return { ok:false, status:503, error:'This native account creation path is not supported yet' };
   const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
   const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
   const password = typeof input.password === 'string' ? input.password : '';
@@ -106,7 +113,8 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   if (isEnvAdmin(username)) return { ok: false, status: 409, error: 'Username already taken' };
 
   // ensure the collections + unique indexes exist (idempotent, API-side)
-  await ensureIndexes();
+  if (native) await native.ensureReady();
+  else await ensureIndexes();
 
   if (await findUserByUsername(username)) return { ok: false, status: 409, error: 'Username already taken' };
   if (email && await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
@@ -153,7 +161,8 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 	let assignedSubscription = null;
 	let assignmentFailure: Extract<CreateUserAccountResult, { ok: false }> | null = null;
   try {
-		await withHomeMongoTransaction(async (session) => {
+		const transaction = native ? native.transaction.bind(native) : withHomeMongoTransaction;
+		await transaction(async (session) => {
 			user = await insertUser(userDoc, { initialSubscription: defaultSnapshot, session });
     const userId = String(user._id);
     const assigned = await setSubscription({
@@ -186,7 +195,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // a unique index caught a duplicate that raced past the checks above —
     // things-era collisions surface via uniqueKeys ('email:<hash>' or
     // 'username:<name>'), legacy ones via the old per-field indexes
-    if (err?.code === 11000) {
+    if (err?.code === 11000 || (native && ['DUPLICATE_UNIQUE_KEY', 'DUPLICATE_DOCUMENT'].includes(err?.code))) {
       const kv = err?.keyValue?.uniqueKeys;
       const uniqueKey = typeof kv === 'string' ? kv : kv?.buffer ? Buffer.from(kv.buffer).toString('utf8') : '';
       // keyPattern.email is set for the legacy per-field index; uniqueKey carries
@@ -217,6 +226,9 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 // Single creation path for users — used by the register route AND by seeding,
 // so a seeded user is identical to a real signup (FUNDAMENTALS.md §2).
 export const registerUser = async (input: RegisterInput): Promise<RegisterResult> => {
+  const native = currentAccountCreationRepository();
+  if (native && (!nativeAccountCompletionAvailable() || input.inviteToken !== undefined))
+    return { ok:false, status:503, error:'This native account registration operation is unavailable' };
   let invite;
   try { if (input.inviteToken !== undefined) invite = await prepareInviteSignup(input.inviteToken, input); }
   catch (err) { if (err instanceof InviteError) return { ok: false, status: err.status, error: err.message }; throw err; }
@@ -247,10 +259,21 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;
+  // Native enqueue must finish within the owning request lifetime. Queued is
+  // explicitly not delivered; a failed enqueue cannot undo the committed user.
+  if (native) {
+    let status: 'queued' | 'failed' = 'failed';
+    try {
+      const result = await sendVerificationEmail({ to: email, link: verificationLink });
+      if (result.status === 'queued' && result.delivered === false) status = 'queued';
+    } catch { /* Return a non-secret delivery failure alongside the saved account. */ }
+    return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink,
+      verificationDelivery: { status, delivered: false } };
+  }
   // Fire-and-forget: a send failure (e.g. fail-closed SES outage) must not fail
   // a registration whose user + session are already committed — the dev link is
   // returned regardless and the user can resend from Settings.
-  void sendVerificationEmail({ to: email, link: verificationLink }).catch(() => {});
+  void withGatewayWork(() => sendVerificationEmail({ to: email, link: verificationLink })).catch(() => {});
 
 	return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink };
 };

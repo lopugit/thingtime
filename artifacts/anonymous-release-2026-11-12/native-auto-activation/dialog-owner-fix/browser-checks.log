@@ -1,0 +1,11 @@
+✔ closed authenticated bell has no mounted dialog and does not falsely report an unknown draft (1103.502833ms)
+✔ real keyboard open/close keeps legitimate dialog protection, focus, cached rows and a usable narrow panel (1093.042709ms)
+✔ identity withdrawal removes the panel and ignores its old delayed notification result (250.181ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2770.97425

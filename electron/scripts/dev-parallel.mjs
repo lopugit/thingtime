@@ -1,3 +1,4 @@
+import { passwordHelperOptions } from './password-helper-identity.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -14,6 +15,8 @@ const stagedWebDir = path.join(electronDir, 'dist', 'web');
 const stagedAiDir = path.join(electronDir, 'dist', 'ai');
 const workspaceArg = process.argv.find(value => value.startsWith('--workspace='));
 const workspace = workspaceArg ? retainedWorkspace(workspaceArg.slice('--workspace='.length)) : null;
+const passwordHelper = passwordHelperOptions(process.argv);
+if (passwordHelper && !workspace) throw Error('An isolated password helper requires a retained development workspace.');
 if (process.argv.includes('--prepare-only') && !workspace) throw new Error('--prepare-only requires a named --workspace.');
 if (process.argv.includes('--stop-workspace')) {
 	if (!workspace) throw new Error('--stop-workspace requires a named --workspace.');
@@ -46,7 +49,7 @@ try {
 	if (workspace) releaseWorkspace = await claimWorkspace(workspace);
 	if (!process.argv.includes('--use-staged')) runScript('build-web.mjs');
 	runScript('verify-web-build.mjs');
-	if (workspace && (!process.argv.includes('--use-staged') || process.argv.includes('--prepare-only'))) await prepareWorkspace(workspace, electronDir, electronExecutable);
+	if (workspace && (!process.argv.includes('--use-staged') || process.argv.includes('--prepare-only'))) await prepareWorkspace(workspace, electronDir, electronExecutable, { passwordHelper });
 	if (process.argv.includes('--prepare-only')) {
 		console.log(`Retained development app ready: ${workspace.app}`);
 	} else {

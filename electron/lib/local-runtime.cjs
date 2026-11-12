@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const net = require('node:net');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
+const { createNativeHomeProfile, validateNativeHomeProfile, nativeHomeHost } = require('./native-home-profile.cjs');
 const DOWNLOAD_URL = 'https://www.mongodb.com/try/download/community';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const port = (value, fallback) => {
@@ -106,6 +107,7 @@ class LocalRuntime {
 		} catch (error) {
 			if (error.code !== 'ENOENT') throw new Error('Local runtime settings could not be unlocked. No remote fallback was enabled.');
 		}
+		if (Object.hasOwn(this.state, 'nativeHome')) validateNativeHomeProfile(this.state, this.root);
 		if (existingSettings && this.state.databaseIdentityVersion === undefined) {
 			const uri = this.mongoUri();
 			const migrated = { ...this.state, databaseIdentityVersion: 1, legacyRendererIdentity: null };
@@ -121,7 +123,7 @@ class LocalRuntime {
 			await this.persist(migrated);
 			this.state = migrated;
 		}
-		if (!this.state.mongodPath) {
+		if (!this.state.mongodPath && !this.state.nativeHome) {
 			// Only fresh installations adopt the bundled version automatically. Existing
 			// installations keep their chosen executable and database compatibility.
 			let existingDatabase = false;
@@ -135,6 +137,7 @@ class LocalRuntime {
 		return {
 			enabled: this.state.enabled,
 			active: this.runningEnabled,
+			storageProvider: this.state.nativeHome ? 'sqlite' : 'mongodb',
 			restartRequired: this.restartRequired || false,
 			databaseMode: this.state.databaseMode,
 			apiPort: this.state.apiPort,
@@ -177,8 +180,9 @@ class LocalRuntime {
 				...(request.mongoUri ? { mongoUri: validateMongoUri(request.mongoUri) } : {})
 			});
 			if (state.enabled && state.databaseMode === 'external' && !state.mongoUri) throw new Error('Enter the MongoDB URI for this local API.');
-			if (state.enabled && state.databaseMode === 'managed') this.assertManagedBinarySupported(state);
-			if (state.enabled && state.databaseMode === 'managed' && !(await executable(state.mongodPath)))
+			if (state.nativeHome && (state.databaseMode !== 'managed' || request.mongoUri)) throw new Error('This protected native profile cannot select a MongoDB endpoint.');
+			if (state.enabled && state.databaseMode === 'managed' && !state.nativeHome) this.assertManagedBinarySupported(state);
+			if (state.enabled && state.databaseMode === 'managed' && !state.nativeHome && !(await executable(state.mongodPath)))
 				throw new Error('MongoDB is unavailable in this build. Choose a MongoDB Community Server executable or use an existing MongoDB connection.');
 			// A replica-set member address is persisted in MongoDB. Changing its port
 			// needs an explicit database migration rather than silently creating a new DB.
@@ -199,6 +203,26 @@ class LocalRuntime {
 		this.pending = next.catch(() => {});
 		return next;
 	}
+	// Host-only staging seam. This method is deliberately absent from renderer IPC.
+	configureNativeHomeProfile({ sqliteFile, enabled = true }) {
+		const next = this.pending.then(async () => {
+			if (typeof enabled !== 'boolean' || this.runningEnabled || this.child) throw new Error('Stop this runtime before selecting its protected native profile.');
+			await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
+			if ((await fs.lstat(this.root)).isSymbolicLink()) throw new Error('A protected native profile cannot use a linked directory.');
+			const nativeHome = createNativeHomeProfile(this.state, this.root, sqliteFile);
+			if (!this.state.nativeHome) {
+				try { await fs.lstat(sqliteFile); throw new Error('An existing SQLite file cannot be adopted without its protected profile identity.'); }
+				catch (error) { if (error.code !== 'ENOENT') throw error; }
+			}
+			const state = { ...this.state, nativeHome, enabled, databaseMode: 'managed' };
+			await this.persist(state); this.state = state; this.restartRequired = true;
+			return this.snapshot();
+		});
+		this.pending = next.catch(() => {}); return next;
+	}
+	nativeHomeHost() {
+		return this.state.enabled && this.state.nativeHome ? nativeHomeHost(this.state, this.root, this.snapshot().origin) : null;
+	}
 	async chooseMongod(file) {
 		if (!(await executable(file)) || !/^mongod(?:\.exe)?$/iu.test(path.basename(file)))
 			throw new Error('Choose the MongoDB Server mongod executable.');
@@ -215,10 +239,15 @@ class LocalRuntime {
 	databaseIdentity(uri = this.mongoUri()) {
 		// This public identifier must not provide an offline guess oracle for a
 		// user-chosen MongoDB password. The domain separates it from vault uses.
+		if (this.state.nativeHome) {
+			const profile = validateNativeHomeProfile(this.state, this.root);
+			return crypto.createHmac('sha256', this.state.vaultKey).update('thingtime-desktop-native-home-identity-v1\0').update(profile.profileId).digest('hex');
+		}
 		return crypto.createHmac('sha256', this.state.vaultKey)
 			.update('thingtime-desktop-database-identity-v1\0').update(uri).digest('hex');
 	}
 	applyEnvironment(env) {
+		if (Object.hasOwn(this.state, 'nativeHome')) validateNativeHomeProfile(this.state, this.root);
 		// Never inherit development/production credentials into the desktop runtime.
 		for (const name of [
 			'MONGODB_CONNECTION_STRING',
@@ -244,12 +273,14 @@ class LocalRuntime {
 			? legacy.rendererIdentity : databaseIdentity;
 		if (!this.state.enabled) return;
 		delete env.THINGTIME_API_FALLBACK_ORIGIN;
-		env.MONGODB_CONNECTION_STRING = this.mongoUri();
+		if (!this.state.nativeHome) env.MONGODB_CONNECTION_STRING = this.mongoUri();
 		env.JWT_SECRET = this.state.jwtSecret;
 		env.THINGTIME_USER_VAULT_KEY = this.state.vaultKey;
-		env.THINGTIME_CHATGPT_PLAN_DIR = path.join(this.root, 'chatgpt-plan');
-		env.THINGTIME_CHATGPT_PLAN_STORAGE = 'mongodb';
-		env.THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION = '1';
+		if (!this.state.nativeHome) {
+			env.THINGTIME_CHATGPT_PLAN_DIR = path.join(this.root, 'chatgpt-plan');
+			env.THINGTIME_CHATGPT_PLAN_STORAGE = 'mongodb';
+			env.THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION = '1';
+		}
 		const identity = 'desktop-' + databaseIdentity.slice(0, 24);
 		env.THINGTIME_DATA_ENV = 'custom:' + identity;
 		env.THINGTIME_FEDERATION_ID = identity;
@@ -259,6 +290,14 @@ class LocalRuntime {
 		if (!this.state.enabled) return;
 		await this.persist(this.state);
 		await assertFreePort(this.state.apiPort);
+		if (this.state.nativeHome) {
+			const profile = validateNativeHomeProfile(this.state, this.root);
+			try { const file = await fs.open(profile.sqliteFile, 'wx', 0o600); await file.close(); }
+			catch (error) { if (error.code !== 'EEXIST') throw error; }
+			const stat = await fs.lstat(profile.sqliteFile);
+			if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('The protected native SQLite file is unavailable.');
+			return;
+		}
 		if (this.state.databaseMode === 'external') return;
 		this.assertManagedBinarySupported();
 		if (!(await executable(this.state.mongodPath)))

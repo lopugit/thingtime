@@ -1,10 +1,6 @@
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
-import {
-  getEmailMessagesCollection,
-  getEmailSuppressionListCollection,
-  getEmailUnsubscribesCollection
-} from '../mongodb/collections';
+import { currentEmailRepository, type EmailMessageId, type ImmediateEmailOutcome } from './repository';
 
 import { getEmailConfig, getFromAddressForStream } from './config';
 import { sendWithSes } from './ses';
@@ -18,34 +14,6 @@ const normalizeRecipients = (to: string | string[]) =>
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-const getSuppressedRecipients = async (recipients: string[], stream: EmailStream) => {
-  const suppressionDocs = await (await getEmailSuppressionListCollection())
-    .find({
-      email: { $in: recipients },
-      active: { $ne: false }
-    })
-    .project({ email: 1 })
-    .toArray();
-
-  const suppressed = new Set(
-    suppressionDocs
-      .map((doc) => (typeof doc.email === 'string' ? normalizeEmail(doc.email) : ''))
-      .filter(Boolean)
-  );
-
-  if (stream === 'newsletter') {
-    const unsubscribeDocs = await (await getEmailUnsubscribesCollection())
-      .find({ email: { $in: recipients } })
-      .project({ email: 1 })
-      .toArray();
-    unsubscribeDocs.forEach((doc) => {
-      if (typeof doc.email === 'string') suppressed.add(normalizeEmail(doc.email));
-    });
-  }
-
-  return recipients.filter((recipient) => suppressed.has(recipient));
-};
-
 const sendWithConsole = async (
   input: EmailSendInput & { to: string[]; from: string; replyTo?: string }
 ): Promise<EmailDeliveryResult> => {
@@ -55,7 +23,7 @@ const sendWithConsole = async (
       `from: ${input.from}`,
       input.replyTo ? `reply-to: ${input.replyTo}` : undefined,
       `subject: ${input.subject}`,
-      input.text
+      input.sensitive ? '[redacted: single-use secret]' : input.text
     ]
       .filter(Boolean)
       .join('\n')
@@ -78,24 +46,12 @@ const deliverEmail = async (
   return sendWithConsole(input);
 };
 
-const updateMessageStatus = async (
-  emailMessageId: any,
-  status: EmailStatus,
-  fields: Record<string, any> = {}
-) => {
-  await (await getEmailMessagesCollection()).updateOne(
-    { _id: emailMessageId },
-    {
-      $set: {
-        status,
-        updatedAt: new Date(),
-        ...fields
-      }
-    }
-  );
+const updateMessageStatus = async (id: EmailMessageId, status: EmailStatus, fields: ImmediateEmailOutcome = {}) => {
+  await currentEmailRepository().finishImmediate(id, status, fields);
 };
 
 export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult> => {
+  const repository = currentEmailRepository();
   const config = getEmailConfig();
   const stream = input.stream || 'transactional';
   const to = normalizeRecipients(input.to);
@@ -112,7 +68,7 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
   const storedHtml = input.sensitive ? REDACTED : input.html;
   const storedText = input.sensitive ? REDACTED : input.text;
 
-  const inserted = await (await getEmailMessagesCollection()).insertOne({
+  const inserted = await repository.enqueue({
     provider: config.provider,
     stream,
     templateKey: input.templateKey || null,
@@ -129,17 +85,20 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.email_messages,
     createdAt: now,
     updatedAt: now
-  });
+  }, { from, to, subject: input.subject, html: input.html, text: input.text, ...(replyTo ? { replyTo } : {}), ...(input.tags ? { tags: input.tags } : {}) }, input.idempotencyKey);
 
-  const emailMessageId = String(inserted.insertedId);
-  const suppressedRecipients = await getSuppressedRecipients(to, stream);
+  const emailMessageId = String(inserted.id);
+  // Native storage never pretends console output is delivery and never falls
+  // back to a hosted transport. A separately authorized worker owns delivery.
+  if (repository.kind === 'native-home') return { delivered: false, via: config.provider, status: inserted.status, emailMessageId };
+  const suppressedRecipients = await repository.suppressed(to, stream);
 
   // Only skip the recipients that opted out; deliver to the rest. Skipping the
   // whole message because one address on a multi-recipient send is suppressed
   // would silently drop mail for people who never unsubscribed.
   const deliverTo = to.filter((recipient) => !suppressedRecipients.includes(recipient));
   if (!deliverTo.length) {
-    await updateMessageStatus(inserted.insertedId, 'skipped', {
+    await updateMessageStatus(inserted.id, 'skipped', {
       skippedAt: new Date(),
       skippedReason: 'suppressed_recipient',
       suppressedRecipients
@@ -156,7 +115,7 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
   try {
     const delivery = await deliverEmail({ ...input, stream, to: deliverTo, from, replyTo }, config);
     const status: EmailStatus = delivery.delivered ? 'sent' : 'logged';
-    await updateMessageStatus(inserted.insertedId, status, {
+    await updateMessageStatus(inserted.id, status, {
       sentAt: delivery.delivered ? new Date() : null,
       loggedAt: delivery.delivered ? null : new Date(),
       providerMessageId: delivery.providerMessageId || null,
@@ -173,7 +132,7 @@ export const sendEmail = async (input: EmailSendInput): Promise<EmailSendResult>
     };
   } catch (err) {
     const message = errorMessage(err);
-    await updateMessageStatus(inserted.insertedId, 'failed', {
+    await updateMessageStatus(inserted.id, 'failed', {
       failedAt: new Date(),
       error: message
     });

@@ -1,0 +1,225 @@
+{
+  "phase": "account",
+  "error": "TimeoutError: page.waitForResponse: Timeout 30000ms exceeded while waiting for event \"response\"",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nTHINGTIME · POSTS SAVED ON THIS DEVICE\nFeed 📰\n⏱️ Latest\nOn this device\n🪐 My subspaces\nFilters\nPost as\nOffline account workspace\n🌈\nWhat's on your mind? ✨\n\nShowing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection.\n\nD\ndelete-9e952faf\n@delete-9e952faf · \njust now\n🔒\nonly the author can see this post\n\nUnrelated retained post proves live Feed rendering.\n\n0\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 17ms\n\nMongoDB: connected (56ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "checks": [
+    "anonymous: offline delete and cold reload",
+    "anonymous: exact post/comment/media/bytes removed",
+    "anonymous: no HTTP mutation",
+    "account: offline delete and cold reload"
+  ],
+  "bounds": [
+    {
+      "phase": "anonymous",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "anonymous",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "anonymous",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "mutations": [
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Synthetic owner post deleted offline."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "author": "delete-9e952faf",
+        "thingtime": "post",
+        "sort": "newest",
+        "limit": 18,
+        "conditions": [
+          {
+            "field": "thingtime",
+            "op": "ne",
+            "value": "comment"
+          },
+          {
+            "mode": "any",
+            "conditions": [
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2025-10-27T00:00:00.000Z",
+                  "2025-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2024-10-27T00:00:00.000Z",
+                  "2024-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2023-10-27T00:00:00.000Z",
+                  "2023-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2022-10-27T00:00:00.000Z",
+                  "2022-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2021-10-27T00:00:00.000Z",
+                  "2021-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2020-10-27T00:00:00.000Z",
+                  "2020-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2019-10-27T00:00:00.000Z",
+                  "2019-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2018-10-27T00:00:00.000Z",
+                  "2018-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2017-10-27T00:00:00.000Z",
+                  "2017-10-27T23:59:59.999Z"
+                ]
+              },
+              {
+                "field": "createdAt",
+                "op": "between",
+                "values": [
+                  "2016-10-27T00:00:00.000Z",
+                  "2016-10-27T23:59:59.999Z"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "post"
+        ],
+        "crystal": {
+          "type": "text",
+          "text": "Unrelated retained post proves live Feed rendering."
+        },
+        "visibility": "private"
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "POST",
+      "body": {
+        "type": "text",
+        "text": "Account child removed with parent.",
+        "images": [],
+        "listing": null,
+        "thing": null,
+        "id": "fd1bc9f4-728d-4ae4-90ff-afcce995a2ac",
+        "shareId": "54de10b4-f98e-4b0c-9898-cb7a1039acca",
+        "tags": [],
+        "attachmentIds": []
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "DELETE",
+      "body": {
+        "id": "54de10b4-f98e-4b0c-9898-cb7a1039acca",
+        "expectedUpdatedAt": "2026-10-27T00:23:20.386Z",
+        "retainAttachmentReceipts": true
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "DELETE",
+      "body": {
+        "id": "54de10b4-f98e-4b0c-9898-cb7a1039acca",
+        "expectedUpdatedAt": "2026-10-27T00:23:20.386Z",
+        "retainAttachmentReceipts": true
+      }
+    },
+    {
+      "phase": "account",
+      "offline": false,
+      "method": "DELETE",
+      "body": {
+        "id": "fd1bc9f4-728d-4ae4-90ff-afcce995a2ac",
+        "expectedUpdatedAt": "2026-10-27T00:23:20.386Z",
+        "retainAttachmentReceipts": true
+      }
+    }
+  ],
+  "errors": []
+}

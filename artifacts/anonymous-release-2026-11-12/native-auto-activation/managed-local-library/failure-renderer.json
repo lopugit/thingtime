@@ -1,0 +1,37 @@
+{
+  "pathname": "/things",
+  "fields": [
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": null,
+      "visible": true,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Select Timeline",
+      "visible": true,
+      "text": "",
+      "value": "on"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Select Timeline",
+      "visible": true,
+      "text": "",
+      "value": "on"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Select Disposable native local restart",
+      "visible": true,
+      "text": "",
+      "value": "on"
+    }
+  ]
+}

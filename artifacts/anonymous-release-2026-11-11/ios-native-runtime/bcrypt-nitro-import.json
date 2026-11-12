@@ -1,0 +1,22 @@
+{
+  "node": "v24.22.1",
+  "mobile": "24.22.1-0",
+  "platform": "ios",
+  "arch": "arm64",
+  "attempted": "canonical .output/server/index.mjs",
+  "sourceSha256": "2c0bab9c081214a3f7e5772c5da4025d44f73ba0b5f7f5ac6b67dcc7740c027a",
+  "imported": false,
+  "bcrypt": {
+    "rounds": 10,
+    "valid": true,
+    "invalid": false
+  },
+  "error": {
+    "name": "Error",
+    "code": null,
+    "message": "Could not load the \"sharp\" module using the ios-arm64 runtime\nPossible solutions:\n- Manually install libvips >= 8.18.7\n    See https://sharp.pixelplumbing.com/install#building-from-source\n- Add WebAssembly-based dependencies:\n    npm install sharp @img/sharp-wasm32\n- Consult the installation documentation:\n    See https://sharp.pixelplumbing.com/install",
+    "stack": "Error: Could not load the \"sharp\" module using the ios-arm64 runtime\nPossible solutions:\n- Manually install libvips >= 8.18.7\n    See https://sharp.pixelplumbing.com/install#building-from-source\n- Add WebAssembly-based dependencies:\n    npm install sharp @img/sharp-wasm32\n- Consult the installation documentation:\n    See https://sharp.pixelplumbing.com/install\n    at file://<APP_BUNDLE>/.output/server/node_modules/sharp/dist/sharp.mjs:171:9\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:647:26)\n    at async file://<APP_BUNDLE>/probe.mjs:4:337"
+  },
+  "observedAt": "2026-11-11T08:12:55.698072+00:00",
+  "publicationRedaction": "Application bundle/container path and simulator identifier removed; observed result unchanged."
+}

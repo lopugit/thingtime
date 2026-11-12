@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "stage": "first stdio native acceptance attempt before navigation timeout fix",
+  "observedError": "page.goto: Timeout 6000ms exceeded while navigating to http://127.0.0.1:19898/draft-preview/index.html, waiting until load",
+  "artifactsReturnedByFailedCall": [],
+  "diagnosis": "A subsequent diagnostic with a pinned native bundle measured the HTML request at 2658ms, runner fulfillment at 4246ms and load at 9198ms. Native bundle startup exceeded the former 6000ms navigation timeout.",
+  "fix": "Navigation timeout 15000ms; normal UI-operation timeout remains 6000ms and the parent still enforces a 30000ms total render deadline.",
+  "successfulRerun": "mcp-acceptance.log"
+}

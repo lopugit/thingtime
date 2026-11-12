@@ -1,0 +1,8 @@
+Built API: owner scope, token and origin refusal, pagination, search, reversible placement and unchanged public data passed.
+Global action API: post/comment/chat-message availability, foreign refusal and archive/restore discovery passed.
+Chrome 1440px: Builder app card Archive, reload, archived search, Restore and preserved app child passed.
+Chrome 1440px: global post/message menus and restore discovery passed.
+Chrome 1440px: Archive, reload Archived, Restore and original-folder readback passed.
+Chrome 375px: Builder app card Archive, reload, archived search, Restore and preserved app child passed.
+Chrome 375px: global post/message menus and restore discovery passed.
+Chrome 375px: Archive, reload Archived, Restore and original-folder readback passed.

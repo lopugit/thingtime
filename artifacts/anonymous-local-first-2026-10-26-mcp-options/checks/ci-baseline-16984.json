@@ -1,0 +1,84 @@
+{
+  "auditedAtUtc": null,
+  "repo": "lopugit/thingtime",
+  "pullRequest": {
+    "number": 1000,
+    "state": "OPEN",
+    "isDraft": false,
+    "baseRefName": "develop",
+    "headRefName": "codex/anonymous-local-first",
+    "headRefOid": "16984b13dce49db926c9e10913ab1b8fb7983778",
+    "autoMergeRequest": null
+  },
+  "checkout": {
+    "path": "/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime",
+    "head": "16984b13dce49db926c9e10913ab1b8fb7983778",
+    "branch": "codex/anonymous-cloud-continuation"
+  },
+  "checks": [
+    {
+      "id": 40271814333,
+      "workflow": "Web CI",
+      "status": "in_progress",
+      "conclusion": null,
+      "note": "Classify/advisories/API suite succeeded; Build + typecheck ratchet + unit tests still in progress."
+    },
+    {
+      "id": 40271814335,
+      "workflow": "Lopu CodeQL all branches",
+      "status": "in_progress",
+      "conclusion": null,
+      "note": "Both language analyses still in progress."
+    },
+    {
+      "id": 40271841445,
+      "workflow": "Lopu CodeQL all branches",
+      "status": "completed",
+      "conclusion": "success",
+      "note": "PR scan queue handoff only; analysis skipped."
+    },
+    {
+      "id": 40272247214,
+      "workflow": "Lopu CodeQL all branches",
+      "status": "completed",
+      "conclusion": "success",
+      "note": "PR scan queue handoff only; analysis skipped."
+    },
+    {
+      "id": 40271841305,
+      "workflow": "Develop S3 PR preview",
+      "status": "completed",
+      "conclusion": "skipped",
+      "note": "Live preview was independently reachable."
+    },
+    {
+      "id": 40272247776,
+      "workflow": "Lopu manages PRs after pull_request_target",
+      "status": "completed",
+      "conclusion": "failure",
+      "note": "Controller jobs failed on GitHub API transport retry errors; not product checks."
+    }
+  ],
+  "preview": {
+    "origin": "https://pr-1000.previews.dev.thingtime.com",
+    "root": {
+      "path": "/",
+      "httpStatus": 200
+    },
+    "rootData": {
+      "path": "/api/root-data",
+      "httpStatus": 200,
+      "jsonPaths": {
+        "branch": "$.envFromCookie.THINGTIME_BRANCH_NAME",
+        "commitSha": "$.envFromCookie.THINGTIME_VERCEL_GIT_COMMIT_SHA",
+        "commitShaObserved": "16984b13dce49db926c9e10913ab1b8fb7983778",
+        "branchObserved": "codex/anonymous-local-first"
+      },
+      "other": {
+        "dataEnvironmentId": "$.dataEnvironment.id = development",
+        "user": "$.user = null"
+      }
+    }
+  },
+  "observationTimeNote": "Exact observation time was not captured; timestamps of GitHub runs do not establish when this audit ran."
+}

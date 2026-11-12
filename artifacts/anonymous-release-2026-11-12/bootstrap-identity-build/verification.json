@@ -1,0 +1,180 @@
+{
+  "artifactSha256": {
+    "build.log": "a1cd2610ab1390926e6111048ab5dd177509ec2bcbd67dc6de8a1321c30cabeb",
+    "bundle-summary.json": "62317f4b9f839acc7ea08bcf8363571ff1391c858f41295e46be42e29835bd18",
+    "cleanup.json": "2122acb72748098003b25413f9c33533cb8d0c536a82b1eca10c2f60fb664ea2",
+    "lint.log": "d474b294e5f20548cc0df19dfafeef01d959e19fe774259011aeed9bc00f4b67",
+    "metadata.safe.json": "c4cedbb9c8526b7a67436a1e362b4496de87291b0be7bdc544121d7466d91811",
+    "mongo-http.log": "52309932e138bb8e6ceff88df99c5b3b716d9e973d73392bfe67d022667bcd27",
+    "ratchet.log": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+    "source-after.json": "cfdbf5b0cbb8ff455221cb247139e74ddd972a3311985a9205feec22e859d958",
+    "source-before.json": "a9196760d7670a01f42c3be2083a1d94679d3c8dcd37a4a40886c88046a9abb5",
+    "temporary-profile-baseline.json": "be5d3b656fe48a286c433765001d2144b055bfc733f44afa747cc3fa3aad2f38",
+    "typecheck.log": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+    "verify.log": "5f2aa8f5faa0716f6c3bb9ad9773dd115b420f2356cbc84a00718c7d90e16127",
+    "web-integrity.json": "b38c1b7bd1fe6cf1426c8414d12fbc90425606b137cca273a76c9e25cedf988b"
+  },
+  "attribution": "base commit plus frozen dirty tracked/untracked source, not a clean commit build",
+  "baseCommit": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "checks": [
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "endedAt": "2026-11-11T17:00:21.389487+00:00",
+      "exitCode": 0,
+      "log": "typecheck.log",
+      "name": "typecheck",
+      "startedAt": "2026-11-11T16:59:42.154169+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "endedAt": "2026-11-11T17:01:00.448373+00:00",
+      "exitCode": 0,
+      "log": "ratchet.log",
+      "name": "ratchet",
+      "startedAt": "2026-11-11T17:00:21.389718+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "endedAt": "2026-11-11T17:01:39.897221+00:00",
+      "errors": 0,
+      "exitCode": 0,
+      "log": "lint.log",
+      "name": "lint",
+      "startedAt": "2026-11-11T17:01:00.448637+00:00",
+      "warnings": 372
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "endedAt": "2026-11-11T17:02:12.870955+00:00",
+      "exitCode": 0,
+      "log": "build.log",
+      "name": "build",
+      "startedAt": "2026-11-11T17:01:39.898419+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "endedAt": "2026-11-11T17:02:13.771977+00:00",
+      "exitCode": 0,
+      "log": "verify.log",
+      "name": "verify",
+      "startedAt": "2026-11-11T17:02:12.871193+00:00"
+    },
+    {
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "endedAt": "2026-11-11T17:02:23.791092+00:00",
+      "exitCode": 0,
+      "log": "mongo-http.log",
+      "name": "mongo-http",
+      "startedAt": "2026-11-11T17:02:13.772245+00:00"
+    }
+  ],
+  "cleanup": {
+    "newFixtureDirectoriesRemaining": [],
+    "passed": true,
+    "ports": {
+      "19881": {
+        "exitCode": 1,
+        "listenerPresent": false
+      },
+      "19882": {
+        "exitCode": 1,
+        "listenerPresent": false
+      }
+    }
+  },
+  "dirtyInputCount": 22,
+  "endedAt": "2026-11-11T17:02:24.651536+00:00",
+  "logHygiene": {
+    "ansiRemoved": true,
+    "credentialPatternScanPassed": true,
+    "rawLogs": "private /tmp/pr1000-bootstrap-identity-*.raw.log (0600), not retained in repository",
+    "trailingWhitespaceRemoved": true
+  },
+  "mongoFixture": {
+    "database": "fresh authenticated task-owned bundled replica set",
+    "network": "existing fixture OS offline boundary, normal Apple protections retained",
+    "parentFlagsUnset": [
+      "TT_BUNDLED_RUNTIME_API",
+      "TT_BUNDLED_RUNTIME_FIXTURE",
+      "TT_BUNDLED_RUNTIME_ROOT"
+    ],
+    "passed": true,
+    "registration": "real canonical API only",
+    "writes": "normal API registration and private Thing CRUD; no direct database seeds"
+  },
+  "output": {
+    "baseCommit": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+    "canonicalInventorySha256": "b8e4159851365ed38dfc4e090018892c72eb6ce99ddad016e2b856ca87be3776",
+    "canonicalStagedEntryMatches": true,
+    "fileCount": 1823,
+    "gitBranch": "codex/anonymous-release",
+    "independentInventoryMatches": true,
+    "metadataSha256": "ef8a5a75e2b06563dca3170f0177c16a19bb7911ec8511e396c432cc3251bdba",
+    "nativeBundle": {
+      "entrypoints": {
+        "renderer": ".output/public/index.html",
+        "server": ".output/server/index.mjs"
+      },
+      "runtime": {
+        "id": "electron-node-middleware-v1",
+        "nativeAbi": "electron-43.1.0-node-24.18.0-modules-148",
+        "shellVersion": "0.1.2"
+      },
+      "target": {
+        "arch": "arm64",
+        "platform": "darwin"
+      }
+    },
+    "nitroPreset": "node_middleware",
+    "outputRoot": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron/dist/web",
+    "rawIntegritySha256": "b38c1b7bd1fe6cf1426c8414d12fbc90425606b137cca273a76c9e25cedf988b",
+    "serverEntrySha256": "85ee59f2089f9b32c95e19428eba3f2bf24532c3c0e13ad6fefaf312d990a62d"
+  },
+  "scope": "Canonical Remix checks + one electron web build + verify + disposable genuine Mongo HTTP; no installed/native/iOS/SQLite HTTP acceptance",
+  "sourceChanges": {},
+  "sourceComparisonScope": "Inventoried build scope only; not a claim that the entire workspace was frozen",
+  "sourceFileCount": 5185,
+  "sourceInventoryAfter": "source-after.json",
+  "sourceInventoryBefore": "source-before.json",
+  "sourceUnchanged": true,
+  "startedAt": "2026-11-11T16:59:42.153983+00:00",
+  "status": "passed"
+}

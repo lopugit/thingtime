@@ -1,0 +1,25 @@
+{
+  "phase": "anonymous",
+  "error": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByText('Post deleted 🗑️', { exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\nTHINGTIME · POSTS SAVED ON THIS DEVICE\nFeed 📰\n⏱️ Latest\nOn this device\n🪐 My subspaces\nFilters\n🌈\nWhat's on your mind? ✨\n\nShowing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection.\n\n🪐\n\nNo posts saved in this device workspace match these filters.\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "checks": [],
+  "bounds": [
+    {
+      "phase": "anonymous",
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "phase": "anonymous",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "phase": "anonymous",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "mutations": [],
+  "errors": []
+}

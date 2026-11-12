@@ -27,13 +27,17 @@
 	<key>CFBundleURLTypes</key>
 	<array><dict>
 		<key>CFBundleTypeRole</key><string>Editor</string>
-		<key>CFBundleURLName</key><string>com.thingtime.passwords.authenticator</string>
-		<key>CFBundleURLSchemes</key><array><string>otpauth</string></array>
+		<key>CFBundleURLName</key><string>$(THINGTIME_PASSWORD_HOST_BUNDLE_ID).authenticator</string>
+		<key>CFBundleURLSchemes</key><array><string>$(THINGTIME_PASSWORD_URL_SCHEME)</string></array>
 	</dict></array>
 	<key>LSUIElement</key>
 	<true/>
 	<key>ThingtimePasswordKeychainGroup</key>
 	<string>$(THINGTIME_PASSWORD_KEYCHAIN_GROUP)</string>
+	<key>ThingtimePasswordNotificationName</key>
+	<string>$(THINGTIME_PASSWORD_HOST_BUNDLE_ID).destination-changed</string>
+	<key>ThingtimePasswordDevelopmentHost</key>
+	<string>$(THINGTIME_PASSWORD_DEVELOPMENT_HOST)</string>
 	<key>ThingtimeWebURL</key>
 	<string>$(THINGTIME_WEB_URL)</string>
 </dict>

@@ -1,0 +1,43 @@
+{
+  "conclusion": "failure",
+  "headSha": "8c690d2984b0cff8322c408625fe2c36488232f5",
+  "jobs": [
+    {
+      "name": "control-plane / Classify Web CI scope",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "control-plane / Product contract advisories (non-blocking)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "control-plane / API suite (headless /tests runner)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "control-plane / Build + typecheck ratchet + unit tests",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "name": "control-plane / needs.scope.outputs.full_web_ci == 'false' && 'Build + typecheck ratchet + unit tests' || 'Build required-context companion (not needed)'",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / needs.scope.outputs.full_web_ci == 'false' && 'API suite (headless /tests runner)' || 'API required-context companion (not needed)'",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Comment product contract advisories (non-blocking)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/lopugit/thingtime/actions/runs/40289045213"
+}

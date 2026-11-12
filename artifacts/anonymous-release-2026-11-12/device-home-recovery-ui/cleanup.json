@@ -1,0 +1,6 @@
+{
+  "browserClosed": true,
+  "serverClosed": true,
+  "temporaryBundleRemoved": true,
+  "scope": "only task-owned browser contexts, listener and scratch directory"
+}

@@ -1,0 +1,18 @@
+Run-time dependency libexif found: YES 0.6.25
+Has header "exif-data.h" with dependency libexif: NO
+Run-time dependency lcms2 found: YES 2.18
+    libexif                                       : 0.6.25
+    lcms2                                         : 2.18
+    enable GIF load                               : YES
+    ICC profile support with lcms2                : YES
+    EXIF metadata support with libexif            : YES
+    JPEG load/save with libjpeg                   : YES
+    PNG load/save with libpng                     : YES
+    WebP load/save with libwebp                   : YES
+    exif                                          : enabled
+    lcms                                          : enabled
+[2/436] Compiling C object libvips/foreign/libnsgif/libnsgif.a.p/lzw.c.o
+[6/436] Compiling C object libvips/foreign/libnsgif/libnsgif.a.p/gif.c.o
+[20/436] Compiling C object libvips/foreign/libforeign.a.p/exif.c.o
+[39/436] Compiling C object libvips/foreign/libforeign.a.p/nsgifload.c.o
+[397/436] Linking static target libvips/foreign/libnsgif/libnsgif.a

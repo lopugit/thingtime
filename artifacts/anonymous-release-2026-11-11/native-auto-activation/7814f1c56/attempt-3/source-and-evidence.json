@@ -1,0 +1,29 @@
+{
+  "observedAt": "2026-11-11T11:21:41.781Z",
+  "scope": "Post-run independent readback of actual native downloader staging; automatic restart remains unverified",
+  "syntheticPublication": true,
+  "actualNativeDeliveryAndStaging": true,
+  "releaseId": "ec3d9f7c4000b4b47f55439c776ac1bd93a170aadd216338f1c733f741f20911",
+  "signatureVerified": true,
+  "payloadInventoryVerified": true,
+  "declaredFiles": 1823,
+  "declaredBytes": 269829305,
+  "highestSequence": 1,
+  "pending": true,
+  "activeReleaseId": null,
+  "ownedLauncherReleased": true,
+  "ownedListenersClosed": [
+    28640,
+    50543,
+    "51819"
+  ],
+  "retainedTaskOnlyWorkspace": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000",
+  "stableAppModified": false,
+  "hashes": {
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "b373ace96e3011fbe63832ae8f88beb2ea602f23fa786c0775e432461abc93f4",
+    "electron/test/fixtures/native-web-auto-api.mts": "ecedfd2d75b7bd26218a09cbb55ada7aa37cff330b3e29d58a71e384b33ca56e",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "df81d60b777767cefa6268a783f480f10095fadc4091416f5105e4d05048c4ce",
+    "artifacts/anonymous-release-2026-11-11/native-auto-activation/7814f1c56/attempt-3/verification.json": "38d8bc57e5291af4bf518a372521eea5ad83182df185431ed02f5f9fed6fbe4e",
+    "artifacts/anonymous-release-2026-11-11/native-auto-activation/7814f1c56/attempt-3/dirty-editor.png": "adc050da21ca551e1680e93ed4d87ecbe14a63db946d2980fa8231b3e8bed3cc"
+  }
+}

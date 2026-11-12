@@ -1,3 +1,4 @@
+import { timelinePersistence } from './persistence';
 import { createHash } from 'node:crypto';
 import {
 	TIMELINE_BRANCH_KIND,
@@ -48,9 +49,6 @@ export async function readTimelineBranchHead(
 	thingId: string,
 	session?: any
 ): Promise<TimelineBranchHead | null> {
-	const doc = await things.findOne(
-		{ ownerId, thingtime: TIMELINE_BRANCH_HEAD_KIND, shareId: timelineBranchHeadThingId(ownerId, branchId, thingId) },
-		session ? { session } : {}
-	);
+	const doc = await timelinePersistence(things, session).record(ownerId, TIMELINE_BRANCH_HEAD_KIND, timelineBranchHeadThingId(ownerId, branchId, thingId));
 	return doc ? branchHeadFromDoc(doc) : null;
 }

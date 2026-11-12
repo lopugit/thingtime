@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T16:00:45.821145+00:00",
+  "scope": "Canonical desktop node_middleware bundle build, independent integrity verification and isolated genuine Mongo HTTP acceptance. Not installed/signed app or automatic activation acceptance.",
+  "commands": [
+    {
+      "command": "corepack pnpm --dir electron run build:web",
+      "runs": 1,
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "command": "corepack pnpm --dir electron run verify:web",
+      "exitCode": 0,
+      "log": "verify.log"
+    },
+    {
+      "command": "env -u TT_BUNDLED_RUNTIME_API -u TT_BUNDLED_RUNTIME_FIXTURE -u TT_BUNDLED_RUNTIME_ROOT node electron/scripts/test-bundled-local-runtime.cjs",
+      "exitCode": 0,
+      "log": "mongo-http.log"
+    }
+  ],
+  "bundle": {
+    "outputRoot": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron/dist/web/",
+    "serverEntry": "electron/dist/web/.output/server/index.mjs",
+    "entrySha256": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657",
+    "metadataPath": "electron/dist/web/metadata.json",
+    "metadataSha256": "ba2728c7c81db9b61ce2cb6b7fb8484173191d4486aac0d1b942163eacc17447",
+    "inventoryPath": "electron/dist/web-integrity.json",
+    "inventoryFileSha256": "cd1c3ff84d82ebb942c6e2b24ba746d880d909393b3b8bd4d60c142f85579d41",
+    "inventoryCanonicalSha256": "6aa0968451b50e00c9bb3e4a6fcac0b01cfc7283dcc37453cbcde801098b73a0",
+    "inventoryFiles": 1822,
+    "sourceInventoryPath": "artifacts/anonymous-release-2026-11-12/native-integration-build/source-inventory.json",
+    "sourceInventorySha256": "b1d0adc03fb83253831a84be4a953b05ca0de01156d4d30a29a43e56692892ab",
+    "sourceRevision": "6d96a617792968e7bca0fc9d72c343ea2141310f",
+    "dirtyAttribution": "Dirty working tree over baseRevision; staged session changes plus unstaged native/UI changes. Metadata Git SHA alone does not identify the built source."
+  },
+  "sourceInventory": "source-inventory.json",
+  "sourceHashesUnchanged": true,
+  "fixtureIsolation": {
+    "profile": "Fresh task-owned mkdtemp directory; synthetic API-created accounts only; no account rows seeded directly",
+    "environment": "API receives LocalRuntime-generated profile auth/DB settings plus explicit production/loopback settings; no inherited application credentials",
+    "database": "Shipped pinned MongoDB8.0.34, authenticated loopback-only replica set",
+    "safeStorage": "Fixture AES-GCM adapter; not OS safeStorage acceptance",
+    "ports": {
+      "api": 19881,
+      "database": 19882
+    },
+    "network": "Existing explicit OS sandbox offline fixture; only its loopback API/database destinations allowed"
+  },
+  "mongoChecks": [
+    "Normal API registration and session identity",
+    "Private Thing create/read/update/delete via actual Desktop middleware socket owner",
+    "Cross-account and anonymous private-read refusal; unrelated edit refusal",
+    "API and managed database restart retain account/session/exact edited content",
+    "Stale revision rejects overwrite with409",
+    "Unauthenticated Mongo listCollections denied",
+    "Offline network and redirect boundary refused"
+  ],
+  "cleanup": {
+    "fixtureProcesses": "Harness awaits its API process and Mongo shutdown",
+    "independentListenerCheck": "lsof found no listeners on19881/19882",
+    "newFixtureDirectoriesRemaining": [],
+    "stableAppsServicesModified": false
+  },
+  "remainingLimits": [
+    "No signed/installed Electron app or OS credential-store acceptance",
+    "No native auto-activation outcome claimed; separate native worker owns it",
+    "No iOS real API/storage outcome claimed; separate iOS worker owns its probe",
+    "SQLite session tests are source/module evidence; this HTTP receipt uses Mongo and does not establish SQLite registration/API readiness"
+  ],
+  "buildLogNormalization": {
+    "sourceSha256": "6bc0d06e4d7034ad1b6c5f566357724d088d9ac417423b9cf1d815ed4cad6f08",
+    "changes": "Removed terminal ANSI codes and trailing whitespace only"
+  }
+}

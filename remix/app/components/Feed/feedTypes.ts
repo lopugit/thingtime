@@ -17,6 +17,7 @@ export type PublicProfile = {
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   bio: string | null;
   avatarUrl: string | null;
   bannerUrl: string | null;
@@ -35,6 +36,7 @@ export type FeedAuthor = {
   username: string;
   displayName: string | null;
   temporary?: boolean;
+  localOnly?: true;
   avatarUrl: string | null;
   avatarPresentation?: ImagePresentation;
   external?: boolean;
@@ -55,7 +57,7 @@ export type FeedAuthor = {
 export type AuthorLinkTarget = { external: boolean; href: string };
 
 export const authorLinkTarget = (author: FeedAuthor | null): AuthorLinkTarget | null => {
-  if (!author?.username) return null;
+  if (!author?.username || author.localOnly) return null;
   if (author.external) return author.externalUrl ? { external: true, href: author.externalUrl } : null;
   return { external: false, href: `/profile/${author.username}` };
 };
@@ -150,6 +152,9 @@ export type PublicPost = {
   // outside subspaces. Optional during rollout.
   title?: string | null;
   subspace?: PublicPostSubspace | null;
+  // Device-only projection diagnostic, never an authorization grant. The
+  // content names a subspace but its display snapshot has not been retained.
+  subspaceContextMissing?: true;
   flair?: PublicPostFlair | null;
   // the author's USER flair in this post's subspace (their pick beside their
   // name — a template or custom text). Optional during rollout.

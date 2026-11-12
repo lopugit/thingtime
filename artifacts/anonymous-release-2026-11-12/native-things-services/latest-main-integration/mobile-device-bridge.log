@@ -1,0 +1,15 @@
+✔ mobile pairing requires its explicit native capability and platform (0.496417ms)
+✔ background presence negotiates the host and stops immediately without crossing an origin (6.2355ms)
+✔ foreign, stale and wrong-origin native replies cannot change this view (0.38975ms)
+✔ iOS CryptoKit and the server share an independently signed canonical wire vector (127.579333ms)
+✔ foreground pairing checks serialize with polling; cancellation does not cancel another caller (3.452375ms)
+✔ legacy native busy refusals never replay status, pair or presence requests (0.706417ms)
+✔ a native busy refusal releases the renderer queue without cancelling the next pairing (0.690875ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 293.689208

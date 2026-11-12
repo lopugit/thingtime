@@ -9,7 +9,7 @@ struct ThingtimeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ThingtimeWebView()
+            appContent
                 .task { await drainShares() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await drainShares() } }
@@ -23,6 +23,14 @@ struct ThingtimeApp: App {
                     Text(shareError ?? "")
                 }
         }
+    }
+
+    @ViewBuilder private var appContent: some View {
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        ThingtimeLocalDevelopmentRoot { ThingtimeWebView() }
+        #else
+        ThingtimeWebView()
+        #endif
     }
 
     @MainActor private func drainShares() async {

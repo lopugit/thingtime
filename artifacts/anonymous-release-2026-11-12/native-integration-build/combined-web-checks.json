@@ -1,0 +1,51 @@
+{
+  "checks": [
+    {
+      "name": "types",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-integration-types.log"
+    },
+    {
+      "name": "ratchet",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-integration-ratchet.log"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-integration-lint.log"
+    }
+  ],
+  "typeDiagnostics": 0,
+  "lintErrors": 0,
+  "lintWarnings": 372,
+  "uiSourceHashes": {
+    "remix/app/components/Passwords/PasswordManager.tsx": "04e9f56329807859c69bd0e128a3e83628ffe63d4f41c5f623c1a82714fd5a4a",
+    "remix/scripts/authenticator-setup.browser.tsx": "5aab0e712169ecdd097400c3fd15a392c4961fb6a130f85bc25a27d2556825bd",
+    "remix/scripts/test-authenticator-setup-ui.mjs": "f21d8dad6f3dd0789644f12b4f67281e54f69c323e42588077b0cc0690e9b4c4"
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n",
+  "body": "🦄\naudio-90a4539e-aed\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nA\naudio-author-42249e21-4\n@audio-author-42249e21-4 · \njust now\n🌐\nanyone can see this post\n\nTwo synthetic ordinary audio tracks.\n\nfixture-track-2.wav\n\n15.7 KiB · WAV audio · Track 2 of 2\n\nUse offline copy\nRemove offline copy\n\nStreaming from Thingtime\n\nDownload original\n\nQUEUE · PLAYS NEXT AUTOMATICALLY\n\n1. fixture-track-1.wav\n2. fixture-track-2.wav\nDownload all · 2 files · 31.3 KiB\n0\nPost as\naudio-90a4539e-aed\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 99ms\n\nMongoDB: connected (12ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nAUDIO-90A4539E-AED\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "postId": "9a015519-376b-4d80-a1b8-c5ec294cf423",
+  "ids": [
+    "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+    "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951"
+  ],
+  "requests": [
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "validate",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "validate",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "validate",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "validate",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc02c2320601232d80315",
+      "plane": "home",
+      "serviceWorker": null
+    }
+  ],
+  "audioResponses": [
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "original-bytes",
+      "status": 200
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_cd987ba43629ec4574ab42a489559076c9ad86f5f4aa380ae3aa5ce8a4e1a41b",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_bad77698528d3efc3209b1d8af9a0bba080b9e987fc56390d37ebe6a57d5d951",
+      "mode": null,
+      "status": 206
+    }
+  ],
+  "errors": []
+}

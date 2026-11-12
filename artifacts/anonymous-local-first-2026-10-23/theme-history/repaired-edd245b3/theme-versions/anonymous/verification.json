@@ -1,0 +1,47 @@
+{
+  "account": false,
+  "customPlane": false,
+  "selectedPlane": "home",
+  "remoteHome": false,
+  "guestStatus": null,
+  "nativeExport": true,
+  "nativeRestore": true,
+  "nativeUndoConflict": true,
+  "nativeMerge": true,
+  "explicitApplyAfterHistory": true,
+  "coldOfflineReload": true,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "button": {
+        "x": 731.953125,
+        "y": 757.1875,
+        "width": 158.609375,
+        "height": 32
+      }
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "button": {
+        "x": 25,
+        "y": 715,
+        "width": 158.609375,
+        "height": 32
+      }
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "button": {
+        "x": 25,
+        "y": 715,
+        "width": 158.609375,
+        "height": 32
+      }
+    }
+  ],
+  "errors": [],
+  "writes": []
+}

@@ -1,4 +1,5 @@
-import { verifyPasswordProvider } from './verify-password-provider.mjs';
+import { isolatedPasswordIdentity } from './password-helper-identity.mjs';
+import { verifyPasswordProvider, verifyIsolatedPasswordFixture } from './verify-password-provider.mjs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,18 @@ if (!unsigned) {
   }
   if (!team) throw new Error('Set APPLE_TEAM_ID for the Password AutoFill keychain group and provisioning profiles.');
 }
+let isolatedIdentity;
+if (isolated) {
+  isolatedIdentity = isolatedPasswordIdentity(process.env.THINGTIME_PASSWORD_HOST_BUNDLE_ID, team);
+  if (process.env.THINGTIME_PASSWORD_KEYCHAIN_GROUP !== isolatedIdentity.keychainGroup ||
+      process.env.THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID !== isolatedIdentity.providerIdentifier)
+    throw Error('Isolated helper must use exactly its signing-team/private-host group.');
+  identitySettings.push(`THINGTIME_PASSWORD_URL_SCHEME=${isolatedIdentity.urlScheme}`,
+    `THINGTIME_PASSWORD_DEVELOPMENT_HOST=${isolatedIdentity.hostIdentifier}`);
+}
+const buildFixture = process.env.THINGTIME_PASSWORD_BUILD_FIXTURE === '1';
+if (buildFixture && (!isolatedIdentity || unsigned || !identity.startsWith('Apple Development:')))
+  throw Error('The separate store fixture requires an explicitly isolated Apple Development build.');
 run('xcodegen', ['generate']);
 const hostProfile = process.env.THINGTIME_PASSWORD_HOST_PROFILE;
 const providerProfile = process.env.THINGTIME_PASSWORD_PROVIDER_PROFILE;
@@ -73,12 +86,25 @@ if (exportDeveloperId) {
   run('xcodebuild', [...buildArguments, 'build']);
 }
 // Never replace the last verified helper with an invalid export.
-if (!unsigned) await verifyPasswordProvider(path.resolve(project, builtApp), { teamIdentifier: team, signingIdentity: identity });
+if (!unsigned) await verifyPasswordProvider(path.resolve(project, builtApp), { teamIdentifier: team, signingIdentity: identity, isolatedIdentity });
 await mkdir(path.dirname(staging), { recursive: true }); await rm(staging, { recursive: true, force: true });
 run('/usr/bin/ditto', [builtApp, staging]);
 if (unsigned) {
   for (const target of [path.join(staging, 'Contents/PlugIns/ThingtimePasswordProvider.appex'), staging]) run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', target]);
 }
 run('/usr/bin/codesign', ['--verify', '--deep', '--strict', staging]);
-await verifyPasswordProvider(staging, { unsigned, teamIdentifier: unsigned ? undefined : team, signingIdentity: unsigned ? undefined : identity });
+await verifyPasswordProvider(staging, { unsigned, teamIdentifier: unsigned ? undefined : team, signingIdentity: unsigned ? undefined : identity, isolatedIdentity });
 console.log('Thingtime credential provider built and verified.');
+
+if (buildFixture) {
+  if (hostProfile || providerProfile) throw Error('The isolated fixture requires automatic private provisioning.');
+  run('xcodebuild', ['-project', 'ThingtimePasswords.xcodeproj', '-scheme', 'ThingtimePasswordFixture', '-configuration', 'Release',
+    '-derivedDataPath', path.join(buildDir, 'release'), ...settings, 'THINGTIME_PASSWORD_FIXTURE_CONDITION=THINGTIME_PASSWORD_DEVELOPMENT_FIXTURE', 'build']);
+  const builtFixture = path.join(buildDir, 'release/Build/Products/Release/Thingtime Password Fixture.app');
+  await verifyIsolatedPasswordFixture(builtFixture, isolatedIdentity, identity);
+  const stagedFixture = path.join(path.dirname(staging), 'Thingtime Password Fixture.app');
+  await rm(stagedFixture, { recursive: true, force: true });
+  run('/usr/bin/ditto', [builtFixture, stagedFixture]);
+  await verifyIsolatedPasswordFixture(stagedFixture, isolatedIdentity, identity);
+  console.log('Separate isolated credential-store fixture built and verified.');
+}

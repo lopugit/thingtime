@@ -1,0 +1,29 @@
+{
+  "passed": false,
+  "launches": [
+    {
+      "mode": "preserve",
+      "launchOutput": "com.thingtime.reloadenvcontrol: 12591",
+      "events": [],
+      "terminateReturncode": 3
+    }
+  ],
+  "cleanup": [
+    {
+      "operation": "shutdown",
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "returncode": 0
+    }
+  ],
+  "sourceHashes": {
+    "main.swift": "490f0b04bbecb18110cb31fc0304f52984bad6ce65027392a68d126cc9413063",
+    "run.py": "97310761ce10bfdbed2a07ce8f7fe646dcf4e1cc6e1a62475f1f64d451fe8019"
+  },
+  "binarySha256": "3a45c5cfb7ae3c464f5ebb8bd4bd4aaaad441e0b5b4c2a904952e105b03337a9",
+  "ownSimulator": "BCD8B967-4FE2-4074-A93C-33975DA6F172",
+  "error": "Preserved environment control did not finish; stop without negative launch",
+  "observedAt": "2026-11-11T18:02:15.723452+00:00"
+}

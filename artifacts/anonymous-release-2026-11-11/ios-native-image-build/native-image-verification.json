@@ -1,0 +1,31 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": false,
+  "storageTested": false,
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "sharpExecuted": true,
+    "nitroImported": true,
+    "apiStarted": false,
+    "storageTested": false,
+    "checks": {
+      "bcrypt": true,
+      "pngRgbaAlpha": true,
+      "webpAlphaAndSocialPng": true,
+      "exifRotateAndCover": true,
+      "fullAnimatedStats": true,
+      "corruptLaterFrameRejected": true
+    },
+    "versions": {
+      "vips": "8.18.7",
+      "sharp": "0.35.5"
+    },
+    "middleware": "function"
+  }
+}

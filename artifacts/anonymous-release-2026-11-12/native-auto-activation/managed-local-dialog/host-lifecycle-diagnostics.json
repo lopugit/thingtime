@@ -1,0 +1,74 @@
+[
+  {
+    "observedAt": 1794425545381,
+    "stage": "close-dispatch"
+  },
+  {
+    "observedAt": 1794425545381,
+    "stage": "close-event"
+  },
+  {
+    "observedAt": 1794425545383,
+    "stage": "close-cancel-pending"
+  },
+  {
+    "observedAt": 1794425545386,
+    "stage": "contents-destroyed"
+  },
+  {
+    "observedAt": 1794425545386,
+    "stage": "window-closed"
+  },
+  {
+    "observedAt": 1794425545386,
+    "stage": "relaunch-entry"
+  },
+  {
+    "observedAt": 1794425545386,
+    "stage": "restart-check"
+  },
+  {
+    "observedAt": 1794425545386,
+    "stage": "password-disconnect-start"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "password-disconnect-end"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "restart-check"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "supervisor-queue"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "supervisor-send-complete"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "quit-request"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "before-quit"
+  },
+  {
+    "observedAt": 1794425545929,
+    "stage": "services-close-start"
+  },
+  {
+    "observedAt": 1794425546209,
+    "stage": "services-close-end"
+  },
+  {
+    "observedAt": 1794425546209,
+    "stage": "quit-retry"
+  },
+  {
+    "observedAt": 1794425546209,
+    "stage": "before-quit"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByText('Password entry saved', { exact: true }) to be visible\n",
+  "errors": [],
+  "checks": [
+    "Same server entry ID read/save by other account returns404; server globally owns entry IDs",
+    "{\"rootUser\":\"6adfcde858634c57d36ed9de\",\"meUser\":\"6adfcde858634c57d36ed9de\",\"rootKeys\":[\"dataPlane\",\"envFromCookie\",\"dataEnvironment\",\"devKitEnv\",\"titlePrefix\",\"user\"]}",
+    "Held real root request after BroadcastChannel account invalidation clears selected entry, title and fields",
+    "Distinct registered accounts create separate encrypted device vaults; next account reads only own fields; same server ID access was refused"
+  ]
+}

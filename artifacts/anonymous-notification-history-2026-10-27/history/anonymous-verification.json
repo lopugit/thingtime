@@ -1,0 +1,24 @@
+{
+  "anonymous": true,
+  "offline": true,
+  "coldReload": true,
+  "nativeHistory": true,
+  "crossTabHistory": true,
+  "search": true,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "writes": [],
+  "errors": []
+}

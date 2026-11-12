@@ -1,0 +1,172 @@
+{
+  "observedAt": "2026-11-11T10:31:13.741Z",
+  "source": "docs/progress/anonymous-local-first.html",
+  "sourceSha256": "925f06989ee6d26f180ccdd94536110000934c9b8e9b074158825fc68a3ce50b",
+  "scope": "Read-only progress-plan HTML layout, derived counts, filters, search and in-page navigation",
+  "chromiumSandbox": true,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 33193,
+      "bottomReached": true,
+      "positionsChecked": 42,
+      "maxWidth": 1440,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 390,
+      "height": 68954,
+      "bottomReached": true,
+      "positionsChecked": 103,
+      "maxWidth": 390,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 320,
+      "height": 86211,
+      "bottomReached": true,
+      "positionsChecked": 128,
+      "maxWidth": 320,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    }
+  ],
+  "requests": [
+    "http://127.0.0.1:63670/plan.html"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "artifacts": [
+    {
+      "name": "plan-1440-top.png",
+      "bytes": 254077,
+      "sha256": "2b3c899228d9d35b00ebcec74b037e36c5080d021d234af92520d9aca1f24c65"
+    },
+    {
+      "name": "plan-1440-bottom.png",
+      "bytes": 225159,
+      "sha256": "7abd2b450537eea29720fe72a3d51c6c485d38cc0ab4ffe6cee8f4de1c22dcb7"
+    },
+    {
+      "name": "plan-1440-counts.png",
+      "bytes": 254038,
+      "sha256": "24561c17d355509b9517c78e633a3d8447b5ca1c649071ea569c8ec54cf9e39f"
+    },
+    {
+      "name": "plan-390-top.png",
+      "bytes": 88096,
+      "sha256": "1511bd0aac5568a681ba42c1b5a8bee60bf4bf4d163cd48b0eb0a9e1b587721e"
+    },
+    {
+      "name": "plan-390-bottom.png",
+      "bytes": 63194,
+      "sha256": "1c0b600dc74b24447b45a419714310bd49e54a4b2c4229c0bb70bbe9e9f92297"
+    },
+    {
+      "name": "plan-390-counts.png",
+      "bytes": 77109,
+      "sha256": "c91430d13bcfec77be240cd7f2aa9b69f4c8c45f23a45fea822cdfec2f37c088"
+    },
+    {
+      "name": "plan-320-top.png",
+      "bytes": 88395,
+      "sha256": "4d6084325483420db6c525d8796a5a93967e4805a9e86d616f68f878ac97f238"
+    },
+    {
+      "name": "plan-320-bottom.png",
+      "bytes": 58869,
+      "sha256": "0d12eb95955efeaea3d40d432d5ccea68238295b87f42ccfc73681e43df6d4ba"
+    },
+    {
+      "name": "plan-320-counts.png",
+      "bytes": 70932,
+      "sha256": "32683b39f914848147f9af9781567aa0d4aeadea169b0ceb454b555b20dc1cee"
+    }
+  ],
+  "ok": true,
+  "browserClosed": true,
+  "serverClosed": true,
+  "chromiumVersion": "149.0.7827.55",
+  "counts": {
+    "total": 94,
+    "done": 65,
+    "local": 25,
+    "todo": 4,
+    "displayed": [
+      65,
+      25,
+      4
+    ]
+  }
+}

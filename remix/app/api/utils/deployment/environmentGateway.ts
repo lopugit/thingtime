@@ -34,12 +34,9 @@ export type MongoConnectionMode = 'proxy' | 'dedicated';
 /** Deployment configuration only; request headers cannot select database access. */
 export const getMongoConnectionMode = (env: Record<string, string | undefined> = process.env): MongoConnectionMode => {
   const mode = env.THINGTIME_MONGODB_CONNECTION_MODE;
-  if (mode === undefined) return mongoConnectionPolicy;
-  // Keep the positive comparison: TypeScript only narrows `string` to the
-  // literal union through `===`, so `mode !== 'proxy' && …` would leave the
-  // return type as plain `string`.
-  if (mode !== 'proxy' && mode !== 'dedicated') throw new GatewayUnavailable();
-  return mode;
+  if (mode === 'proxy' || mode === 'dedicated') return mode;
+  if (mode !== undefined) throw new GatewayUnavailable();
+  return mongoConnectionPolicy;
 };
 
 /** Vercel builds default to the gateway. Local/desktop standalone runtimes retain
@@ -136,6 +133,8 @@ export const createGatewayAuthority = (options: {
 
 let activeWork = 0;
 let draining = false;
+let activeDrains = 0;
+let shutdownReservation: object | null = null;
 let drainBarrier: Promise<unknown> = Promise.resolve();
 const drains = new Set<() => Promise<void>>();
 const finishDrain = () => {
@@ -143,11 +142,30 @@ const finishDrain = () => {
     draining = false;
     // A rollback may re-admit this worker while close is still pending. All
     // new work waits for close + cache eviction before opening a fresh pool.
-    drainBarrier = drainBarrier.then(() => Promise.allSettled([...drains].map(drain => drain())));
+    activeDrains++;
+    drainBarrier = drainBarrier.then(() => Promise.allSettled([...drains].map(drain => Promise.resolve().then(drain))))
+      .finally(() => { activeDrains--; });
   }
 };
 export const registerGatewayDrain = (drain: () => Promise<void>) => { drains.add(drain); return () => drains.delete(drain); };
+export class GatewayWorkUnavailable extends Error {
+  constructor() { super('The local API is finishing an update. Retry after it reopens.'); }
+}
+/** Includes detached jobs and pool drain completion, even without a gateway. */
+export const isGatewayWorkIdle = () => activeWork === 0 && activeDrains === 0 && !draining;
+/** The native host reserves admission synchronously with its HTTP/runtime gates.
+ * No caller input can acquire this in-process-only handle. */
+export const reserveGatewayWorkShutdown = () => {
+  if (shutdownReservation || !isGatewayWorkIdle()) return null;
+  const own = shutdownReservation = {};
+  return Object.freeze({
+    isCurrent: () => shutdownReservation === own && isGatewayWorkIdle(),
+    release: () => { if (shutdownReservation === own) shutdownReservation = null; }
+  });
+};
+export const GATEWAY_WORK_LIFECYCLE = Object.freeze({ version: '1.0.0', isIdle: isGatewayWorkIdle, reserveShutdown: reserveGatewayWorkShutdown });
 export const beginGatewayWork = () => {
+  if (shutdownReservation) throw new GatewayWorkUnavailable();
   activeWork++;
   let ended = false;
   return () => { if (!ended) { ended = true; activeWork--; finishDrain(); } };

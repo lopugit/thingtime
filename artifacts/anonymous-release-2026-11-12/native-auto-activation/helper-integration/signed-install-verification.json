@@ -1,0 +1,25 @@
+{
+  "identity": {
+    "hostIdentifier": "com.thingtime.passwords.dev.nativeautopr1000",
+    "providerIdentifier": "com.thingtime.passwords.dev.nativeautopr1000.provider",
+    "fixtureIdentifier": "com.thingtime.passwords.dev.nativeautopr1000.fixture",
+    "teamIdentifier": "6DQQ9V7C84",
+    "keychainGroup": "6DQQ9V7C84.com.thingtime.passwords.dev.nativeautopr1000",
+    "notificationName": "com.thingtime.passwords.dev.nativeautopr1000.destination-changed",
+    "urlScheme": "thingtime-password-dev-b3eba43c30a93d39e3a5bc63b0eddbfa5a7026af572ddf8d1a4771a2619aa51f"
+  },
+  "signingClass": "Apple Development",
+  "canonicalBuildExit": 0,
+  "hostDependencies": [
+    "ThingtimePasswordProvider"
+  ],
+  "productionSchemeExcludesFixture": true,
+  "hostSeedMarkerAbsent": true,
+  "separateFixtureSeedMarkerPresent": true,
+  "installedHost": "/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Passwords.app",
+  "installedFixture": "/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Password Fixture.app",
+  "installedSignaturesVerified": true,
+  "hostExecutableSha256": "542b8ff8af8cd23f1b784379180ce42defb0ca40b4482e390c0ddfc63133bbcf",
+  "fixtureExecutableSha256": "3ffe55faa43db49a8fcb854aad2a91ac641d07458d9e2f2e5086371405b32945",
+  "noRuntimeOperationYet": true
+}

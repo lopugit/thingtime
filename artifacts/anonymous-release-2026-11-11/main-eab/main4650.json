@@ -1,0 +1,26 @@
+{
+  "observedAt": "2026-11-11T10:31:13.551923+00:00",
+  "parent": "18a2646b835623675de24bfe80b91146de3a23cc",
+  "mergedMain": "4650f5af2ebeb7e32d7e9e58339b0b3a8bf851d1",
+  "scope": "PR1474 CORS docs and isolated synthetic browser test only; no application runtime changes",
+  "applicationSourceParity": {
+    "remix/app/docs/apiDocs.ts": true,
+    "remix/app/local-workspace/accountApi.client.ts": true,
+    "remix/app/local-workspace/accountApi.test.ts": true,
+    "remix/app/components/Things/ThingsPage.tsx": true,
+    "remix/app/hooks/useApi.tsx": true,
+    "remix/app/entry.client.tsx": true,
+    "remix/scripts/things-library-archive-acceptance.mjs": true
+  },
+  "addedScriptSyntaxCheck": {
+    "command": "node --check remix/scripts/test-password-file-download.mjs",
+    "exitCode": 0,
+    "browserTestExecutedThisCheckpoint": false
+  },
+  "runtimeEvidence": "verification.json",
+  "limitations": [
+    "Production bucket CORS was not changed or accepted.",
+    "New head CI and preview remain pending.",
+    "Separate automatic-activation and iOS-image work remains uncommitted WIP."
+  ]
+}

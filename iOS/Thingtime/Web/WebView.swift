@@ -21,6 +21,9 @@ struct WebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        if let rules = ThingtimeLocalRuntime.shared.offlineRules { configuration.userContentController.add(rules) }
+        #endif
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
@@ -54,7 +57,13 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
         context.coordinator.loadedRootURL = url
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        var developmentNavigation = URLRequest(url: url.appendingPathComponent("things"))
+        developmentNavigation.setValue(UUID().uuidString, forHTTPHeaderField: "X-Thingtime-Development-Navigation")
+        webView.load(developmentNavigation)
+        #else
         webView.load(URLRequest(url: url))
+        #endif
         return webView
     }
 
@@ -110,6 +119,9 @@ struct WebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        private var localWorkspaceFence = ThingtimeLocalWorkspaceFence()
+        #endif
         var loadedRootURL: URL?
         var shareComposer: ShareComposerBridge?
         func configureShareComposer(configuration: WKWebViewConfiguration, origin: URL) {
@@ -174,6 +186,10 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            #if THINGTIME_LOCAL_DEVELOPMENT
+            localWorkspaceFence.navigationStarted()
+            ThingtimeLocalRuntime.shared.recordNavigation("wk-provisional-start", url: webView.url)
+            #endif
             authenticatorSetup.navigationStarted()
             lidar.invalidate()
             // A background refresh may construct the initial web scene. Only a
@@ -201,7 +217,22 @@ struct WebView: UIViewRepresentable {
             return nil
         }
 
+        #if THINGTIME_LOCAL_DEVELOPMENT
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            ThingtimeLocalRuntime.shared.recordNavigation("wk-commit", url: webView.url)
+        }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            ThingtimeLocalRuntime.shared.recordNavigation("wk-provisional-failure", url: webView.url, error: error)
+        }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            ThingtimeLocalRuntime.shared.recordNavigation("wk-navigation-failure", url: webView.url, error: error)
+        }
+        #endif
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            #if THINGTIME_LOCAL_DEVELOPMENT
+            ThingtimeLocalRuntime.shared.recordNavigation("wk-finish", url: webView.url)
+            ThingtimeLocalRuntime.shared.observe(webView)
+            #endif
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
             if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }
@@ -236,6 +267,43 @@ struct WebView: UIViewRepresentable {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
                 return
             }
+            #if THINGTIME_LOCAL_DEVELOPMENT
+            if type == "local-workspace-status" || type == "local-workspace-initialize" {
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frame = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frame, root),
+                      let requestId = body["id"] as? String, UUID(uuidString: requestId) != nil,
+                      let nativeOrigin = ThingtimeLocalRuntime.shared.origin,
+                      ThingtimeLocalWorkspaceFence.allowsOrigin(nativeOrigin: nativeOrigin, selectedRoot: root, currentURL: current, frameURL: frame) else { return }
+                let snapshot = localWorkspaceFence.capture(url: current)
+                let initializing = type == "local-workspace-initialize"
+                let expected = body["payload"] as? [String: Any]
+                let expectedVersion = expected?["expectedVersion"] as? String
+                let expectedDocumentId = expected?["expectedDocumentId"] as? String
+                let expectedOrigin = expected?["expectedOrigin"] as? String
+                let exactOrigin = nativeOrigin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if initializing && (expectedOrigin != exactOrigin || !localWorkspaceFence.allowsInitialization(snapshot, currentURL: current, expectedVersion: expectedVersion, expectedDocumentId: expectedDocumentId)) { return }
+                Task { @MainActor [weak self, weak webView] in
+                    guard let self, let webView else { return }
+                    var proof = await ThingtimeLocalRuntime.shared.deviceHomeProof(store: webView.configuration.websiteDataStore)
+                    guard self.webView === webView, let live = webView.url, let selected = self.loadedRootURL,
+                          self.localWorkspaceFence.isCurrent(snapshot, currentURL: live),
+                          LopuVoiceContract.sameOrigin(live, root), LopuVoiceContract.sameOrigin(selected, root),
+                          ThingtimeLocalWorkspaceFence.allowsOrigin(nativeOrigin: nativeOrigin, selectedRoot: selected, currentURL: live, frameURL: frame) else { return }
+                    if initializing {
+                        guard expectedOrigin == exactOrigin, proof["canInitialize"] as? Bool == true,
+                              self.localWorkspaceFence.allowsInitialization(snapshot, currentURL: live, expectedVersion: expectedVersion, expectedDocumentId: expectedDocumentId) else { return }
+                        // No suspension between the final ownership check and mutation.
+                        ThingtimeLocalRuntime.shared.commitDeviceHomeSelection()
+                        proof["profile"] = "device-only"
+                    }
+                    proof["documentId"] = snapshot.documentId
+                    proof["requestId"] = requestId
+                    self.sendToWeb(type: "local-workspace-result", payload: proof)
+                }
+                return
+            }
+            #endif
             if type.hasPrefix("widget-") {
                 guard message.frameInfo.isMainFrame, let current = webView?.url, let root = loadedRootURL,
                       LopuVoiceContract.sameOrigin(current, root) else { return }

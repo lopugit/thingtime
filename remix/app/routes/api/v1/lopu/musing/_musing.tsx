@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { consumeLopuMusingQuota } from '~/api/utils/lopu/rateLimit';
 import { wishSlotMusing } from '~/api/utils/lopu/fallbacks';
@@ -64,7 +65,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const ownerId = viewer?.accountKind !== 'service' ? viewer?.id : undefined;
   const encoder = new TextEncoder();
   const body = new ReadableStream({
-    async start(controller) {
+    start: controller => withGatewayWork(async () => {
       try {
         for await (const ev of streamLopuMusing(ctx, { forceFallback, signal: request.signal, ownerId })) {
           controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
@@ -75,7 +76,7 @@ export const loader = async ({ request }: { request: Request }) => {
       } finally {
         controller.close();
       }
-    }
+    })
   });
 
   return new Response(body, {

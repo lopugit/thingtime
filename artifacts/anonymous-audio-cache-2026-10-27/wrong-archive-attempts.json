@@ -1,0 +1,46 @@
+[
+  {
+    "attempt": 1,
+    "actualArchiveSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+    "expectedArchiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+    "acceptance": false,
+    "reason": "Runner erroneously loaded legacy post-draft archive; retained only as harness diagnostics",
+    "cleanup": {
+      "session": "a8acad30-e117-4e6d-a72a-83a96001e31b",
+      "remaining": ""
+    }
+  },
+  {
+    "attempt": 2,
+    "actualArchiveSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+    "expectedArchiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+    "acceptance": false,
+    "reason": "Runner erroneously loaded legacy post-draft archive; retained only as harness diagnostics",
+    "cleanup": {
+      "session": "dad81cbc-336c-4fa2-8b7c-5695760ad020",
+      "remaining": ""
+    }
+  },
+  {
+    "attempt": 3,
+    "actualArchiveSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+    "expectedArchiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+    "acceptance": false,
+    "reason": "Runner erroneously loaded legacy post-draft archive; retained only as harness diagnostics",
+    "cleanup": {
+      "session": "f37006fd-82e6-4185-ab18-fea2ebf8cd9e",
+      "remaining": ""
+    }
+  },
+  {
+    "attempt": 4,
+    "actualArchiveSha256": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5",
+    "expectedArchiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+    "acceptance": false,
+    "reason": "Runner erroneously loaded legacy post-draft archive; retained only as harness diagnostics",
+    "cleanup": {
+      "session": "d7c1d3be-777b-4460-b7af-cb92812c0497",
+      "remaining": ""
+    }
+  }
+]

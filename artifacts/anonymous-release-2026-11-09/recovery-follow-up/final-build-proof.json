@@ -1,0 +1,37 @@
+{
+  "head": "af8c52540cb3dd81d962feb7897168d6da81ae7c",
+  "buildCommand": "corepack pnpm --dir remix run build",
+  "buildExitCode": 0,
+  "sourceBefore": {
+    "remix/app/local-workspace/accountSync.ts": "0b38d51955127fc80a9d42087e39c94dfdeb4045044e54c5c3d0c8097e506474",
+    "remix/app/local-workspace/accountFiles.ts": "1f086554d3ec08538cde474d4a1da2f102fae6f69a88113620543c839ec843f6",
+    "remix/app/local-workspace/accountTimelineVersions.ts": "fe3f0172c9c77d76ac968e390e725e7e7bdbaa0aa0b0a7263f9812c32f04b59e",
+    "remix/app/local-workspace/accountApi.client.ts": "279d6cc3af5600b427928a8714db95bf6392756ceb6f988f79ed9a492b7a9f9b",
+    "remix/app/local-workspace/things.ts": "78d33751f8acb17fbd2935dddc71d8cce9b0b9582a6c97b8025055728a5dbf26",
+    "remix/app/local-workspace/accountHistoryBoundRecovery.test.ts": "995735e75e9d036da0f281d434bf6881048d98bdc2ae3494ec81948c5677b6dc",
+    "remix/app/local-workspace/accountTimelineRecovery.browser.test.ts": "8ed3cd5f2255ef1346b216e7010ca1ef91e4b18d94c3e30dd43cfce4fb99f7da"
+  },
+  "sourceAfter": {
+    "remix/app/local-workspace/accountSync.ts": "0b38d51955127fc80a9d42087e39c94dfdeb4045044e54c5c3d0c8097e506474",
+    "remix/app/local-workspace/accountFiles.ts": "1f086554d3ec08538cde474d4a1da2f102fae6f69a88113620543c839ec843f6",
+    "remix/app/local-workspace/accountTimelineVersions.ts": "fe3f0172c9c77d76ac968e390e725e7e7bdbaa0aa0b0a7263f9812c32f04b59e",
+    "remix/app/local-workspace/accountApi.client.ts": "279d6cc3af5600b427928a8714db95bf6392756ceb6f988f79ed9a492b7a9f9b",
+    "remix/app/local-workspace/things.ts": "78d33751f8acb17fbd2935dddc71d8cce9b0b9582a6c97b8025055728a5dbf26",
+    "remix/app/local-workspace/accountHistoryBoundRecovery.test.ts": "995735e75e9d036da0f281d434bf6881048d98bdc2ae3494ec81948c5677b6dc",
+    "remix/app/local-workspace/accountTimelineRecovery.browser.test.ts": "8ed3cd5f2255ef1346b216e7010ca1ef91e4b18d94c3e30dd43cfce4fb99f7da"
+  },
+  "assets": {
+    "remix/.vercel/output/static/index.html": "cf273daaf8e3b06264646a02f1fa4f1a5e7c5f10bc92859d1753e7e96977e402",
+    "remix/.vercel/output/static/draft-preview/runner.js": "021173e86f867265b34e6b555392b7c66b142e630883c0739b9abf0aa5eea2e4",
+    "remix/.vercel/output/static/platform/runtime.js": "7a59a77625c7e7d5bf4ee46bae48bd715d5306c764ad050825b495d85831d198",
+    "remix/.vercel/output/functions/__server.func/index.mjs": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722"
+  },
+  "buildLogSha256": "4b8dd5663e1891abe00e826c6cec1ab5ef1429856a3e3bc2c63c71cbc98088f4",
+  "postBuildTestOnlyEdits": {
+    "description": "Only test fixtures changed after the canonical build; production source and compiled output remained frozen.",
+    "hashes": {
+      "remix/app/local-workspace/accountHistoryBoundRecovery.test.ts": "981d185b81a8d8a13eb35fdf548a12ffc2fe29302ef7295b6b49b4e0d52d6f13",
+      "remix/app/local-workspace/accountTimelineRecovery.browser.test.ts": "1b1fb6913d15d98c064cbc086f37f69f7981e0acc4f5ee9a3089f4f369f5dbe8"
+    }
+  }
+}

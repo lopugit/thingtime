@@ -1,0 +1,280 @@
+import { createQuotaFactory, TEST_STORAGE_CAPACITY } from './storageTestFixture';
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createHash } from 'node:crypto';
+import { IDBKeyRange } from 'fake-indexeddb';
+import { AccountDiscussionCache } from './accountDiscussions';
+import { AccountFileSync, type AccountFileRetentionTransport } from './accountFiles';
+import { WorkspaceDatabase, type WorkspaceTransaction } from './storage';
+const scope = { kind: 'account' as const, ownerId: 'owner', origin: 'https://files.test', dataPlane: 'home' };
+function fixture(capacity = TEST_STORAGE_CAPACITY.bytes) {
+ const db = new WorkspaceDatabase(createQuotaFactory({bytes: capacity}), undefined, undefined, IDBKeyRange);
+ let now = Date.parse('2026-10-17T00:00:00Z'), retired = false;
+ const lease = { assertCurrent() { if (retired) throw new Error('Retired'); }, onInvalidate: () => () => {} };
+ const files = new AccountFileSync(db, scope, lease, () => now), bytes = new TextEncoder().encode('Previously uploaded file bytes');
+ const remote = { ok: true, cacheKey: 'a'.repeat(64) + ':original', size: bytes.length, file: { purpose: 'file' as 'file' | 'recording', ownerId: scope.ownerId, updatedAt: new Date(now).toISOString(), folderId: null as string | null,
+  attachment: { id: 'account-file', name: 'existing.txt', size: bytes.length, contentType: 'text/plain', mediaKind: 'file', title: 'Original title' } } };
+ const calls: any[] = [];
+ const transport = {
+  retention: async () => structuredClone(remote), bytes: async () => { calls.push('read'); return new Blob([bytes]); },
+  start: async () => { throw Error('Retained files must never upload'); }, parts: async () => { throw Error('Must not request parts'); }, put: async () => { throw Error('Must not PUT'); }, complete: async () => { throw Error('Must not complete'); },
+  get: async () => ({ id: remote.file.attachment.id, author: { id: scope.ownerId }, thingtime: ['attachment'], crystal: remote.file.attachment, folderId: remote.file.folderId, updatedAt: remote.file.updatedAt }),
+  annotate: async (input: any) => { calls.push(input); assert.equal(input.id, remote.file.attachment.id); assert.equal(input.expectedUpdatedAt, remote.file.updatedAt); for (const key of ['title','description','filenamePreview']) if (key in input) (remote.file.attachment as any)[key] = input[key]; remote.file.updatedAt = new Date(++now).toISOString(); return { attachment: remote.file.attachment, updatedAt: remote.file.updatedAt }; },
+  move: async () => { throw Error('Unexpected move'); },
+  remove: async (input: any) => { calls.push(input); assert.equal(input.retainReceipt, true); assert.equal(input.requestId, undefined); return { deleted: true as const, deferred: false }; }
+ };
+ return { db, files, bytes, remote, transport, calls, lease, advance() { now += 1000; }, retire() { retired = true; } };
+}
+test('retained account files use canonical metadata, scoped bytes and existing edit/delete queues without uploading', async () => {
+ const f = fixture();
+ try {
+  const { row, changed } = await f.files.retain(f.transport, 'account-file'); assert.equal(changed, true);
+  assert.match(row.id, /^local-file-account-/); assert.equal(row.localAttachment.requestId, undefined);
+  assert.equal(row.crystal.title, 'Original title'); assert.equal(await f.files.remoteId(row.id), 'account-file');
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes); assert.equal((await f.files.sync(f.transport)).completed, 0);
+  assert.deepEqual(f.calls, ['read']); assert.equal((await f.files.library()).aliases.get('account-file'), row.id);
+  for (const other of [{...scope,ownerId:'other'},{...scope,dataPlane:'other'},{...scope,origin:'https://other.test'}]) assert.equal((await new AccountFileSync(f.db,other,f.lease).library()).things.length,0);
+  f.advance(); await f.files.things.annotateFile({ id: row.id, title: 'Edited offline' });
+  await f.files.sync(f.transport); assert.equal(f.remote.file.attachment.title,'Edited offline');
+  assert.equal(f.calls.filter((c: unknown) => typeof c === 'object' && c !== null && 'title' in c).length,1);
+  await f.files.remove(row.id); assert.equal((await f.files.library()).things.length,0);
+  await assert.rejects(f.files.retain(f.transport,'account-file'), /deleted/);
+  await f.files.sync(f.transport); assert.equal((await f.files.library()).aliases.get('account-file'),null);
+  await f.db.transaction(scope,'readonly',f.lease, async tx => { assert.equal(await tx.getBytes(row.id),undefined); assert.equal((await tx.list('account-files')).length,1); });
+ } finally { await f.db.close(); }
+});
+test('retention reconciles clean remote details while preserving offline edits and immutable operations', async () => {
+ const f=fixture();
+ try {
+  const {row}=await f.files.retain(f.transport,'account-file'); f.advance();
+  f.remote.file.attachment.title='New account title'; f.remote.file.updatedAt='2026-10-17T00:00:01.000Z';
+  assert.equal((await f.files.retain(f.transport,'account-file')).row.crystal.title,'New account title');
+  assert.deepEqual(f.calls,['read'],'Unchanged immutable bytes are read from scoped storage');
+  await f.files.things.annotateFile({id:row.id,title:'Local title'}); f.advance();
+  (f.remote.file.attachment as any).description='Account description'; f.remote.file.updatedAt='2026-10-17T00:00:02.000Z';
+  assert.equal((await f.files.retain(f.transport,'account-file')).row.crystal.title,'Local title');
+  await f.files.sync(f.transport);
+  const local=(await f.files.views([row.id]))[0]; assert.equal(local.crystal.title,'Local title'); assert.equal(local.crystal.description,'Account description');
+  assert.equal(f.remote.file.attachment.title,'Local title');
+ } finally {await f.db.close();}
+});
+test('foreign, linked or malformed descriptors never persist bytes or create upload intent', async () => {
+ for(const mutate of [ (r:any)=>delete r.file.purpose, (r:any)=>r.file.purpose='post', (r:any)=>r.file.ownerId='foreign', (r:any)=>r.file.attachment.url='https://foreign.test/file', (r:any)=>r.size++, (r:any)=>r.cacheKey='url-secret', (r:any)=>r.file.updatedAt='bad', (r:any)=>{r.size=r.file.attachment.size=Number.MAX_SAFE_INTEGER+1;} ]) {
+  const f=fixture(); try {mutate(f.remote);await assert.rejects(f.files.retain(f.transport,'account-file')); assert.deepEqual(f.calls,[]); assert.deepEqual(await f.files.status(),[]); assert.deepEqual((await f.files.library()).things,[]);} finally {await f.db.close();}
+ }
+});
+test('truncation, changed snapshots, retirement and quota failures leave no partial retention', async () => {
+ for(const mode of ['truncated','changed','retired','quota']) {
+  const f=fixture(); try {
+   const transport:AccountFileRetentionTransport={...f.transport,bytes:async()=>{
+    if(mode==='changed')f.remote.file.updatedAt='2026-10-17T00:00:01.000Z';
+    if(mode==='retired')f.retire(); return mode==='truncated'?f.bytes.slice(1):f.bytes;
+   }};
+   if(mode==='quota')await f.db.transaction(scope,'readwrite',f.lease,async tx=>{for(let i=0;i<4;i++)await tx.putBytes('fill-'+i,new Uint8Array(16*1024*1024));});
+   await assert.rejects(f.files.retain(transport,'account-file'));
+   if(mode!=='retired') {assert.equal((await f.files.library()).things.length,0);assert.deepEqual(await f.files.metadata.status(),[]);assert.deepEqual(await f.files.status(),[]);}
+  }finally{await f.db.close();}
+ }
+});
+test('cross-tab retention converges on one identity and rejects changed immutable bytes', async () => {
+ const f=fixture(); try {
+  const other=new AccountFileSync(f.db,scope,f.lease);
+  const [a,b]=await Promise.all([f.files.retain(f.transport,'account-file'),other.retain(f.transport,'account-file')]);
+  assert.equal(a.row.id,b.row.id); assert.equal((await f.files.library()).things.length,1);
+  await f.db.transaction(scope,'readonly',f.lease,async tx=>assert.equal((await tx.list('account-files')).length,1));
+  f.advance(); f.remote.cacheKey='b'.repeat(64)+':original';
+  await assert.rejects(f.files.retain(f.transport,'account-file'),/bytes or identity changed/);
+  assert.deepEqual((await f.files.readFile(a.row.id)).bytes,f.bytes);
+ }finally{await f.db.close();}
+});
+test('retention coalesces reads and cannot resurrect a file deleted in flight', async () => {
+ const f=fixture(); try {
+  const {row}=await f.files.retain(f.transport,'account-file'); f.advance();
+  let resume!:()=>void, entered!:()=>void; const ready=new Promise<void>(r=>{entered=r;}), hold=new Promise<void>(r=>{resume=r;});let reads=0;
+  const transport={...f.transport,retention:async()=>{reads++;entered();await hold;return structuredClone(f.remote);}};
+  const a=f.files.retain(transport,'account-file'), b=f.files.retain(transport,'account-file');
+  await ready;await f.files.remove(row.id);resume();await assert.rejects(a,/deleted/);await assert.rejects(b,/deleted/);assert.equal(reads,1);assert.equal((await f.files.library()).things.length,0);
+ }finally{await f.db.close();}
+});
+test('retention admits at most three distinct files at once and releases admission after failure', async () => {
+ const f=fixture(); let resume!:()=>void;
+ const hold=new Promise<void>(r=>{resume=r;});
+ const transport={...f.transport,retention:async()=>{await hold;throw Error('Unavailable');}};
+ try {
+  const pending=['a','b','c'].map(id=>assert.rejects(f.files.retain(transport,id),/Unavailable/));
+  await assert.rejects(f.files.retain(transport,'d'),/Other files/); resume(); await Promise.all(pending);
+  assert.equal((await f.files.retain(f.transport,'account-file')).changed,true);
+ }finally{resume();await f.db.close();}
+});
+test('an upload completed while retention reads bytes keeps its original local identity and request', async () => {
+ const f=fixture();
+ try {
+  const requestId=crypto.randomUUID();
+  const local=await f.files.things.saveFile({requestId,name:'existing.txt',contentType:'text/plain',bytes:f.bytes,purpose:'file'});
+  let resume!:()=>void,entered!:()=>void;const hold=new Promise<void>(r=>{resume=r;}),ready=new Promise<void>(r=>{entered=r;});
+  const retaining=f.files.retain({...f.transport,bytes:async()=>{entered();await hold;return f.bytes;}},'account-file');
+  await ready;
+  assert.equal((await f.files.sync({...f.transport,start:async()=>({id:'account-file',partSizeBytes:f.bytes.length,partCount:1}),parts:async(_id,parts)=>parts.map(part=>({...part,url:'https://storage.test/part',headers:{},expiresAt:'2026-10-18'})),put:async()=>{},complete:async()=>f.remote.file.attachment as any})).completed,1);
+  resume(); assert.equal((await retaining).row.id,local.id);
+  assert.equal((await f.files.library()).things.length,1);
+  await f.db.transaction(scope,'readonly',f.lease,async tx=>{const records=await tx.list<any>('account-files');assert.equal(records.length,1);assert.equal(records[0].value.request.requestId,requestId);assert.equal(records[0].value.source,undefined);});
+ }finally{await f.db.close();}
+});
+test('conflicting account and offline edits remain reviewable after retention refresh', async () => {
+ const f=fixture();try{
+  const {row}=await f.files.retain(f.transport,'account-file');
+  await f.files.things.annotateFile({id:row.id,title:'Local title'});f.advance();
+  f.remote.file.attachment.title='Concurrent account title';f.remote.file.updatedAt='2026-10-17T00:00:01.000Z';
+  await f.files.retain(f.transport,'account-file');await f.files.sync(f.transport);
+  assert.equal((await f.files.status())[0].state,'conflict');
+  assert.equal((await f.files.views([row.id]))[0].crystal.title,'Local title');assert.equal(f.remote.file.attachment.title,'Concurrent account title');
+  assert.equal(f.calls.filter(c=>typeof c==='object').length,0);
+ }finally{await f.db.close();}
+});
+test('retained existing files can be removed at the exact device quota', async () => {
+ const f=fixture();try{
+  const {row}=await f.files.retain(f.transport,'account-file');
+  await f.db.transaction(scope,'readwrite',f.lease,async tx=>{let remaining=TEST_STORAGE_CAPACITY.bytes-(await tx.usage()).bytes,index=0;while(remaining){const size=Math.min(remaining,TEST_STORAGE_CAPACITY.binaryBytes);await tx.putBytes('fill-'+index++,new Uint8Array(size));remaining-=size;}});
+  await f.files.remove(row.id);await f.files.sync(f.transport);
+  assert.deepEqual(await f.files.status(),[]);assert.equal((await f.files.library()).aliases.get('account-file'),null);
+ }finally{await f.db.close();}
+});
+test('aborting during the final storage transaction rolls back retained bytes, metadata and alias', async () => {
+ const f=fixture(),controller=new AbortController(),original=f.db.transaction.bind(f.db);
+ f.db.transaction=async(scope,mode,lease,run)=>original(scope,mode,lease,async tx=>run(mode==='readwrite'?{
+  ...tx,putBlob:async(...args:Parameters<WorkspaceTransaction['putBlob']>)=>{await tx.putBlob(...args);controller.abort();}
+ }:tx));
+ try{
+  await assert.rejects(f.files.retain(f.transport,'account-file',controller.signal));
+  f.db.transaction=original;
+  await f.db.transaction(scope,'readonly',f.lease,async tx=>{assert.equal((await tx.usage()).records,0);});
+ }finally{await f.db.close();}
+});
+
+test('retained originals stay native Blobs through reopen, reauthorization and export with bounded hashing', async context => {
+ const f = fixture(128 * 1024 * 1024), block = new Uint8Array(1024 * 1024).fill(137), hash = createHash('sha256');
+ const blob = new Blob(Array.from({length: 70}, () => { hash.update(block); return block; }));
+ const expected = hash.digest('hex'), original = Blob.prototype.arrayBuffer;
+ let reads = 0;
+ context.mock.method(Blob.prototype, 'arrayBuffer', function(this: Blob) {
+  assert.ok(this.size <= 1024 * 1024, 'Retaining and exporting must not materialize a whole original');
+  return original.call(this);
+ });
+ f.remote.size = f.remote.file.attachment.size = blob.size;
+ const transport = {...f.transport, bytes: async () => { reads++; return blob; }};
+ try {
+  const {row} = await f.files.retain(transport, 'account-file');
+  await f.db.close();
+  const reopened = await f.files.readFileBlob(row.id);
+  assert.ok(reopened.snapshot.value instanceof Blob); assert.equal(reopened.blob.size, blob.size);
+  assert.equal(reopened.row.localAttachment.sha256, expected);
+  f.advance(); await f.files.retain(transport, 'account-file');
+  assert.equal(reads, 1, 'Fresh descriptors reauthorize existing immutable Blobs');
+  const exported = await f.files.things.export([row.id]);
+  assert.equal(exported.manifest.files[0].sha256, expected);
+  assert.ok([...exported.files.values()].every(file => file instanceof Blob));
+  await f.db.transaction(scope, 'readonly', f.lease, async tx => {
+   const records = await tx.list<any>('account-files');
+   assert.equal(records.length, 1); assert.equal(records[0].value.request.requestId, undefined);
+   assert.equal(records[0].value.source, 'account'); assert.equal(records[0].value.state, 'synced');
+  });
+ } finally { await f.db.close(); }
+});
+
+for (const failure of ['cancel', 'retire'] as const) test(`retention ${failure} during chunk hashing admits no partial file`, async context => {
+ const f = fixture(), controller = new AbortController(), blob = new Blob([new Uint8Array(2 * 1024 * 1024)]);
+ f.remote.size = f.remote.file.attachment.size = blob.size;
+ const original = Blob.prototype.arrayBuffer;
+ context.mock.method(Blob.prototype, 'arrayBuffer', async function(this: Blob) {
+  const bytes = await original.call(this);
+  if (failure === 'cancel') controller.abort(); else f.retire();
+  return bytes;
+ });
+ try {
+  await assert.rejects(f.files.retain({...f.transport, bytes: async () => blob}, 'account-file', controller.signal));
+  await f.db.transaction(scope, 'readonly', {assertCurrent() {}, onInvalidate: () => () => {}}, async tx => {
+   assert.deepEqual(await tx.usage(), {records: 0, bytes: 0});
+  });
+ } finally { await f.db.close(); }
+});
+
+
+test('retained recordings keep purpose, edit offline and delete with an existing-ID receipt without uploads',async()=>{
+ const f=fixture();try{
+  f.remote.file.purpose='recording';
+  const {row}=await f.files.retain(f.transport,'account-file');
+  assert.equal(row.localAttachment.purpose,'recording');assert.equal(row.localAttachment.requestId,undefined);
+  assert.deepEqual((await f.files.readFile(row.id)).bytes,f.bytes);
+  await f.files.things.annotateFile({id:row.id,title:'Offline recording'});await f.files.sync(f.transport);
+  assert.equal(f.remote.file.attachment.title,'Offline recording');
+  f.remote.file.purpose='file';f.advance();await assert.rejects(f.files.retain(f.transport,'account-file'),/identity changed/);
+  assert.equal((await f.files.views([row.id]))[0].localAttachment.purpose,'recording');
+  await f.files.remove(row.id);assert.equal((await f.files.library()).things.length,0);await f.files.sync(f.transport);
+  assert.equal(f.calls.at(-1).retainReceipt,true);assert.equal(f.calls.at(-1).requestId,undefined);
+  await assert.rejects(f.files.readFile(row.id));
+ }finally{await f.db.close();}
+});
+
+for (const purpose of ['file', 'recording'] as const) for (const concurrent of [false, true])
+test(`${purpose} deletion after unsynced local edits ${concurrent ? 'reviews unrelated account changes' : 'does not wait for metadata sync'}`, async () => {
+ const f = fixture(); try {
+  f.remote.file.purpose = purpose;
+  const {row} = await f.files.retain(f.transport, 'account-file');
+  await f.files.things.annotateFile({id: row.id, title: 'Unsynced local name'});
+  if (concurrent) { f.remote.file.attachment.title = 'Another device name'; f.remote.file.updatedAt = '2026-10-17T00:00:02.000Z'; }
+  await f.files.remove(row.id);
+  await f.files.sync(f.transport);
+  const writes = f.calls.filter(call => typeof call === 'object');
+  if (concurrent) {
+   assert.equal((await f.files.status())[0].state, 'conflict'); assert.deepEqual(writes, []);
+   const review = await f.files.inspectDeletion(f.transport, row.id);
+   assert.equal(review.local.title, 'Unsynced local name'); assert.equal(review.remote.metadata.title, 'Another device name');
+  } else {
+   assert.deepEqual(await f.files.status(), []); assert.equal(writes.length, 1);
+   assert.equal(writes[0].retainReceipt, true); assert.equal(writes[0].expectedUpdatedAt, f.remote.file.updatedAt);
+   assert.equal(f.remote.file.attachment.title, 'Original title', 'No metadata write is required before deletion');
+  }
+ } finally { await f.db.close(); }
+});
+
+
+for (const status of [401, 403, 404, 410, 503]) test(`file retention ${status} preserves edits and only definitive descriptor refusals fence bytes`, async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file');
+  await f.files.things.annotateFile({ id: row.id, title: 'Unsynced title' }); f.advance();
+  await assert.rejects(f.files.retain({ ...f.transport, retention: async () => { throw { status }; } }, 'account-file'));
+  if ([403,404,410].includes(status)) await assert.rejects(f.files.readFile(row.id), /no longer available/);
+  else assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+  assert.equal((await f.files.things.readFile(row.id)).row.crystal.title, 'Unsynced title');
+  f.advance(); await f.files.retain(f.transport, 'account-file');
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+  assert.equal((await f.files.views([row.id]))[0].crystal.title, 'Unsynced title');
+  assert.deepEqual(f.calls, ['read'], 'Fresh authorized descriptors may reuse identical scoped bytes without uploading');
+ } finally { await f.db.close(); }
+});
+
+test('a late retained-file response cannot undo a newer canonical refusal', async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file'); f.advance();
+  let calls = 0;
+  await assert.rejects(f.files.retain({ ...f.transport, retention: async () => {
+   if (++calls === 2) await new AccountDiscussionCache(f.db, scope, f.lease).forget('account-file', Date.parse('2026-10-17T00:00:01Z'));
+   return structuredClone(f.remote);
+  } }, 'account-file'), /no longer available/);
+  await assert.rejects(f.files.readFile(row.id), /no longer available/);
+  f.advance(); await f.files.retain(f.transport, 'account-file');
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+ } finally { await f.db.close(); }
+});
+
+
+test('a failed original-byte response is not a canonical descriptor refusal', async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file'); f.advance();
+  await f.db.transaction(scope, 'readwrite', f.lease, async tx => {
+   const record = await tx.get<any>('account-files', row.id); delete record.retainedKey; await tx.put('account-files', row.id, record);
+  });
+  await assert.rejects(f.files.retain({ ...f.transport, bytes: async () => { throw { status: 403 }; } }, 'account-file'));
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+ } finally { await f.db.close(); }
+});

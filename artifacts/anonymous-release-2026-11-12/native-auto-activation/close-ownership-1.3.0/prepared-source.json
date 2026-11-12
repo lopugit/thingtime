@@ -1,0 +1,46 @@
+{
+  "files": [
+    {
+      "path": "main.cjs",
+      "sha256": "64fb93729ec082f507444107228781c81c2492505fef21270fecbd15d67b123e",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "preload.cjs",
+      "sha256": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "lib/web-bundle-activation.cjs",
+      "sha256": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "lib/web-bundle-updates.cjs",
+      "sha256": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "lib/renderer-server.cjs",
+      "sha256": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "scripts/verify-web-bundle-auto-activation.mjs",
+      "sha256": "3cae71845885bd31d9d1972e72f591a068df96702f13130fc422656b100f9a4b",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "dist/web/metadata.json",
+      "sha256": "3ca8f08766f5be7401bcd3d4d7163c5ebc273152ff85aa2eb47bdcd5a78cf6d8",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "dist/web-integrity.json",
+      "sha256": "8bfab7b39b9f4d51560667ab07d642e91d7a03560393a3fef75f96ae9892aa25",
+      "matchesCurrentSource": true
+    }
+  ],
+  "exactMatch": true,
+  "webPayloadReused": true
+}

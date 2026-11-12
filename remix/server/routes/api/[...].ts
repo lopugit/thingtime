@@ -1,6 +1,7 @@
 import { runWithMongoConnectionFeature } from '../../../app/api/utils/mongodb/connectionTracker';
 import { publishMongoConnectionSnapshots } from '../../../app/api/utils/mongodb/connectionInventory';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
+import { isNativeHomeSelected, runNativeHomeRequest } from '../../utils/nativeHomeRuntime';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -22,6 +23,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/things/interactions': () => import('../../../app/routes/api/v1/things/interactions/_interactions'),
   'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
@@ -88,6 +90,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   [CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/register/_register'),
   [CHATGPT_OAUTH_RELAY_PATH.replace('/api/', '')]: () => import('../../../app/routes/api/v1/integrations/chatgpt/oauth/relay/_relay'),
   'v1/integrations/ci/route': () => import('../../../app/routes/api/v1/integrations/ci/route/_route'),
+  'v1/releases/native-web': () => import('../../../app/routes/api/v1/releases/native-web/_native-web'),
+  'v1/releases/native-web/content': () => import('../../../app/routes/api/v1/releases/native-web/content/_content'),
   'v1/integrations/ios-release': () => import('../../../app/routes/api/v1/integrations/ios-release/_ios-release'),
   'v1/integrations/ci/preview-retention': () => import('../../../app/routes/api/v1/integrations/ci/preview-retention/_preview-retention'),
   'v1/integrations/ci/credentials': () => import('../../../app/routes/api/v1/integrations/ci/credentials/_credentials'),
@@ -313,6 +317,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces/transfer': () => import('../../../app/routes/api/v1/subspaces/transfer/_transfer'),
   'v1/subspaces/update': () => import('../../../app/routes/api/v1/subspaces/update/_update'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
+  'v1/algorithms/sync': () => import('../../../app/routes/api/v1/algorithms/sync/_sync'),
+  'v1/themes/sync': () => import('../../../app/routes/api/v1/themes/sync/_sync'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),
@@ -432,6 +438,20 @@ export default defineHandler(async (event) => {
     return jsonResponse(createApiDocPayload(doc, new URL(event.req.url).origin));
   }
 
+  // Native composition is the sole account dispatch authority in this process.
+  // Its operation allowlist is checked before loading a route or reading a body.
+  // Do not enter Mongo telemetry, recovery, background dispatch or proxy scopes.
+  if (isNativeHomeSelected() && path !== 'v1/capabilities') {
+    return runNativeHomeRequest(event.req, { method, path }, async () => {
+      const load = routeModules[path];
+      if (!load) return new Response(null, { status: 404 });
+      const route = await load();
+      const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
+      if (!handler) return new Response(null, { status: 405 });
+      return normalizeResponse(await handler({ request: event.req }));
+    });
+  }
+
   // Fixed public provider artwork is an asset of the document origin. It
   // never reads the account, selected data plane, or fallback API.
   if (path === 'v1/connections/provider-icon') {
@@ -456,6 +476,7 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/releases/native-web' || path === 'v1/releases/native-web/content') return jsonResponse({ ok: false, code: 'release_origin_unavailable', error: 'Native releases require this configured API origin.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     if (path === 'v1/lopu/chats/reply' && event.req.headers.get('X-Thingtime-Device-Inference') === '1') {
       const origin = getApiFallbackOrigin();
       if (!origin) return unavailableLocalApiResponse();
@@ -508,8 +529,10 @@ export default defineHandler(async (event) => {
 	if (path === 'v1/capabilities') {
 		const { createApiCapabilitiesManifest } = await import('../../../app/docs/apiDocs');
 		const { getDeploymentDataEnvironment } = await import('../../../app/api/utils/deployment/dataEnvironment');
-		return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities'], getDeploymentDataEnvironment()), {
-      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' }
+		const { nativeHomeCapabilitySnapshot } = await import('../../utils/nativeHomeCapabilities');
+		const availability = await nativeHomeCapabilitySnapshot(new URL(event.req.url).origin);
+		return jsonResponse(createApiCapabilitiesManifest([...Object.keys(routeModules), 'v1/capabilities'], availability ? null : getDeploymentDataEnvironment(), availability), {
+      headers: { 'Cache-Control': availability ? 'private, no-store' : 'public, max-age=60, stale-while-revalidate=300' }
     });
   }
 

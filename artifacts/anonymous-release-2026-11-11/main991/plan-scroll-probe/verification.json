@@ -1,0 +1,10 @@
+{
+  "source": "docs/progress/anonymous-local-first.html",
+  "sourceSha256": "c1bb74c354fe8603bf740d97befd9dd3ee22dc8f40ea6c68939c788dd03a8853",
+  "scope": "Static progress plan in task-owned clean Chromium",
+  "viewports": [],
+  "errors": [],
+  "cleanup": true,
+  "passed": false,
+  "failure": "Test harness did not disable smooth scrolling before bottom-of-page assertion; no successful layout acceptance claimed."
+}

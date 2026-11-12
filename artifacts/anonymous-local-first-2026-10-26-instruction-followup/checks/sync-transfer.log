@@ -1,0 +1,22 @@
+✔ initial read failure recovers through the scheduled worker without an edit or focus event (37.738917ms)
+✔ a different tab holding the initial claim retains a retry without duplicate IO (8.004334ms)
+✔ anonymous and explicit-conflict workers do not schedule remote retries (13.034208ms)
+✔ oversized revisions survive reopen without timer retries and an edited revision resumes sync (598.565083ms)
+✔ acknowledging a lost reply resumes a newer device edit at normal transfer cadence (108.519042ms)
+✔ large frozen attempts resume after lost part, reload and newer edit; lost commit acknowledges without replay (6238.17975ms)
+✔ unchanged snapshots reuse durable content; cancelled reads never request a part (2525.7465ms)
+✔ identity retirement during a resumed part does not apply progress or receipt (491.876ms)
+✔ fresh device reads every immutable part with paced requests and validates the complete digest (1202.493958ms)
+✔ long reads renew their durable claim so a second tab cannot race the eventual upload (8.525ms)
+✔ rate-limited account reads retain exact local content and explain automatic backoff (72.218708ms)
+✔ seven-day expiry retires only its frozen attempt and resumes from a fresh reconciled snapshot (10475.573791ms)
+✔ explicit abort retires only its frozen attempt and resumes from a fresh reconciled snapshot (3455.11ms)
+✔ a changed account revision after transfer retirement requires review before a fresh upload (299.337334ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26337.285542

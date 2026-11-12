@@ -1,0 +1,167 @@
+{
+  "scope": "Source/actual iOS Simulator compile and profile fixtures; no full account runtime launch acceptance",
+  "sourceHashes": {
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4fbe3f737a545d42569dfc087290d765fca8f3aac320061b20dc9d4c08ddb21b",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "bc04680a0242e7d9c1b02cb5a08c541ac50a46ceac5da509ca6bfb4ff95b2a5c",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "2531caf2398b5acb9086f6efe28ad6e3e5db0bb7aa06f5c5ca3b54552559b2f0",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.h": "dd854d5626c7f2704d17e0f7d486d20ffed26ef07dfed4cc4532bd03cad7bbca",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalWorkspaceFence.swift": "7e14368d719663bb7a0a41317a29b068a09a260431529b18277cfa2a7153a388",
+    "iOS/scripts/local-development/entry.mjs": "a2aa98316542a70c9f3cf63ff9531c1e60ce162ef15b0160321c5d8048b9999a",
+    "iOS/scripts/local-development/native-home.mjs": "6f8fee95ed503575ef51e975c7b86d4a9c56957c7387bacd20e4068a40fce8ba",
+    "iOS/scripts/local-development/prepare.py": "b904a411036e8515cde19182e88e819d3ea2628ee4e156c3389117cf45fa6f71",
+    "iOS/scripts/local-development/run.py": "9da11e81c8cea33815762032204d5b9e2b06b5ec4a4aebb12d3e947c009139c0",
+    "iOS/scripts/local-development/README.md": "4481447a25d1ebebe87506b59ad39648d909753e480e2e62763b6dde5535aa3e",
+    "iOS/scripts/local-development/test-native-home.mjs": "6639be6fb28bffc35ba3b9291e5b50c2a741d6920d7c7ffaddbe9d39ac6a09c9",
+    "iOS/scripts/local-development/test-account-profile.swift": "aae4c20413ebf29f17a4860fbb9328b7e44e20b03930fb1cf5e45e4b8a5d52e7",
+    "iOS/scripts/local-development/account-profile-control/run.py": "81511569f68f466b0e797f3e0b218fe42cf831e57d3b57987a0f4ed48e3fab71",
+    "iOS/scripts/local-development/account-profile-control/main.swift": "997bc2be672520b3ca8e73a2620afc7bebb05da7da1bf2bf2680874f7ee94549"
+  },
+  "nativeCompile": {
+    "command": [
+      "xcodebuild",
+      "-project",
+      "/tmp/thingtime-ios-native-account-home-01/ThingtimeLocalDevelopment.xcodeproj",
+      "-scheme",
+      "ThingtimeLocalDevelopment",
+      "-configuration",
+      "Debug",
+      "-sdk",
+      "iphonesimulator",
+      "-destination",
+      "generic/platform=iOS Simulator",
+      "-derivedDataPath",
+      "/tmp/thingtime-ios-native-account-home-01/DerivedData",
+      "ARCHS=arm64",
+      "ONLY_ACTIVE_ARCH=YES",
+      "CODE_SIGNING_ALLOWED=NO",
+      "build"
+    ],
+    "returncode": 0,
+    "scope": "compile only; no application installation or launch"
+  },
+  "nativeSourceChangedDuringBuild": [],
+  "binarySha256": "9b11ff43504e00549f61348c6bc0393a7af657544da01c658e5eba6b46679202",
+  "builtAppInventory": {
+    "sha256": "8cd6ca1c05e9a5b4b92ad61d42c48af1c665652f60af060683a8486cbc037a39",
+    "files": 1854,
+    "bytes": 408839797
+  },
+  "builtLocalRuntimeInventory": {
+    "sha256": "e7ca41e2353e2d982914a361bb57b98564a9574c58db5eb672867ff11a622490",
+    "files": 1841,
+    "bytes": 278714491
+  },
+  "canonicalPayload": {
+    "canonicalFilesMatched": 1838,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "b891bb0e7055ddffc66cd118fbe4515f0aeed9d5b88e020c99131242d72afabc",
+      "files": 1838,
+      "bytes": 278697744
+    }
+  },
+  "currentBootstrapResourcesMatch": {
+    "entry.mjs": true,
+    "native-home.mjs": true
+  },
+  "parentPayload": {
+    "indexSha256": "5617e642b47a394b354effc21c3f36e0acfb00ccbdc24db421b4d25a204c058f",
+    "metadataSha256": "9b436b833c2668a94ea83af230f29469dd63f58655dfbc2d63d173b88e4c6ab4"
+  },
+  "nodeFocusedTests": {
+    "passed": 5,
+    "failed": 0,
+    "command": "node --test iOS/scripts/local-development/test-native-home.mjs iOS/scripts/local-development/test-environment.mjs"
+  },
+  "swiftProfileContract": {
+    "passed": true,
+    "realKeychain": false
+  },
+  "actualKeychainRetention": false,
+  "fullNodeNitroAccountAcceptance": false,
+  "simulatorControls": [
+    {
+      "receipt": "/tmp/thingtime-ios-protected-account-profile-01/verification.json",
+      "sha256": "d0c1936be0e331e094d91d33dd4e3c6917fe6e87b0c632aaed103dace1fb9c1c",
+      "passed": false,
+      "error": "xcrun: /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/iOS/scripts/local-development/account-profile-control/main.swift:4:1: error: 'main' attribute cannot be used in a module that contains top-level code\n 1 | import UIKit\n   | |- note: top-level code defined in this source file\n   | `- note: pass '-parse-as-library' to compiler invocation if this is intentional\n 2 | import CryptoKit\n 3 | \n 4 | @main final class ProfileControl: UIResponder, UIApplicationDelegate {\n   | `- error: 'main' attribute cannot be used in a module that contains top-level code\n 5 |     var window: UIWindow?\n 6 |     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {\n",
+      "cleanup": []
+    },
+    {
+      "receipt": "/tmp/thingtime-ios-protected-account-profile-02/verification.json",
+      "sha256": "a7387736ad171d9a8b968fbd1e88fa4519b711f51f7198fa268e6b2cf71f9771",
+      "passed": false,
+      "error": "[Errno 2] No such file or directory: '/Users/lopu/Library/Developer/CoreSimulator/Devices/75117864-1EEB-461F-B157-14350E17BFC7/data/Containers/Data/Application/200212DD-A152-4763-A1CA-A17916E250E0/Documents/receipt.json'",
+      "cleanup": [
+        {
+          "operation": "shutdown",
+          "returncode": 0
+        },
+        {
+          "operation": "delete",
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "receipt": "/tmp/thingtime-ios-protected-account-profile-03/verification.json",
+      "sha256": "a4df6c4936bbbd87d0ee0db9841b9d2c3ce7106854be612ae24d8750527a91ad",
+      "passed": false,
+      "error": "Profile control refused: initial",
+      "cleanup": [
+        {
+          "operation": "shutdown",
+          "returncode": 0
+        },
+        {
+          "operation": "delete",
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "receipt": "/tmp/thingtime-ios-protected-account-profile-04/verification.json",
+      "sha256": "10118aa96d110e0e734faae96a7c0b51f2dcfba960f2bf0420e99f9242d44a57",
+      "passed": false,
+      "error": "Profile control refused: initial",
+      "cleanup": [
+        {
+          "operation": "shutdown",
+          "returncode": 0
+        },
+        {
+          "operation": "delete",
+          "returncode": 0
+        }
+      ]
+    },
+    {
+      "receipt": "/tmp/thingtime-ios-protected-account-profile-05/verification.json",
+      "sha256": "d88092f8cd52aaf384064b81d923f304e672733b18294348b9c3ae0127b22d4e",
+      "passed": false,
+      "error": "xcrun: An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to launch com.thingtime.localaccountprofilecontrol.\nNo such process\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tApplication launch for 'com.thingtime.localaccountprofilecontrol' did not return a process handle nor launch error.\n\tNo such process\n",
+      "cleanup": [
+        {
+          "operation": "shutdown",
+          "returncode": 0
+        },
+        {
+          "operation": "delete",
+          "returncode": 0
+        }
+      ]
+    }
+  ]
+}

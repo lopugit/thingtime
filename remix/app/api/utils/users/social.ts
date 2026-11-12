@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
+import { nativeFriendIds, nativeGroupIds } from '../things/nativeAudienceReads';
 import { ObjectId } from 'mongodb';
 
 // The social graph is identity: follow/friend edges always live on the home
@@ -231,6 +233,8 @@ export const friendAction = async (
 // Accepted-friend ids of one user (both directions of the pair doc). Powers
 // the tt:userFriends acl circle (AclViewer.friendIds) and post fan-out.
 export const friendIdsOf = async (userId: string): Promise<Set<string>> => {
+  const native = getBoundThingsPersistence(null);
+  if (native) return nativeFriendIds(native, userId);
   const things = await getThingsCollection();
   const docs = await things
     .find({
@@ -253,6 +257,8 @@ export const friendIdsOf = async (userId: string): Promise<Set<string>> => {
 // docs carry targetId = the MEMBER's user id (api/utils/groups), so one query
 // on the existing (thingtime, targetId) access pattern answers.
 export const groupIdsOf = async (userId: string): Promise<Set<string>> => {
+  const native = getBoundThingsPersistence(null);
+  if (native) return nativeGroupIds(native, userId);
   const things = await getThingsCollection();
   const docs = await things
     .find({ thingtime: 'group-member', targetId: userId } as any)

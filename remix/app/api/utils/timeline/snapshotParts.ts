@@ -1,3 +1,4 @@
+import { timelinePersistence } from './persistence';
 import { createHash } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { TIMELINE_EVENT_MAX_BYTES, type TimelineSnapshot } from '../../../timeline/contract.ts';
@@ -51,11 +52,13 @@ export function timelineSnapshotPartFromDoc(doc: any): TimelineSnapshotPart {
 }
 
 export async function storeTimelineSnapshotParts(things: any, parts: TimelineSnapshotPart[], session: any, now: Date) {
+ if (!parts.length) return;
+ return timelinePersistence(things, session).guard(parts[0]?.ownerId, session, async () => {
  if (!session) throw new Error('Timeline snapshot parts require the content transaction');
  if (parts.length > 4096 || parts.some(part => part.ownerId !== parts[0].ownerId || part.eventId !== parts[0].eventId)) throw new Error('Snapshot parts must belong to one bounded event');
  for (let offset = 0; offset < parts.length; offset += 64) {
   const batch = parts.slice(offset, offset + 64).map(parseTimelineSnapshotPart);
-  const prior = await things.find({ ownerId: batch[0].ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: batch.map(part => timelineSnapshotPartThingId(part.ownerId, part.id)) } }, { session }).toArray();
+  const prior = await timelinePersistence(things, session).records(batch[0].ownerId, TIMELINE_SNAPSHOT_PART_KIND, batch.map(part => timelineSnapshotPartThingId(part.ownerId, part.id)));
   const existing = new Map(prior.map((doc: any) => { const part = timelineSnapshotPartFromDoc(doc); return [part.id, JSON.stringify(part)]; }));
   const insert = batch.filter(part => {
    if (!existing.has(part.id)) return true;
@@ -65,8 +68,9 @@ export async function storeTimelineSnapshotParts(things: any, parts: TimelineSna
    thingtime: [TIMELINE_SNAPSHOT_PART_KIND], acl: ['tt:user'], folderId: timelineFolderId(part.ownerId), parentId: timelineEventThingId(part.ownerId, part.eventId), targetId: timelineEventThingId(part.ownerId, part.eventId), crystal: {}, extended: null, tags: [],
    // The parent event meters these retained bytes exactly once.
    storageClass: 'control', timelineSnapshotPartVersion: 1, secure: toBin(JSON.stringify(part)), createdAt: now, updatedAt: now }));
-  if (insert.length) await things.insertMany(insert, { session });
+  if (insert.length) await timelinePersistence(things, session).insert(insert);
  }
+ });
 }
 
 export async function readTimelineSnapshot(things: any, ownerId: string, eventId: string, side: TimelineSnapshotSide, snapshot: TimelineSnapshot | null, session?: any): Promise<TimelineSnapshot | null> {
@@ -76,7 +80,7 @@ export async function readTimelineSnapshot(things: any, ownerId: string, eventId
  const pieces: string[] = [];
  for (let offset = 0; offset < reference.partCount; offset += 64) {
   const ids = Array.from({ length: Math.min(64, reference.partCount - offset) }, (_, index) => timelineSnapshotPartId(eventId, side, offset + index));
-  const docs = await things.find({ ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: ids.map(id => timelineSnapshotPartThingId(ownerId, id)) } }, session ? { session } : {}).toArray();
+  const docs = await timelinePersistence(things, session).records(ownerId, TIMELINE_SNAPSHOT_PART_KIND, ids.map(id => timelineSnapshotPartThingId(ownerId, id)));
   if (docs.length !== ids.length) throw new Error('Timeline snapshot parts are unavailable');
   const parts = new Map(docs.map((doc: any) => { const part = timelineSnapshotPartFromDoc(doc); return [part.id, part]; }));
   for (const id of ids) {

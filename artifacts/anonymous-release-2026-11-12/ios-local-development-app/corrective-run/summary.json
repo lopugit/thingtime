@@ -1,0 +1,22 @@
+{
+  "buildSucceeded": true,
+  "observedNativeRuntimeReady": true,
+  "uiAcceptancePassed": false,
+  "observedUiAssertions": [],
+  "declaredUiAssertions": [
+    "visible Things heading",
+    "New folder dialog create",
+    "shared Rename action edit",
+    "same Thing ID and edited name after reload"
+  ],
+  "missingUiReceipts": [
+    "ui-edit.json",
+    "webview.json"
+  ],
+  "observedFailure": "WKWebView main-frame provisional navigation timed out NSURLErrorDomain -1001; screenshot white",
+  "offlineWebViewEnforcementObserved": false,
+  "sourceToBinaryReproducibility": "unproven",
+  "signedAppEqualsInstalled": true,
+  "canonicalWebSourceEvidence": "../../native-integration-build/source-inventory.json",
+  "actualExecutedSourceHashesMatchCurrent": true
+}

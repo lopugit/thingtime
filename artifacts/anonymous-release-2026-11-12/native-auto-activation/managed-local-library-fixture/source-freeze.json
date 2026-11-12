@@ -1,0 +1,52 @@
+{
+  "format": 1,
+  "recordedAt": "2026-11-11T18:36:02.990622+00:00",
+  "head": "c039dee857dcd3558192111e956921395648cd69",
+  "status": "frozen-awaiting-parent-ios-slot-release",
+  "sourceHashes": {
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bc227f899829029cde4cecc571ef77a976627f7564d554c6f038ab39288eaa33",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "2cc0cca6abd61285991b8dd68661dbbb686bc4e095055e5de01ec8ec6aab82dc",
+    "electron/test/fixtures/native-auto-local.cjs": "0b86987ac6160cf6b107f0624173ff95e1663307b84fe84e3ddc785d2a997339",
+    "electron/test/native-auto-local.test.cjs": "5616f7fe51fa7c867a17c57de7383468cf2a04282b56b58c0a060234d9cc2f05"
+  },
+  "unchangedWebHashes": {
+    "electron/dist/web/.output/server/index.mjs": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50",
+    "electron/dist/web/metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "electron/dist/web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322"
+  },
+  "actualNewAppRun": false,
+  "webBuildRequired": false,
+  "tests": {
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0,
+    "command": "node --test electron/test/native-auto-local.test.cjs electron/test/password-helper-identity.test.cjs electron/test/web-bundle-activation.test.cjs",
+    "logSha256": "8baa7b79e8920b760c42a89e1f4447a89f2462b036e9e06b7f0d55d68f8a0011",
+    "syntaxAndDiffChecksPassed": true
+  },
+  "priorFailedReceipt": {
+    "path": "../managed-local-account/verification.json",
+    "sha256": "aa8f4b8852f299ec66bc6d313a1d3d68e0a6933b22c1b177bb4556ebe74c6ce7",
+    "homeAutomaticActivationStillOpen": true
+  },
+  "nextCommand": {
+    "cwd": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+    "environment": {
+      "THINGTIME_NATIVE_BUNDLE_QA": "1",
+      "THINGTIME_NATIVE_LOCAL_BUILD_READY": "1"
+    },
+    "executable": "node",
+    "arguments": [
+      "electron/scripts/verify-web-bundle-auto-activation.mjs",
+      "--local-api",
+      "--workspace=native-bundle-qa-auto-local-library-pr1000",
+      "--output=artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-library",
+      "--password-helper-app=/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Passwords.app",
+      "--password-fixture-app=/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers/Thingtime Password Fixture.app",
+      "--password-helper-host=com.thingtime.passwords.dev.nativeautopr1000",
+      "--password-helper-team=6DQQ9V7C84",
+      "--password-helper-signing-identity=Apple Development: lopudesigns@gmail.com (9BTZ4XB356)"
+    ]
+  },
+  "runBoundary": "One changed-fixture attempt only after explicit parent iOS-finished signal and byte/source revalidation."
+}

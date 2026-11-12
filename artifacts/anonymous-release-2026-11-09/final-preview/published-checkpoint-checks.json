@@ -1,0 +1,117 @@
+{
+  "baseRefName": "main",
+  "headRefName": "codex/anonymous-local-first",
+  "headRefOid": "4492bc7eaf8fdf577c88af513c03a98ccca984ae",
+  "isDraft": false,
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:04:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865244/job/129308200586",
+      "name": "native-pr-compile",
+      "startedAt": "2026-11-09T16:57:15Z",
+      "status": "COMPLETED",
+      "workflowName": "iOS TestFlight"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:11:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865508/job/129308251699",
+      "name": "control-plane / Analyze (actions)",
+      "startedAt": "2026-11-09T16:57:20Z",
+      "status": "COMPLETED",
+      "workflowName": "Lopu CodeQL all branches"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:05:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865506/job/129308600524",
+      "name": "control-plane / Build + typecheck ratchet + unit tests",
+      "startedAt": "2026-11-09T16:57:57Z",
+      "status": "COMPLETED",
+      "workflowName": "Web CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:11:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865508/job/129308251745",
+      "name": "control-plane / Analyze (javascript-typescript)",
+      "startedAt": "2026-11-09T16:57:20Z",
+      "status": "COMPLETED",
+      "workflowName": "Lopu CodeQL all branches"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T16:59:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865506/job/129308600644",
+      "name": "control-plane / API suite (headless /tests runner)",
+      "startedAt": "2026-11-09T16:57:57Z",
+      "status": "COMPLETED",
+      "workflowName": "Web CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T16:57:55Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865506/job/129308603628",
+      "name": "control-plane / needs.scope.outputs.full_web_ci == 'false' && 'Build + typecheck ratchet + unit tests' || 'Build required-context companion (not needed)'",
+      "startedAt": "2026-11-09T16:57:55Z",
+      "status": "COMPLETED",
+      "workflowName": "Web CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T16:57:55Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659865506/job/129308603289",
+      "name": "control-plane / needs.scope.outputs.full_web_ci == 'false' && 'API suite (headless /tests runner)' || 'API required-context companion (not needed)'",
+      "startedAt": "2026-11-09T16:57:55Z",
+      "status": "COMPLETED",
+      "workflowName": "Web CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T16:57:06Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659843566/job/129308201375",
+      "name": "control-plane / Lopu backfills current CodeQL snapshots for open PRs",
+      "startedAt": "2026-11-09T16:57:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Lopu PR manager"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:01:49Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/lopugit/thingtime/actions/runs/42659843566/job/129310829333",
+      "name": "control-plane / Apply Lopu CodeQL dispositions",
+      "startedAt": "2026-11-09T17:01:50Z",
+      "status": "COMPLETED",
+      "workflowName": "Lopu PR manager"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-09T17:11:14Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/lopugit/thingtime/runs/129316051810",
+      "name": "CodeQL",
+      "startedAt": "2026-11-09T17:11:05Z",
+      "status": "COMPLETED",
+      "workflowName": ""
+    },
+    {
+      "__typename": "StatusContext",
+      "context": "Vercel prebuilt (preview)",
+      "startedAt": "2026-11-09T17:01:17Z",
+      "state": "SUCCESS",
+      "targetUrl": "https://thingtime-7i7q4srza-lopugits-projects.vercel.app"
+    }
+  ],
+  "url": "https://github.com/lopugit/thingtime/pull/1000"
+}

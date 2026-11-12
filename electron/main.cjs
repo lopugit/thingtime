@@ -27,6 +27,12 @@ if (process.argv.includes('--password-agent-info')) {
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { startRendererServer } = require('./lib/renderer-server.cjs');
+const { createWebBundleStore } = require('./lib/web-bundle-store.cjs');
+const { createWebBundleLaunch } = require('./lib/web-bundle-launch.cjs');
+const { createWebBundleDownload } = require('./lib/web-bundle-download.cjs');
+const { createWebBundleUpdates } = require('./lib/web-bundle-updates.cjs');
+const { observeBundleLifecycle, BUNDLE_CANCELLATION_REASONS, acceptBundleActivationCheckpoint, bundleShutdownIdleState, projectBundleActivationEligibility, createBundleActivationDiagnosticReporter, queueDesktopRelaunch, sendBundleActivation, nativeBundleActivationAllowed, nativeRuntimeWorkLifecycle, reserveBundleShutdown, presentBundleWindow, createBundleWorkAdmission, BUNDLE_ACTIVATION_FEATURE, bundleActivationManifest, assertBundleActivationSender, createWebBundleActivation, closeForBundleActivation } = require('./lib/web-bundle-activation.cjs');
+const { validateTrustPolicy, createElectronBundleHost, assertElectronBundleMetadata } = require('../native-bundles/host.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
@@ -93,6 +99,105 @@ const macTitlebar = {
 let appOrigin = null;
 let activeContentOrigin = null;
 let webBuildMetadata = null;
+let selectedWebBundle = null;
+let webBundleLaunch = null;
+let webBundleUpdates = null;
+let webBundleActivation = null, bundleActivationTimer = null, bundleActivationContext = null;
+let bundleActivationRequest = null, bundleAutomaticUpdates = null, bundleRendererReady = false, automaticBundleClosing = false, bundleClosePending = false, bundleCloseAccepted = false;
+let bundledRendererServer = null, bundleShutdownReservation = null, localRuntimeInitialized = false;
+let bundleLastCheckpoint = null, bundleLastCancellation = null;
+let bundleLastActivity = Date.now();
+const bundleRendererRequests = new Set();
+const bundleWorkAdmission = createBundleWorkAdmission({ closing: () => bundleClosePending || bundleCloseAccepted, onStart: () => invalidateBundleActivation('host-work') });
+// Retained task launchers suppress stdout (which may contain email links), but
+// retain stderr diagnostics. Emit only this projected, credential-free record.
+const reportBundleActivation = createBundleActivationDiagnosticReporter({ emit: state => console.error('[thingtime:bundle-activation] ' + JSON.stringify(state)) });
+function reportBundleLifecycle(stage) {
+ try {
+  if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending')
+   observeBundleLifecycle(event => console.error('[thingtime:bundle-lifecycle] ' + JSON.stringify({ observedAt: Date.now(), ...event })), stage);
+ } catch { /* Diagnostic transport cannot affect shutdown. */ }
+}
+function reportBundleHttpActivity() {
+ try {
+  if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending' && bundledRendererServer?.snapshotActivity)
+   console.error('[thingtime:bundle-http] ' + JSON.stringify({ observedAt: Date.now(), ...bundledRendererServer.snapshotActivity() }));
+ } catch { /* Read-only diagnostics cannot affect admission or shutdown. */ }
+}
+function handleDesktopOperation(channel, handler) {
+ const discovery = ['thingtime-desktop:get-info', 'thingtime-desktop:renderer-ready', 'thingtime-desktop:bundle-update-policy', 'thingtime-desktop:bundle-activation-checkpoint'];
+ ipcMain.handle(channel, discovery.includes(channel) ? handler : bundleWorkAdmission.wrap(handler));
+}
+function invalidateBundleActivation(reason = 'host-changed') {
+ if (bundleActivationRequest) {
+  bundleLastCancellation = BUNDLE_CANCELLATION_REASONS.includes(reason) ? reason : 'host-changed';
+  try { if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') reportBundleActivation(bundleActivationDiagnostics()); }
+  catch { /* Optional observation cannot prevent the real cancellation. */ }
+ }
+ webBundleActivation?.cancel();
+}
+function noteBundleUserActivity() { bundleLastActivity = Date.now(); invalidateBundleActivation('host-input'); }
+function embeddedPlanRuntimeIdle() {
+ try {
+  const idle = Reflect.get(globalThis, Symbol.for('thingtime.chatgpt-plan.idle'));
+  return typeof idle === 'function' && idle() === true;
+ } catch { return false; }
+}
+function embeddedApiRuntimeWork() {
+ try { return nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle'))); }
+ catch { return null; }
+}
+function desktopWindowPresentationBlocked() {
+ return automaticBundleClosing || bundleClosePending || bundleCloseAccepted || desktopServicesClosing || desktopServicesClosed || authorityTransition.restarting;
+}
+function presentMainWindow() {
+ return presentBundleWindow({ blocked: desktopWindowPresentationBlocked(), window: mainWindow, origin: appOrigin, create: createWindow });
+}
+function embeddedShutdownIdle() {
+ const state = embeddedShutdownState();
+ return state.reserved ? state.reservation === 'idle' : state.http === 'idle' && state.chatgpt === 'idle' && state.runtime === 'idle';
+}
+function embeddedShutdownState() {
+ return bundleShutdownIdleState({ reservation: bundleShutdownReservation,
+  http: () => { const idle = bundledRendererServer?.isIdle; return typeof idle === 'function' ? idle.call(bundledRendererServer) : undefined; },
+  chatgpt: () => { const idle = Reflect.get(globalThis, Symbol.for('thingtime.chatgpt-plan.idle')); return typeof idle === 'function' ? idle() : undefined; },
+  runtime: () => nativeRuntimeWorkLifecycle(Reflect.get(globalThis, Symbol.for('thingtime.runtime-work.lifecycle')))?.isIdle() });
+}
+function releaseBundleShutdown() {
+ bundleShutdownReservation?.release(); bundleShutdownReservation = null;
+}
+function bundleActivationDiagnostics(allowClosing = false) {
+ const available = Boolean(mainWindow && !mainWindow.isDestroyed());
+ const state = projectBundleActivationEligibility({
+  closeAccepted: bundleCloseAccepted, closePending: bundleClosePending, allowClosing,
+  nativeAuthority: nativeBundleActivationAllowed({ initialized: localRuntimeInitialized, runtime: localRuntime, activity: embeddedApiRuntimeWork() }),
+  automaticUpdates: bundleAutomaticUpdates === true, rendererReady: bundleRendererReady,
+  windowAvailable: available, windowFocused: available ? mainWindow.isFocused() : null,
+  servicesClosing: desktopServicesClosing, servicesClosed: desktopServicesClosed, authorityActive: authorityTransition.active,
+  idleInterval: Date.now() - bundleLastActivity >= 30000,
+  counts: { otherWindows: BrowserWindow.getAllWindows().filter(window => window !== mainWindow).length,
+   rendererRequests: bundleRendererRequests.size, ipcWork: bundleWorkAdmission.active,
+   mailWork: desktopMail.active.size, attachmentUploads: desktopAttachmentUpload.active.size,
+   folderQueue: desktopFolderSync.ordinaryQueue?.length || 0, aiSyncWork: aiSyncSessions.size },
+  idle: embeddedShutdownState(),
+  speechActive: Boolean(desktopSpeech.current), fileExportActive: Boolean(desktopFileExport.active),
+  folderSyncActive: Boolean(desktopFolderSync.active), folderStreamActive: Boolean(desktopFolderSync.streamWaiter),
+  folderRequestActive: Boolean(desktopFolderSync.resourceRequest), syncWindowActive: Boolean(syncWindowLease.window),
+  agentBrowserActive: Boolean(agentBrowsersPromise), contextAvailable: Boolean(bundleActivationContext),
+  checkpoint: bundleLastCheckpoint, cancellation: bundleLastCancellation
+ });
+ return state;
+}
+function bundleActivationEligible(allowClosing = false) {
+ const state = bundleActivationDiagnostics(allowClosing);
+ if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') reportBundleActivation(state);
+ return state.eligible ? bundleActivationContext : null;
+}
+function startBundleUpdateCheck() {
+ if (bundleAutomaticUpdates !== true || !bundleRendererReady || desktopWindowPresentationBlocked()) return;
+ void webBundleUpdates?.checkAndStage().then(() => { void webBundleActivation?.attempt(); });
+}
+
 let mainWindow = null;
 let sessionHash = null;
 let aiConnectorsPromise = null;
@@ -103,23 +208,40 @@ let desktopServicesClosing = false;
 let desktopServicesClosed = false;
 let desktopProviderAuthority = new AbortController();
 function invalidateDesktopProviderAuthority() {
+ bundleLastActivity = Date.now(); invalidateBundleActivation('host-authority'); bundleAutomaticUpdates = null;
+ bundleActivationContext = mainWindow ? { window: mainWindow } : null;
  desktopProviderAuthority.abort();
  desktopProviderAuthority = new AbortController();
 }
 async function closeDesktopServices() {
+ reportBundleLifecycle('services-close-start');
  const tasks = [];
+ if (webBundleUpdates) tasks.push(webBundleUpdates.close());
  if (process.platform !== 'darwin') tasks.push(passwordProvider.close());
  if (agentBrowsersPromise) tasks.push(agentBrowsersPromise.then(controller => controller.close()));
  if (localRuntime) tasks.push((async () => {
+  if (localRuntime.state?.nativeHome) {
+   // Stop admission/sockets first. An unfinished handler keeps native close
+   // unavailable; never force-dispose its provider or key copies.
+   if (bundledRendererServer) await bundledRendererServer.close();
+   await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.();
+   const close = globalThis[Symbol.for('thingtime.native-home.close')];
+   if (typeof close !== 'function') throw new Error('Native account shutdown ownership is unavailable.');
+   await close(); await localRuntime.stop(); return;
+  }
   try { await globalThis[Symbol.for('thingtime.chatgpt-plan.close')]?.(); }
   finally { await localRuntime.stop(); }
  })());
  const results = await Promise.allSettled(tasks);
+ reportBundleLifecycle('services-close-end');
  if (results.some(result => result.status === 'rejected')) console.warn('A desktop service did not close cleanly.');
 }
 attachQuitSignals(app);
 app.on('before-quit', (event) => {
- if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && process.platform === 'darwin')) return;
+ reportBundleLifecycle('before-quit');
+ webBundleActivation?.close(); clearInterval(bundleActivationTimer);
+ webBundleLaunch?.close();
+ if (desktopServicesClosed || (!localRuntime && !agentBrowsersPromise && !webBundleUpdates && process.platform === 'darwin')) return;
  event.preventDefault();
  if (desktopServicesClosing) return;
  desktopServicesClosing = true;
@@ -127,7 +249,7 @@ app.on('before-quit', (event) => {
   desktopServicesClosed = true;
   // Electron may still be unwinding the prevented native Quit dispatch when
   // cleanup resolves immediately. Retry on the next event-loop turn.
-  setImmediate(() => app.quit());
+  setImmediate(() => { reportBundleLifecycle('quit-retry'); app.quit(); });
  });
 });
 let desktopSettingsLastError = null;
@@ -244,12 +366,121 @@ function loadLocalEnv() {
   loadEnvFile(path.join(remixDir, '.env.auto'));
 }
 
-function getWebOutputDir() {
+function getShippedWebRoot() {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'web', '.output');
+    return path.join(process.resourcesPath, 'web');
   }
+  return path.dirname(localWebOutput);
+}
 
-  return localWebOutput;
+function getWebOutputDir() {
+  return path.join(selectedWebBundle?.directory || getShippedWebRoot(), '.output');
+}
+
+async function initializeWebBundleLaunch() {
+  if (parallelDevMode && process.env.THINGTIME_DESKTOP_DEV_TEST_ORIGIN) return;
+  // Trust is shipped with the native shell; a downloaded bundle or API cannot
+  // supply its own keys. An empty key list keeps shipped offline startup usable.
+  const policy = validateTrustPolicy(JSON.parse(fs.readFileSync(path.join(__dirname, 'native-web-policy.json'), 'utf8')));
+  const host = createElectronBundleHost({ platform: process.platform, arch: process.arch,
+    versions: process.versions, shellVersion: app.getVersion(), policy });
+  const bundledDirectory = getShippedWebRoot();
+  assertElectronBundleMetadata(JSON.parse(fs.readFileSync(path.join(bundledDirectory, 'metadata.json'), 'utf8')), host);
+  const store = await createWebBundleStore({ bundledDirectory, trustedKeys: policy.trustedKeys, host,
+    cacheDirectory: path.join(app.getPath('userData'), 'native-web-bundles', host.nativeAbi, host.channel) });
+  if (policy.trustedKeys.some(key => key.channels.includes(host.channel) && key.platforms.includes(host.platform) && key.runtimes.includes(host.runtimeId))) {
+    const origin = new URL(desktopSettings.snapshot().selectedEndpoint.url).origin;
+    const downloader = createWebBundleDownload({ origin, host, trustedKeys: policy.trustedKeys,
+      downloadDirectory: path.join(app.getPath('userData'), 'native-web-downloads') });
+    webBundleUpdates = createWebBundleUpdates({ store, downloader });
+    webBundleActivation = createWebBundleActivation({
+      context: bundleActivationEligible,
+      pending: async () => Boolean((await store.inspect()).pending),
+      checkpoint: ({ nonce, signal }) => new Promise((resolve, reject) => {
+        const window = mainWindow;
+        const abort = () => reject(signal.reason);
+        signal.addEventListener('abort', abort, { once: true });
+        bundleActivationRequest = { nonce, window, respond: value => { signal.removeEventListener('abort', abort); resolve(value); } };
+        bundleLastCheckpoint = { ready: null, reason: null }; bundleLastCancellation = null;
+        if (!sendBundleActivation(window, { type: 'prepare', nonce })) { signal.removeEventListener('abort', abort); reject(Error('The current renderer cannot accept an update checkpoint')); }
+      }),
+      release: nonce => {
+        const request = bundleActivationRequest;
+        if (request?.nonce === nonce) {
+          bundleActivationRequest = null;
+          sendBundleActivation(request.window, { type: 'release', nonce, keepVeto: bundleClosePending });
+        }
+      },
+      closeAndRelaunch: async ({ signal, assertCurrent, nonce }) => {
+        const window = mainWindow;
+        assertCurrent();
+        bundleShutdownReservation = reserveBundleShutdown([
+          () => bundledRendererServer?.reserveShutdown?.(),
+          () => {
+            const reserve = Reflect.get(globalThis, Symbol.for('thingtime.chatgpt-plan.reserve-shutdown'));
+            return typeof reserve === 'function' ? reserve() : null;
+          },
+          () => {
+            const activity = embeddedApiRuntimeWork(), handle = activity?.reserveShutdown();
+            if (!handle) return null;
+            return { isCurrent: () => embeddedApiRuntimeWork() === activity && handle.isCurrent(), release: () => handle.release() };
+          }
+        ]);
+        if (!bundleShutdownReservation) return false;
+        const assertRestart = () => {
+          reportBundleLifecycle('restart-check');
+          if (!bundleCloseAccepted || !bundleShutdownReservation?.isCurrent() || BrowserWindow.getAllWindows().some(candidate => !candidate.isDestroyed()))
+            throw Error('The desktop update no longer owns shutdown admission');
+        };
+        automaticBundleClosing = true;
+        try { return await closeForBundleActivation({ window, signal, observe: ({ stage }) => reportBundleLifecycle(stage),
+          assertCurrent: () => { assertCurrent(); if (!bundleShutdownReservation?.isCurrent()) throw Error('Shutdown admission changed'); },
+          relaunch: async () => {
+            try { await restartDesktopRuntime({ assertRestart }); }
+            catch {
+              // The close was accepted, but no replacement process was queued.
+              // Reopen the same running bundle and leave its verified update pending.
+              bundleCloseAccepted = false; automaticBundleClosing = false; releaseBundleShutdown();
+              if (!desktopServicesClosing && !desktopServicesClosed && !authorityTransition.restarting) {
+                createWindow(); console.warn('The staged update could not relaunch; the running bundle was reopened.');
+              }
+              throw Error('The staged update remains pending after a relaunch failure');
+            }
+          },
+          onCloseState: (pending, accepted) => {
+            bundleClosePending = pending;
+            if (accepted) bundleCloseAccepted = true;
+            if (!pending) {
+              automaticBundleClosing = bundleCloseAccepted;
+              if (!accepted) releaseBundleShutdown();
+              sendBundleActivation(window, { type: 'release', nonce, keepVeto: false });
+            }
+          } }); }
+        finally {
+          if (!bundleClosePending && !bundleCloseAccepted) { automaticBundleClosing = false; releaseBundleShutdown(); }
+        }
+      }
+    });
+    bundleActivationTimer = setInterval(() => {
+      // Independent main-process heartbeat also survives a renderer IPC stall
+      // or an unresolved close. It never starts/reserves work of its own.
+      if (parallelDevMode && webBundleUpdates?.snapshot().status === 'pending') { reportBundleActivation(bundleActivationDiagnostics()); reportBundleHttpActivity(); }
+      if (!bundleClosePending) void webBundleActivation?.attempt();
+    }, 30000);
+    bundleActivationTimer.unref();
+  }
+  webBundleLaunch = createWebBundleLaunch({ store, onFailure: async () => {
+    if (desktopServicesClosing || desktopServicesClosed) return;
+    // Nitro is imported into this process. Never import a second server over a
+    // failed one: the next process rolls the attempted trial back before import.
+    desktopSettingsLastError = 'The new web bundle did not start. Restoring the previous bundle.';
+    // Recovery retains the same account, origin and profile. It must also work
+    // before a renderer origin or password-provider session exists.
+    await relaunchDesktopProcess();
+  } });
+  selectedWebBundle = await webBundleLaunch.prepare();
+  webBuildMetadata = null;
+  assertElectronBundleMetadata(readWebBuildMetadata(), host);
 }
 
 function readWebBuildMetadata() {
@@ -270,7 +501,9 @@ function readWebBuildMetadata() {
 }
 
 function getCurrentAppVersion() {
-  const releaseVersion = readWebBuildMetadata()?.desktopRelease?.version;
+  // A web update cannot change the native shell's updater/version identity.
+  let releaseVersion;
+  try { releaseVersion = JSON.parse(fs.readFileSync(path.join(getShippedWebRoot(), 'metadata.json'), 'utf8'))?.desktopRelease?.version; } catch {}
   return normalizeVersionString(releaseVersion) || app.getVersion();
 }
 
@@ -346,6 +579,8 @@ async function startNitroServer() {
   loadLocalEnv();
 
   localRuntime.applyEnvironment(process.env);
+  const nativeHome = localRuntime.nativeHomeHost();
+  if (nativeHome) require('./lib/native-home-profile.cjs').publishNativeHomeHost(globalThis, nativeHome);
   const fallbackOrigin = `http://127.0.0.1:${parallelDevMode ? 28640 : 28630}`;
   const remoteContentOrigin = sessionAuthority.rendererOrigin(activeApiEndpoint, fallbackOrigin, localRuntime.state.enabled);
   const port = localRuntime.state.enabled ? localRuntime.state.apiPort : Number(new URL(remoteContentOrigin).port);
@@ -393,8 +628,21 @@ async function startNitroServer() {
       return import(pathToFileURL(serverEntry).href);
     }
   });
-  app.on('before-quit', () => { void renderer.close(); });
+  let closingRenderer;
+  const closeRenderer = () => closingRenderer ??= renderer.close();
+  bundledRendererServer = { ...renderer, close: closeRenderer };
+  app.on('before-quit', () => { void closeRenderer(); });
   appOrigin = renderer.origin;
+  if (webBundleLaunch?.selection?.source === 'trial') {
+    const response = await fetch(new URL('/.well-known/thingtime-capabilities.json', appOrigin), {
+      redirect: 'error', signal: AbortSignal.timeout(10000)
+    });
+    const manifest = await response.json();
+    if (!response.ok || manifest.origin !== appOrigin || !manifest.features?.['api.things']?.version) {
+      throw new Error('The new bundled API did not serve its local capability manifest.');
+    }
+    await webBundleLaunch.serverReady();
+  }
   return appOrigin;
 }
 
@@ -1142,6 +1390,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
+ localRuntimeInitialized = true;
  if (localRuntime.snapshot().enabled && !parallelDevMode) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
@@ -1674,14 +1923,17 @@ async function desktopUploadMenuBarIcon(event) {
 	return { cancelled: false, settings: await selectMenuBarIcon('custom', targetPath) };
 }
 
-async function restartDesktopRuntime() {
+async function relaunchDesktopProcess() {
+ return queueDesktopRelaunch({ app, authorityTransition, parallelDevMode, process, observe: ({ stage }) => reportBundleLifecycle(stage) });
+}
+async function restartDesktopRuntime({ assertRestart = () => {} } = {}) {
+ assertRestart();
  mainWindow?.webContents.stop();
+ reportBundleLifecycle('password-disconnect-start');
  await passwordProvider.disconnect();
- authorityTransition.retainUntilRestart();
- if (parallelDevMode) {
-  if (!process.connected || typeof process.send !== 'function') throw new Error('Restart this development app through the parallel development launcher.');
-  process.send({ type: 'thingtime-dev-restart' }, () => app.quit());
- } else { app.relaunch(); app.quit(); }
+ reportBundleLifecycle('password-disconnect-end');
+ assertRestart();
+ await relaunchDesktopProcess();
 }
 function effectiveDesktopSettings() {
  const settings = desktopSettings?.snapshot();
@@ -1693,6 +1945,7 @@ function requireLocalRuntimeSender(event) {
  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.senderFrame.url).origin !== appOrigin) throw new Error('Open local runtime settings in the bundled Thingtime interface.');
 }
 async function configureLocalRuntime(event, request) {
+ invalidateBundleActivation();
  return authorityTransition.run(() => configureLocalRuntimeGuarded(event, request));
 }
 async function configureLocalRuntimeGuarded(event, request) {
@@ -1701,6 +1954,7 @@ async function configureLocalRuntimeGuarded(event, request) {
  return getDesktopInfo();
 }
 async function changeDesktopSession(event, request, legacy) {
+ invalidateBundleActivation();
  return authorityTransition.run(() => changeDesktopSessionGuarded(event, request, legacy));
 }
 async function changeDesktopSessionGuarded(event, request, legacy) {
@@ -1739,7 +1993,10 @@ async function chooseLocalMongod(event) {
 function getDesktopInfo() {
   const buildMetadata = readWebBuildMetadata();
   return {
+    nativeFeatures: bundleActivationManifest(appOrigin),
     appVersion: getCurrentAppVersion(),
+    webBundle: { source: selectedWebBundle?.source || 'bundled', releaseId: selectedWebBundle?.releaseId || null,
+      update: webBundleUpdates?.snapshot() || { status: 'unconfigured' }, activation: bundleActivationDiagnostics() },
     buildIdentity: {
       gitBranch: typeof buildMetadata.gitBranch === 'string' ? buildMetadata.gitBranch : null,
       gitCommit: typeof buildMetadata.gitCommit === 'string' && /^[0-9a-f]{7,40}$/u.test(buildMetadata.gitCommit)
@@ -1856,7 +2113,7 @@ function rendererPartition() {
  return sessionAuthority.partition(target, { local: Boolean(localRuntime?.runningEnabled), databaseIdentity: localRuntime?.runningEnabled ? localRuntime.runningDatabaseIdentity : '' });
 }
 function createWindow() {
-  if (desktopServicesClosing || desktopServicesClosed) return;
+  if (desktopWindowPresentationBlocked()) return;
 	if (!appOrigin) throw new Error('The bundled Thingtime interface is not ready yet.');
 	activeContentOrigin = new URL(appOrigin).origin;
 
@@ -1882,10 +2139,30 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, 'preload.cjs'),
-      sandbox: true
+      sandbox: true,
+      additionalArguments: [`--thingtime-bundle-activation=${BUNDLE_ACTIVATION_FEATURE.version}`]
     }
   });
 
+
+  bundleActivationContext = { window: mainWindow };
+  bundleAutomaticUpdates = null; bundleRendererReady = false; bundleRendererRequests.clear();
+  mainWindow.on('focus', noteBundleUserActivity);
+  mainWindow.on('blur', noteBundleUserActivity);
+  mainWindow.webContents.on('before-input-event', noteBundleUserActivity);
+  mainWindow.on('close', event => {
+    if (automaticBundleClosing && !bundleActivationEligible(true)) event.preventDefault();
+  });
+  const updateSession = mainWindow.webContents.session;
+  updateSession.webRequest.onBeforeRequest((details, callback) => {
+    if (mainWindow) { bundleRendererRequests.add(details.id); invalidateBundleActivation('host-network'); }
+    callback({});
+  });
+  const requestFinished = details => {
+    if (bundleRendererRequests.delete(details.id)) invalidateBundleActivation('host-network');
+  };
+  updateSession.webRequest.onCompleted(requestFinished);
+  updateSession.webRequest.onErrorOccurred(requestFinished);
   attachWindowZoom(mainWindow);
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) { invalidateDesktopProviderAuthority(); syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); desktopAttachmentUpload.invalidate(); }
@@ -1929,17 +2206,23 @@ function createWindow() {
 		isClosing: () => desktopServicesClosing || desktopServicesClosed,
 		onError(error) {
 			desktopSettingsLastError = error instanceof Error ? error.message : String(error);
+			if (webBundleLaunch?.selection?.source === 'trial') {
+				void webBundleLaunch.fail(error).then(recovering => {
+					if (!recovering && !webBundleLaunch.failure && !desktopServicesClosing && !desktopServicesClosed) showLoadUrlError(error);
+				}).catch(showLoadUrlError);
+				return;
+			}
 			showLoadUrlError(error);
 		}
 	});
 }
 
-ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
-ipcMain.handle('thingtime-desktop:attachment-upload', (event, request) => desktopAttachmentUpload.request(event, request));
-ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
-ipcMain.handle('thingtime-desktop:folder-sync-active', (event, request) => syncWindowLease.set(event, request));
+handleDesktopOperation('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
+handleDesktopOperation('thingtime-desktop:attachment-upload', (event, request) => desktopAttachmentUpload.request(event, request));
+handleDesktopOperation('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
+handleDesktopOperation('thingtime-desktop:folder-sync-active', (event, request) => syncWindowLease.set(event, request));
 
-ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
+handleDesktopOperation('thingtime-desktop:speech-start', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
 	if (process.platform !== 'darwin') throw new Error('Native speech is available on macOS only.');
 	const frame = event.senderFrame;
@@ -1947,7 +2230,7 @@ ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
 		try { frame.send('thingtime-desktop:speech-event', payload); } catch { desktopSpeech.stop(request.sessionId); }
 	});
 });
-ipcMain.handle('thingtime-desktop:agent-browsers', async (event, request) => {
+handleDesktopOperation('thingtime-desktop:agent-browsers', async (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
 	if (process.platform !== 'darwin') throw new Error('The agent browser manager currently requires macOS.');
 	const frame = event.senderFrame;
@@ -1958,7 +2241,7 @@ ipcMain.handle('thingtime-desktop:agent-browsers', async (event, request) => {
 	if (event.senderFrame !== frame || desktopServicesClosing) throw new Error('The desktop document changed or is closing.');
 	return controller.request(request);
 });
-ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
+handleDesktopOperation('thingtime-desktop:speech-stop', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
 	if (typeof request?.sessionId !== 'string') throw new Error('Invalid speech session.');
 	return desktopSpeech.stop(request.sessionId);
@@ -1967,120 +2250,133 @@ ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
 const passwordProvider = require('./lib/password-provider.cjs').createPasswordProvider({ app, root: __dirname, origin: () => appOrigin, endpoint: activeAccountEndpoint,
   safeStorage, dialog, BrowserWindow, ipcMain, window: () => mainWindow,
   context: () => ({ origin: appOrigin, endpoint: activeAccountEndpoint(), session: mainWindow?.webContents?.session }) });
-ipcMain.handle('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
+handleDesktopOperation('thingtime-desktop:password-provider', (event, request) => passwordProvider(event, request));
 
-ipcMain.handle('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
-ipcMain.handle('thingtime-desktop:mail-cancel', (event, request) => desktopMail.cancel(event, request));
-ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
-ipcMain.handle('thingtime-desktop:get-node-panel-preference', (event, request) => {
+handleDesktopOperation('thingtime-desktop:mail-sync', (event, request) => desktopMail.sync(event, request));
+handleDesktopOperation('thingtime-desktop:mail-cancel', (event, request) => desktopMail.cancel(event, request));
+handleDesktopOperation('thingtime-desktop:get-info', () => getDesktopInfo());
+handleDesktopOperation('thingtime-desktop:get-node-panel-preference', (event, request) => {
 	requireTrustedAiBridgeEvent(event);
 	const store = requireDesktopSettings();
 	return store.enqueue(() => store.nodePanelPreference(request?.accountId));
 });
-ipcMain.handle('thingtime-desktop:set-node-panel-preference', (event, request) => {
+handleDesktopOperation('thingtime-desktop:set-node-panel-preference', (event, request) => {
 	requireTrustedAiBridgeEvent(event);
 	return requireDesktopSettings().setNodePanelPreference(request);
 });
-ipcMain.handle('thingtime-desktop:get-settings', (event) => {
+handleDesktopOperation('thingtime-desktop:get-settings', (event) => {
 	requireTrustedAiBridgeEvent(event);
 	return requireDesktopSettings().snapshot();
 });
-ipcMain.handle('thingtime-desktop:add-endpoint', (event, request) => desktopAddEndpoint(event, request));
-ipcMain.handle('thingtime-desktop:remove-endpoint', (event, request) => desktopRemoveEndpoint(event, request));
-ipcMain.handle('thingtime-desktop:configure-local-runtime', configureLocalRuntime);
-ipcMain.handle('thingtime-desktop:recover-session', (event, request) => changeDesktopSession(event, request, true));
-ipcMain.handle('thingtime-desktop:use-current-session', (event, request) => changeDesktopSession(event, request, false));
-ipcMain.handle('thingtime-desktop:choose-local-mongod', chooseLocalMongod);
-ipcMain.handle('thingtime-desktop:restart-runtime', async (event) => { requireLocalRuntimeSender(event); await restartDesktopRuntime(); });
-ipcMain.handle('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
-ipcMain.handle('thingtime-desktop:check-endpoint-compatibility', (event) => desktopCheckEndpointCompatibility(event));
-ipcMain.handle('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
-ipcMain.handle('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
-ipcMain.handle('thingtime-desktop:set-node-auto-start', (event, request) => desktopSetNodeAutoStart(event, request));
-ipcMain.handle('thingtime-desktop:load-url', (event, url) => {
+handleDesktopOperation('thingtime-desktop:add-endpoint', (event, request) => desktopAddEndpoint(event, request));
+handleDesktopOperation('thingtime-desktop:remove-endpoint', (event, request) => desktopRemoveEndpoint(event, request));
+handleDesktopOperation('thingtime-desktop:configure-local-runtime', configureLocalRuntime);
+handleDesktopOperation('thingtime-desktop:recover-session', (event, request) => changeDesktopSession(event, request, true));
+handleDesktopOperation('thingtime-desktop:use-current-session', (event, request) => changeDesktopSession(event, request, false));
+handleDesktopOperation('thingtime-desktop:choose-local-mongod', chooseLocalMongod);
+handleDesktopOperation('thingtime-desktop:restart-runtime', async (event) => { requireLocalRuntimeSender(event); await restartDesktopRuntime(); });
+handleDesktopOperation('thingtime-desktop:select-endpoint', (event, request) => desktopSelectEndpoint(event, request));
+handleDesktopOperation('thingtime-desktop:check-endpoint-compatibility', (event) => desktopCheckEndpointCompatibility(event));
+handleDesktopOperation('thingtime-desktop:select-menu-bar-icon', (event, request) => desktopSelectMenuBarIcon(event, request));
+handleDesktopOperation('thingtime-desktop:upload-menu-bar-icon', (event) => desktopUploadMenuBarIcon(event));
+handleDesktopOperation('thingtime-desktop:set-node-auto-start', (event, request) => desktopSetNodeAutoStart(event, request));
+handleDesktopOperation('thingtime-desktop:load-url', (event, url) => {
 	requireTrustedAiBridgeEvent(event);
 	return selectAndLoadDesktopUrl(url);
 });
-ipcMain.handle('thingtime-desktop:check-for-updates', (event) => {
+handleDesktopOperation('thingtime-desktop:check-for-updates', (event) => {
   requireTrustedAiBridgeEvent(event);
   return checkForUpdates();
 });
-ipcMain.handle('thingtime-desktop:download-update-bundle', (event) => {
+handleDesktopOperation('thingtime-desktop:download-update-bundle', (event) => {
   requireTrustedAiBridgeEvent(event);
   return downloadUpdateBundle();
 });
-ipcMain.handle('thingtime-desktop:list-update-catalog', (event) => {
+handleDesktopOperation('thingtime-desktop:list-update-catalog', (event) => {
   requireTrustedAiBridgeEvent(event);
   return getReleaseCatalog();
 });
-ipcMain.handle('thingtime-desktop:cache-release-bundle', (event, request) => {
+handleDesktopOperation('thingtime-desktop:cache-release-bundle', (event, request) => {
   requireTrustedAiBridgeEvent(event);
   return cacheSelectedRelease(request);
 });
-ipcMain.handle('thingtime-desktop:install-cached-release', (event, request) => {
+handleDesktopOperation('thingtime-desktop:install-cached-release', (event, request) => {
   requireTrustedAiBridgeEvent(event);
   return installCachedRelease(request);
 });
-ipcMain.handle('thingtime-desktop:launch-cached-release', (event, request) => {
+handleDesktopOperation('thingtime-desktop:launch-cached-release', (event, request) => {
   requireTrustedAiBridgeEvent(event);
   return launchCachedRelease(request);
 });
-ipcMain.handle('thingtime-desktop:remove-cached-release', (event, request) => {
+handleDesktopOperation('thingtime-desktop:remove-cached-release', (event, request) => {
   requireTrustedAiBridgeEvent(event);
   return removeCachedRelease(request);
 });
-ipcMain.handle('thingtime-desktop:reveal-update-cache', (event) => {
+handleDesktopOperation('thingtime-desktop:reveal-update-cache', (event) => {
   requireTrustedAiBridgeEvent(event);
   return revealUpdateCache();
 });
-ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(event));
-ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
-ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
-ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
-ipcMain.handle('thingtime-desktop:open-app-locations', (event) => openAppLocations(event));
-ipcMain.handle('thingtime-desktop:permission-restart', (event) => { requireMacNode(event); return offerPermissionRestart(); });
-ipcMain.handle('thingtime-desktop:activity', (event, request) => {
+handleDesktopOperation('thingtime-desktop:ai-discover', (event) => discoverAiSources(event));
+handleDesktopOperation('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
+handleDesktopOperation('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
+handleDesktopOperation('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
+handleDesktopOperation('thingtime-desktop:open-app-locations', (event) => openAppLocations(event));
+handleDesktopOperation('thingtime-desktop:permission-restart', (event) => { requireMacNode(event); return offerPermissionRestart(); });
+handleDesktopOperation('thingtime-desktop:activity', (event, request) => {
  requireSpeechSender(event, mainWindow, appOrigin);
  requireRendererMatchesConfiguredNode(event);
  return desktopActivities.request(request);
 });
-ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
-ipcMain.handle('thingtime-desktop:node-location', (event, request) => nodeLocationRequest(event, request));
-ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
-ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
-ipcMain.handle('thingtime-desktop:node-unregister-service', (event) => nodeUnregisterService(event));
-ipcMain.handle('thingtime-desktop:node-begin-pairing', (event) => nodeBeginPairing(event));
-ipcMain.handle('thingtime-desktop:node-complete-pairing', (event, request) => nodeCompletePairing(event, request));
-ipcMain.handle('thingtime-desktop:node-resume-pairing', (event, request) => nodeResumePairing(event, request));
-ipcMain.handle('thingtime-desktop:node-unpair', (event, request) => nodeUnpair(event, request));
-ipcMain.handle('thingtime-desktop:node-permissions', (event) => nodeGetPermissions(event));
-ipcMain.handle('thingtime-desktop:node-open-permission-settings', (event, request) => nodeOpenPermissionSettings(event, request));
-ipcMain.handle('thingtime-desktop:node-add-project', (event) => nodeAddProject(event));
-ipcMain.handle('thingtime-desktop:node-connector', (event, request) => nodeConnectorCommand(event, request));
-ipcMain.handle('thingtime-desktop:node-device', (event, request) => nodeDeviceCommand(event, request));
+handleDesktopOperation('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
+
+handleDesktopOperation('thingtime-desktop:bundle-update-policy', (event, request) => {
+ assertBundleActivationSender(event, mainWindow, appOrigin);
+ if (!request || Object.keys(request).length !== 1 || typeof request.enabled !== 'boolean') throw Error('Invalid update preference');
+ const changed = bundleAutomaticUpdates !== request.enabled;
+ bundleAutomaticUpdates = request.enabled;
+ if (!request.enabled) { invalidateBundleActivation('host-preference'); webBundleUpdates?.cancel(); }
+ if (changed && request.enabled) startBundleUpdateCheck();
+ return true;
+});
+handleDesktopOperation('thingtime-desktop:bundle-activation-checkpoint', (event, request) => {
+ assertBundleActivationSender(event, mainWindow, appOrigin);
+ return acceptBundleActivationCheckpoint({ request, pending: bundleActivationRequest, window: mainWindow,
+  record: value => { bundleLastCheckpoint = value; }, cancel: invalidateBundleActivation });
+});
+handleDesktopOperation('thingtime-desktop:renderer-ready', async (event) => {
+  requireLocalRuntimeSender(event);
+  if (desktopServicesClosing || desktopServicesClosed) return false;
+  const confirmed = await webBundleLaunch?.rendererReady() || false;
+  bundleRendererReady = true;
+  if (!desktopServicesClosing && !desktopServicesClosed) startBundleUpdateCheck();
+  return confirmed;
+});
+handleDesktopOperation('thingtime-desktop:node-location', (event, request) => nodeLocationRequest(event, request));
+handleDesktopOperation('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
+handleDesktopOperation('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
+handleDesktopOperation('thingtime-desktop:node-unregister-service', (event) => nodeUnregisterService(event));
+handleDesktopOperation('thingtime-desktop:node-begin-pairing', (event) => nodeBeginPairing(event));
+handleDesktopOperation('thingtime-desktop:node-complete-pairing', (event, request) => nodeCompletePairing(event, request));
+handleDesktopOperation('thingtime-desktop:node-resume-pairing', (event, request) => nodeResumePairing(event, request));
+handleDesktopOperation('thingtime-desktop:node-unpair', (event, request) => nodeUnpair(event, request));
+handleDesktopOperation('thingtime-desktop:node-permissions', (event) => nodeGetPermissions(event));
+handleDesktopOperation('thingtime-desktop:node-open-permission-settings', (event, request) => nodeOpenPermissionSettings(event, request));
+handleDesktopOperation('thingtime-desktop:node-add-project', (event) => nodeAddProject(event));
+handleDesktopOperation('thingtime-desktop:node-connector', (event, request) => nodeConnectorCommand(event, request));
+handleDesktopOperation('thingtime-desktop:node-device', (event, request) => nodeDeviceCommand(event, request));
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 
 if (!singleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!mainWindow) {
-      if (appOrigin) createWindow();
-      return;
-    }
-
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-
-    mainWindow.show(); mainWindow.focus();
-  });
+  app.on('second-instance', presentMainWindow);
 
 	app
 		.whenReady()
 		.then(async () => {
    await initializeDesktopSettings();
+   await initializeWebBundleLaunch();
    await startNitroServer();
    // Each API/database has its own persisted cookie/storage partition. Clear
    // only HTTP cache so new bundles cannot revive stale root-data responses.
@@ -2094,21 +2390,17 @@ if (!singleInstanceLock) {
         console.warn('Unable to check Thingtime API endpoint compatibility', error);
       });
     })
-    .catch((error) => {
+    .catch(async (error) => {
+      if (await webBundleLaunch?.fail(error).catch(() => false)) return;
       dialog.showErrorBox('Thingtime failed to start', error instanceof Error ? error.message : String(error));
       app.quit();
     });
 }
 
-app.on('activate', () => {
-  if ((!mainWindow || mainWindow.isDestroyed()) && appOrigin) {
-		createWindow();
-  } else if (mainWindow) {
-    mainWindow.show(); mainWindow.focus();
-  }
-});
+app.on('activate', presentMainWindow);
 
 app.on('window-all-closed', () => {
+  if (automaticBundleClosing) return;
   if (process.platform !== 'darwin') {
     app.quit();
   }

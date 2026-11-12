@@ -1,0 +1,24 @@
+{
+  "verified": true,
+  "checkoutHead": "e67c4e475fa0aff7b838310dfdcd864063a9f05c",
+  "mergeHead": "f36da5c032251270c0b24a754c61a4e510633c59",
+  "staticShellSha256": "6c48bd3f2e9e5b8620a40ef3076e38cd38c682c83593257a1dbf3607ef4d9ab6",
+  "fullBuildManifestSha256": "80757f2781a1ddd1ca15cfc9db108c5fed57cdcc6485fc820f38eab49d87b6be",
+  "checks": [
+    "global: native nested text/button/icon independently edited and saved through two offline reloads",
+    "site: native nested text/button/icon independently edited and saved through two offline reloads",
+    "native /ode renders both saved scopes with button-to-input keyboard navigation and editable live inputs at desktop/390/320px; no Action execution or input-value persistence is claimed"
+  ],
+  "siteViewChecks": 21,
+  "httpMutationCount": 0,
+  "authenticatedRequestCount": 0,
+  "serverAuditedRequestCount": 14,
+  "cleanup": {
+    "sessionId": "e41f6fdc-f47f-42cf-b85c-8c6ae00ea082",
+    "remainingOwnedContainers": [],
+    "temporaryDerivativeImage": "sha256:b4e1551985e16f88828dfbd075b15bc394e6a93db894bb1eb207d0ed9284c666",
+    "derivativeTagRemoved": true,
+    "privateStateRemoved": true,
+    "leaseRemoved": true
+  }
+}

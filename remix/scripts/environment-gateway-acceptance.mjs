@@ -8,10 +8,18 @@ import { createServer as createTcpServer } from 'node:net';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MongoClient } from 'mongodb';
+import { draftPreviewCsp } from './csp.mjs';
+import { tsImport } from 'tsx/esm/api';
+
+// Validate actual HTTP bytes with the shipping protocol reader, not a second
+// acceptance-only interpretation of its digest/framing/clean-EOF contract.
+const { readCatalogueStream } = await tsImport('../app/catalogue/catalogueStream.ts', import.meta.url);
+const { capabilitySatisfies } = await tsImport('../app/api/utils/capabilities/capabilityContract.ts', import.meta.url);
+const { getDeploymentDataEnvironment } = await tsImport('../app/api/utils/deployment/dataEnvironment.ts', import.meta.url);
 
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
@@ -79,13 +87,56 @@ async function ready(server, key) {
   }
   throw new Error('Built gateway readiness timed out.');
 }
-async function api(key, path, { body, cookie, status = 200, headers = {} } = {}) {
+async function api(key, path, { body, cookie, status = 200, headers = {}, retryRateLimit = false } = {}) {
   console.log(`${key} ${body ? 'POST' : 'GET'} ${path.split('?')[0]}`);
-  const response = await fetch(origin(key) + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: origin(key),
+  const send = () => fetch(origin(key) + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: origin(key),
     ...(cookie ? { Cookie: cookie } : {}), ...headers }, ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+  let response = await send();
+  if (retryRateLimit && status === 200 && response.status === 429) {
+    const seconds = Number(response.headers.get('retry-after'));
+    assert.ok(Number.isFinite(seconds) && seconds > 0 && seconds <= 60, 'Honor the bounded fixture rate-limit response.');
+    await response.body?.cancel(); await delay(seconds * 1000 + 100);
+    response = await send(); // Same immutable command and operation identity.
+  }
   assert.equal(response.status, status, `${key} ${path}: HTTP ${response.status}`);
   const data = await response.json();
   return { response, data, cookie: response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+}
+async function catalogueCapabilities(key) {
+  const publicManifest = (await api(key, '/.well-known/thingtime-capabilities.json')).data;
+  const routeResponse = await api(key, '/api/v1/capabilities'), routeManifest = routeResponse.data;
+  // The public discovery envelope carries origin. The canonical route
+  // manifest instead carries ok/schemaVersion/dataEnvironment; bind that
+  // response to the selected URL and verify its own contract independently.
+  assert.equal(publicManifest.origin, origin(key));
+  assert.equal(routeResponse.response.url, origin(key) + '/api/v1/capabilities');
+  assert.equal(routeManifest.ok, true); assert.equal(routeManifest.schemaVersion, 1);
+  assert.deepEqual(routeManifest.dataEnvironment, getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'development' }));
+  for (const [feature, required] of [['api.themes-sync', '1.8.0'], ['api.algorithms-sync', '1.6.0'], ['api.themes', '1.3.0'], ['api.algorithms', '1.2.0'], ['api.things-import', '1.14.0']]) {
+    assert.ok(capabilitySatisfies(publicManifest.features[feature]?.version, required), `${key} public ${feature} ${required}`);
+    assert.ok(capabilitySatisfies(routeManifest.features[feature], required), `${key} routes ${feature} ${required}`);
+  }
+}
+async function catalogue(key, domain, account) {
+  const response = await fetch(origin(key) + `/api/v1/${domain}/sync`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin(key), Cookie: account.cookie,
+      'X-Thingtime-Expected-Data-Plane': 'home' },
+    body: JSON.stringify({ operation: 'catalogue', expectedOwnerId: account.data.user.id }),
+    redirect: 'manual', signal: AbortSignal.timeout(60_000)
+  });
+  assert.equal(response.status, 200); assert.match(response.headers.get('content-type'), /^application\/x-ndjson/);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  const entries = []; let completion;
+  const receipt = await readCatalogueStream(response.body, { domain, origin: origin(key), ownerId: account.data.user.id,
+    dataPlane: 'home', storagePlane: 'home' }, {
+    entry: async (id, value) => { entries.push({ id, value }); },
+    complete: async value => { completion = value; }
+  });
+  assert.deepEqual(completion, receipt, 'Only canonical integrity validation plus clean EOF admits a catalogue.');
+  assert.equal(receipt.entries, entries.length);
+  assert.deepEqual(entries.map(entry => entry.id), [...new Set(entries.map(entry => entry.id))].sort());
+  return { receipt, entries };
 }
 const trap = createTcpServer(socket => { followerDials++; socket.destroy(); });
 const alias = createServer((request, response) => {
@@ -113,6 +164,26 @@ try {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
+  // Negotiate the selected origins before any catalogue-dependent work.
+  await catalogueCapabilities('owner'); await catalogueCapabilities('follower');
+  // A branch's anonymous renderer must keep its own exact assets and restrictive
+  // headers even when account API traffic is forwarded to an environment owner.
+  for (const file of ['index.html', 'runner.js']) {
+    const response = await fetch(origin('follower') + '/draft-preview/' + file, { signal: AbortSignal.timeout(5000) });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-security-policy'), draftPreviewCsp);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(join(cwd, 'dist/draft-preview', file)),
+      'The follower must serve its built renderer bytes, not a gateway response or SPA fallback.');
+  }
+  for (const method of ['GET', 'HEAD']) {
+    const response = await fetch(origin('follower') + '/social-card', { method, signal: AbortSignal.timeout(10000) });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /^image\/png/);
+    const body = Buffer.from(await response.arrayBuffer());
+    if (method === 'GET') assert.equal(body.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    else assert.equal(body.length, 0);
+  }
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',
@@ -131,6 +202,83 @@ try {
   const account = await api('follower', '/api/v1/auth/register', { body: { username: 'gateway-acceptance', email: 'gateway@example.invalid', password: randomBytes(24).toString('hex') } });
   assert.ok(account.data.user.id); assert.ok(account.cookie);
   const root = await api('follower', '/api/root-data', { cookie: account.cookie }); assert.equal(root.data.user.id, account.data.user.id);
+  const syncHeaders = { 'X-Thingtime-Expected-Data-Plane': 'home' }, expectedCatalogues = { themes: new Map(), algorithms: new Map() };
+  const syncWrite = async (domain, command) => {
+    const result = await api('follower', `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: syncHeaders, retryRateLimit: true,
+      body: { operation: 'write', expectedOwnerId: account.data.user.id, command } });
+    assert.equal(result.data.acknowledgment.id, command.id); assert.equal(result.data.acknowledgment.writeId, command.writeId);
+    assert.ok(result.data.acknowledgment.resultVersion);
+    return result.data.acknowledgment;
+  };
+  // Both catalogues exceed the former creation ceilings and cross a 64-row
+  // processing page. All product writes use canonical authenticated APIs.
+  for (let index = 0; index < 105; index++) {
+    const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
+      name: `Gateway catalogue theme ${String(index).padStart(3, '0')}`, theme: { colors: { accent: '#123456', focusBorder: '#26724d' }, general: { focusGlowBlur: 20, focusGlowOpacity: 0.4 } }, visibility: 'private' };
+    const acknowledgment = await syncWrite('themes', command);
+    if (index === 104) assert.deepEqual(await syncWrite('themes', command), acknowledgment, 'Exact theme retry above old count ceiling replays its receipt.');
+    expectedCatalogues.themes.set(command.id, { name: command.name, version: acknowledgment.resultVersion });
+  }
+  for (let index = 0; index < 65; index++) {
+    const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
+      description: 'Disposable gateway catalogue fixture', content: { name: `Gateway algorithm ${index}`, emoji: '🧠',
+        weights: { types: { text: 0.5 }, tags: { gateway: 2 }, authors: {} }, eventCount: index, lastTrainedAt: null } };
+    const acknowledgment = await syncWrite('algorithms', command);
+    if (index === 64) assert.deepEqual(await syncWrite('algorithms', command), acknowledgment, 'Exact algorithm retry above old count ceiling replays its receipt.');
+    expectedCatalogues.algorithms.set(command.id, { content: command.content, version: acknowledgment.resultVersion });
+  }
+  const catalogueEvidence = { themes: {}, algorithms: {}, realReplica: true, canonicalReaderIntegrity: true,
+    themeRowsCrossPageBoundary: true, legacyPrecedenceLive: false, concurrentMutationPinningLive: false };
+  for (const key of ['owner', 'follower']) for (const domain of ['themes', 'algorithms']) {
+    const body = { operation: 'catalogue', expectedOwnerId: account.data.user.id };
+    await api(key, `/api/v1/${domain}/sync`, { headers: syncHeaders, body, status: 401 });
+    await api(key, `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: {
+      ...syncHeaders, Origin: 'https://cross-site.invalid', 'Sec-Fetch-Site': 'cross-site' }, body, status: 403 });
+    await api(key, `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: syncHeaders,
+      body: { ...body, expectedOwnerId: 'different-disposable-owner' }, status: 409 });
+    const observed = await catalogue(key, domain, account), expected = expectedCatalogues[domain];
+    assert.deepEqual(observed.entries.map(entry => entry.id), [...expected.keys()].sort());
+    for (const { id, value } of observed.entries) {
+      assert.equal(value.id, id); assert.equal(value.version, expected.get(id).version);
+      if (domain === 'themes') {
+        assert.equal(value.name, expected.get(id).name); assert.equal(value.visibility, 'private');
+        assert.equal(value.theme.colors.accent, '#123456');
+        assert.equal(value.theme.colors.focusBorder, '#26724d'); assert.equal(value.theme.general.focusGlowBlur, 20); assert.equal(value.theme.general.focusGlowOpacity, 0.4);
+      } else {
+        assert.deepEqual(value.content, expected.get(id).content); assert.equal(value.shared, false); assert.equal(value.listed, false);
+      }
+    }
+    catalogueEvidence[domain][key] = { entries: observed.receipt.entries, authenticated: true, anonymousRefused: true,
+      crossSiteRefused: true, wrongOwnerRefused: true, sortedExactIds: true, exactPersistedVersion: true };
+  }
+  // Normal creates/branches must use the same uncapped-count writers too.
+  const normalTheme = await api('follower', '/api/v1/themes', { cookie: account.cookie,
+    body: { name: 'Beyond old theme ceiling', theme: {}, visibility: 'private' } });
+  const normalAlgorithm = await api('follower', '/api/v1/algorithms', { cookie: account.cookie,
+    body: { name: 'Beyond old algorithm ceiling', branchFrom: [...expectedCatalogues.algorithms.keys()][0] } });
+  assert.ok(normalTheme.data.theme.id); assert.ok(normalAlgorithm.data.algorithm.id);
+  const pagedEvidence = {};
+  for (const key of ['owner', 'follower']) for (const domain of ['themes', 'algorithms']) {
+    const expectedIds = new Set([...expectedCatalogues[domain].keys(), domain === 'themes' ? normalTheme.data.theme.id : normalAlgorithm.data.algorithm.id]);
+    const rows = [], cursors = new Set(); let cursor = null, pages = 0;
+    do {
+      const query = '?page=1' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const result = await api(key, `/api/v1/${domain}${query}`, { cookie: account.cookie });
+      assert.ok(result.data[domain].length <= 64); rows.push(...result.data[domain]); pages++;
+      cursor = result.data.nextCursor;
+      assert.ok(cursor === null || typeof cursor === 'string');
+      if (cursor) { assert.ok(!cursors.has(cursor)); cursors.add(cursor); }
+    } while (cursor);
+    assert.equal(rows.length, expectedIds.size); assert.deepEqual(new Set(rows.map(row => row.id)), expectedIds);
+    assert.ok(pages > 1); await api(key, `/api/v1/${domain}?page=1`, { status: 401 });
+    await api(key, `/api/v1/${domain}?page=1&cursor=invalid`, { cookie: account.cookie, status: 400 });
+    const legacy = await api(key, `/api/v1/${domain}`, { cookie: account.cookie });
+    assert.equal(legacy.data[domain].length, domain === 'themes' ? 100 : 50);
+    pagedEvidence[domain + ':' + key] = { entries: rows.length, pages, exactIds: true, legacyBoundRetained: true, malformedCursorRefused: true, anonymousRefused: true };
+  }
+  catalogueEvidence.ownedPagination = pagedEvidence;
+  catalogueEvidence.canonicalCreatesBeyondOldCeilings = true;
+  catalogueEvidence.exactSyncRetriesBeyondOldCeilings = true;
   await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] },
     headers: { Origin: 'https://cross-site.invalid', 'Sec-Fetch-Site': 'cross-site' }, status: 403 });
   const saved = await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] } });
@@ -170,8 +318,8 @@ try {
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
-  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
-    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
+  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', draftPreviewExactAssets: true, draftPreviewCsp: true, socialCardPngAndHead: true, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
+    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged, catalogue: catalogueEvidence }));
 } finally {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }

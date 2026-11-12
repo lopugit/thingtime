@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T11:10:51.967Z",
+  "finishedAt": "2026-11-11T11:14:05.697Z",
+  "phase": "publish-after-baseline-and-real-download",
+  "cleanupVerified": true,
+  "failure": {
+    "name": "Error",
+    "message": "The real native downloader did not stage its signed publication: The bundle update could not be verified. The running app is unchanged."
+  },
+  "retainedDiagnostics": "/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/thingtime-native-auto-zudyyE"
+}

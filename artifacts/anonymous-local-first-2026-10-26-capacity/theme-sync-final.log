@@ -1,0 +1,51 @@
+
+> test:theme-sync
+> node --import tsx --test app/api/utils/themes/*.test.ts app/api/utils/things/storedSnapshot.test.ts app/api/utils/lopu/userVaultVersion.test.ts app/api/utils/things/themeTransfer.test.ts app/timeline/themeContent.test.ts app/routes/api/v1/themes/sync/sync.test.ts
+
+✔ actual Thing state detects generic edits despite an unchanged embedded timestamp (5.281125ms)
+✔ same-millisecond credential replacement, ACL changes and physical recreation produce distinct versions (0.687292ms)
+✔ atomic state filters compare the full document as a literal (0.911166ms)
+✔ BSON identity and dates cannot collide with their JSON string representations (2.781084ms)
+✔ previously unknown root fields participate without an allowlist migration (0.287416ms)
+✔ missing identities, unusable timestamps and oversized state fail closed (0.800625ms)
+✔ home context accepts only a home destination and bounded receipt plane (65.95925ms)
+﹣ theme saves commit home placement with content and immutable receipts, refusing invalid folders atomically (5.721708ms) # SKIP
+﹣ concurrent normal theme creates exceed the former count limit and drain bounded pages (0.568666ms) # SKIP
+﹣ conditional active-theme selection has real atomic receipts, normal-writer conflicts and deletion fencing (0.627208ms) # SKIP
+✔ active theme contracts preserve null clearing and reject authority, oversized and ambiguous fields (2.009125ms)
+﹣ conditional account theme saves use canonical storage, durable receipts and atomic deletion cleanup (0.5505ms) # SKIP
+✔ theme synchronization shares canonical token normalization and stable request identities (3.178667ms)
+✔ theme synchronization refuses ambiguous operations, authority fields and oversized or executable values (4.346041ms)
+✔ theme acknowledgments distinguish create/update from deletion and reject extra server envelope fields (0.348666ms)
+✔ theme sync retains explicit focus tokens through canonical normalization and replay parsing (0.443375ms)
+✔ theme receipt replays only the exact admitted owner, selected plane and normalized request (439.063125ms)
+✔ client imports, revision heads and altered acknowledgments cannot become successful theme receipts (45.892792ms)
+✔ stored comparison tokens preserve BSON, physical identity and unrecognized envelope fields (20.345208ms)
+✔ theme projection uses owned/public readers and excludes identity, publication and extra state (1.633042ms)
+✔ theme importer invokes canonical writer without source ID and always private (0.631708ms)
+✔ generic transfer resolves theme IDs via dedicated writer and rolls back with dedicated delete (9.165667ms)
+✔ theme exports support legacy dedicated reads and have no attachment discovery (2.085666ms)
+✔ owned display titles survive portable export/import without changing source names or publishing (0.553041ms)
+✔ managed title reads retain owner/home boundaries and do not change folder-only readers (0.669083ms)
+✔ dedicated theme sync pins confirmed owner and selected plane while declaring home storage (157.75075ms)
+✔ anonymous, temporary, service, changed-account, changed-plane and cross-origin callers never reach theme storage (17.693542ms)
+✔ internal Action identity and failed rate admission do not authorize theme synchronization (4.342916ms)
+✔ theme sync repeats session admission before mutation and response disclosure (0.983666ms)
+✔ selection reads and writes retain admission and disclosure boundaries (2.195291ms)
+✔ explicit home destination preserves receipt context without replacing current session admission (2.140208ms)
+✔ home context rejects alternate destinations, extra authority and read operations before storage (2.078417ms)
+✔ Character sync reauthorizes the selected actor before writes and disclosure (1.518333ms)
+✔ catalogue preserves account admission, rate limits and stream revalidation (3.351084ms)
+✔ theme projection preserves every current token and exact historical partial values without adding defaults (4.098667ms)
+✔ protected theme history excludes non-approved fields and its decoder rejects hidden content (7.271417ms)
+✔ theme create/edit/delete events share the exact parent chain and trusted Action/AI provenance (1.533ms)
+✔ theme retained-byte projection matches approved live payload and never exempts client drafts or invalid shapes (8.667333ms)
+✔ theme focus tokens use v2 while historical v1 bytes and validation stay frozen (89.663ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 4
+ℹ todo 0
+ℹ duration_ms 7517.252833

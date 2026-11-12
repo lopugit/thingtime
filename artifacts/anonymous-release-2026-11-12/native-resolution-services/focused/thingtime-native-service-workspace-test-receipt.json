@@ -1,0 +1,14 @@
+{
+  "command": [
+    "node",
+    "--import",
+    "tsx",
+    "--test",
+    "app/api/utils/serviceWorkspaces/access.test.ts",
+    "app/api/utils/serviceWorkspaces/nativeAccess.test.ts"
+  ],
+  "startedAt": "2026-11-12T00:56:20.624238+00:00",
+  "deadlineSeconds": 180,
+  "exitCode": 0,
+  "elapsedSeconds": 179.93936179099546
+}

@@ -1,4 +1,7 @@
 import { withGatewayWork } from '../deployment/environmentGateway';
+import { safeInternalHref } from './safeInternalHref';
+import { currentNotificationRepository, NotificationRepositoryError } from './repository';
+import { currentUserIdentityRepository } from '../auth/userIdentityRepository';
 import { waitUntil } from '@vercel/functions';
 import { randomUUID } from 'node:crypto';
 import type { NotificationDelivery } from '../lopu/remindersCore';
@@ -20,12 +23,13 @@ import type { NotificationCategory, NotificationType } from '~/schemas/registry'
 import { emailNotificationsBulk, maybeEmailNotification } from './emails';
 import { sendNotificationPush, type PushDeliveryReport } from './apns';
 import {
-  buildNotificationListFilters,
   resolveNotificationListQuery,
   type NotificationListOptions as NotificationListQueryOptions,
   type ResolvedNotificationListQuery
 } from './listQuery';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
+
+export { safeInternalHref } from './safeInternalHref';
 
 // Notifications are PROTECTED things minted only here (see registry.ts
 // PROTECTED_THINGTIME): ownerId = recipient, targetId = the subject thing
@@ -34,7 +38,6 @@ import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 // The bell still applies push preferences; history=1 explicitly reads all rows.
 
 const MAX_PREVIEW_CHARS = 140;
-const MAX_HREF_CHARS = 300;
 const MAX_CURSOR_CHARS = 512;
 // The page-size bounds live in listQuery.ts — normalizeNotificationListOptions
 // delegates the limit to resolveNotificationListQuery so both entry points
@@ -96,18 +99,6 @@ export const clampPreview = (value: unknown): string | null => {
   return text.length > MAX_PREVIEW_CHARS ? `${text.slice(0, MAX_PREVIEW_CHARS - 1)}…` : text;
 };
 
-// A click-through for a system note is always an in-app path: rooted, not
-// protocol-relative, no whitespace/control characters, bounded. Anything else
-// is dropped rather than rendered.
-export const safeInternalHref = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const href = value.trim();
-  if (!href.startsWith('/') || href.startsWith('//') || href.length > MAX_HREF_CHARS) return null;
-  // eslint-disable-next-line no-control-regex
-  if (/[\\\s\u0000-\u001f\u007f]/.test(href)) return null;
-  return href;
-};
-
 export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   shareId: randomUUID(),
   schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
@@ -148,10 +139,13 @@ export const emitNotification = (input: EmitNotificationInput): Promise<void> =>
 const emitNotificationNow = async (input: EmitNotificationInput): Promise<void> => {
   try {
     if (!input.recipientId || input.recipientId === input.actor.id) return;
-    const things = await getThingsCollection();
+    const history = currentNotificationRepository();
     const doc = notificationDoc(input, new Date());
-    await things.insertOne(doc as any);
+    await history.insertOne(doc);
     if (input.historyOnly) return;
+    // History is committed independently. Native push/email transports require
+    // their own provider adapters; never borrow the hosted account's delivery.
+    if (history.kind === 'native-home') throw new NotificationRepositoryError('NOTIFICATION_DELIVERY_UNAVAILABLE', 'Native notification history was saved; external delivery is unavailable');
     const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
     const pushOn = prefs.masters.push && prefs.push[input.type] !== false;
     if (pushOn) {
@@ -161,7 +155,7 @@ const emitNotificationNow = async (input: EmitNotificationInput): Promise<void> 
     }
     // The email channel rides the same emit but is fire-and-forget — the
     // social action never waits on SES (emails.ts re-checks its own gates).
-    void maybeEmailNotification(input).catch(() => {});
+    void withGatewayWork(() => maybeEmailNotification(input)).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] emit failed:', err?.message || err);
   }
@@ -178,22 +172,11 @@ export type EmitNotificationsBulkOptions = {
 };
 
 const withoutUnreadDuplicates = async (recipients: BulkRecipient[], base: Omit<EmitNotificationInput, 'recipientId' | 'type'>): Promise<BulkRecipient[]> => {
-  const things = await getThingsCollection();
-  const preview = clampPreview(base.preview);
-  const held = (await things
-    .find({
-      thingtime: 'notification',
-      ownerId: { $in: recipients.map(({ recipientId }) => recipientId) },
-      readAt: null,
-      targetId: base.targetId || null,
-      'crystal.actorId': base.actor.id,
-      'crystal.type': { $in: [...new Set(recipients.map(({ type }) => type))] },
-      ...(preview ? { 'crystal.preview': preview } : {})
-    } as any)
-    .project({ ownerId: 1, 'crystal.type': 1 })
-    .toArray()) as any[];
+  const held = await currentNotificationRepository().findUnreadDuplicates({
+    recipients, actorId: base.actor.id, targetId: base.targetId || null, preview: clampPreview(base.preview)
+  });
   if (!held.length) return recipients;
-  const heldKeys = new Set(held.map((doc) => `${String(doc.ownerId)} ${String(doc.crystal?.type)}`));
+  const heldKeys = new Set(held.map((doc) => `${doc.ownerId} ${doc.type}`));
   return recipients.filter(({ recipientId, type }) => !heldKeys.has(`${recipientId} ${type}`));
 };
 // System notes: the platform speaking through Lopu — an action you ran
@@ -255,6 +238,7 @@ export const emitSystemNotificationOnce = async (
 	checkpoint: (session: any) => Promise<boolean>,
 	onPush?: (report: PushDeliveryReport) => void
 ): Promise<boolean> => {
+  if (currentNotificationRepository().kind === 'native-home') throw new NotificationRepositoryError('NOTIFICATION_TRANSACTION_UNSUPPORTED', 'Native scheduler checkpoint and notification must share a supported transaction');
 	const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
 	if (!prefs.masters.push || prefs.push[input.type] === false) return false;
 	const things = await getThingsCollection();
@@ -303,8 +287,10 @@ const emitNotificationsBulkNow = async (
     const docs = wanted.map(({ recipientId, type }) => notificationDoc({ ...base, recipientId, type,
       historyOnly: base.historyOnly || !deliveryIds.has(recipientId) }, now));
     if (!docs.length) return;
-    const things = await getThingsCollection();
-    await things.insertMany(docs as any, { ordered: false });
+    const history = currentNotificationRepository();
+    await history.insertMany(docs);
+    if (history.kind === 'native-home' && docs.some(doc => !doc.historyOnly)) throw new NotificationRepositoryError('NOTIFICATION_DELIVERY_UNAVAILABLE', 'Native notification history was saved; external delivery is unavailable');
+    if (history.kind === 'native-home') return;
     const deduped = docs.filter(doc => !doc.historyOnly).map((doc) => ({
       recipientId: String(doc.ownerId),
       type: doc.crystal.type as NotificationType
@@ -321,7 +307,7 @@ const emitNotificationsBulkNow = async (
       }));
     }
     // Email retains its existing delivery boundary.
-    void emailNotificationsBulk(deduped, base).catch(() => {});
+    void withGatewayWork(() => emailNotificationsBulk(deduped, base)).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] bulk emit failed:', err?.message || err);
   }
@@ -335,6 +321,18 @@ const loadActors = async (
   const ids = [...new Set(actorIds)].filter(Boolean);
   const map = new Map<string, { username: string | null; displayName: string | null; avatarUrl: string | null }>();
   if (!ids.length) return map;
+  if (currentNotificationRepository().kind === 'native-home') {
+    const documents = await currentUserIdentityRepository()!.findUserThingsByIds(ids);
+    for (const doc of documents) {
+      const crystal = doc.crystal && typeof doc.crystal === 'object' ? doc.crystal as Record<string, unknown> : {};
+      map.set(String(doc.shareId), {
+        username: typeof crystal.username === 'string' ? crystal.username : null,
+        displayName: typeof crystal.displayName === 'string' ? crystal.displayName : null,
+        avatarUrl: effectiveProfileMediaUrl(doc, 'avatar')
+      });
+    }
+    return map;
+  }
   const things = await getThingsCollection();
   const objectIds = ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
   const [userThings, legacyUsers] = await Promise.all([
@@ -490,47 +488,9 @@ export const listNotifications = async (
   const { cursor, from, to, query, withTotal } = normalized.value;
 
   const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(userId));
-  // Push master off = the bell goes quiet entirely (list AND badge), without
-  // touching the stored per-type switches. The same short-circuit covers a
-  // filter that asks only for disabled or unknown types.
-  const filters = buildNotificationListFilters(userId, prefs, query);
-  if (!filters) {
-    return { ok: true, notifications: [], unreadCount: 0, ...(query.history ? { historyUnreadCount: 0 } : {}), total: withTotal ? 0 : null, nextBefore: null, nextCursor: null };
-  }
-
-  // The badge count is filter-agnostic: everything enabled and unread.
-  const unreadFilter = buildNotificationListFilters(userId, prefs, resolveNotificationListQuery({ unread: '1' }));
-
-  // `before`, `since` and `until` are already folded into filters.base/.page.
-  // The Watch's inclusive `from` / exclusive `to` window rides alongside as its
-  // own clause so the two createdAt bounds never collide on a single key. It is
-  // a filter, so it narrows `total` too; the cursor is pagination, so it
-  // narrows the page only.
-  const rangeClauses: Record<string, any>[] = [];
-  if (from || to) {
-    rangeClauses.push({
-      createdAt: {
-        ...(from ? { $gte: from } : {}),
-        ...(to ? { $lt: to } : {})
-      }
-    });
-  }
-  const baseFilter = rangeClauses.length ? { $and: [filters.base, ...rangeClauses] } : filters.base;
-  const pageClauses: Record<string, any>[] = [filters.page, ...rangeClauses];
-  if (cursor) pageClauses.push(notificationCursorClauseFor(cursor));
-  const pageFilter = pageClauses.length === 1 ? filters.page : { $and: pageClauses };
-
-  const things = await getThingsCollection();
-  const [docs, unreadCount, total, historyUnreadCount] = await Promise.all([
-    things
-      .find(pageFilter as any)
-      .sort({ createdAt: -1, shareId: 1 })
-      .limit(query.limit)
-      .toArray(),
-    unreadFilter ? things.countDocuments(unreadFilter.base as any) : Promise.resolve(0),
-    withTotal ? things.countDocuments(baseFilter as any) : Promise.resolve(null),
-    query.history ? things.countDocuments({ thingtime: 'notification', ownerId: userId, readAt: null } as any) : Promise.resolve(undefined)
-  ]);
+  const { documents: docs, unreadCount, total, historyUnreadCount } = await currentNotificationRepository().readPage({
+    userId, prefs, query, cursor, from, to, withTotal
+  });
 
   const actors = await loadActors(docs.map((doc: any) => String(doc.crystal?.actorId || '')));
   const notifications = (docs as any[]).map((doc) => publicNotification(doc, actors));
@@ -551,9 +511,6 @@ export const markNotificationsRead = async (
   if (!all && !ids.length) {
     return { ok: false, status: 400, error: 'Pass ids to mark, or all: true' };
   }
-  const filter: Record<string, any> = { thingtime: 'notification', ownerId: userId, readAt: null };
-  if (!all) filter.shareId = { $in: ids };
-  const things = await getThingsCollection();
-  const res = await things.updateMany(filter as any, { $set: { readAt: new Date(), updatedAt: new Date() } });
-  return { ok: true, updated: res.modifiedCount || 0 };
+  const updated = await currentNotificationRepository().markRead(userId, all ? null : ids, new Date(), new Date());
+  return { ok: true, updated };
 };

@@ -1,0 +1,31 @@
+{
+  "passed": false,
+  "launches": [
+    {
+      "mode": "initial",
+      "launchOutput": "com.thingtime.localaccountprofilecontrol: 38595"
+    }
+  ],
+  "cleanup": [
+    {
+      "operation": "shutdown",
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "returncode": 0
+    }
+  ],
+  "scope": "iOS Simulator actual Keychain profile; no Node/Nitro/HTTP or physical-device acceptance",
+  "sourceHashes": {
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalAccountProfile.swift": "da34896660f1bfcb7918efd82436a0a6e0a33b516b893d4d8e6e8fb6a393f97a",
+    "iOS/scripts/local-development/account-profile-control/main.swift": "c34de896d4e5f75ff4fda796dd1e175ead13cf9e1f2daac26af69a1e71a3173c",
+    "iOS/scripts/local-development/account-profile-control/run.py": "afd4331d5b67db8718b836f03481f830d925cdedb72c998242ca44d62d5972e7"
+  },
+  "sdk": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk",
+  "toolchain": "Xcode 27.0\nBuild version 27A5194q",
+  "binarySha256": "f56c3242bc8504ccc36b162d237af1393670f901fe8686f8359eaae940c16c2e",
+  "ownSimulator": "75117864-1EEB-461F-B157-14350E17BFC7",
+  "error": "[Errno 2] No such file or directory: '/Users/lopu/Library/Developer/CoreSimulator/Devices/75117864-1EEB-461F-B157-14350E17BFC7/data/Containers/Data/Application/200212DD-A152-4763-A1CA-A17916E250E0/Documents/receipt.json'",
+  "observedAt": "2026-11-11T21:25:02.440709+00:00"
+}

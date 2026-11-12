@@ -13,6 +13,9 @@ import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
 import { PersistedThingMenuLoaderContext } from './components/Thingtime/ContextMenu/PersistedThingContextMenu';
 import { bindRootIdentityChannel, rootIdentity } from './utils/rootIdentity';
+import { watchDesktopBundleActivation } from './utils/desktopBundleActivation';
+import { getElectronBridge } from './utils/electronBridge';
+import { createDesktopRendererBootHealth, watchDesktopRendererReady } from './utils/desktopRendererReady';
 import {
   clearStaleChunkReloadGuard,
   reloadForStaleChunk,
@@ -73,11 +76,19 @@ if (!root) {
   throw new Error('Thingtime root element was not found.');
 }
 
+const desktopBootHealth = createDesktopRendererBootHealth();
+function DesktopRendererReady() {
+  React.useEffect(() => watchDesktopRendererReady({ router, root: root!, bridge: getElectronBridge(), isHealthy: desktopBootHealth.isHealthy }), []);
+  React.useEffect(() => watchDesktopBundleActivation({ router, bridge: getElectronBridge(), isHealthy: desktopBootHealth.isHealthy }), []);
+  return null;
+}
+
 createRoot(root).render(
   <React.StrictMode>
     <ClientCacheProvider>
       <PersistedThingMenuLoaderContext.Provider value={loadPersistedThingMenu}>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} onError={error => { desktopBootHealth.onError(); console.error(error); }} />
+        <DesktopRendererReady />
       </PersistedThingMenuLoaderContext.Provider>
     </ClientCacheProvider>
   </React.StrictMode>

@@ -1,0 +1,13 @@
+Unexpected Application Error!
+Account workspace changed. Reopen this editor before continuing.
+WorkspaceError: Account workspace changed. Reopen this editor before continuing.
+    at Object.assertCurrent (http://127.0.0.1:61925/fixture.js:102231:13)
+    at new AccountDraftClient (http://127.0.0.1:61925/fixture.js:178808:24)
+    at createWorker (http://127.0.0.1:61925/fixture.js:180286:23)
+    at accountWorkspaceWorker (http://127.0.0.1:61925/fixture.js:181655:19)
+    at startAccountWorkspaceSync (http://127.0.0.1:61925/fixture.js:181661:7)
+    at http://127.0.0.1:61925/fixture.js:187357:7
+    at Object.react_stack_bottom_frame (http://127.0.0.1:61925/fixture.js:19847:21)
+    at runWithFiberInDEV (http://127.0.0.1:61925/fixture.js:2277:72)
+    at commitHookEffectListMount (http://127.0.0.1:61925/fixture.js:10691:164)
+    at commitHookPassiveMountEffects (http://127.0.0.1:61925/fixture.js:10745:60)

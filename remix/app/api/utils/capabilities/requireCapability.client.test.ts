@@ -5,6 +5,7 @@ import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { afterEach, beforeEach, test } from 'node:test';
 import { createThingtimeCapabilityChecker } from './requireCapability.client';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
+import { timelineVersionExportRequirement } from '../../../timeline/exportVersion';
 import { canKeepThingAfterReadFailure } from '../../../components/Things/thingDetailSectionsCore';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -106,6 +107,22 @@ test('archive clients reject missing, older and breaking contracts but accept co
    mock.mock.restore();
   }
  }
+});
+
+test('profile exports negotiate their exact history decoders while ordinary exports retain their minimum', async (t) => {
+  for (const version of [undefined, '1.21.0', '2.0.0', '1.22.0', '1.23.1']) {
+    const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { 'api.timeline': { version } } : {} }));
+    const check = createThingtimeCapabilityChecker();
+    const request = check('api.timeline', timelineVersionExportRequirement('algorithm-content'));
+    if (version === '1.22.0' || version === '1.23.1') await request;
+    else await assert.rejects(request, /incompatible/);
+    if (version === '1.21.0') {
+      await assert.rejects(check('api.timeline', timelineVersionExportRequirement('theme-content')), /incompatible/);
+      await check('api.timeline', timelineVersionExportRequirement('thing-content'));
+    }
+    if (version === '1.23.1') await check('api.timeline', timelineVersionExportRequirement('theme-content'));
+    response.mock.restore();
+  }
 });
 
 
@@ -327,7 +344,7 @@ test('active API source keeps explicit origin, schema and response endpoint fenc
 });
 
 
-test('Archive read gate rejects a 1.62 active API behind a 1.63 frontend and retries after rollout', async () => {
+test('Archive read gate rejects either older variant behind a 1.65 frontend and retries after rollout', async () => {
   const origin = 'https://thingtime.test';
   let activeVersion: string | undefined = '1.62.0';
   const calls: string[] = [];
@@ -336,19 +353,19 @@ test('Archive read gate rejects a 1.62 active API behind a 1.63 frontend and ret
     calls.push(path);
     return Response.json(path === '/api/v1/capabilities'
       ? { ok: true, schemaVersion: 1, features: activeVersion ? { 'api.things': activeVersion } : {} }
-      : { schemaVersion: 1, origin, features: { 'api.things': { version: '1.63.0' } } });
+      : { schemaVersion: 1, origin, features: { 'api.things': { version: '1.65.0' } } });
   }) as typeof fetch;
   const check = createLibraryArchiveReadChecker(createThingtimeCapabilityChecker(), createThingtimeCapabilityChecker({ source: 'active-api' }));
   const transport = { fetch: fetcher, currentOrigin: () => origin };
   let queries = 0;
   const query = async () => { await check(origin, transport); queries++; };
-  for (const version of ['1.62.0', undefined, '2.0.0']) {
+  for (const version of ['1.62.0', '1.63.0', '1.64.0', '1.64.99', undefined, '2.0.0']) {
     activeVersion = version;
     await assert.rejects(query(), /api.things is incompatible/);
     assert.equal(queries, 0, 'an incompatible active API cannot reach the library query');
   }
   assert.deepEqual(new Set(calls), new Set(['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']));
-  activeVersion = '1.63.0';
+  activeVersion = '1.65.0';
   await query();
   assert.equal(queries, 1);
 });

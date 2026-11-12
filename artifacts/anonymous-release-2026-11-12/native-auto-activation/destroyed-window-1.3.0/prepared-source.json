@@ -1,0 +1,40 @@
+{
+  "rows": [
+    {
+      "path": "main.cjs",
+      "sha256": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "preload.cjs",
+      "sha256": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "lib/renderer-server.cjs",
+      "sha256": "f4b821b727e186b86a7dfe0daa993687cd07962f480f8bf43a95668cddb09471",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "lib/web-bundle-activation.cjs",
+      "sha256": "5c704737428fb819531b75b463ea5f5901095697336c98beabb4792ae8391e47",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "scripts/verify-web-bundle-auto-activation.mjs",
+      "sha256": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "dist/web/metadata.json",
+      "sha256": "ba2728c7c81db9b61ce2cb6b7fb8484173191d4486aac0d1b942163eacc17447",
+      "matchesCurrentSource": true
+    },
+    {
+      "path": "dist/web-integrity.json",
+      "sha256": "cd1c3ff84d82ebb942c6e2b24ba746d880d909393b3b8bd4d60c142f85579d41",
+      "matchesCurrentSource": true
+    }
+  ],
+  "exactCurrentSnapshot": true
+}

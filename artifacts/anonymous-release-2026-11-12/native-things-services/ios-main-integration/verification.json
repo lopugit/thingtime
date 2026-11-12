@@ -1,0 +1,134 @@
+{
+  "scope": "actual unsigned isolated iOS Simulator compilation and payload verification only; no simulator boot, installation, launch, signing, Keychain or UI acceptance",
+  "startedAt": "2026-11-11T23:10:32.150434+00:00",
+  "expectedNitroSha256": "a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801",
+  "cache": "/tmp/thingtime-ios-native-services-main-integration-01",
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/iOS/scripts/local-development/prepare.py",
+        "--cache",
+        "/tmp/thingtime-ios-native-services-main-integration-01",
+        "--web-output",
+        "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/electron/dist/web/.output",
+        "--entry-sha256",
+        "a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801",
+        "--runtime-cache",
+        "/tmp/thingtime-node24-pr1000-bab94d1d",
+        "--native-app",
+        "/tmp/thingtime-ios-native-account-home-01/LocalRuntime",
+        "--native-accounts",
+        "--allow-public-prerelease"
+      ],
+      "log": "prepare.log",
+      "timeoutSeconds": 240,
+      "returncode": 0,
+      "logSha256": "78b7445f4698c333b88f4f186c5a36fb9c23b6874c9684ea2de4879e48a2365a"
+    },
+    {
+      "command": [
+        "xcodebuild",
+        "-project",
+        "/tmp/thingtime-ios-native-services-main-integration-01/ThingtimeLocalDevelopment.xcodeproj",
+        "-scheme",
+        "ThingtimeLocalDevelopment",
+        "-configuration",
+        "Debug",
+        "-sdk",
+        "iphonesimulator",
+        "-destination",
+        "generic/platform=iOS Simulator",
+        "-derivedDataPath",
+        "/tmp/thingtime-ios-native-services-main-integration-01/DerivedData",
+        "ARCHS=arm64",
+        "ONLY_ACTIVE_ARCH=YES",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "log": "build.log",
+      "timeoutSeconds": 1500,
+      "returncode": 0,
+      "logSha256": "0158980b410993241f5b7683c7bd15404fbb805d5802b285dd508c9494e2e65f"
+    }
+  ],
+  "passed": true,
+  "nativeRuntimeLaunchAccepted": false,
+  "keychainRetentionAccepted": false,
+  "sourceToBinaryReproducibility": "unproven",
+  "preparation": {
+    "entrySha256": "a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801",
+    "canonicalOutputInventory": {
+      "sha256": "5ea324fc9c3da8f46c5d67bead4462e868bd9e2799e894bfc595d94914ec1d3d",
+      "files": 1846,
+      "bytes": 270422529
+    },
+    "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+    "sourceToBinaryReproducibility": "unproven",
+    "origin": "http://127.0.0.1:29741",
+    "bundleId": "com.thingtime.localdevelopment",
+    "nativeAccountsRequested": true,
+    "localAccountApiSupported": "pending-runtime-validation",
+    "nativeAddonSha256": {
+      ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+      ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    },
+    "toolCheckoutHead": "c72610a0c540c8cd0f3bbb56ab271941550d3048"
+  },
+  "preparedCanonicalPayload": {
+    "canonicalFilesMatched": 1846,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "ce534c0fc7be52fd387d4a258d9cc2890756fde8167c418ba60040bd94de7276",
+      "files": 1848,
+      "bytes": 278835905
+    }
+  },
+  "builtApp": "/tmp/thingtime-ios-native-services-main-integration-01/DerivedData/Build/Products/Debug-iphonesimulator/ThingtimeLocalDevelopment.app",
+  "binarySha256": "dd5a17e117b1a54d5136571529f6c1ac6c4c7a6b81e730dc2b9f4e6ac0f238c4",
+  "builtAppInventory": {
+    "sha256": "9ac63479490a075b3dc567ce12c456b9cd75eca0e1b91aa662af53c7a81d1392",
+    "files": 1864,
+    "bytes": 409305766
+  },
+  "builtCanonicalPayload": {
+    "canonicalFilesMatched": 1846,
+    "onlyExplicitAddonSubstitutions": true,
+    "nativeAddons": {
+      "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+        "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+        "bytes": 142528,
+        "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+      },
+      "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+        "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+        "bytes": 8270848,
+        "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+      }
+    },
+    "inventory": {
+      "sha256": "ce534c0fc7be52fd387d4a258d9cc2890756fde8167c418ba60040bd94de7276",
+      "files": 1848,
+      "bytes": 278835905
+    }
+  },
+  "bootstrapResourcesMatch": {
+    "entry.mjs": true,
+    "native-home.mjs": true
+  },
+  "observedNitroSha256": "a8816bc20947b965719b6c55c8fb6a40f0c570bc0bfa081c16e15dbcf4488801",
+  "nativeSourceChangedDuringBuild": [],
+  "finishedAt": "2026-11-11T23:11:30.298634+00:00"
+}

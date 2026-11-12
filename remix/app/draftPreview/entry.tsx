@@ -24,6 +24,7 @@ let update: (draft: Draft) => void;
 let busy = false;
 let current: Draft | undefined;
 const status = document.querySelector('#diagnostics')!;
+const exportButton = document.querySelector<HTMLButtonElement>('#export')!;
 function App() {
   const [draft, setDraft] = React.useState<Draft>();
   update = next => { flushSync(() => setDraft(next)); };
@@ -36,6 +37,7 @@ async function render(content: unknown, root?: string) {
   if (busy) throw new Error('A draft render is already running');
   busy = true;
   current = undefined;
+  exportButton.disabled = true;
   document.querySelector('#preview-mount')!.setAttribute('aria-busy', 'true');
   try {
     const draft = await prepareDraft(content, root);
@@ -48,6 +50,7 @@ async function render(content: unknown, root?: string) {
     const preview = document.querySelector('#native-preview')!;
     if (!preview?.textContent?.trim() || !preview.getBoundingClientRect().height) throw new Error('Native renderer produced empty content');
     current = draft;
+    exportButton.disabled = false;
     status.textContent = JSON.stringify({ ok: true, hash: draft.hash, diagnostics: draft.diagnostics }, null, 2);
     return { ok: true, json: draft.json, hash: draft.hash, diagnostics: draft.diagnostics, root: draft.root.id };
   } catch (error) {

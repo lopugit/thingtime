@@ -1,0 +1,9 @@
+
+> @1.0.0 typecheck /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> tsc --noEmit
+
+app/api/utils/documentStore/nativeNotifications.test.ts(31,34): error TS2345: Argument of type '{ ttid: string; username: string; email: string; displayName: string; passwordHash: string; emailVerified: false; accountKind: "user"; createdAt: Date; updatedAt: Date; }' is not assignable to parameter of type 'UserDoc & { schemaVersion?: number; }'.
+  Property 'meta' is missing in type '{ ttid: string; username: string; email: string; displayName: string; passwordHash: string; emailVerified: false; accountKind: "user"; createdAt: Date; updatedAt: Date; }' but required in type 'UserDoc'.
+server/utils/nativeHomeRuntime.ts(8,10): error TS2724: '"../../app/api/utils/mongodb/dataPlane"' has no exported member named 'enforceExpectedDataPlaneIdentity'. Did you mean 'enforceExpectedDataPlane'?
+server/utils/nativeHomeRuntime.ts(66,55): error TS2307: Cannot find module '../../app/api/utils/documentStore/nativeAccountHttpHome' or its corresponding type declarations.
+ ELIFECYCLE  Command failed with exit code 2.

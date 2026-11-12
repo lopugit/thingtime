@@ -1,3 +1,4 @@
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { unzipSync } from 'fflate';
@@ -97,9 +98,11 @@ test('the deadline stops a slow archive', async () => {
 
 test('the deadline fires while an upstream read is stalled and aborts the upstream signal', async () => {
 	let upstreamAborted = false;
+	let finishUpstream!: () => void;
 	const stalled = new ReadableStream<Uint8Array>({
 		start(controller) {
 			controller.enqueue(bytesOf('a'));
+			finishUpstream = () => controller.close();
 			// never closes, never delivers the second byte
 		}
 	});
@@ -123,6 +126,10 @@ test('the deadline fires while an upstream read is stalled and aborts the upstre
 	await assert.rejects(collect(stream), (error: unknown) => error instanceof ZipStreamError && /timed out/.test(error.message));
 	assert.ok(Date.now() - started < 5_000, 'the timer, not the platform, ended the read');
 	assert.equal(upstreamAborted, true);
+	// The synthetic source deliberately ignores abort; release its pending read
+	// after proving the deadline response so it cannot leak into later tests.
+	finishUpstream();
+	await new Promise<void>(resolve => setImmediate(resolve));
 });
 
 test('cancelling the consumer releases the upstream reader', async () => {
@@ -142,4 +149,28 @@ test('cancelling the consumer releases the upstream reader', async () => {
 	// the pump observes the abort on its next drain/read turn
 	for (let attempt = 0; attempt < 50 && !cancelled; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
 	assert.equal(cancelled, true);
+	await new Promise<void>(resolve => setImmediate(resolve));
+});
+
+test('consumer cancellation keeps ZIP shutdown admission until upstream cancellation cleanup settles', async () => {
+ let release!: () => void;
+ const cleanup = new Promise<void>(resolve => { release = resolve; });
+ let cleaning!: () => void;
+ const cleanupStarted = new Promise<void>(resolve => { cleaning = resolve; });
+ const upstream = new ReadableStream<Uint8Array>({
+  pull(controller) { controller.enqueue(new Uint8Array(1024)); },
+  async cancel() { cleaning(); await cleanup; }
+ });
+ const reader = createZipStream([{ path: 'pending.bin', size: Number.MAX_SAFE_INTEGER, open: async () => upstream }], [], { highWaterMarkBytes: 1 }).getReader();
+ await reader.read();
+ assert.equal(isGatewayWorkIdle(), false);
+ await reader.cancel();
+ await cleanupStarted;
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ release();
+ await new Promise<void>(resolve => setImmediate(resolve));
+ assert.equal(isGatewayWorkIdle(), true);
+ const reservation = reserveGatewayWorkShutdown();
+ assert.ok(reservation);
+ reservation.release();
 });

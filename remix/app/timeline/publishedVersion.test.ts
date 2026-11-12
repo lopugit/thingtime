@@ -1,3 +1,4 @@
+import { themeContentSnapshot } from './themeContent';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parsePublishedVersionPreview, parseVersionRequest } from './publishedVersion.ts';
@@ -56,4 +57,18 @@ test('recovery is explicit restore-only and its preview identity is bounded', ()
 	assert.deepEqual(parseVersionRequest(apply), apply);
 	assert.throws(() => parseVersionRequest({ ...apply, expectedRecovery: 'invalid' }));
 	assert.throws(() => parseVersionRequest({ ...apply, recover: undefined }));
+});
+
+test('theme previews accept mixed historical v1 and focus v2 through their exact decoder', () => {
+	const snapshot = (theme: any) => themeContentSnapshot({ crystal: { name: 'Theme', theme }, tags: [], visibility: 'private', folderId: null });
+	const old = snapshot({ colors: { accent: '#123456' } });
+	const current = snapshot({ colors: { accent: '#123456', focusBorder: '#456789' }, general: { focusGlowOpacity: 0.5 } });
+	assert.equal(old.version, 1); assert.equal(current.version, 2);
+	const request = { command: 'preview-version' as const, mode: 'restore' as const, eventId: 'old' };
+	const value = { eventId: 'old', thingId: 'theme', mode: 'restore', expectedHeadId: 'head', current, incoming: old, result: current,
+		baseEventId: null, conflicts: [] };
+	assert.deepEqual(parsePublishedVersionPreview(value, 'old', 'theme', request), value);
+	for (const bad of [{ ...current, version: 3 }, { ...current, version: 1 },
+		{ ...current, value: { ...current.value as any, secret: 'hidden' } }])
+		assert.throws(() => parsePublishedVersionPreview({ ...value, result: bad }, 'old', 'theme', request));
 });

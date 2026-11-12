@@ -1,0 +1,8 @@
+{
+  "archive": "/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/tmp/continuation/audio-search-app.tar.gz",
+  "sha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+  "bytes": 68527832,
+  "entries": 2309,
+  "source": "Fresh full sanitized client/server build from working tree; see audio-search-build-source.json",
+  "builtAt": "2026-10-26T20:41:12.793Z"
+}

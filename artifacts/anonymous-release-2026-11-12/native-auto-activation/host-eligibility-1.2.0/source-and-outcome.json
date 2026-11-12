@@ -1,0 +1,159 @@
+{
+  "sourceRevision": "01c6bc3afbe9970944ef4df51c338141792ed3ce",
+  "testedSourceHashes": {
+    "electron/main.cjs": "793ae41b8cf989b6c91d475d21c48b96d54c65e36191ee2b9eb3ff607a36107f",
+    "electron/preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "electron/lib/web-bundle-activation.cjs": "92278bf0870616842053af7d0750c7b04bcd690baa05ea208d799531ef3a414d",
+    "electron/lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "electron/lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "electron/dist/web/metadata.json": "12508ea63c9b1e9e6c576bbfef934519f76806f934b05a7d88dec24db3d8c9de",
+    "remix/app/utils/electronBridge.ts": "d4bb63d3cd924121afdeede2e77fa17cb1ce8e5bafb427035ede352acb73abf9",
+    "remix/app/components/MagicInput/MagicInput.tsx": "6055dd5e98ba9e1e31224f2e0684a8536878810c3702942486e4b823978acd0a",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "fad313e63a0cb3dd2b91645f41407181e500354813b5319e886fcaa50e66df3b"
+  },
+  "prepared": {
+    "main.cjs": "793ae41b8cf989b6c91d475d21c48b96d54c65e36191ee2b9eb3ff607a36107f",
+    "preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "lib/web-bundle-activation.cjs": "92278bf0870616842053af7d0750c7b04bcd690baa05ea208d799531ef3a414d",
+    "lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "dist/web/metadata.json": "12508ea63c9b1e9e6c576bbfef934519f76806f934b05a7d88dec24db3d8c9de"
+  },
+  "preparedSourceMatchesBuildInputs": true,
+  "finalSourceHashes": {
+    "electron/main.cjs": "e9487bd24ac96555312165fce7eb4374f5a2283233d4098f721bec73035eae16",
+    "electron/lib/web-bundle-activation.cjs": "92278bf0870616842053af7d0750c7b04bcd690baa05ea208d799531ef3a414d",
+    "electron/test/web-bundle-activation.test.cjs": "04d5c2cd1f3d4ab25a6f00bf2319741cd8c99e1c43d77ef1585f17a88e6525db",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "fad313e63a0cb3dd2b91645f41407181e500354813b5319e886fcaa50e66df3b",
+    "remix/app/utils/electronBridge.ts": "d4bb63d3cd924121afdeede2e77fa17cb1ce8e5bafb427035ede352acb73abf9"
+  },
+  "build": {
+    "command": "corepack pnpm --dir electron build:web",
+    "exitCode": 0,
+    "uncontended": true,
+    "logSha256": "f78d2200735906496f6b7dfb4ffc15f65e68c2129afe6687b16f7e274031029d"
+  },
+  "tests": {
+    "command": "node --test electron/test/web-bundle-activation.test.cjs electron/test/desktop-shutdown.test.cjs electron/test/password-provider.test.cjs",
+    "passed": 47,
+    "failed": 0,
+    "syntaxChecksPassed": true,
+    "bridgeFocusedLintErrors": 0
+  },
+  "observed": {
+    "signedStaging": true,
+    "dirtyPendingMs": 70434,
+    "normalEnterAndCanonicalPersistedReadback": true,
+    "hardReloadReadback": true,
+    "closedDrawerEmojiFields": 0,
+    "unknownDraftBlockers": 0,
+    "eligibleHostSamples": 12,
+    "unavailableRendererObservations": 12,
+    "hostStdoutRecords": 0,
+    "lastSuccessfulHostProjection": {
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      }
+    },
+    "lastIncomingMessages": [
+      {
+        "type": "prepare",
+        "at": 1794406025259,
+        "keepVeto": false
+      },
+      {
+        "type": "release",
+        "at": 1794406025260,
+        "keepVeto": false
+      }
+    ],
+    "automaticReplacement": false,
+    "idleDeadlineMs": 150000,
+    "manualRestartCalled": false
+  },
+  "finalTransportCorrection": {
+    "nativeShellOnly": true,
+    "console": "stderr",
+    "canonicalStdoutSuppressionPreserved": true,
+    "actualNativeRunAfterCorrection": false
+  },
+  "payloadReuse": {
+    "verifiedCurrentAndPreparedPayloadIdentical": true,
+    "inventorySha256": "06bbaaeb0829e0e25e662ecc0533b2f00d9cdece832cb0e5d8b651dedae39b05",
+    "files": 1822,
+    "bytes": 269974217,
+    "allRecordedSourceInputsOtherThanMainUnchanged": true,
+    "mainDeltaExactlyApprovedLoggerTransport": true,
+    "eligibleForFreshCanonicalPreparationWithoutBuildWeb": true,
+    "condition": "Revalidate this full payload inventory and all recorded inputs; any subsequent renderer/server/packaging-input change invalidates this shell-only reuse claim."
+  },
+  "cleanup": {
+    "verified": true,
+    "pid": 36535,
+    "pidExited": true,
+    "launcherAbsent": true,
+    "trustPolicyRestored": true,
+    "taskListeners": [
+      28640,
+      22677,
+      22678,
+      22679
+    ],
+    "snapshotRetained": true,
+    "stableAppUntouched": true,
+    "taskListenersAbsent": true
+  },
+  "limits": [
+    "No host cancellation-source or renderer ready/participant/flush refusal reason is in the current checkpoint contract",
+    "Heartbeat absent in this tested snapshot because canonical launcher suppresses stdout; stderr correction is focused-test-only",
+    "No second native run or local API extension",
+    "Post-success desktop/390 drawer lifecycle checks not reached"
+  ]
+}

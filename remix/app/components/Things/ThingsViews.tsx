@@ -478,6 +478,7 @@ export const ThingsListView = ({
       textTransform="uppercase"
     >
       <Checkbox
+        aria-label="Select all visible Things"
         colorScheme="pink"
         isChecked={allSelected && items.length > 0}
         isIndeterminate={!allSelected && handlers.selected.size > 0}

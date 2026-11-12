@@ -1,0 +1,20 @@
+✔ registered SQLite account creates and attaches real protected holds with immutable receipt completion and atomic refusal (456.242458ms)
+✔ canonical content mutations fence old held ownership during transfer, deduping unchanged provenance (0.876625ms)
+✔ unheld ordinary writes do not acquire an operation fence; forged hold fields refuse (0.17375ms)
+✔ native memo identities are empty and isolated by live request and exact SQLite transaction (28.603208ms)
+✔ memo keys reject expired descendants, invalid native bindings and caught transaction failures (6.564375ms)
+✔ real SQLite request selection preserves exact transaction binding and expires cached handles (5.794209ms)
+✔ foreign owner selection poisons caught errors and rolls back content (4.732834ms)
+✔ provider, plane, missing native scope and bootstrap lifetime fail closed without Mongo (4.224625ms)
+✔ readonly Timeline ports retain author identity and expire within a live request (5.333625ms)
+✔ closing bootstrap during content callback prevents a caught-error commit (4.502667ms)
+✔ expired async descendants cannot acquire a replacement repository or borrow Mongo (3.885042ms)
+✔ a leaked readonly Timeline port is expired even while its parent request remains active (3.053959ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1218.768084

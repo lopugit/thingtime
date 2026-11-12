@@ -1,0 +1,99 @@
+{
+  "pathname": "/edit/nativeAutoActivationFixture",
+  "fields": [
+    {
+      "tag": "DIV",
+      "editable": "true",
+      "label": null,
+      "visible": true,
+      "text": "nativeAutoActivationFixture"
+    },
+    {
+      "tag": "DIV",
+      "editable": "true",
+      "label": null,
+      "visible": true,
+      "text": "Synthetic draft survives automatic native bundle activation"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Emoji",
+      "visible": false,
+      "text": "",
+      "value": "🔗"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Title",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Hover tooltip",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "URL (relative or https://)",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Commander: search Things",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Emoji",
+      "visible": false,
+      "text": "",
+      "value": "🔗"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Title",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Hover tooltip",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "URL (relative or https://)",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Commander: search Things",
+      "visible": false,
+      "text": "",
+      "value": ""
+    }
+  ]
+}

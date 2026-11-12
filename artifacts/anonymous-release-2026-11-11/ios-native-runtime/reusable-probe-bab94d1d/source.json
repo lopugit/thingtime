@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "bab94d1d974b981600d86d6c3211e8b8a19c35e8",
+  "observedAt": "2026-11-11T09:37:59.833331+00:00",
+  "sourceSha256": {
+    "iOS/scripts/native-runtime-probe/run.py": "870b62d3d9c395253f324cb1acacbf8807e76ccf66fd9e0743745e9efe3768d5",
+    "iOS/scripts/native-runtime-probe/probe.mjs": "07c0b1822fb51953500319ff10674226a1f120df649dd89de29f60dc92f4a9ed",
+    "iOS/scripts/native-runtime-probe/main.mm": "37ae3b37c6019351b48a435bfb6838048d4d4e627031c57100173f406a8d721f"
+  },
+  "exitCode": 0,
+  "scope": "Actual checked-in reusable probe on a fresh owned iOS26.5 simulator; partial runtime compatibility only",
+  "entrySha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "command": "python3 iOS/scripts/native-runtime-probe/run.py --cache <new private cache> --web-output <canonical electron/dist/web/.output> --entry-sha256 39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde --bcrypt <pinned bcrypt6.0.0 source> --addon-api <pinned node-addon-api8.9.2 headers> --runtime com.apple.CoreSimulator.SimRuntime.iOS-26-5 --allow-public-prerelease",
+  "productionTargetChanged": false,
+  "realAccountDataUsed": false
+}

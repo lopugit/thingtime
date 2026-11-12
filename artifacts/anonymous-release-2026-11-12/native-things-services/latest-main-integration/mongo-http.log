@@ -1,0 +1,1 @@
+PASS bundled MongoDB default bootstrap, authenticated replica, normal API registration/private CRUD/session retention across restart, valid folder moves/cycle refusal/child-preserving deletion and restart, cross-account ACL and stale-revision refusal, denied anonymous DB reads, and deliberate offline network boundary.

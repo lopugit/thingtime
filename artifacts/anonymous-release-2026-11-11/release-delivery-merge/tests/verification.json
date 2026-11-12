@@ -1,0 +1,49 @@
+{
+  "recordedAt": "2026-11-11T08:49:04.248Z",
+  "head": "9f97d4739a0755f23ad3b4b3e0745410ab8ec6c3",
+  "fetchedMain": "b3374a16d23994dd3c1c355d75d3fe730321a284",
+  "node": "v24.18.0",
+  "scope": "Focused native/API/capability/archive/renderer tests after latest-main reconciliation; no full build or full Electron suite run by delegate",
+  "results": [
+    {
+      "log": "tests/native-focused.log",
+      "sha256": "20e04590b5b216421c1b317b206366cd487c457778df65f3ce4986d01c6adea5",
+      "tests": 71,
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "log": "tests/api-renderer-focused.log",
+      "sha256": "8aaa9447f0b30192c7e7e1a3d9b16b082380a3be93b6ff974a694c1d9b15f004",
+      "tests": 255,
+      "passed": 255,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "sourceHashes": {
+    "native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "native-bundles/host.cjs": "5e12b298aa2cac9c8082a947b7547bd6a65cc3d0ab2de69552e3135a4b2808aa",
+    "native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e",
+    "electron/lib/web-bundle-download.cjs": "d850da9c514f2b0e3fedb016880fd8cf4d46563b07a0fe34797b24aef4b6388a",
+    "electron/lib/web-bundle-launch.cjs": "b4547e68e29213051133c7e8a8897e7b2df19003d5652b772265336f41c7180b",
+    "electron/lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "electron/lib/web-bundle-updates.cjs": "846b794f6b5b0dd3a1d4cc2cef7d5f30c5fa1c93aa628488a4beb94d3465da88",
+    "remix/app/api/utils/releases/nativeWeb.ts": "67e7f95c6764712b3f0d1eb2d36a82fa2beba13a002b33b66373ac27d5af35df",
+    "remix/app/api/utils/releases/nativeWebHttp.ts": "a8133d9e72714afa5419d336b2372e4d6eda83dc0051fc31e530806e561c20d3",
+    "remix/app/components/Kinds/HtmlThingRenderer.tsx": "fde2722e52d22460e1a53a3aa208463d7aecb8fe649758a868ce197126577bda",
+    "remix/app/draftPreview/prepare.ts": "5a7d7c905a4ecaa2b36fd409a465464c84f83fc8ee37bf58a2795ecb1913f6e3",
+    "remix/app/utils/thingTransfer/storedZipCore.mjs": "97459c3b4c8b9391a09bdb55375154e3aae24f005760cbbdd70e8f288e86ab43"
+  },
+  "commands": [
+    {
+      "cwd": "repository root",
+      "command": "node --test --test-concurrency=2 native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/web-bundle-download.test.cjs electron/test/web-bundle-launch.test.cjs electron/test/web-bundle-updates.test.cjs electron/test/native-bundle-metadata.test.cjs electron/test/renderer-server.test.cjs electron/test/bundled-renderer.test.cjs"
+    },
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --test --test-concurrency=2 app/api/utils/releases/nativeWeb.test.ts app/docs/apiCapabilities.test.ts app/api/utils/capabilities/thingtimeCapabilities.test.ts app/components/Kinds/HtmlThingRenderer.test.ts app/draftPreview/prepare.test.ts app/utils/thingTransfer/storedZip.test.ts app/utils/thingTransfer/archive.test.ts"
+    }
+  ]
+}

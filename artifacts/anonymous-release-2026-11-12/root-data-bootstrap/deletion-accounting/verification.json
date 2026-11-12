@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-11-11T21:33:57.474578+00:00",
+  "scope": "native deletion accounting prerequisite; no canonical Things API or Timeline activation",
+  "worktree": "/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime",
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/nativeUserStorage.ts": "b8a9cdbd9db90658df76f52aa0cd647fa8de4c6457a93e5734dbffdaff88792d",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts": "cefca1cab160b91300012eebf13fd9cec7c9d8ca8f20f791eb5ed99e2165bf27",
+    "remix/app/api/utils/storage/userStorage.ts": "23a9ae2285ea18e2d1dc807154e842a18e46c2bd5fcecee5b2ca1aaa3a2f3a5a"
+  },
+  "checks": [
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --test app/api/utils/documentStore/nativeUserStorage.test.ts",
+      "result": "34 pass, 0 fail, 0 skipped; actual file-backed SQLite; synthetic module persistence fixtures, not canonical history acceptance",
+      "log": "native-deletion-accounting-sqlite.log"
+    },
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --experimental-test-module-mocks --test app/api/utils/storage/*.test.ts app/api/utils/subscriptions/subscriptionIdentity.test.ts",
+      "result": "41 pass, 0 fail, 0 skipped",
+      "log": "native-deletion-accounting-storage.log"
+    },
+    {
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/documentStore/nativeUserStorage.ts app/api/utils/documentStore/nativeUserStorage.test.ts app/api/utils/storage/userStorage.ts",
+      "result": "exit 0 on final corrected three files",
+      "logs": [
+        "native-deletion-accounting-lint.log"
+      ]
+    },
+    {
+      "cwd": ".",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "result": "Earlier prerequisite revision passed. Not repeated after review correction (boolean lane guard and regression tests); parent owns final canonical checks.",
+      "log": "native-deletion-accounting-typecheck.log"
+    },
+    {
+      "cwd": ".",
+      "command": "git diff --check -- remix/app/api/utils/documentStore/nativeUserStorage.ts remix/app/api/utils/documentStore/nativeUserStorage.test.ts remix/app/api/utils/storage/userStorage.ts",
+      "result": "exit 0"
+    }
+  ],
+  "limitations": [
+    "No native reconciliation runner or queue implemented; unavailable ledgers remain unavailable and current trusted ledgers are fenced needs-reconcile.",
+    "Malformed/foreign or old-version ledgers are preserved, not repaired into authority.",
+    "No routes, HTTP composition, root-data, app payload, package, docs or graph changed; no build, commit or push.",
+    "Parent owns final canonical history repository, graph refresh and integration."
+  ],
+  "reviewCorrection": "Retention and refund-credit issuance require deletionOnly; normal shrink+growth cannot spend the same quota relief twice. Exact 100/100 -> -50 -> +50 -> retain50 refuses and rolls back even when caught.",
+  "independentReview": {
+    "result": "previous quota-credit reuse finding closed; no further actionable findings",
+    "scope": "deletion-accounting prerequisite; not canonical Things/Timeline activation"
+  }
+}

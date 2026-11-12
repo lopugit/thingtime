@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { assertMongoProviderAllowed } from '../documentStore/nativeHomeSelection';
 import { randomUUID } from 'node:crypto';
-import { requireGatewayDatabaseAccess, registerGatewayDrain } from '../deployment/environmentGateway';
+import { requireGatewayDatabaseAccess, registerGatewayDrain, withGatewayWork } from '../deployment/environmentGateway';
 import { INDEX_LIFECYCLE_ID, indexExecutionPolicy, type IndexExecutionOptions, budgetIndexCommands, indexPlanFingerprint, recordIndexPlan, runDurableIndexPlan, invalidateDurableIndexPlan } from './indexLifecycle';
 import { getMongoUri } from './config';
 import { mongoConnectionTracker } from './connectionTracker';
@@ -24,7 +25,9 @@ const clientCache = new Map<string, Promise<any>>();
 const MAX_CUSTOM_CLIENTS = 6;
 
 const getClientCachedFor = async (uri: string, isHome: boolean) => {
+  assertMongoProviderAllowed();
   await requireGatewayDatabaseAccess();
+  assertMongoProviderAllowed();
   const cached = clientCache.get(uri);
   if (cached) {
     // LRU touch — Map iteration order is insertion order
@@ -84,7 +87,7 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
     const stale = clientCache.get(staleUri);
     clientCache.delete(staleUri);
     customIndexesEnsured.delete(staleUri);
-    stale?.then((client: any) => client.close()).catch(() => {});
+    if (stale) void withGatewayWork(async () => { await (await stale).close(); }).catch(() => {});
   }
 
   const client = await entry;
@@ -94,6 +97,7 @@ const getClientCachedFor = async (uri: string, isHome: boolean) => {
 
 // Observability may reuse a home client, but must never create or warm one.
 export const getExistingHomeMongoDb = async () => {
+  assertMongoProviderAllowed();
   let cached: Promise<any> | undefined;
   try { cached = clientCache.get(getMongoUri()); } catch { return null; }
   if (!cached) return null;
@@ -311,6 +315,7 @@ export const getExistingHomeConnectionSnapshotCollection = async () => {
 // only ever read and written at the CURRENT generation, via the same
 // physicalCollectionName mapping as home.
 export const getThingtimeDb = async () => {
+  assertMongoProviderAllowed();
   if (!isCustomMongoEndpointActive()) return getHomeThingtimeDb();
   const uri = getActiveMongoUri();
   const db = (await getClientCachedFor(uri, false)).db(getActiveMongoDbName());

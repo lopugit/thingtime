@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -158,7 +159,7 @@ export const action = async ({ request }: { request: Request }) => {
     let tokenExpiresAt = tokenExpiryIso(token);
     const minted = await remoteMintLinkToken(baseUrl, token);
     if (minted) {
-      if (obtainedViaLogin) void remoteLogout(baseUrl, token).catch(() => {});
+      if (obtainedViaLogin) void withGatewayWork(() => remoteLogout(baseUrl, token)).catch(() => {});
       token = minted.token;
       tokenExpiresAt = null;
     }

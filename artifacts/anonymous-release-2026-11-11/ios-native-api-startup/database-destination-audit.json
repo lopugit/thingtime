@@ -1,0 +1,14 @@
+{
+  "scope": "Pinned canonical Nitro snapshot server JS modules",
+  "connectionInputs": [
+    "MONGODB_CONNECTION_STRING"
+  ],
+  "substitutionInputs": [
+    "MONGO_PASS"
+  ],
+  "otherMongoEnvironmentKeys": "Driver diagnostics only",
+  "noCopiedEnvironment": true,
+  "nativeEnvironmentClearedBeforeImport": true,
+  "noAuthenticatedRequests": true,
+  "noDataRouteWrites": true
+}

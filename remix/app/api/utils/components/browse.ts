@@ -1,4 +1,6 @@
 import { getThingsCollection } from '../mongodb/collections';
+import { getBoundThingsPersistence } from '../things/persistenceContext';
+import { browseNativeCatalog } from '../things/nativeCatalogReads';
 import {
   asViewer,
   canViewInherited,
@@ -11,6 +13,7 @@ import {
   toPublicThings,
   visibilityQueryFor,
   withMatch,
+  withFriendIds,
   type Fail,
   type PublicThing,
   type ThingDoc,
@@ -532,6 +535,23 @@ export const browseComponents = async (
   const q = typeof query.q === 'string' ? query.q.trim() : '';
   const lib = libFilterOf(query.lib);
   const category = categoryFilterOf(query.category);
+
+  const native = getBoundThingsPersistence(null);
+  if (native) {
+    const family = familyKeyOf(query.family), library = truthyFlag(query.library), mine = truthyFlag(query.mine);
+    const grouped = query.group === 'family' && !q && !lib && sortRaw !== 'popular' && !library && !mine;
+    // Mongo full-text matching and textScore have no equivalent native index.
+    // Personal/family scopes precede q in the canonical catalogue contract.
+    if (q && !family && !library && !mine && sortRaw !== 'popular') return fail(503, 'Native catalog text search requires the canonical full-text search adapter');
+    const result = await browseNativeCatalog(native, await withFriendIds(viewer), 'component', {
+      mode: family ? 'visible' : library ? 'library' : mine ? 'mine' : 'visible',
+      sort: library ? 'newest' : mine ? sortRaw === 'oldest' ? 'oldest' : 'newest' : sortRaw === 'popular' ? 'popular' : sortRaw === 'oldest' ? 'oldest' : 'newest',
+      cursor: query.cursor, limit: Math.floor(limit), family, groupFamilies: grouped,
+      library: !family && !library && !mine ? lib : null, category: !family && !library && !mine ? category : null
+    });
+    if (isFail(result)) return result;
+    return { ok: true, components: result.things, nextCursor: result.nextCursor, total: result.total, totalCapped: result.totalCapped };
+  }
 
   const finish = async (
     result: Fail | { things: PublicThing[]; nextCursor: string | null; total?: number | null; totalCapped?: boolean }

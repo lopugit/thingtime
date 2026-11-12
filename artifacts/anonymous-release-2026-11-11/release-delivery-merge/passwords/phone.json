@@ -1,0 +1,12 @@
+{
+  "saves": 3,
+  "layoutKeys": [
+    "settings-password-entry-editor",
+    "settings-password-workspace-toolbar"
+  ],
+  "genericActions": 0,
+  "pageErrors": [],
+  "sourceAndAttachmentsPreserved": true,
+  "blurLockAccountSwitchAndStaleBindings": true,
+  "width": 390
+}

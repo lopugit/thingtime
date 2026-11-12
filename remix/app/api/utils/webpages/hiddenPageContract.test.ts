@@ -11,8 +11,13 @@ const read = (...segments: string[]) => readFileSync(resolve(utilsDir, ...segmen
 
 test('resolveWebpage carries canonical permalink authority into rendering', () => {
 	const webpages = read('webpages', 'webpages.ts');
-	const idArm = webpages.slice(webpages.indexOf('const collection = await getThingsCollection();\n\tconst visibility'));
-	assert.ok(idArm, 'resolveWebpage must still resolve ?id= through a visibility-fenced lookup');
+	const resolverStart = webpages.indexOf('export const resolveWebpage');
+	assert.ok(resolverStart >= 0, 'the canonical resolver must exist');
+	const idStart = webpages.indexOf("const id = typeof query.id", resolverStart);
+	assert.ok(idStart > resolverStart, 'resolveWebpage must still resolve ?id= through a visibility-fenced lookup');
+	const idArm = webpages.slice(idStart);
+	assert.match(idArm, /visibilityQueryFor\(viewer, \[\]\)/, 'hosted lookup retains its visibility fence');
+	assert.match(idArm, /canViewInherited\(candidate as ThingDoc, viewer\)/, 'native lookup uses canonical inherited authorization');
 
 	assert.match(
 		idArm,

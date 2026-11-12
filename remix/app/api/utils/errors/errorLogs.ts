@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { Binary } from 'mongodb';
@@ -58,13 +59,13 @@ const persist = async (doc: ReturnType<typeof buildErrorLogThing>) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      (async () => {
+      withGatewayWork(async () => {
         const { getHomeThingsCollection } = await import('../mongodb/collections');
         const col = await getHomeThingsCollection();
         if (Date.now() >= deadline) return false;
         await col.insertOne(doc, { timeoutMS: Math.max(1, deadline - Date.now()) });
         return true;
-      })(),
+      }),
       new Promise<boolean>(resolve => { timer = setTimeout(() => { console.warn('[error-log] persistence deadline exceeded'); resolve(false); }, 1000); })
     ]);
   } catch {

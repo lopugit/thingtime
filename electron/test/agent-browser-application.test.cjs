@@ -22,6 +22,15 @@ test('a successful HTTP response alone cannot establish private database readine
   }
 });
 
+test('a partial client build cannot substitute the SPA for an isolated renderer bundle', async () => {
+  for (const missing of ['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js']) {
+    const request = async (url, options) => options.method === 'HEAD'
+      ? new Response('', { headers: { 'content-type': url.endsWith(missing) ? 'text/html' : 'text/javascript' } })
+      : new Response(html('current'));
+    await assert.rejects(verifyApplicationAssets(request), error => error.message.includes(missing) && error.message.includes('build:client'));
+  }
+});
+
 test('desktop acceptance authority is exact loopback, with private local bytes and explicit data identity', () => {
   const { applicationOptions } = require('../lib/agent-browsers/runtime/application.cjs');
   const id = '12345678-1234-1234-1234-123456789abc', origin = 'http://127.0.0.1:28671';
@@ -46,7 +55,7 @@ test('asset acceptance reads the selected shared test origin, with no fixed-port
     urls.push(url);
     return options.method === 'HEAD' ? new Response('', { headers: { 'content-type': 'text/javascript' } }) : new Response(html('shared'));
   }, origin);
-  assert.deepEqual(urls.sort(), [`${origin}/assets/index-shared.js`, `${origin}/index.html`, `${origin}/login`].sort());
+  assert.deepEqual(urls.sort(), [`${origin}/assets/index-shared.js`, `${origin}/index.html`, `${origin}/login`, ...['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js'].map(path=>origin+path)].sort());
 });
 
 test('packaged node_middleware exports serve real health and assets through the installed-app listener', async () => {
@@ -56,7 +65,7 @@ test('packaged node_middleware exports serve real health and assets through the 
   const entry = path.join(root, 'index.mjs');
   // Match the packaged Nitro export shape; this module intentionally has no
   // listener of its own, reproducing the previously silent startup failure.
-  await fs.writeFile(entry, `export const middleware=(req,res)=>{if(req.url==='/api/v1/health/nitro'){res.setHeader('content-type','application/json');return res.end(JSON.stringify({ok:true,state:'ready'}));}if(req.url==='/assets/index-current.js'){res.setHeader('content-type','text/javascript');return res.end('export{}');}if(req.url==='/fail')throw Error('private failure');res.end('<script type="module" src="/assets/index-current.js"></script>');};export const handleUpgrade=undefined;`);
+  await fs.writeFile(entry, `export const middleware=(req,res)=>{if(req.url==='/api/v1/health/nitro'){res.setHeader('content-type','application/json');return res.end(JSON.stringify({ok:true,state:'ready'}));}if(['/assets/index-current.js','/draft-preview/runner.js','/platform/runtime.js','/library/runner.js','/embed/thingtime.min.js'].includes(req.url)){res.setHeader('content-type','text/javascript');return res.end('export{}');}if(req.url==='/fail')throw Error('private failure');res.end('<script type="module" src="/assets/index-current.js"></script>');};export const handleUpgrade=undefined;`);
   const reservation = net.createServer();
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port; await new Promise(resolve => reservation.close(resolve));
@@ -147,22 +156,31 @@ test('supervised API restart retains signing/database environment and live datab
     const {child,restartApplicationChild,stopApplication}=require(${JSON.stringify(helper)});
     const {randomBytes,createHash}=require('node:crypto');
     const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+    let phase='setup';
     (async()=>{
       const root=fs.mkdtempSync(path.join(os.tmpdir(),'tt-restart-proof-'));
       const env={...process.env,JWT_SECRET:randomBytes(48).toString('base64url'),MONGODB_CONNECTION_STRING:'mongodb://127.0.0.1:27017/'+randomBytes(8).toString('hex')};
       const database=child(process.execPath,['-e','setInterval(()=>{},1000)'],env);
-      const program="const fs=require('fs'),c=require('crypto');fs.writeFileSync(process.env.PROOF,c.createHash('sha256').update(process.env.JWT_SECRET+'|'+process.env.MONGODB_CONNECTION_STRING).digest('hex'),{mode:0o600});setInterval(()=>{},1000)";
+      // Publish completion atomically: existsSync must never observe a proof
+      // after open/truncation but before the synthetic child writes its digest.
+      const program="const fs=require('fs'),c=require('crypto');const temp=process.env.PROOF+'.partial';fs.writeFileSync(temp,c.createHash('sha256').update(process.env.JWT_SECRET+'|'+process.env.MONGODB_CONNECTION_STRING).digest('hex'),{mode:0o600});fs.renameSync(temp,process.env.PROOF);setInterval(()=>{},1000)";
+      const expected=createHash('sha256').update(env.JWT_SECRET+'|'+env.MONGODB_CONNECTION_STRING).digest('hex');
       const wait=async file=>{for(let i=0;i<100;i++){if(fs.existsSync(file))return;await new Promise(r=>setTimeout(r,10));}throw Error('proof timeout')};
       const first=path.join(root,'first'),second=path.join(root,'second');
       try{
+        phase='initial API proof';
         const api=child(process.execPath,['-e',program],{...env,PROOF:first});await wait(first);
+        phase='controlled API restart';
         await restartApplicationChild(api,()=>child(process.execPath,['-e',program],{...env,PROOF:second,ADMIN_USERNAMES:'synthetic-admin'}));
-        await wait(second);process.kill(database.pid,0);
-        if(fs.readFileSync(first,'utf8')!==fs.readFileSync(second,'utf8'))throw Error('state changed');
+        phase='replacement API proof';
+        await wait(second);
+        phase='database child liveness';process.kill(database.pid,0);
+        phase='retained signing/database proof';
+        if(fs.readFileSync(first,'utf8')!==expected||fs.readFileSync(second,'utf8')!==expected)throw Error('namespace proof mismatch');
       }finally{await stopApplication();fs.rmSync(root,{recursive:true,force:true});}
-    })().catch(()=>process.exit(2));`;
+    })().catch(error=>{console.error(JSON.stringify({phase,message:error.message,code:error.code||null}));process.exit(2)});`;
   const restarted = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8', timeout: 15000 });
-  assert.equal(restarted.status, 0, 'controlled restart must preserve namespace state');
+  assert.equal(restarted.status, 0, `controlled restart must preserve namespace state: ${restarted.error?.message || restarted.stderr || `exit ${restarted.status}`}`);
   assert.equal(restarted.stdout, '');
   const failed = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(helper)}).child(process.execPath,['-e','process.exit(0)'],process.env)`], { encoding: 'utf8', timeout: 5000 });
   assert.equal(failed.status, 1, 'unexpected child exit must terminate the runtime');

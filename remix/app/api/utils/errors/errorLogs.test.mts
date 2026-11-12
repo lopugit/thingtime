@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 let docs: any[] = [];
 let fail = false;
+let beforeInsert: (() => Promise<void>) | null = null;
 let query: any;
 let user: any = null;
 const col = {
-  insertOne: async (doc: any) => { if (fail) throw new Error('secret connection failure'); await new Promise(r => setTimeout(r, 5)); docs.push(doc); },
+  insertOne: async (doc: any) => { if (fail) throw new Error('secret connection failure'); await beforeInsert?.(); await new Promise(r => setTimeout(r, 5)); docs.push(doc); },
   find: (filter: any) => { query = filter; return { sort: () => ({ limit: () => ({ toArray: async () => docs }) }) }; }
 };
 mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedExports: { getHomeThingsCollection: async () => col } });
@@ -58,4 +59,29 @@ test('per-request capture flood is bounded to five persisted records', async (t)
     for (let n = 0; n < 20; n++) void recordErrorLog(new Error('outage'), { source: 'test' });
   });
   assert.equal(docs.length, 5);
+});
+
+
+test('logger timeout does not release shutdown tracking before the actual insert settles', async t => {
+  t.mock.method(console, 'error', () => {}); t.mock.method(console, 'warn', () => {});
+  const { isGatewayWorkIdle, reserveGatewayWorkShutdown } = await import('../deployment/environmentGateway');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release!: () => void, entered!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  beforeInsert = async () => { entered(); await blocked; };
+  try {
+    const capture = recordErrorLog(new Error('bounded synthetic failure'), { source: 'shutdown-test' });
+    await ready;
+    assert.equal(isGatewayWorkIdle(), false);
+    t.mock.timers.tick(1000);
+    assert.equal(await capture, null);
+    assert.equal(isGatewayWorkIdle(), false, 'response deadline does not settle the DB insert');
+    assert.equal(reserveGatewayWorkShutdown(), null);
+    release();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    t.mock.timers.tick(5);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(isGatewayWorkIdle(), true);
+  } finally { release(); beforeInsert = null; t.mock.timers.reset(); }
 });

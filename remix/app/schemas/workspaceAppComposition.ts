@@ -53,7 +53,7 @@ const req = (body?: Json): Json => ({
 	method: body ? 'POST' : 'GET',
 	path: endpoint,
 	feature: 'api.builder-workspaces',
-	minimumVersion: '1.0.1',
+	minimumVersion: '1.2.0',
 	...(body
 		? { body }
 		: {

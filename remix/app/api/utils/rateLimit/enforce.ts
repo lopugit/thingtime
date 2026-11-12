@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { currentRateLimitRepository, nativeRateLimitContext } from './repository';
 import { getRateLimitsCollection } from '../mongodb/collections';
 import { getRateLimitConfig, type RateLimitRule } from './config';
 
@@ -54,6 +55,8 @@ const resetFrom = (requests: Date[], now: Date, windowMs: number): Date => {
 // Atomically record one hit for `key` if under `limit` within `windowMs`.
 const consume = async (key: string, limit: number, windowMs: number, cost = 1): Promise<RateLimitOutcome> => {
   const now = new Date();
+  const native = currentRateLimitRepository();
+  if (native) return native.consumeWindow({ key, limit, windowMs, cost, now });
   const windowStart = new Date(now.getTime() - windowMs);
   const expiresAt = new Date(now.getTime() + windowMs);
   const coll = await getRateLimitsCollection();
@@ -93,7 +96,11 @@ export const enforceRateLimit = async (
   identity: string | null,
   options: { failClosed?: boolean; limitMultiplier?: number } = {}
 ): Promise<RateLimitOutcome> => {
-  const config = await getRateLimitConfig();
+  let config;
+  try { config = await getRateLimitConfig(); } catch (error) {
+    if (!nativeRateLimitContext()) throw error;
+    return { allowed: false, limit: 0, remaining: 0, resetAt: new Date().toISOString(), unavailable: true };
+  }
   const configured = config[name];
   // Trusted server-side product entitlement only; never read from a request.
   // Bound multiplication so the shared sliding-window record remains bounded.
@@ -109,11 +116,12 @@ export const enforceRateLimit = async (
     // Fail-open is deliberate, but NEVER silent: a limiter collection outage
     // must name the affected rule. Index creation is handled independently by
     // boot/bootstrap paths and is no longer awaited here.
+    const failClosed = options.failClosed || nativeRateLimitContext();
     console.error(
-      `[rate-limit] enforcement unavailable for ${name} — failing ${options.failClosed ? 'closed' : 'open'}:`,
+      `[rate-limit] enforcement unavailable for ${name} — failing ${failClosed ? 'closed' : 'open'}:`,
       err?.message || err
     );
-    if (options.failClosed) {
+    if (failClosed) {
       return { allowed: false, limit: rule.limit, remaining: 0, resetAt: now, unavailable: true };
     }
     // Ordinary user actions fail open so a limiter outage cannot seize up the

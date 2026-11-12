@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 // Post/comment text moderation orchestrator. Runs asynchronously after
 // createThing/updateThing land a post-family doc with text (fire-and-forget —
 // analysis never blocks or slows the write). Screens crystal.text with the
@@ -175,18 +176,18 @@ export const screenTextForCreate = async (
 		// never call omni, but STILL resolve the surface so 'off' publishes
 		// normally while an active surface fails closed to born-pending.
 		if (nowMs() < breaker.openUntil || budgetMs <= 0) {
-			const choiceAttempt = (overrides.resolveText ?? resolveConfiguredTextModeration)();
+			const choiceAttempt = withGatewayWork(() => (overrides.resolveText ?? resolveConfiguredTextModeration)());
 			choiceAttempt.catch(() => {});
 			const choice = await Promise.race([choiceAttempt, timeout]).finally(() => clearTimeout(timer));
 			return choice && choice.kind === 'off' ? { kind: 'skip' } : { kind: 'unavailable' };
 		}
 		// EVERYTHING variable-latency — the settings read AND the omni call —
 		// races the budget, so no degraded dependency can hold a post hostage.
-		const attempt = (async () => {
+		const attempt = withGatewayWork(async () => {
 			const choice = await (overrides.resolveText ?? resolveConfiguredTextModeration)();
 			if (choice.kind === 'off') return 'off' as const;
 			return { choice, verdict: mapOmniTextVerdict(await choice.screen(content)) };
-		})();
+		});
 		// a rejection landing AFTER the timeout already won the race must never
 		// surface as an unhandled rejection
 		attempt.catch(() => {});
@@ -348,7 +349,7 @@ export const analyzeTextThing = createAnalyzeTextThing();
 // home doc that shares the id).
 export const queueTextModeration = (shareId: string): void => {
 	if (isCustomMongoEndpointActive()) return;
-	void analyzeTextThing(shareId).catch(() => {});
+	void withGatewayWork(() => analyzeTextThing(shareId)).catch(() => {});
 };
 
 // The single writer of text moderationFlag docs (HOME plane) — used by the

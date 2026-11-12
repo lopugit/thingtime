@@ -1,0 +1,6 @@
+
+> @1.0.0 typecheck /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> tsc --noEmit
+
+server/utils/nativeHomeDispatch.test.ts(53,22): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+ ELIFECYCLE  Command failed with exit code 2.

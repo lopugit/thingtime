@@ -1,0 +1,9 @@
+{
+  "remix/app/components/Passwords/AccountPasswordWorkspace.tsx": "8e37650d47e805e41edf3f86b9ce79ebe5a460fd44b8339e2f6ddf9fee8246b7",
+  "remix/app/components/Passwords/queueStatusReader.ts": "459704ba684271ed6594593594e3cc0c6e75adcd62888084c7926b142b9af773",
+  "remix/app/components/Passwords/queueStatusReader.test.ts": "5b755906c7c65574c4276b2ab7c840a5e742bb411c5a8d1d59f346c01962eca6",
+  "remix/app/local-workspace/passwordQueueStatus.browser.test.ts": "dbcc2bee8edfeb81e770656c2885a0f47116ba77b55911d12e06b30f86a561a2",
+  "remix/app/local-workspace/passwordQueueStatus.browser.fixture.tsx": "8934da5046396219047bf4011573c6246ff9c95808a5d341161c5d1b33514038",
+  "remix/scripts/build-password-queue-status-fixture.cjs": "f14d6b18feb86aff8a5af426935fd3a1199f035fd9e2ed4b39a775f650773a7f",
+  "remix/package.json": "70eb255b2a01a4a21cb788f11cb33adc62f0c30ed94ee650503054f1ddff98b2"
+}

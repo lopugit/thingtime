@@ -1,0 +1,218 @@
+{
+  "status": "passed",
+  "baseCommit": "9b2fe56ed1f8459568d032cf82709f28bb0b3bce",
+  "attribution": "Base commit plus frozen source inventory, not a clean-commit build",
+  "startedAt": "2026-11-11T23:49:20.732058+00:00",
+  "endedAt": "2026-11-11T23:51:50.070894+00:00",
+  "checks": [
+    {
+      "name": "webpages",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:webpages"
+      ],
+      "startedAt": "2026-11-11T23:49:20.745036+00:00",
+      "endedAt": "2026-11-11T23:49:23.823792+00:00",
+      "exitCode": 0,
+      "log": "webpages.log"
+    },
+    {
+      "name": "schemas",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:schemas"
+      ],
+      "startedAt": "2026-11-11T23:49:23.823872+00:00",
+      "endedAt": "2026-11-11T23:49:25.614520+00:00",
+      "exitCode": 0,
+      "log": "schemas.log"
+    },
+    {
+      "name": "subspaces",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:subspaces"
+      ],
+      "startedAt": "2026-11-11T23:49:25.614588+00:00",
+      "endedAt": "2026-11-11T23:49:26.257482+00:00",
+      "exitCode": 0,
+      "log": "subspaces.log"
+    },
+    {
+      "name": "timeline",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:timeline"
+      ],
+      "startedAt": "2026-11-11T23:49:26.257538+00:00",
+      "endedAt": "2026-11-11T23:49:34.013180+00:00",
+      "exitCode": 0,
+      "log": "timeline.log"
+    },
+    {
+      "name": "storage",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:storage"
+      ],
+      "startedAt": "2026-11-11T23:49:34.013266+00:00",
+      "endedAt": "2026-11-11T23:49:34.624792+00:00",
+      "exitCode": 0,
+      "log": "storage.log"
+    },
+    {
+      "name": "root-data",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:root-data"
+      ],
+      "startedAt": "2026-11-11T23:49:34.624862+00:00",
+      "endedAt": "2026-11-11T23:49:35.270082+00:00",
+      "exitCode": 0,
+      "log": "root-data.log"
+    },
+    {
+      "name": "capabilities",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:api-capabilities"
+      ],
+      "startedAt": "2026-11-11T23:49:35.270178+00:00",
+      "endedAt": "2026-11-11T23:49:36.005421+00:00",
+      "exitCode": 0,
+      "log": "capabilities.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "startedAt": "2026-11-11T23:49:36.005489+00:00",
+      "endedAt": "2026-11-11T23:50:09.709052+00:00",
+      "exitCode": 0,
+      "log": "typecheck.log"
+    },
+    {
+      "name": "ratchet",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "startedAt": "2026-11-11T23:50:09.709123+00:00",
+      "endedAt": "2026-11-11T23:50:43.172394+00:00",
+      "exitCode": 0,
+      "log": "ratchet.log"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "startedAt": "2026-11-11T23:50:43.172461+00:00",
+      "endedAt": "2026-11-11T23:51:14.416462+00:00",
+      "exitCode": 0,
+      "log": "lint.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "startedAt": "2026-11-11T23:51:14.416536+00:00",
+      "endedAt": "2026-11-11T23:51:36.254505+00:00",
+      "exitCode": 0,
+      "log": "build.log"
+    },
+    {
+      "name": "verify",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "startedAt": "2026-11-11T23:51:36.254594+00:00",
+      "endedAt": "2026-11-11T23:51:36.872423+00:00",
+      "exitCode": 0,
+      "log": "verify.log"
+    },
+    {
+      "name": "mongo-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "startedAt": "2026-11-11T23:51:36.872505+00:00",
+      "endedAt": "2026-11-11T23:51:46.253548+00:00",
+      "exitCode": 0,
+      "log": "mongo-http.log"
+    },
+    {
+      "name": "sqlite-http",
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-sqlite-account.cjs"
+      ],
+      "startedAt": "2026-11-11T23:51:46.256335+00:00",
+      "endedAt": "2026-11-11T23:51:48.813527+00:00",
+      "exitCode": 0,
+      "log": "sqlite-http.log"
+    }
+  ],
+  "sourceUnchanged": true,
+  "sourceChanges": [],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "e84fb066c4bded7d5c5680a7b0c1bcac5d2625abf5c9bdb88c7bfe08a49c4371",
+    "electron/dist/web-integrity.json": "989f82d8f9b531e7045f3bc64ed3e5135aaf51da598de4e9eaa6e2de919f06e9",
+    "electron/dist/web/metadata.json": "f2597bedb85fb8c195126df690b63880334a0bc441534bbda9e9870bfd605bfb"
+  }
+}

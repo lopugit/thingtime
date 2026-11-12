@@ -1,0 +1,19 @@
+{
+  "sourceFrozen": true,
+  "sourceHashes": {
+    "electron/main.cjs": "64fb93729ec082f507444107228781c81c2492505fef21270fecbd15d67b123e",
+    "electron/lib/web-bundle-activation.cjs": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "3cae71845885bd31d9d1972e72f591a068df96702f13130fc422656b100f9a4b",
+    "electron/test/web-bundle-activation.test.cjs": "5c559a3d001c5ea805f863b2e1c4ad97dde8c37ef7043166ba0d7cdeeb99386c",
+    "electron/test/desktop-shutdown.test.cjs": "dacd8d37f87f39a000fe5630b71ff0bb6fda4f1d54723ee3c234a1a89e383bc0",
+    "electron/test/password-provider.test.cjs": "e5d4daaa13dd7851b30f982b7284aa880eed06c5a678b3653fdb02a573ebd725"
+  },
+  "verificationSha256": "28d1185683aa55ac44e7a629a2ccc180e7e6ac2fd0ff55c40b9a32efd8a080a0",
+  "outcome": "Automatic activation remained pending at embeddedHttpIdle; close ownership fix not exercised by actual app.",
+  "cleanupVerified": true,
+  "automaticFreshProcessVerified": false,
+  "localAccountApiVerified": false,
+  "stagesAreCleanupOnly": true,
+  "previousFailureReceiptUnchanged": true,
+  "nextCondition": "Identify whether HTTP idle refusal is admitted middleware/response work or an upgraded socket; preserve its lifetime before scheduling another activation."
+}

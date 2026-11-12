@@ -1,0 +1,28 @@
+[
+  {
+    "id": "2865fa4e-4f25-4f8d-987c-93cd581a1fb7",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adfef77c2ae43091523c035\",\"home\"]",
+    "state": "pending",
+    "deleted": {
+      "id": "2865fa4e-4f25-4f8d-987c-93cd581a1fb7",
+      "revision": 1,
+      "updatedAt": "2026-10-27T00:25:35.146Z"
+    },
+    "retryAt": 0,
+    "baseId": "2865fa4e-4f25-4f8d-987c-93cd581a1fb7",
+    "inFlight": null
+  },
+  {
+    "id": "7d6fc051-5234-4469-97bf-5539143af13e",
+    "scope": "[\"account\",\"http://127.0.0.1:18724\",\"6adfef77c2ae43091523c035\",\"home\"]",
+    "state": "pending",
+    "deleted": {
+      "id": "7d6fc051-5234-4469-97bf-5539143af13e",
+      "revision": 2,
+      "updatedAt": "2026-10-27T00:25:35.442Z"
+    },
+    "retryAt": 0,
+    "baseId": "7d6fc051-5234-4469-97bf-5539143af13e",
+    "inFlight": null
+  }
+]

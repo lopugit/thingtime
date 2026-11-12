@@ -1,0 +1,17 @@
+{
+  "stable": true,
+  "observations": [
+    {
+      "height": 3980,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    },
+    {
+      "height": 3882,
+      "reviewPanes": 3,
+      "componentReady": true,
+      "notFound": false
+    }
+  ]
+}

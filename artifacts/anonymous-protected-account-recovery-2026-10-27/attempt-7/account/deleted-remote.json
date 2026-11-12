@@ -1,0 +1,18 @@
+{
+  "themes": {
+    "ok": true,
+    "ownerId": "6adfabdb578ba62f34465700",
+    "dataPlane": "home",
+    "storagePlane": "home",
+    "complete": true,
+    "themes": []
+  },
+  "algorithms": {
+    "ok": true,
+    "ownerId": "6adfabdb578ba62f34465700",
+    "dataPlane": "home",
+    "storagePlane": "home",
+    "complete": true,
+    "algorithms": []
+  }
+}

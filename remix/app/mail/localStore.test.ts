@@ -1,7 +1,14 @@
 import 'fake-indexeddb/auto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyLocalMail, readMailLocal, writeMailLocal, clearMailLocal } from './localStore';
+import { emptyLocalMail, readMailLocal as read, writeMailLocal as write, clearMailLocal as clear, type MailStorageScope } from './localStore';
+import type { WorkspaceLease } from '../local-workspace/storage';
+const active: WorkspaceLease = { assertCurrent() {}, onInvalidate: () => () => {} };
+const accountScope = (ownerId: string): MailStorageScope => ({ kind: 'account', ownerId, origin: 'https://mail-test.example' });
+const readMailLocal = (owner: string) => read(accountScope(owner), active);
+const writeMailLocal = (owner: string, value: ReturnType<typeof emptyLocalMail>) => write(accountScope(owner), value, active);
+const clearMailLocal = (owner: string) => clear(accountScope(owner), active);
+
 Object.defineProperty(globalThis, 'location', { value: { origin: 'https://mail-test.example' } });
 test('encrypted offline store survives reopen and is isolated by account', async () => {
 	const value = emptyLocalMail();

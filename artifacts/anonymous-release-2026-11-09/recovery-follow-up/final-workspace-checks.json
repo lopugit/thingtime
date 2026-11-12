@@ -1,0 +1,46 @@
+{
+  "startedSource": {
+    "accountFiles.ts": "1f086554d3ec08538cde474d4a1da2f102fae6f69a88113620543c839ec843f6",
+    "accountSync.ts": "0b38d51955127fc80a9d42087e39c94dfdeb4045044e54c5c3d0c8097e506474",
+    "things.ts": "78d33751f8acb17fbd2935dddc71d8cce9b0b9582a6c97b8025055728a5dbf26",
+    "accountApi.client.ts": "279d6cc3af5600b427928a8714db95bf6392756ceb6f988f79ed9a492b7a9f9b",
+    "accountTimelineVersions.ts": "fe3f0172c9c77d76ac968e390e725e7e7bdbaa0aa0b0a7263f9812c32f04b59e",
+    "accountHistoryBoundRecovery.test.ts": "981d185b81a8d8a13eb35fdf548a12ffc2fe29302ef7295b6b49b4e0d52d6f13",
+    "accountTimelineRecovery.browser.test.ts": "1b1fb6913d15d98c064cbc086f37f69f7981e0acc4f5ee9a3089f4f369f5dbe8"
+  },
+  "finishedSource": {
+    "accountFiles.ts": "1f086554d3ec08538cde474d4a1da2f102fae6f69a88113620543c839ec843f6",
+    "accountSync.ts": "0b38d51955127fc80a9d42087e39c94dfdeb4045044e54c5c3d0c8097e506474",
+    "things.ts": "78d33751f8acb17fbd2935dddc71d8cce9b0b9582a6c97b8025055728a5dbf26",
+    "accountApi.client.ts": "279d6cc3af5600b427928a8714db95bf6392756ceb6f988f79ed9a492b7a9f9b",
+    "accountTimelineVersions.ts": "fe3f0172c9c77d76ac968e390e725e7e7bdbaa0aa0b0a7263f9812c32f04b59e",
+    "accountHistoryBoundRecovery.test.ts": "981d185b81a8d8a13eb35fdf548a12ffc2fe29302ef7295b6b49b4e0d52d6f13",
+    "accountTimelineRecovery.browser.test.ts": "1b1fb6913d15d98c064cbc086f37f69f7981e0acc4f5ee9a3089f4f369f5dbe8"
+  },
+  "commands": [
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:local-workspace"
+      ],
+      "exitCode": 0,
+      "logSha256": "5c15c91a33b9f8743fd6515ca7f2107f3a4b9f49860c82810ba0b8fb4734cd59"
+    }
+  ],
+  "completedAt": "2026-11-09T16:43:07.534031+00:00",
+  "workspace": {
+    "passed": 947,
+    "failed": 0,
+    "skipped": 113
+  },
+  "offlineShell": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "skipMeaning": "Explicit browser/environment opt-ins; not acceptance passes"
+}

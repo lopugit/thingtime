@@ -1,0 +1,12 @@
+
+> @1.0.0 typecheck /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> tsc --noEmit
+
+app/api/utils/serviceWorkspaces/nativeAccess.test.ts(32,69): error TS2339: Property 'error' does not exist on type '{ ok: true; user: any; publicUser: PublicUser; }'.
+app/api/utils/things/contentExecutionGate.native.test.ts(98,65): error TS2339: Property 'error' does not exist on type 'CreateThingResult'.
+  Property 'error' does not exist on type '{ ok: true; doc: ThingDoc; rootSubspaceId?: string; }'.
+app/api/utils/things/nativeExternalAudienceReads.test.ts(58,23): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+app/api/utils/things/nativeExternalAudienceReads.test.ts(58,84): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+app/api/utils/things/nativeExternalAudienceReads.test.ts(122,22): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+app/api/utils/things/nativeExternalAudienceReads.test.ts(122,83): error TS2550: Property 'hasOwn' does not exist on type 'ObjectConstructor'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
+ ELIFECYCLE  Command failed with exit code 2.

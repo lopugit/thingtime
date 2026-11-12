@@ -1,0 +1,59 @@
+{
+  "sourceRevision": "0fecb007965f42a05fdcebe53ac704a68c0b6b5a",
+  "preparedSourceMatchesBuildInputs": true,
+  "build": {
+    "command": "corepack pnpm --dir electron build:web",
+    "exitCode": 0,
+    "uncontended": true,
+    "logSha256": "6cb61de7b94b99fcab6ca5797073ca27e7fe65836d072880ba703818be98b0bd"
+  },
+  "observed": {
+    "signedDownloadStaged": true,
+    "dirtyPendingMs": 70345,
+    "checkpointPrepareRequests": 1,
+    "nativeControlsIndependentlyVerified": true,
+    "manualRestartCalled": false,
+    "automaticReplacementReached": false,
+    "persistenceReadbackPassed": false
+  },
+  "diagnosis": {
+    "category": "unsubmitted-create-command",
+    "evidence": [
+      "Thingtime.tsx:1155-1168 undefined renders CommanderV1Deprecated",
+      "CommanderV1Deprecated.tsx:353-357 typing updates inputValue only",
+      "CommanderV1Deprecated.tsx:322-325 Enter executes command",
+      "CommanderV1Deprecated.tsx:248-254 writes canonical setThingtime",
+      "verify-web-bundle-auto-activation.mjs:178 Tab does not execute the creation command"
+    ],
+    "nextAction": "Commit the current undefined-value command using Enter, await canonical getThingtime value and exact task-owned persisted acknowledgement before hard reload; preserve later fresh-process readback assertion."
+  },
+  "cleanup": {
+    "launcherAbsent": true,
+    "baselinePid20083Exited": true,
+    "taskListenersAbsent": [
+      28640,
+      41394,
+      41395,
+      41396
+    ],
+    "taskSnapshotRetained": true,
+    "originalTrustPolicyRestored": true,
+    "stableAppUntouched": true,
+    "ownedAccidentalGraphQuery": {
+      "session": 18761,
+      "pids": [
+        32614,
+        32871,
+        33692
+      ],
+      "exitCode": 143,
+      "rootAliasUnchanged": true
+    }
+  },
+  "limits": [
+    "Remote synthetic account API only; no local account API acceptance",
+    "No automatic process replacement or cold-restart persistence proved",
+    "No retry after this attempt",
+    "No product or harness source changes"
+  ]
+}

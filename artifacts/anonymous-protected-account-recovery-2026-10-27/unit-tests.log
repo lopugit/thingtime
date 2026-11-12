@@ -1,0 +1,20 @@
+✔ anonymous theme deletion recovery keeps identity, private intent and retry/redo history (241.406375ms)
+✔ account theme deletion recovery keeps identity, private intent and retry/redo history (246.704667ms)
+✔ anonymous feed-algorithm deletion recovery keeps identity, private intent and retry/redo history (74.401583ms)
+✔ account feed-algorithm deletion recovery keeps identity, private intent and retry/redo history (145.165875ms)
+✔ theme recovery rechecks account tombstone and in-flight intent inside commit (49.714375ms)
+✔ feed-algorithm recovery rechecks account tombstone and in-flight intent inside commit (41.73325ms)
+✔ theme recovery refuses occupied IDs, mismatched schemas and workspace scopes (22.043ms)
+✔ feed-algorithm recovery refuses occupied IDs, mismatched schemas and workspace scopes (19.121542ms)
+✔ anonymous theme recovery rolls content, queue and history back on storage failure (43.178459ms)
+✔ account theme recovery rolls content, queue and history back on storage failure (70.5535ms)
+✔ anonymous feed-algorithm recovery rolls content, queue and history back on storage failure (36.776667ms)
+✔ account feed-algorithm recovery rolls content, queue and history back on storage failure (50.1215ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1957.642083

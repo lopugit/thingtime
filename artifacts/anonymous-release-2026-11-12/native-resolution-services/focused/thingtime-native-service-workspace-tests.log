@@ -1,0 +1,11 @@
+✔ shared workspace authorization retains more than5000 synthetic fetched candidates without a product ceiling (21.000125ms)
+✔ canonical native workspace setup preserves every read role, scoped page, linked customer and fresh revocation (6067.2565ms)
+✔ canonical native workspace reads traverse membership and linked-property batches without truncation (171442.591ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 179886.018416

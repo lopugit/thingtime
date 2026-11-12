@@ -1,0 +1,50 @@
+{
+  "outcome": "Incomplete: development scene remained inactive for180s, no WK admission or UI action attempted",
+  "nativeSourceBeforeAfterUnchanged": true,
+  "nativeSourceFiles": 125,
+  "nativeSourceInventorySha256": "85f3f2fe6bd24607bd4b5a3964e5f10ccce58d9cda90e668fe73ccd94f65b0d8",
+  "checkoutBaseAtPreparation": "c039dee857dcd3558192111e956921395648cd69",
+  "sourceAttribution": "c039dee85 plus exact frozen combined staged/dirty native source inputs; merged-main changes are attributed by file hashes, not futureHEAD",
+  "payloadHashesAfter": {
+    "electron/dist/web/.output/server/index.mjs": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50",
+    "electron/dist/web/metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "electron/dist/web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322"
+  },
+  "signedAppSha256": "716a8b234d671c9f4383e7d604139ce34c8135122357675ffc7a01c7cafb0bdb",
+  "binarySha256": "5136e82e5b72ac03b5687f6fae4222edca87bd864d7cf738ba3a8e78470a7437",
+  "frameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "actualRuntimePreservedExactOSKey": true,
+  "canonicalHTTP": {
+    "manifest": 200,
+    "root": 200,
+    "asset": 200,
+    "nativeURLSessionThings": 200,
+    "accountApiStatus": 503,
+    "accountApiCode": "LOCAL_API_NOT_CONFIGURED",
+    "cloudFallback": false
+  },
+  "actualUiAssertions": [],
+  "screenshotObservation": "SpringBoard remained visible with task app icon; no app renderer acceptance",
+  "nativeLifecycle": "Only scene-initial-inactive and native-urlsession-things-200 observed; no active admission or WK navigation",
+  "boundedDiagnosis": "No demonstrated crash; terminate0 indicates task process was terminable. Retained app-only log has2lines/no lifecycle cause. No additional launch or source change.",
+  "cleanupIndependentSimulatorAbsence": true,
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "networkScope": "Node external-request count0 is startup-only. WebView external block did not execute because WK not admitted; OS networking unrestricted.",
+  "sourceToBinaryReproducibility": "Imported NodeMobile runtime integrity verified; runtime reproduction and physical-device/distribution acceptance unproven"
+}

@@ -29,25 +29,9 @@ import {
   type UserStorageUsage
 } from './storageCore';
 
-const hasOwn = (value: unknown, key: string): boolean =>
-  !!value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, key);
-
-export const userStorageAllowanceFromCrystal = (crystal: any): number | null => {
-  const override = crystal?.overrides;
-  if (hasOwn(override, 'userStorageBytes')) {
-    const value = override.userStorageBytes;
-    return value === null ? null : Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
-  }
-  const value = crystal?.tierQuotas?.userStorageBytes;
-  return value === null ? null : Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : 0;
-};
-
-export const userStorageAllowanceIsValid = (crystal: any): boolean => {
-  const raw = hasOwn(crystal?.overrides, 'userStorageBytes')
-    ? crystal.overrides.userStorageBytes
-    : crystal?.tierQuotas?.userStorageBytes;
-  return raw === null || (Number.isSafeInteger(raw) && Number(raw) >= 0);
-};
+import { userStorageAllowanceFromCrystal, userStorageAllowanceIsValid, readyUserStorageAdmission, assertUserStorageQuota } from './userStorageAdmission';
+import { isNativeUserStorageSession, applyNativeUserStorageDelta, retainNativeDeletedThingStorage, markNativeUserStorageNeedsReconcile } from '../documentStore/nativeUserStorage';
+export { userStorageAllowanceFromCrystal, userStorageAllowanceIsValid } from './userStorageAdmission';
 
 // Mongo expression matching userStorageAllowanceFromCrystal while preserving
 // the important distinction between an absent override and an explicit null
@@ -173,26 +157,8 @@ export const getUserStorageUsages = async (ownerIds: readonly string[]): Promise
 
 const explainPositiveAdmissionFailure = async (ownerId: string, deltaBytes: number, session: any): Promise<never> => {
   const existing = await (await getThingsCollection()).findOne(subscriptionThingMatch('user', ownerId), { session });
-  if (
-    !existing ||
-    !userSubscriptionLedgerEnvelopeIsTrusted(existing, ownerId) ||
-    existing.crystal?.storageAccountingVersion !== USER_STORAGE_ACCOUNTING_VERSION ||
-    existing.crystal?.storageLedgerStatus !== USER_STORAGE_STATUS.ready ||
-    !Number.isSafeInteger(existing.crystal?.storageUsedBytes) ||
-    Number(existing.crystal.storageUsedBytes) < 0 ||
-    !userStorageAllowanceIsValid(existing.crystal)
-  ) {
-    throw new StorageMutationError(503, 'accounting_unavailable', 'Account storage accounting is being initialized — try again shortly');
-  }
-  const usedBytes = Number(existing.crystal?.storageUsedBytes || 0);
-  const allowanceBytes = userStorageAllowanceFromCrystal(existing.crystal);
-  if (allowanceBytes !== null && usedBytes + deltaBytes > allowanceBytes) {
-    throw new StorageMutationError(
-      507,
-      'quota_exceeded',
-      `This change needs more account storage (${usedBytes} of ${allowanceBytes} bytes used). Saved history also uses storage; deleting a Thing keeps its recorded history.`
-    );
-  }
+  const { usedBytes, allowanceBytes } = readyUserStorageAdmission(existing, ownerId);
+  assertUserStorageQuota(usedBytes, allowanceBytes, deltaBytes);
   throw new StorageMutationError(503, 'accounting_unavailable', 'Account storage accounting is unavailable — try again');
 };
 
@@ -307,6 +273,8 @@ const queueUserStorageDelta = async (ownerId: string, deltaBytes: number, sessio
 // pre-existing corrupt underflow is kept conservative, marks the ledger for
 // reconciliation, and does not prevent the user from deleting content.
 export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number, session: any): Promise<void> => {
+  // Explicit capability dispatch only; never pass native handles to MongoDB.
+  if (isNativeUserStorageSession(session)) return applyNativeUserStorageDelta(ownerId, deltaBytes, session);
   if (deltaBytes === 0 || ownerId.startsWith('sandbox:')) return;
   if (!session || (typeof session.inTransaction === 'function' && !session.inTransaction())) throw new StorageMutationError(500, 'storage_invariant', 'Account storage mutations require the content transaction');
   if (!Number.isSafeInteger(deltaBytes)) {
@@ -376,6 +344,7 @@ export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number,
  * bytes into retained history without admitting new customer content. Existing
  * overage must not block cleanup. Unknown ledgers remain fenced for reconcile. */
 export const retainDeletedThingStorage = async (ownerId: string, bytes: number, session: any): Promise<void> => {
+  if (isNativeUserStorageSession(session)) return retainNativeDeletedThingStorage(ownerId, bytes, session);
   if (!session || (typeof session.inTransaction === 'function' && !session.inTransaction()) || !Number.isSafeInteger(bytes) || bytes < 0) throw new StorageMutationError(500, 'storage_invariant', 'Invalid retained deletion storage');
   if (!bytes) return;
   const result = await (await getThingsCollection()).updateOne({
@@ -393,6 +362,7 @@ export const markUserStorageNeedsReconcile = async (
   session: any,
   now = new Date()
 ): Promise<void> => {
+  if (isNativeUserStorageSession(session)) return markNativeUserStorageNeedsReconcile(ownerId, session, now);
   const fenced = await (await getThingsCollection()).updateOne(
     {
       ...userSubscriptionLedgerMatch(ownerId),

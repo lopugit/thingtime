@@ -1,3 +1,4 @@
+import { withGatewayWork } from '~/api/utils/deployment/environmentGateway';
 import { json, readJsonBody } from '~/api/http';
 
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
@@ -45,7 +46,7 @@ export const action = async ({ request }: { request: Request }) => {
       // round-trip), turning the deliberately-neutral response into a timing
       // oracle for account enumeration. Delivery failures are recorded in the
       // email outbox, not surfaced here.
-      void sendPasswordResetEmail({ to: email, link, expiresMinutes: RESET_TTL_MINUTES }).catch(() => {});
+      void withGatewayWork(() => sendPasswordResetEmail({ to: email, link, expiresMinutes: RESET_TTL_MINUTES })).catch(() => {});
       // Surface the link only in local + Vercel preview, mirroring the
       // register route's dev verification link.
       if (shouldShowDevVerificationLink()) resetLink = link;

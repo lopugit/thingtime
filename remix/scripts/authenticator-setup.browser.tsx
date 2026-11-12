@@ -4,10 +4,13 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Box, Button, ChakraProvider, Text } from '@chakra-ui/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { ThingtimeProvider } from '../app/Providers/ThingtimeProvider';
-import { PasswordManager } from '../app/components/Passwords/PasswordManager';
+import { rootIdentity } from '../app/utils/rootIdentity';
+import { bindLocalWorkspace } from '../app/local-workspace/runtime.client';
+import { PasswordManager, PasswordManagerScope } from '../app/components/Passwords/PasswordManager';
 import type { PasswordEntry } from '../app/passwords/model';
 const ownerId = 'synthetic-password-tools-owner';
+const local = new URL(location.href).searchParams.get('local') === '1';
+{ const { generation } = rootIdentity.read(); bindLocalWorkspace(local, generation, local ? undefined : { kind: 'account', origin: location.origin, ownerId, dataPlane: 'home' }, false); rootIdentity.confirm(generation); }
 const entryId = '11111111-1111-4111-8111-111111111111';
 const title = 'Synthetic QA login';
 const iconUrl = 'https://password-tools.invalid/icon.png';
@@ -20,7 +23,7 @@ const entries = new Map<string, { revision: number; entry: PasswordEntry }>([[en
   { id: 'website', label: 'Website', type: 'url', value: 'https://password-tools.invalid/' }
 ] } }]]);
 const layouts = new Map<string, any>();
-let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0; let duplicateKeyWarnings = 0;
+let saves = 0; let reads = 0; let iconFetches = 0; let rejectedRequests = 0; let duplicateKeyWarnings = 0; let verificationRequests = 0;
 const originalConsoleError = console.error;
 console.error = (...args: unknown[]) => {
   if (typeof args[0] === 'string' && /same key|unique ["']?key/i.test(args[0])) duplicateKeyWarnings++;
@@ -34,9 +37,10 @@ window.fetch = async (input, init) => {
   if (url.href === iconUrl) { iconFetches++; return new Response(iconBytes, { headers: { 'Content-Type': 'image/png' } }); }
   if (url.href === badIconUrl) return new Response(null, { status: 404 });
   if (url.origin !== location.origin) { rejectedRequests++; return Response.json({ ok: false, error: 'Synthetic fixture blocks external requests.' }, { status: 403 }); }
-  if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(['api.passwords', 'api.things', 'api.webpages-resolve', 'api.actions-run', 'api.mongodb-endpoint'].map(feature => [feature, { version: feature === 'api.passwords' ? '1.9.1' : '1.99.0' }])) });
+  if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json({ schemaVersion: 1, origin: location.origin, features: Object.fromEntries(['api.passwords', 'api.things', 'api.webpages-resolve', 'api.actions-run', 'api.mongodb-endpoint'].map(feature => [feature, { version: feature === 'api.passwords' ? '1.10.0' : '1.99.0' }])) });
   const body = init?.body ? JSON.parse(String(init.body)) : {};
   if (url.pathname === '/api/v1/passwords') {
+    if (String(body.operation).startsWith('verification-')) verificationRequests++;
     const response = (data: Record<string, unknown>) => Response.json({ ok: true, ownerId, ...data });
     if (!init?.body) return response({ configured: true, entries: Array.from(entries, ([id, record]) => metadata(id, record)), nextCursor: null });
     if (body.expectedOwnerId !== ownerId) return Response.json({ ok: false, error: 'Wrong synthetic owner.' }, { status: 403 });
@@ -62,16 +66,23 @@ window.fetch = async (input, init) => {
 };
 
 let scope: Record<string, string> | undefined;
+const bridgeAcceptedOwners: string[] = [], bridgeIgnoredOwners: string[] = [];
 let requestId = crypto.randomUUID();
 const emitSetup = (kind: string, extra = {}) => { if (scope) window.dispatchEvent(new CustomEvent('thingtime:authenticator-setup', { detail: { kind, nonce: scope.nonce, ownerId: scope.ownerId, requestId, ...extra } })); };
 window.thingtimeAuthenticatorSetup = { version: '1.0.0', postMessage(message) {
+  if (message.ownerId !== ownerId) { bridgeIgnoredOwners.push(message.ownerId); return; }
+  bridgeAcceptedOwners.push(message.ownerId);
   if (message.operation === 'ready') { scope = message; queueMicrotask(() => emitSetup('available')); }
   if (message.operation === 'consume') queueMicrotask(() => emitSetup('setup', { setup: 'otpauth://totp/Synthetic?secret=' + ['GEZD','GNBV','GY3T','QOJQ','GEZD','GNBV','GY3T','QOJQ'].join('') }));
 }};
 (window as any).nativeSetupFixture = {
+  verificationRequests: () => verificationRequests,
+  bridgeSnapshot: () => ({ acceptedOwners: [...bridgeAcceptedOwners], ignoredOwners: [...bridgeIgnoredOwners] }),
   offer: () => { requestId = crypto.randomUUID(); emitSetup('available'); },
-  snapshot: () => ({ saves, totpEntries: [...entries.values()].filter(record => record.entry.fields.some(field => field.type === 'totp')).length }),
+  snapshot: () => ({ saves, totpEntries: (local ? [] : [...entries.values()]).filter(record => record.entry.fields.some(field => field.type === 'totp')).length }),
 };
-function Fixture() { return <PasswordManager />; }
-const router = createMemoryRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture>, loader: () => ({ user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' }) }], { hydrationData: { loaderData: { root: { user: { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' } } } });
-createRoot(document.getElementById('root')!).render(<ChakraProvider><ThingtimeProvider storageKey="synthetic-native-setup-ui" persistLocal={false} exposeGlobals={false}><RouterProvider router={router} /></ThingtimeProvider></ChakraProvider>);
+// Match the existing password editor fixture's account transport component;
+// the anonymous variant exercises the actual outer device-vault gate.
+function Fixture() { return local ? <PasswordManager /> : <PasswordManagerScope ownerId={ownerId} />; }
+const router = createMemoryRouter([{ id: 'root', path: '*', element: <CurrentPageBuilderFixture><Fixture /></CurrentPageBuilderFixture>, loader: () => ({ user: local ? null : { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' }) }], { hydrationData: { loaderData: { root: { user: local ? null : { id: ownerId, username: 'synthetic-password-tools', ttid: 'synthetic', temporary: false, accountKind: 'user' }, dataPlane: 'home' } } } });
+createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);

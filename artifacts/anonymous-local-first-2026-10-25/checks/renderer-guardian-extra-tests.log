@@ -1,0 +1,12 @@
+﹣ real Docker: stdin EOF, wrapper process-group SIGKILL, independent runtime deadline (1.088458ms) # SKIP
+✔ extracts actual CLI event shape and accepts clean expected invalid-call result (8.694292ms)
+✔ rejects incomplete, ambiguous, unsafe, changed and partial artifacts (78.328208ms)
+✔ saves exclusively after complete validation; existing output and bad input preserve data (580.726ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 811.048208

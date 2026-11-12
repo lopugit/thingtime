@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "scope": "Canonical browser File/Blob ZIP64 codec acceptance; independent of full app/Builder acceptance",
+  "browser": "Chromium 156.0.8078.4 sandbox enabled",
+  "sourceHashesStillCurrent": {
+    "archive.ts": true,
+    "binary.ts": true,
+    "storedZip.ts": true,
+    "format.ts": true
+  },
+  "payloadBytes": 4294967297,
+  "archiveBytes": 4294968525,
+  "trailingOffset": 4294968140,
+  "payloadSha256": "2796b8078bc15b6f263639d77b54b01ebfcf9ea9610c20bc6b976931946d57ce",
+  "lastByte": 173,
+  "isolation": "Fresh task-owned manager claim; pinned image; network none, read-only root, no host mounts or ports, cap-drop ALL, seccomp, 4096MiB fixed memory ceiling, 1 CPU",
+  "verification": "Native Chromium File preflight, canonical archive.ts bundled with esbuild, full archive streamed in 1MiB chunks to host temporary file, Python zipfile read all payload bytes and checked CRC32/SHA256, manifest, trailing entry, ZIP64 directory/locator/footer",
+  "resources": "Before and after cgroup memory.events: max=0, oom=0, oom_kill=0",
+  "cleanup": "Manager release verified zero remaining session containers; host temporary directory and large archive removed; container source fixture removed",
+  "limitations": "Codec proof only; no claim of full UI acceptance or Node Blob >4GiB support. Private task coordination unavailable and parent-reported."
+}

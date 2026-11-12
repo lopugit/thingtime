@@ -1,0 +1,211 @@
+🦄
+Login
+🌈
+🦄
+
+BUILDER CANVAS · 2 BLOCKS · UNSAVED
+
+← my pages
+
+Draft saved on this device ✓
+
+global initial nested text
+↶
+↷
+Changes
++
++
+＋
+Add a block
+
+Global blocks 🌐
+
+✕
+
+Blocks
+
+Select a block…
+column
+· text
+
+SELECTED BLOCK · TEXT
+
+↑
+↓
+delete
+Bind data Action
+
+Text
+
+📝 Rich editor (Editor.js)
+
+Style
+
+body
+heading
+eyebrow
+
+Tag
+
+auto
+p
+h1
+h2
+h3
+h4
+h5
+h6
+span
+div
+blockquote
+pre
+code
+
+Link (https, /path, mailto:, tel:) — makes this text a button
+
+FONT SIZE
+
+WEIGHT
+
+LINE HEIGHT
+
+LETTER SPACING
+
+COLOR
+
+FONT FAMILY
+
+TEXT ALIGN
+
+⇤
+↔
+⇥
+☰
+
+LAYOUT
+
+Align
+
+auto
+start
+center
+end
+stretch
+
+Max width (px)
+
+WIDTH
+
+HEIGHT
+
+MIN WIDTH
+
+MIN HEIGHT
+
+PADDING
+
+▢
+⬍⬌
+⛶
+
+MARGIN
+
+▢
+⬍⬌
+⛶
+
+APPEARANCE
+
+BACKGROUND
+
+OPACITY
+
+CORNER RADIUS
+
+▢
+⛶
+
+BORDER
+
+STYLE
+
+none
+solid
+dashed
+dotted
+double
+
+WIDTH
+
+COLOR
+
+SHADOW
+
+X
+
+Y
+
+BLUR
+
+SPREAD
+
+COLOR
+
+NATIVE CODE
+
+Custom CSS (property: value per line)
+
+SITE PAGE
+
+Name
+
+Saving forks this page into your Things — only you see your version.
+
+Transfer
+Save my version
+Discard
+✉️
+CONTACT
+
+connect@thingtime.com
+
+Support Thingtime
+
+© 2026 Thingtime
+
+🌱 git/unknown
+Current Tab
+
+Nitro API: status unavailable
+
+Frontend: status unavailable
+
+MongoDB: status unavailable
+
+🌈
+🦄
+🧙‍♂️
+📖
+DOCS
+
+Legal policies & terms
+
+Docs home
+
+Design mockups
+
+Design system
+
+🌈
+ACCOUNT
+
+Log in
+
+Register
+
+column
+/
+text
++
+⊞
+⋯

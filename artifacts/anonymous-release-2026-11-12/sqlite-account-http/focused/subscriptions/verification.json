@@ -1,0 +1,75 @@
+{
+  "observedAt": "2026-11-11T20:06:10.152016+00:00",
+  "scope": "Native canonical subscription/session entitlement reads and shared one-hop Character policy; no runtime/HTTP activation",
+  "sourceHashes": {
+    "remix/app/api/utils/subscriptions/subscriptionRepository.ts": "9f6a45715f05283f343ea9789e9b9b689cf9ad915b76895c85856a5f61b00cd2",
+    "remix/app/api/utils/subscriptions/subscriptions.ts": "7bf133a3f76b7394ea589e9e2f51d275fda2e01df0bfef54c7efe51392375eb6",
+    "remix/app/api/utils/auth/characterEntitlements.ts": "c4f49f8a219ff33caf5b92555d95269e3bfc4ab1845c6abd0ef04f3d3701dd21",
+    "remix/app/api/utils/documentStore/nativeSubscriptions.ts": "9b54ae5b61f4a40e5a163546506a11c370f37aa1d7ffe77de5214dce20eb8911",
+    "remix/app/api/utils/documentStore/nativeSubscriptions.test.ts": "f637d585ee0b0c4d17c94396161f20b04950b3b574af93635f0a77dbc19c4a62",
+    "remix/app/api/utils/documentStore/nativeSubscriptions.mongo.fixture.mts": "740b77e26b1064bea98e12f1538f9552e3e7a2102137e5520c89641e42742d2a"
+  },
+  "adapterAPI": [
+    "await createNativeSubscriptionRepository(provider,homePlaneId)",
+    "Inside matching native auth scope: await withHomeSubscriptionRepository(repository,work)"
+  ],
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/documentStore/nativeSubscriptions.test.ts",
+      "exitCode": 0,
+      "tests": 9,
+      "pass": 9,
+      "fail": 0,
+      "skip": 0,
+      "log": "pr1000-native-subscriptions-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/characters.test.mts app/api/utils/auth/characterLogin.test.mts",
+      "exitCode": 0,
+      "tests": 13,
+      "pass": 13,
+      "fail": 0,
+      "skip": 0,
+      "log": "pr1000-native-subscriptions-characters.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:subscriptions",
+      "exitCode": 0,
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "skip": 0,
+      "log": "pr1000-native-subscriptions-existing.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/subscriptions/subscriptionRepository.ts app/api/utils/subscriptions/subscriptions.ts app/api/utils/auth/characterEntitlements.ts app/api/utils/documentStore/nativeSubscriptions.ts app/api/utils/documentStore/nativeSubscriptions.test.ts app/api/utils/documentStore/nativeSubscriptions.mongo.fixture.mts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "pr1000-native-subscriptions-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit",
+      "exitCode": 2,
+      "failure": "Unrelated concurrent nativeNotifications.test.ts:142 TS1005 missing closing brace; type qualification remains pending parent combined check",
+      "log": "pr1000-native-subscriptions-types.log"
+    }
+  ],
+  "semantics": [
+    "Actual canonical-created account and resolveSessionUser projection survive SQLite reopen with real accounting",
+    "One transactional snapshot; one owner hop; exact actual provider and request lifetime fences",
+    "Missing/squatted ledger throws503; trusted invalid counters normalize canonical unavailable/null counts, no seed/default grant",
+    "Extracted pure Character policy shared with Mongo; only entitlement allowlist inherits; own usage/note remains own",
+    "Disabled/nested/temporary/service/missing/corrupt owners and hostile owner ledger cannot grant inherited allowance",
+    "Batch dedup/order and one provider transaction; hostile accessor-list rejection and queued input snapshot",
+    "Hosted single/batch Mongo operation compatibility and no hosted native import"
+  ],
+  "limitations": [
+    "No native app subscription projection or subscription mutation beyond existing account-creation adapter",
+    "synchronizeCharacterStorageTier explicitly unsupported natively",
+    "Character policy tests assign synthetic Character metadata through genuine secure CAS; native Character provisioning/content admission not accepted",
+    "Current scans cost O(rows * requested keys), no native index/performance parity claim",
+    "No runtime/HTTP selector, server/app/build/Graphify/Git or shared docs/artifacts changed by worker"
+  ],
+  "sourceReceipt": "/tmp/pr1000-native-subscriptions-verification.json"
+}

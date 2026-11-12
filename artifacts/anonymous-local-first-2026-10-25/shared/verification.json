@@ -1,0 +1,105 @@
+{
+  "normalSharedCopyButton": true,
+  "individuallyEditableCopiedHeading": true,
+  "coldOfflineDependencyReload": true,
+  "sourceUnchanged": true,
+  "savedProfileAction": "actual LocalActions.run invoked through isolated test fixture, not the normal run button",
+  "profileHistoryRetained": true,
+  "media": {
+    "largeSharedOriginal": true,
+    "bytes": 17825795,
+    "sha256": "565383931cc1fe1f0dad6000cb34780802899a570ff7ad35cea05f4615595f14",
+    "independentOfflineBytes": true
+  },
+  "bounds": [
+    {
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "overflow": false
+    }
+  ],
+  "writes": [
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things/export"
+    }
+  ],
+  "errors": [],
+  "setupSteps": [
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/register",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/login",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/users/public-uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-start"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/parts",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-parts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/attachments/uploads/complete",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "upload-complete"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "post"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "component"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/things",
+      "status": 200,
+      "code": "NO_SAFE_ERROR_CODE",
+      "phase": "webpage"
+    }
+  ],
+  "sourceOwner": {
+    "isAdmin": false,
+    "publicUploadApproval": "canonical admin API for this disposable owner only"
+  }
+}

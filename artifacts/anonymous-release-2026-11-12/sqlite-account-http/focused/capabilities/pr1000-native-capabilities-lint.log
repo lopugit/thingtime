@@ -1,0 +1,19 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/api/utils/capabilities/runtimeAvailability.ts app/api/utils/capabilities/runtimeAvailability.test.ts app/api/utils/capabilities/thingtimeCapabilities.ts app/api/utils/capabilities/thingtimeCapabilities.test.ts app/docs/apiDocs.ts app/docs/apiCapabilities.test.ts server/utils/nativeHomeCapabilities.ts server/handlers/thingtime-capabilities.ts server/routes/api/\[...\].ts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix/app/docs/apiDocs.ts
+    403:1266  warning  Unexpected string concatenation of literals  no-useless-concat
+    898:119   warning  Unexpected string concatenation of literals  no-useless-concat
+    960:249   warning  Unexpected string concatenation of literals  no-useless-concat
+   3963:119   warning  Unexpected string concatenation of literals  no-useless-concat
+   4794:119   warning  Unexpected string concatenation of literals  no-useless-concat
+  11904:99    warning  Unexpected string concatenation of literals  no-useless-concat
+  11998:322   warning  Unnecessary escape character: \"             no-useless-escape
+  11998:337   warning  Unnecessary escape character: \"             no-useless-escape
+  12072:99    warning  Unexpected string concatenation of literals  no-useless-concat
+
+✖ 9 problems (0 errors, 9 warnings)
+

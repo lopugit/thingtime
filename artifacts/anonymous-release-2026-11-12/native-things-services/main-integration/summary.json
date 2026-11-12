@@ -1,0 +1,53 @@
+{
+  "scope": "Test executions across six commands; some suites may repeat coverage",
+  "sourceFileCount": 5493,
+  "sourceFilesCanonicalJsonSha256": "d8024b215d6d1523b7cc199ac796046887c12d6bb29b1ec3f0500f7b78b9ebea",
+  "suites": {
+    "native-things-services": {
+      "tests": 18,
+      "pass": 18,
+      "fail": 0,
+      "skipped": 0
+    },
+    "things": {
+      "tests": 458,
+      "pass": 455,
+      "fail": 0,
+      "skipped": 3
+    },
+    "file-sync": {
+      "tests": 913,
+      "pass": 913,
+      "fail": 0,
+      "skipped": 0
+    },
+    "attachments": {
+      "tests": 423,
+      "pass": 423,
+      "fail": 0,
+      "skipped": 0
+    },
+    "files": {
+      "tests": 118,
+      "pass": 118,
+      "fail": 0,
+      "skipped": 0
+    },
+    "capabilities": {
+      "tests": 211,
+      "pass": 211,
+      "fail": 0,
+      "skipped": 0
+    }
+  },
+  "total": {
+    "tests": 2141,
+    "pass": 2138,
+    "fail": 0,
+    "skipped": 3
+  },
+  "fullLint": {
+    "errors": 0,
+    "warnings": 375
+  }
+}

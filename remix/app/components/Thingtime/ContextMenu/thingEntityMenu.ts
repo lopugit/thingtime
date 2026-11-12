@@ -18,7 +18,7 @@ export function buildThingEntityMenu(
   if (archiveActions.length && !sections.some(section => section.id === 'organise'))
     sections.push({ id: 'organise', label: 'Organise', actions: archiveActions });
   return { subjectId, sections: [
-    { id: 'thing', actions: [...action('open'), ...action('inspect'), ...action('storage-placement'), ...action('history'), ...action('copy-link'), ...action('share-preview'), ...action('rename'), ...action('edit'), ...action('share')] },
+    { id: 'thing', actions: [...action('open'), ...action('inspect'), ...action('storage-placement'), ...action('history'), ...action('copy-link'), ...action('share-preview'), ...action('download'), ...action('rename'), ...action('edit'), ...action('share')] },
     { id: 'lopu', actions: action('send-to-lopu') },
     ...sections,
     { id: 'danger', actions: action('delete') }

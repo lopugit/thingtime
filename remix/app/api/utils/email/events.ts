@@ -1,8 +1,4 @@
-import {
-  getEmailEventsCollection,
-  getEmailSuppressionListCollection,
-  getEmailUnsubscribesCollection
-} from '../mongodb/collections';
+import { currentEmailRepository } from './repository';
 
 export type EmailEventInput = {
   eventType: string;
@@ -25,7 +21,7 @@ export const recordEmailEvent = async (input: EmailEventInput) => {
     receivedAt: now,
     createdAt: now
   };
-  await (await getEmailEventsCollection()).insertOne(doc);
+  await currentEmailRepository().recordEvent(doc);
   return doc;
 };
 
@@ -39,22 +35,7 @@ export const suppressEmailAddress = async ({
   payload?: Record<string, any>;
 }) => {
   const now = new Date();
-  await (await getEmailSuppressionListCollection()).updateOne(
-    { email: normalizeEmail(email) },
-    {
-      $set: {
-        email: normalizeEmail(email),
-        reason,
-        payload: payload || {},
-        active: true,
-        updatedAt: now
-      },
-      $setOnInsert: {
-        createdAt: now
-      }
-    },
-    { upsert: true }
-  );
+  await currentEmailRepository().suppress(normalizeEmail(email), reason, payload || {}, now);
 };
 
 export const unsubscribeEmailAddress = async ({
@@ -67,20 +48,5 @@ export const unsubscribeEmailAddress = async ({
   source?: string;
 }) => {
   const now = new Date();
-  await (await getEmailUnsubscribesCollection()).updateOne(
-    { email: normalizeEmail(email), listId },
-    {
-      $set: {
-        email: normalizeEmail(email),
-        listId,
-        source,
-        unsubscribedAt: now,
-        updatedAt: now
-      },
-      $setOnInsert: {
-        createdAt: now
-      }
-    },
-    { upsert: true }
-  );
+  await currentEmailRepository().unsubscribe(normalizeEmail(email), listId, source, now);
 };

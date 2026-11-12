@@ -1,0 +1,51 @@
+[
+  {
+    "name": "root-data",
+    "command": [
+      "corepack",
+      "pnpm",
+      "--dir",
+      "remix",
+      "run",
+      "test:root-data"
+    ],
+    "startedAt": "2026-11-11T21:19:57.282884+00:00",
+    "exitCode": 0,
+    "log": "root-data.log"
+  },
+  {
+    "name": "capabilities",
+    "command": [
+      "corepack",
+      "pnpm",
+      "--dir",
+      "remix",
+      "run",
+      "test:api-capabilities"
+    ],
+    "startedAt": "2026-11-11T21:19:57.283174+00:00",
+    "exitCode": 0,
+    "log": "capabilities.log"
+  },
+  {
+    "name": "native-runtime",
+    "command": [
+      "corepack",
+      "pnpm",
+      "--dir",
+      "remix",
+      "exec",
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "server/utils/nativeHomeRuntime.test.ts",
+      "server/utils/nativeHomeFence.test.ts",
+      "server/utils/nativeHomePlugin.test.ts",
+      "server/utils/nativeHomeDispatch.test.ts"
+    ],
+    "startedAt": "2026-11-11T21:19:57.283240+00:00",
+    "exitCode": 0,
+    "log": "native-runtime.log"
+  }
+]

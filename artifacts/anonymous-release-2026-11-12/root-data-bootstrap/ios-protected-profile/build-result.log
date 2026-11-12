@@ -1,0 +1,3 @@
+warning: variable does not need to be mutable
+warning: `commander-indexer` (lib) generated 1 warning (run `cargo fix --lib -p commander-indexer` to apply 1 suggestion)
+** BUILD SUCCEEDED **

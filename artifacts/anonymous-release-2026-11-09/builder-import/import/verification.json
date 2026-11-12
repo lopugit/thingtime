@@ -1,0 +1,257 @@
+{
+  "origin": "http://127.0.0.1:18724",
+  "sessionId": "77f90b59-6cdc-4cc5-8f4a-e57081bee299",
+  "bundleSha256": "9707745a860b84a11abf034e85f02d9850cfa2f2abbe021683fe133b3b711af4",
+  "normalImportDialog": true,
+  "importOffline": true,
+  "coldReload": true,
+  "coldReloadOffline": true,
+  "offlineReloadFailure": null,
+  "anonymousScope": "[\"anonymous\",1]",
+  "initialSessionCookies": 0,
+  "exactDependencyCrystal": true,
+  "exactRootCrystalWithRemappedReference": true,
+  "noAuthoredSharingEnvelope": true,
+  "root": {
+    "thingtime": [
+      "webpage",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Affirmation preview",
+      "version": 1,
+      "blocks": [
+        {
+          "id": "card",
+          "type": "component",
+          "css": {
+            "width": "100%",
+            "max-width": "400px"
+          },
+          "component": "local-4c3aae8e-443d-4c1e-afd0-fa260cb34f73"
+        }
+      ]
+    },
+    "id": "local-7a6a902b-f83b-4ef7-87ca-d58f8af218ee",
+    "revision": 1,
+    "createdAt": "2026-11-09T12:25:25.923Z",
+    "updatedAt": "2026-11-09T12:25:25.923Z"
+  },
+  "dependency": {
+    "thingtime": [
+      "component",
+      "builder-thing"
+    ],
+    "crystal": {
+      "name": "Original affirmation card",
+      "library": "custom",
+      "category": "general",
+      "componentKey": "original-affirmation",
+      "version": 1,
+      "args": [
+        {
+          "name": "message",
+          "type": "text",
+          "default": "I don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me."
+        }
+      ],
+      "render": {
+        "tag": "article",
+        "props": {
+          "style": {
+            "width": "min(400px, 100%)",
+            "aspectRatio": "5 / 7",
+            "borderRadius": "28px",
+            "background": "linear-gradient(155deg, #fff1ce 0%, #f8d5c2 100%)",
+            "display": "flex",
+            "alignItems": "center",
+            "justifyContent": "center",
+            "padding": "28px 18px",
+            "boxSizing": "border-box",
+            "color": "#a45f4d",
+            "fontFamily": "Georgia, serif",
+            "fontSize": "clamp(17px, 4.9vw, 23px)",
+            "lineHeight": "1.48",
+            "textAlign": "center",
+            "whiteSpace": "pre-wrap"
+          }
+        },
+        "children": [
+          {
+            "ttArg": "message"
+          }
+        ]
+      }
+    },
+    "id": "local-4c3aae8e-443d-4c1e-afd0-fa260cb34f73",
+    "revision": 1,
+    "createdAt": "2026-11-09T12:25:25.923Z",
+    "updatedAt": "2026-11-09T12:25:25.923Z"
+  },
+  "nonAnonymousRecords": 0,
+  "peerEvidence": {
+    "publicResolverStatus": 404,
+    "freshBrowserContentFound": false
+  },
+  "widths": [
+    {
+      "width": 1440,
+      "dialog": {
+        "width": 512,
+        "client": 512,
+        "scroll": 512
+      },
+      "rendered": {
+        "left": 0,
+        "right": 400,
+        "height": 560,
+        "docWidth": 1440,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    },
+    {
+      "width": 390,
+      "dialog": {
+        "width": 342,
+        "client": 342,
+        "scroll": 342
+      },
+      "rendered": {
+        "left": 0,
+        "right": 390,
+        "height": 546,
+        "docWidth": 390,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    },
+    {
+      "width": 320,
+      "dialog": {
+        "width": 272,
+        "client": 272,
+        "scroll": 272
+      },
+      "rendered": {
+        "left": 0,
+        "right": 320,
+        "height": 448,
+        "docWidth": 320,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    }
+  ],
+  "errors": []
+}

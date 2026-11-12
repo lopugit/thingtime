@@ -1,0 +1,133 @@
+{
+  "sourceRef": "40c57f919ac1824103cb8307a1fcda145ceb25f5",
+  "runtimeDistributionSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+  "sourceToBinaryReproducibility": "unproven",
+  "simulatorDeleted": true,
+  "passed": true,
+  "phases": [
+    {
+      "phase": "write",
+      "node": "v24.22.1",
+      "platform": "ios",
+      "arch": "arm64",
+      "checks": [
+        "real-node-sqlite",
+        "async-rollback",
+        "caught-error-aborts",
+        "primitive-pagination",
+        "close-reopen",
+        "byte-exact-bson",
+        "bson-types",
+        "collection-unique-rollback",
+        "collection-query-update-pagination-type-equality",
+        "collection-close-reopen",
+        "collection-persisted-definition-and-data",
+        "unclosed-commit-ready"
+      ],
+      "passed": true,
+      "sqliteVersion": "3.53.4",
+      "bsonSha256": "a6cb5c12f3873f54be6206756486ee4a48eadbcdeea2e089874c6697a314d716"
+    },
+    {
+      "phase": "restart-read",
+      "node": "v24.22.1",
+      "platform": "ios",
+      "arch": "arm64",
+      "checks": [
+        "real-node-sqlite",
+        "byte-exact-bson",
+        "bson-types",
+        "collection-persisted-definition-and-data",
+        "app-process-restart-committed-data",
+        "final-close"
+      ],
+      "passed": true,
+      "sqliteVersion": "3.53.4",
+      "bsonSha256": "a6cb5c12f3873f54be6206756486ee4a48eadbcdeea2e089874c6697a314d716"
+    }
+  ],
+  "frameworkSha256": "08faa1c98ec78a4156040fe2288435137b09c0a85dd9d5f3646a0f4de061574d",
+  "sourceHashes": {
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "b41324fd4a1041c0d18fc2a64902e57e64d13c65b767267aadadfbdde187ce4e"
+  },
+  "dependencyResolution": "workspace MongoDB and workspace Vite esbuild dependency",
+  "executedToolSha256": {
+    "iOS/scripts/native-sqlite-probe/run.py": "d520e3eb690ee36f76e32a65554f5c2981962ea13d2edbb04e5ceac63ff94623",
+    "iOS/scripts/native-sqlite-probe/probe.mjs": "9879d7b8492e47a4395d3978ef8f5b25a21c2dcec6c3da89f0b89303bff10d68",
+    "iOS/scripts/native-runtime-probe/main.mm": "e03af67c0f03997ce9d73f10d467f15ae8ab8fac679c74a7e2b42ebff545cd6f"
+  },
+  "mongodbVersion": "6.21.0",
+  "bundleSha256": "bf0c97d91bd2871a78b6a9ab05f272d501ee3b78cfc05cb737dd8bde1717bcec",
+  "esbuildVersion": "0.28.1",
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "harnessBinarySha256": "8be2414a14447738ed4a82daba05431e1e5d572ff24ede18b4a37bcc9b89488c",
+  "launchPids": [
+    31913,
+    33614
+  ],
+  "writerOwnership": {
+    "pid": 31913,
+    "executableMatchesOwnInstalledApp": true,
+    "executableSha256": "8be2414a14447738ed4a82daba05431e1e5d572ff24ede18b4a37bcc9b89488c"
+  },
+  "walBeforeKill": {
+    "primitive.sqlite-wal": {
+      "size": 8272,
+      "sha256": "320ea6b3fb58d7ba65727c1515d59165b267267ebf2181a084ac3b0807a600ea"
+    },
+    "collections.sqlite-wal": {
+      "size": 8272,
+      "sha256": "9cb17e3a9f1e246dccd69dc4bcd95cafb2a883bc270b56774ffa5844d1667cb9"
+    }
+  },
+  "immediatePreSignalOwnership": {
+    "pid": 31913,
+    "executableMatchesOwnInstalledApp": true,
+    "executableSha256": "8be2414a14447738ed4a82daba05431e1e5d572ff24ede18b4a37bcc9b89488c"
+  },
+  "writerSignal": "SIGKILL",
+  "walAfterKill": {
+    "primitive.sqlite-wal": {
+      "size": 8272,
+      "sha256": "320ea6b3fb58d7ba65727c1515d59165b267267ebf2181a084ac3b0807a600ea"
+    },
+    "collections.sqlite-wal": {
+      "size": 8272,
+      "sha256": "9cb17e3a9f1e246dccd69dc4bcd95cafb2a883bc270b56774ffa5844d1667cb9"
+    }
+  },
+  "uncleanWriterExitVerified": true,
+  "readerOwnership": {
+    "pid": 33614,
+    "executableMatchesOwnInstalledApp": true,
+    "executableSha256": "8be2414a14447738ed4a82daba05431e1e5d572ff24ede18b4a37bcc9b89488c"
+  },
+  "distinctProcessRestart": true,
+  "databaseHeaders": {
+    "primitive.sqlite": "SQLite format 3\u0000",
+    "collections.sqlite": "SQLite format 3\u0000"
+  },
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "cleanupPassed": true,
+  "observedAt": "2026-11-11T14:47:58.342212+00:00"
+}

@@ -1,0 +1,127 @@
+{
+  "format": 1,
+  "scope": "Protected SQLite native-home bootstrap, provider-aware canonical account dispatch and zero-Mongo fence; source verification only",
+  "head": "5847cacbd13d04f73a2cd71e5d19032d9288b506",
+  "sourceHashes": {
+    "electron/lib/local-runtime.cjs": "259188e9a627c30f02e7a9bc0dffaa2783e5a1f5bc043af7c7d11efb1de2bfc1",
+    "electron/lib/native-home-profile.cjs": "f837d509bd55601254e5f8c276745c5cddfd97faff72b16671704f73d45ad805",
+    "electron/main.cjs": "2fea89f93a81e0b6ce5038dd0943e31029b50211ea1589da9a81517dc67adbb1",
+    "electron/scripts/test-bundled-sqlite-account.cjs": "aacdfe6dae1a5ff075aac705d1fa60e81b7ef2132905498489adf8a8275470ea",
+    "electron/test/local-runtime.test.cjs": "1ad2452b31e87c4488c044732e36e5a6336103dfea7fca3df24730345bce7800",
+    "electron/test/native-home-profile.test.cjs": "c671e217355b0204f95626e863a3dfda31382880961afd4f507a68c0ddeec1c1",
+    "electron/test/desktop-shutdown.test.cjs": "53b81766ce269cae71c6bfb91f4908aef9b44ca973661bfc226ac483b4778e5a",
+    "electron/test/bundled-sqlite-account-fixture.test.cjs": "7e535e5e01b8eca0ee078269e73ba208d52e6f35c7029265d3cfe130cf18da13",
+    "remix/app/api/utils/documentStore/nativeHomeSelection.ts": "c089f3338271f18d2f91d4613e09be6b0467ca11f46408056f4180f7d9fe0f47",
+    "remix/app/api/utils/mongodb/config.ts": "cb043a4ba82108f812f77e521dbe7decf06c3b99cc9ec303d43cf4ba30a5e673",
+    "remix/app/api/utils/mongodb/mongodb.ts": "07a4922562718c7fe03b77692f5508e8ba12da489533756696608f8cd9b58cf5",
+    "remix/app/api/utils/mongodb/collections.ts": "20c06d6ea92cb205b234e903ea1bd1db50f1459e9bca39f5f015e6aed8907009",
+    "remix/app/api/utils/mongodb/dataPlane.ts": "ddd48ca7c4128cd1d227c66e33139c2569cab0e0561ca5076699dd2c11a51b38",
+    "remix/server/utils/apiFallback.ts": "7c5c292542f85b334e73e3c8d0750b5d725e3e035cebd5e6d91b6520be15177d",
+    "remix/server/utils/nativeHomeRuntime.ts": "3c683961411234503e181bd994ef16ae39574edfe3292350a846cedb03c532a5",
+    "remix/server/utils/nativeHomeRuntime.test.ts": "aa077dff79681ddb21da0a5d06340f240314a04cbb4dca286ac256e382c0069b",
+    "remix/server/utils/nativeHomeFence.test.ts": "5673bd3de8a512cbb69c2949c29341c9c8cf06bdbe54169b33a9c12ff2c9ba9e",
+    "remix/server/utils/nativeHomeDispatch.test.ts": "8c6a72fee13572fae7820ad214a3209ba6027539e263dae08710dfc384de0a2c",
+    "remix/server/routes/api/[...].ts": "8f164ff2eb472279d1a62fb7286ed574045b98508891c6bf6774e34d5cca85d1",
+    "remix/server/routes/api/root-data.get.ts": "1016a79ab8b8ad853b8809a8f3736c83bd4e5504bbf9c5623d42e9771d2bbba4",
+    "remix/server/plugins/native-home-runtime.ts": "b162690aa4f80709b6a7d3dc587fabc2f235821b33712432612a0bd0711fb8ef",
+    "remix/server/utils/nativeHomePlugin.test.ts": "4b95e6841fab83c28dca55af5407ef16f2bd46d684a3ef094a6170767a47d14a"
+  },
+  "checks": [
+    {
+      "command": "node --test electron/test/desktop-shutdown.test.cjs electron/test/bundled-sqlite-account-fixture.test.cjs electron/test/local-runtime.test.cjs electron/test/native-home-profile.test.cjs",
+      "passed": 38,
+      "failed": 0
+    },
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --test server/utils/nativeHomeRuntime.test.ts server/utils/nativeHomeFence.test.ts server/utils/nativeHomeDispatch.test.ts server/utils/apiFallback.test.ts app/api/utils/mongodb/dataPlane.test.ts",
+      "passed": 33,
+      "failed": 0
+    },
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --test server/utils/nativeHomePlugin.test.ts",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "check": "focused Remix lint, owned files",
+      "exit": 0
+    },
+    {
+      "check": "native JavaScript syntax and tracked owned diff whitespace",
+      "exit": 0
+    },
+    {
+      "command": "node --test electron/test/bundled-sqlite-account-fixture.test.cjs",
+      "passed": 4,
+      "failed": 0,
+      "scope": "Latest fixture-only corrections; other focused checks retained for unchanged owned runtime inputs"
+    },
+    {
+      "cwd": "remix",
+      "command": "node --import tsx --test server/utils/nativeHomeDispatch.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "scope": "Latest actual two-generator fixture contract regression"
+    },
+    {
+      "check": "latest dispatcher regression targeted lint and fixture syntax",
+      "exit": 0
+    }
+  ],
+  "nextCommand": "THINGTIME_RUN_BUNDLED_SQLITE_ACCOUNT_TEST=1 THINGTIME_SQLITE_EXPECTED_NITRO_SHA=<fresh independently verified compiled SHA> node electron/scripts/test-bundled-sqlite-account.cjs",
+  "launchState": "PASS actual compiled SQLite account HTTP using real Electron OS safeStorage, registration/session/roster reopen and normal logout/login; task resources removed",
+  "port": 19885,
+  "claims": {
+    "realTemporarySqliteBootstrap": true,
+    "actualH3DispatcherCanonicalAccountHandlers": true,
+    "zeroMongoConnectionAttemptsWithInheritedFakeMongoAndFallback": true,
+    "realElectronSafeStorageAndCompiledNitro": true,
+    "fullApplicationUiAcceptance": false,
+    "genericThingsSupported": false,
+    "rootDataSupported": false,
+    "iOSKeyBridge": false,
+    "externalEmailDelivered": false
+  },
+  "limits": [
+    "Host-only opt-in storage selection; no user settings UI or renderer provider/key selector",
+    "Attachment session-replacement cleanup is unsupported and safely caught behind typed Mongo fence",
+    "Native notification history persists; external delivery remains unavailable",
+    "JWT/vault bytes are reused; fresh outbox key and immutable profile/file/key binding persist inside OS-encrypted host state",
+    "Registration queue admission is distinct from mail delivery",
+    "Runtime close refuses active handler work; no forced provider/key disposal",
+    "No shared output rebuild, actual app/server launch, Git/index mutation or stable profile/helper access in this slice"
+  ],
+  "buildCorrection": {
+    "cause": "Nitro imports every server/plugins module; a test there was incorrectly treated as a production plugin with no default export",
+    "change": "Moved test outside auto-scanned directory; added recursive regression refusing test/spec modules under server/plugins",
+    "runtimeSourceChanged": false,
+    "focusedTestsPassed": 2,
+    "targetedLintExit": 0,
+    "canonicalBuildRerun": "parent-owned; not rerun by child",
+    "previousReceiptSha256": "0282445ee1ee515a29b32c10c0d685a25361d24992105156d6da70116140741e"
+  },
+  "actualAcceptance": {
+    "receipt": "actual-manifest-shape-fix.json",
+    "sha256": "caecd71e0602b4a3b3705ade78a5a887d5c950b502ecd4f99b22daab8abcb3f5",
+    "nitroSha": "c6fb3c4cc80fb7021f3a7056e5972459334090e7174a6deebd9e707e0adecfa2",
+    "exitCode": 0,
+    "profileAndProcessCleanupVerified": true,
+    "fullUiOrAutomaticReplacement": false
+  },
+  "postBuildFixtureCorrections": {
+    "previousReceiptSha256": "9d80cf427e3b5a2194150ed26aadd861f99d0376c66637b157d7c681c18aad3a",
+    "runtimeSourceChanged": false,
+    "payloadRebuilt": false,
+    "causes": [
+      "Electron main-entry require.main differs from module; explicit guarded task-child entry required",
+      "Canonical flat capabilities JSON intentionally has no origin field; enforce exact response origin/path and documented flat shape instead"
+    ],
+    "regressions": [
+      "Electron main entry versus ordinary import/renderer",
+      "Both actual canonical capability generators; availability and exact response identity"
+    ],
+    "priorFailureRetained": "actual-entry-fix.json"
+  }
+}

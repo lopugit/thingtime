@@ -1,4 +1,5 @@
 import { Zip, ZipPassThrough } from 'fflate';
+import { withGatewayWork } from '../deployment/environmentGateway';
 
 // A backpressure-aware ZIP body: entries are appended one after another as
 // stored (uncompressed) members, so memory stays at one upstream chunk plus
@@ -159,7 +160,7 @@ export const createZipStream = (
 					zip.end();
 				};
 
-				pump().catch(failNow);
+				void withGatewayWork(pump).catch(failNow);
 			},
 			pull() {
 				wake();

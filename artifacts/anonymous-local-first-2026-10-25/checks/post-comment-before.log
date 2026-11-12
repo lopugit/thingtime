@@ -1,0 +1,218 @@
+
+> test:feed
+> node --import tsx --test app/components/Feed/*.test.ts app/components/Feed/feedTypes.test.ts app/api/utils/algorithms/*.test.ts app/routes/api/v1/algorithms/sync/sync.test.ts
+
+✔ active algorithm contracts preserve null clearing and reject authority, oversized and ambiguous fields (1.957042ms)
+﹣ algorithm sync uses canonical private storage, conditional content and immutable receipts (0.568458ms) # SKIP
+✔ algorithm writes preserve canonical portable weights and refuse publication, training replay and authority fields (10.755792ms)
+✔ algorithm receipt binds owner, home storage and exact content without retaining the interest profile (3.800583ms)
+✔ algorithm placement is optional, explicit and part of the immutable command (1.86225ms)
+✔ portable algorithms preserve every weight and ranking without sharing mutable state (46.406917ms)
+✔ algorithm transfers reject authority, lineage, active selection and executable training (0.29375ms)
+✔ malformed and unbounded interest profiles fail rather than being truncated (3.802708ms)
+✔ portable algorithm display titles preserve absence, null and existing text with canonical bounds (0.510041ms)
+✔ stages ladder matches the design mockup thresholds (5.286416ms)
+✔ growthStageFor picks the stage by boundary, inclusive at min (0.216084ms)
+✔ garbage signal counts clamp to the egg (0.228834ms)
+✔ nextGrowthStage climbs the ladder and tops out at 🧠 (0.110334ms)
+✔ crossedGrowthStage fires only when a boundary is crossed (0.111791ms)
+✔ abandoning the picker restores the previous circle instead of falling through to public (2.321458ms)
+✔ the Select captures the circle it is leaving before switching to custom (0.476ms)
+✔ the fallback ref is seeded from the edited post, preserving private local drafts and the edited audience (0.280209ms)
+✔ PostCard opens the picker without committing a circle change (0.498625ms)
+✔ custom audience modal stays above the Builder inspector drawer (185.768209ms)
+✔ feed builtin IDs are reserved and distinguish personal IDs (0.764125ms)
+✔ vote rankings differentiate popularity, recency, growth and divided votes (0.967666ms)
+✔ older cursor pages remain searchable and reachable beyond the first 20 without duplicate rows (2.025459ms)
+✔ empty authorized pages advance to later matching comments (0.19525ms)
+✔ a stalled/cyclic cursor stops auto-loading: test-page.a_boundary -> test-page.a_boundary (0.404709ms)
+✔ a stalled/cyclic cursor stops auto-loading: test-page.c_boundary -> test-page.d_boundary -> test-page.c_boundary (0.124583ms)
+✔ transport failures retry the same cursor without skipping an older page (0.272125ms)
+✔ concurrent requests coalesce and unmounted/account-switched discussions discard late pages (0.115458ms)
+✔ canonical rich rows use cursor replies without widening ordinary feed behavior (2.215292ms)
+✔ opaque tokens retain punctuation and are forwarded unchanged without interpreting their order (0.567625ms)
+✔ revocation stops the page chain and cannot be retried as an authorized empty result (0.531292ms)
+✔ generic Thing discussions enable styled collection controls without changing rich child controls (3.04375ms)
+✔ device page coverage and retention failures survive the pager boundary (0.317375ms)
+✔ appends a page whose ids are all new, preserving page order (1.4355ms)
+✔ drops page entries already rendered — ranked re-scoring re-serves ids (0.804125ms)
+✔ dedupes duplicates that arrive within a single page (0.145625ms)
+✔ keeps the first-rendered instance rather than the re-served one (0.098709ms)
+✔ an all-duplicate page returns the SAME array reference (no wasted repaint) (0.09075ms)
+✔ an empty page returns the same array reference (0.064625ms)
+✔ appending onto an empty list yields the page itself (0.0945ms)
+✔ a reset page is deduped, not trusted verbatim (0.079417ms)
+✔ a reset with an empty page clears the list (0.073334ms)
+✔ feedScopeOf reads a cached subspaces scope only for a logged-in viewer (0.192541ms)
+✔ sortCommentPage mirrors the server comparator: top = score desc then older first, new = newest first, old = oldest first, null = untouched (0.338833ms)
+✔ isCommentSort accepts exactly top / new / old (0.113458ms)
+✔ isPendingComment recognises the optimistic provisional id only (0.07425ms)
+✔ windowCommentPage: the default page reveals the LAST n, a sort the FIRST n, and pins the viewer’s own fresh comments that fall below the window (0.219917ms)
+✔ mergeCommentPage: the page wins the order, the viewer’s pending / kept comments survive after it, and unseen counts what the page could not include (0.335458ms)
+✔ authorLinkTarget: native authors keep their profile route (0.162375ms)
+✔ authorLinkTarget: third-party authors link out, or nowhere at all (0.101375ms)
+✔ hashtags match at word starts and keep the literal text intact (3.996375ms)
+✔ urls, entities, mid-word hashes, and pure numbers never linkify (8.415292ms)
+✔ unicode tags, punctuation boundaries, and brackets work (0.189791ms)
+✔ inline extraction dedupes case-insensitively and caps the list (0.170417ms)
+✔ NFD input normalizes to the same tag as NFC and never severs an accent (0.181584ms)
+✔ tag hrefs canonicalize and escape the tag (0.075875ms)
+✔ astral-letter tags never bisect a surrogate pair or break the href (2.758792ms)
+✔ PostCard shares canonical URLs for hidden and mixed audiences (4.843125ms)
+✔ the anyone-with-the-link baseline composes tt:hidden (0.316167ms)
+✔ visibilityFromAcl reports custom ahead of hidden — the reason the name gate was wrong (1.554542ms)
+✔ guest menu shares omit both presented and stale secret keys (0.151167ms)
+✔ PostCard keeps the two-argument onChanged contract (0.706958ms)
+✔ every post-level onChanged call addresses post.id (0.835042ms)
+✔ every comment-level onChanged call addresses comment.id (0.400791ms)
+✔ PostList.tsx hands PostCard a stable onChanged identity (2.716417ms)
+✔ SearchPage.tsx hands PostCard a stable onChanged identity (9.473584ms)
+✔ thing.tsx hands PostCard a stable onChanged identity (0.311209ms)
+✔ post.tsx hands PostCard a stable onChanged identity (1.317583ms)
+✔ media.tsx hands PostCard a stable onChanged identity (3.007416ms)
+✖ submitComment refreshes media only after acceptance and isolates refresh failures (22.321917ms)
+✖ submitComment does not report rejected comments as added (8.79425ms)
+✖ submitReply refreshes media only after acceptance and isolates refresh failures (9.692167ms)
+✖ submitReply does not report rejected comments as added (6.658209ms)
+✔ handleRichCommented reports the accepted rich comment without resending on refresh failure (10.17075ms)
+✔ handleRichReplied reports the accepted rich comment without resending on refresh failure (6.434375ms)
+✔ shared discussions and every nested/focused reply row forward the acceptance callback (3.218583ms)
+✔ narrow discussion reaction actions keep omitted totals unknown until the server accepts (10.704084ms)
+✖ accepted cursor replies refresh once without writing the broad thread cache (7.102833ms)
+✔ opening cursor replies reads one authorized page and rejects stale or revoked results (21.326417ms)
+✖ submitComment sends the selected Character rather than the session principal (6.606125ms)
+✖ submitReply sends the selected Character rather than the session principal (5.977417ms)
+✔ the expanded post composer routes file-bearing paste into its attachment uploader (0.883458ms)
+✔ the attachment composer exposes the same bounded queue used by pick, drop, and paste (0.218542ms)
+✔ interactive webpage attachments cannot become or replace an editable builder target (23.668625ms)
+✔ known reaction rejections preserve authored context and roll back safely (1.679125ms)
+✔ authored 503 reaction rejections are not treated as ambiguous commits (0.147708ms)
+✔ ambiguous reaction failures explain reconciliation and safe retry behavior (0.215166ms)
+✔ transport failures keep optimistic state instead of trusting a GET that could overtake the write (0.114459ms)
+✔ dedicated algorithm sync pins confirmed owner and selected plane while declaring home storage (15.528916ms)
+✔ anonymous, temporary, service, changed-account, changed-plane and cross-origin callers never reach algorithm storage (12.650417ms)
+✔ internal Action identity and failed rate admission do not authorize algorithm synchronization (2.028292ms)
+✔ algorithm sync repeats session admission before mutation and response disclosure (0.802834ms)
+✔ selection operations use the same admission and hide pointers after account revocation (0.884083ms)
+✔ Character sync reauthorizes the selected actor before writes and disclosure (2.341834ms)
+ℹ tests 93
+ℹ suites 0
+ℹ pass 85
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 3384.408875
+
+✖ failing tests:
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:4136
+✖ submitComment refreshes media only after acceptance and isolates refresh failures (22.321917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:65:14)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:4845
+✖ submitComment does not report rejected comments as added (8.79425ms)
+  Error: Write failed
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:73:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:4136
+✖ submitReply refreshes media only after acceptance and isolates refresh failures (9.692167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:65:14)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:4845
+✖ submitReply does not report rejected comments as added (6.658209ms)
+  Error: Write failed
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:73:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7)
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:7600
+✖ accepted cursor replies refresh once without writing the broad thread cache (7.102833ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:132:10)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:10126
+✖ submitComment sends the selected Character rather than the session principal (6.606125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'character'
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:174:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'character',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/components/Feed/postCommentAcceptance.test.ts:2:10126
+✖ submitReply sends the selected Character rather than the session principal (5.977417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'character'
+
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/components/Feed/postCommentAcceptance.test.ts:174:12)
+      at async Test.run (node:internal/test_runner/test:1332:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'character',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

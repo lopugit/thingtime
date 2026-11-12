@@ -1,0 +1,15 @@
+{
+  "outcome": "Positive native edit/spellcheck/reload passed; negative launch admission timed out; paired causal reproduction incomplete",
+  "positivePid": 20469,
+  "positiveKeyPresent": true,
+  "positiveEditReadback": true,
+  "positiveReloadFinishedTwice": true,
+  "positiveExplicitTermination": 0,
+  "negativePid": null,
+  "negativeEnvironmentMutation": "unobserved",
+  "matchingNegativeCrashReportFound": false,
+  "simulatorIndependentlyAbsent": true,
+  "budget": "Original control600s exhausted across fixture setup and corrected control; no retry",
+  "productFilter": "unchanged pending parent conditional evidence review",
+  "noFullAppRerun": true
+}

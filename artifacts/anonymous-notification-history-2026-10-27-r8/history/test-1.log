@@ -1,0 +1,9 @@
+✔ anonymous Lopu messages survive cold offline navigation and render through the normal history UI (19330.63291ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19434.282261

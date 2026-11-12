@@ -1,0 +1,56 @@
+{
+  "ok": true,
+  "verifiedAt": "2026-11-09T11:56:16.624887+00:00",
+  "source": {
+    "featureHead": "d214a6b5a1965831febd2e5d1f2488ee3f13d1fc",
+    "mergeHead": "c0d1ae9c4a5c047d9c7ada870dea7a5f6fa8f4a0",
+    "applicationIndexTree": "4446aa62b581c0b554486f32c345bd19627ef683",
+    "launcherBlob": "469ebe6a437f3fb6e3c68933e4cfe849e2b4f0c4",
+    "integrationTestBlob": "be572391c767b4d2424d86a0d06be063461112dc"
+  },
+  "build": "Final pnpm --dir remix build:draft output from build:client (private staged copy of index.html, runner.js and policy.json)",
+  "assetSha256": {
+    "policy.json": "f839d46fc28a6fd860349372583daa3830d4c63dbf9776cc7855390b94eee10f",
+    "index.html": "087b1ba2bdba43d15e849e113e57fc7c9b2d005ad782e2b5e84ed74d39b103c4",
+    "runner.js": "ca0f7c236cba1bad9a64ca1214f68bb8d3ad26c5be1d4dae7fca5a30ce9b2a2b"
+  },
+  "runnerBytes": 42150982,
+  "runtime": {
+    "image": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be",
+    "platform": "linux/arm64",
+    "node": "24.21.0",
+    "playwrightChromiumRevision": "1228",
+    "observedBrowserVersion": "149.0.7827.0",
+    "dockerServer": "29.5.2"
+  },
+  "tests": {
+    "isolatedSdkRealDocker": {
+      "passed": true,
+      "durationMs": 40249.922375,
+      "launcherUmask": "077"
+    },
+    "launcherUnit": {
+      "passed": 5,
+      "failed": 0
+    },
+    "nativeDraftUnit": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "visualReview": {
+    "inspectedAllFourBaselinePngs": true,
+    "finalPngBytesMatched": {
+      "thingtime-draft.json": true,
+      "viewport-1440x1000.png": true,
+      "viewport-390x844.png": true,
+      "viewport-320x844.png": true,
+      "card.png": true
+    }
+  },
+  "observedRecovery": {
+    "originalUmask077": "Cannot find module /opt/thingtime/MCP/scripts/render-only-server.mjs",
+    "originalUmask022": "Positive SDK capture passed",
+    "fixedWrapperOtherAttempts": "15-second Chromium navigation deadline was observed before parser diagnostics; these attempts do not count as input-validation proof."
+  }
+}

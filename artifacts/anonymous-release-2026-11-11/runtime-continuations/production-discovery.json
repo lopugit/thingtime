@@ -1,0 +1,28 @@
+{
+  "origin": "https://thingtime.com",
+  "observedAt": "2026-11-11T12:27:20.051Z",
+  "manifests": [
+    {
+      "path": "/.well-known/thingtime-capabilities.json",
+      "features": {
+        "api.chatgpt-mcp": {
+          "version": "2.2.0"
+        },
+        "chatgpt.mcp": null,
+        "chatgpt.render-export": null,
+        "api.releases-native-web": null,
+        "api.releases-native-web-content": null
+      }
+    },
+    {
+      "path": "/.well-known/thingtime-chatgpt-capabilities.json",
+      "features": {
+        "api.chatgpt-mcp": null,
+        "chatgpt.mcp": "2.1.0",
+        "chatgpt.render-export": null,
+        "api.releases-native-web": null,
+        "api.releases-native-web-content": null
+      }
+    }
+  ]
+}

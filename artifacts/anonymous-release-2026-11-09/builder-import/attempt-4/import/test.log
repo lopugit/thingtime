@@ -1,0 +1,29 @@
+✖ normal Things importer retains the complete exact anonymous draft after reload (12419.563477ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12520.585306
+
+✖ failing tests:
+
+test at ../../tmp/qa-import.test.mjs:13:1
+✖ normal Things importer retains the complete exact anonymous draft after reload (12419.563477ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + [Function: status]
+  - 404
+  
+      at TestContext.<anonymous> (file:///tmp/qa-import.test.mjs:142:11)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    expected: 404,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

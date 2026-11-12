@@ -1,11 +1,14 @@
 import React, { createContext } from 'react';
 import { Subject } from 'rxjs';
+import { desktopBundleSafety } from '~/utils/desktopBundleSafety';
+import { getElectronAutoUpdateEnabled } from '~/utils/electronBridge';
 import { thingtimeDefaults, thingtimeMinimumValues, thingtimeNewData, thingtimeOverwriteAll } from './Thingtime/ThingtimeDefaults';
 import { sanitise } from '../functions/sanitise';
 import { smarts } from '../smarts';
 import { useThingtimeLine } from '~/hooks/useThingtimeMachine';
 import type { PathArray, TimelineEvent } from '~/hooks/useThingtimeMachine';
 import localforage from 'localforage';
+import type { ThingtimeStorage } from '../local-workspace/editorTree';
 import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
@@ -29,6 +32,7 @@ export interface ThingtimeTypes {
 	getThingtime: any;
 	thingtimeRef: any;
 	loading: boolean;
+	flushPersistence?: () => Promise<void>;
 	paths: string[];
 	events: Subject<any>;
 }
@@ -49,6 +53,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const storageKey = props?.storageKey || 'thingtime';
 	const persistLocal = props?.persistLocal !== false;
 	const exposeGlobals = props?.exposeGlobals !== false;
+	const storage: ThingtimeStorage = props.storage || localforage;
+	const storageRef = React.useRef(storage); storageRef.current = storage;
+	const storageError = React.useRef(props.onStorageError); storageError.current = props.onStorageError;
 
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
@@ -93,10 +100,12 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				return serialized;
 			},
 			write: async (serialized) => {
-				await localforage.setItem(storageKeyRef.current, serialized);
+				await storageRef.current.setItem(storageKeyRef.current, serialized);
+				storageError.current?.(null);
 			},
 			onError: (error, context) => {
 				console.error(`[tt] Thingtime autosave ${context.phase} failed at revision ${context.revision}`, error);
+				storageError.current?.(error);
 			}
 		});
 	}
@@ -339,6 +348,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				namespace: 'default'
 			}
 		) => {
+			desktopBundleSafety.changed();
 			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
 			if (setThingtimeFlushScheduledRef.current) return;
 			setThingtimeFlushScheduledRef.current = true;
@@ -347,6 +357,13 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		[flushSetThingtimeQueue]
 	);
 
+	const flushPersistence = React.useCallback(async () => {
+		if (!persistLocal || !persistenceReadyRef.current) throw new Error('The editor is not ready to save on this device.');
+		flushSetThingtimeQueue();
+		persistenceRevisionRef.current += 1;
+		persistenceRef.current?.schedule(thingtimeRef.current, persistenceRevisionRef.current);
+		await persistenceRef.current?.flush();
+	}, [flushSetThingtimeQueue, persistLocal]);
  const flushThingtimePersistence = React.useCallback(async (signal?: AbortSignal) => {
   const expectedStorageKey = storageKey;
   const assertCurrent = () => {
@@ -363,6 +380,21 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
    flush: async () => { await persistenceRef.current?.flush(); }
   });
  }, [storageKey, persistLocal, loading, flushSetThingtimeQueue]);
+
+ React.useLayoutEffect(() => {
+  if (!persistLocal) return;
+  return desktopBundleSafety.register({ kind: 'persistence',
+   ready: () => providerActiveRef.current && !loading && persistenceReadyRef.current && storageKeyRef.current === storageKey,
+   automaticUpdates: sessionHash => getElectronAutoUpdateEnabled(thingtimeRef.current, sessionHash),
+   checkpoint: async signal => {
+    await flushThingtimePersistence(signal);
+    const revision = persistenceRevisionRef.current, snapshot = thingtimeRef.current, storage = storageRef.current;
+    return () => !signal.aborted && providerActiveRef.current && storageKeyRef.current === storageKey &&
+      storageRef.current === storage && persistenceRevisionRef.current === revision && thingtimeRef.current === snapshot &&
+      setThingtimeQueueRef.current.length === 0 && persistenceRef.current?.getState().dirty === false;
+   }
+  });
+ }, [persistLocal, loading, storageKey, flushThingtimePersistence]);
 
 	const getThingtime = React.useCallback(
 		(...args) => {
@@ -419,20 +451,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
-        // Preserve the pre-account device workspace once, without ever uploading
-        // it on hydration or handing it to a later account on this device.
-        if (persistLocal && !localStorageThingtime && props.accountId) {
-          let claim: string | null = null;
-          try {
-            claim = localStorage.getItem('tt-legacy-workspace-account');
-            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
-          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
-          if (claim === props.accountId) {
-            localStorageThingtime = await localforage.getItem('thingtime');
-            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
-          }
-        }
+				const localStorageThingtime = persistLocal ? await storage.getItem(storageKey) : null;
+        // The anonymous device tree remains in its own namespace. Login must
+        // never silently claim it for an account; explicit transfer is separate.
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
@@ -473,7 +494,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 							// Repair the blob this provider actually read. Writing the literal
 							// default key here would overwrite another provider's tree and
 							// leave this one unrepaired, so it would repair again every load.
-							await localforage.setItem(storageKey, repairedSerialized);
+							await storage.setItem(storageKey, repairedSerialized);
 							if (cancelled) return;
 						}
 					} else {
@@ -484,9 +505,11 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				}
 
 				persistenceReadyRef.current = true;
+				storageError.current?.(null);
 			} catch (err) {
 				if (cancelled) return;
 				console.error('There was an error getting thingtime from localStorage', err);
+				storageError.current?.(err);
 				retryAttempt += 1;
 				const retryDelay = Math.min(250 * 2 ** (retryAttempt - 1), 5_000);
 				// Do not expose an apparently editable but permanently non-persistent
@@ -510,7 +533,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, props.accountId]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, storage, props.accountId]);
 
 	// thingtime change listener
 	React.useEffect(() => {
@@ -601,6 +624,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			thingtimeRef: thingtimeRef,
 			paths: paths,
 			loading: loading,
+			flushPersistence,
 			events: events
 		};
 
@@ -611,7 +635,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
 		// 2
 		setEverything(EverythingRef.current); // 2
-	}, [thingtimeState, setThingtime, flushThingtimePersistence, getThingtime, thingtimeRef, paths, loading, events, persistLocal]);
+	}, [thingtimeState, setThingtime, flushThingtimePersistence, getThingtime, thingtimeRef, paths, loading, events, persistLocal, flushPersistence]);
 
 	Object.assign(Everything, {
 		thingtime: thingtimeState,
@@ -622,6 +646,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		thingtimeRef: thingtimeRef,
 		paths: paths,
 		loading: loading,
+		flushPersistence,
 		events: events
 	});
 

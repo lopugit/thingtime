@@ -1,5 +1,5 @@
 import type { WebpageBlock } from '../Builder/webpageBlocks';
-import type { SavedPasswordFile } from '~/passwords/files.client';
+import type { SavedPasswordFile } from '~/passwords/storage';
 
 const stack = { display: 'grid', gap: '12px', 'min-width': '0' };
 const row = { display: 'flex', 'flex-wrap': 'wrap', gap: '8px', 'align-items': 'center', 'min-width': '0' };
@@ -20,9 +20,10 @@ export const passwordAttachmentBlocks: WebpageBlock[] = [el('password-attachment
     text('attachment-picker-text', 'Add attachment', 'span'), el('attachment-picker', 'input', '', { type: 'file', name: 'attachment', disabled: '{files.busy}', 'aria-label': 'Add password attachment', ...action('files.choose') }, undefined, { ...control, width: '100%' })
   ], stack)]),
   when('attachment-busy-visible', 'files.busy', [el('attachment-progress', 'progress', '', { 'aria-label': 'Working with encrypted attachment' }, undefined, { width: '60px', height: '4px' })]),
+  when('attachment-list-unavailable', 'files.unlisted', [el('attachment-list-status', 'p', 'The account attachment list is not yet available on this device. Saved local files are shown below. Refresh account files when connected.', { role: 'status' })]),
   repeat('attachment-list', 'files.items', [el('attachment-card', 'div', '', {}, [
-    text('attachment-name', '{item.name}', 'span'), text('attachment-size', '{item.size} bytes', 'span'),
-    button('attachment-download', 'Download', 'files.download', { id: '{item.id}' }, { disabled: '{files.busy}' }),
+    text('attachment-name', '{item.name}', 'span'), text('attachment-size', '{item.size} bytes', 'span'), text('attachment-availability', '{item.availabilityLabel}', 'span'),
+    button('attachment-download', 'Download', 'files.download', { id: '{item.id}' }, { disabled: '{item.downloadDisabled}' }),
     when('attachment-remove-visible', 'files.writable', [button('attachment-remove', 'Remove', 'files.remove', { id: '{item.id}' }, { disabled: '{files.busy}' })])
   ], { ...row, 'padding-block': '4px', 'overflow-wrap': 'anywhere' })]),
   when('attachment-all-visible', 'files.canToggle', [button('attachment-show-all', '{files.toggleLabel}', 'files.toggle', {}, { disabled: '{files.busy}' })]),
@@ -31,7 +32,7 @@ export const passwordAttachmentBlocks: WebpageBlock[] = [el('password-attachment
 ], { ...stack, 'max-width': '1100px', margin: '20px auto 0', padding: '0 16px', 'box-sizing': 'border-box' })];
 
 /** Never expose the encrypted-file key/nonce or arbitrary future API fields. */
-export const passwordAttachmentItems = (files: SavedPasswordFile[]) => files.map(file => ({ id: file.id, name: file.metadata.archivePath || file.metadata.name, size: file.metadata.size.toLocaleString() }));
+export const passwordAttachmentItems = (files: SavedPasswordFile[], busy = false) => files.map(file => ({ id: file.id, name: file.metadata.archivePath || file.metadata.name, size: file.metadata.size.toLocaleString(), availabilityLabel: file.available === false ? 'Not available offline yet' : '', downloadDisabled: busy || file.available === false }));
 
 export const passwordSourceBlocks: WebpageBlock[] = [el('password-source', 'section', '', {}, [
   when('source-account-visible', 'source.hasAccount', [privateField('source-account', 'Source account', 'sourceAccount')]),

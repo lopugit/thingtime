@@ -1,0 +1,27 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+  "simulatorDeleted": true,
+  "apiStarted": false,
+  "storageTested": false,
+  "sdk": "iPhoneSimulator27.0.sdk",
+  "native": {
+    "node": "v24.22.1",
+    "platform": "ios",
+    "arch": "arm64",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "sharpExecuted": false,
+    "nitroImported": false,
+    "apiStarted": false,
+    "storageTested": false,
+    "checks": {
+      "bcrypt": true
+    },
+    "error": {
+      "name": "Error",
+      "code": "ERR_MODULE_NOT_FOUND",
+      "message": "Cannot find module '<APP_BUNDLE>/.output/server/node_modules/sharp/dist/index.cjs' imported from <APP_BUNDLE>/probe.mjs",
+      "stack": "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<APP_BUNDLE>/.output/server/node_modules/sharp/dist/index.cjs' imported from <APP_BUNDLE>/probe.mjs\n    at finalizeResolution (node:internal/modules/esm/resolve:272:11)\n    at moduleResolve (node:internal/modules/esm/resolve:879:10)\n    at defaultResolve (node:internal/modules/esm/resolve:1006:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)\n    at #resolve (node:internal/modules/esm/loader:687:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)\n    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:636:32)\n    at TracingChannel.tracePromise (node:diagnostics_channel:370:14)"
+    }
+  }
+}

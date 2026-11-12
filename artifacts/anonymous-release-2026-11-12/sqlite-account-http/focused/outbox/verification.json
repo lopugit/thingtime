@@ -1,0 +1,57 @@
+{
+  "sourceFrozen": true,
+  "sourceHashes": {
+    "remix/app/api/utils/auth/email.ts": "a0c95b5eefaad3a5386b0ef8dcabd6eb63cbc5e74167fdcfd7ca1585c0ffb5e0",
+    "remix/app/api/utils/auth/vaultCipher.ts": "4b0d17fab2ee8f089e9dc7d04ed500d7af974bec10f72548cb9f79a019b6054f",
+    "remix/app/api/utils/email/types.ts": "f9a18631ae5cdc824457806561441d527432f3121574f5f14e50efa02c53f0c1",
+    "remix/app/api/utils/email/events.ts": "db122cf76332c27f9c5e4121f136c5fc46ce138eae782d8296248c849f807993",
+    "remix/app/api/utils/email/service.ts": "9383d8590c0b68e9c1cca26a66919a1dd0560383dd07d010939535b4838945fa",
+    "remix/app/api/utils/email/repository.ts": "530fd5f51d00e24f0df4b9f801df6d47bc8eead5964ce0343fc5e933850ab429",
+    "remix/app/api/utils/email/repository.test.ts": "13e104fe4b7c198ca5144e56e05e4e6e55995920ed62c0b300cefde05e56ffaf",
+    "remix/app/api/utils/email/repository.mongo.fixture.mts": "5af629e7bc1c1081f31913a100b51d5d70b81da14f64bf14121f11adc341ff07",
+    "remix/app/api/utils/documentStore/nativeEmailRepository.ts": "fd2714f09c2f836b561a92f6e24b1e76d07c62082d7d3da9e39cecdf77e410cc",
+    "remix/app/api/utils/documentStore/nativeEmailRepository.test.ts": "a79f418de5b2564bf46f08097149fce801df4a5ac369ea0090cd9470b0b18de3"
+  },
+  "observedAt": "2026-11-11T20:16:46.695701+00:00",
+  "tests": {
+    "command": "cd remix && node --import tsx --test app/api/utils/email/repository.test.ts app/api/utils/documentStore/nativeEmailRepository.test.ts",
+    "passed": 9,
+    "failed": 0,
+    "skipped": 0,
+    "sqlite": "Real SQLite files, close/reopen, independent handles, contention, immutable-payload admission, leases/retry/suppression, expired scopes and rollback",
+    "crypto": "Actual canonical AESGCM envelopes, explicit random disposable key; legacy-env interoperability and wrong purpose/home/message/key refusal",
+    "hosted": "Recording query-contract regression only, no Mongo server; console behavior and negative unavailable-transport stub; not provider delivery"
+  },
+  "lint": "Focused all10 ownedfiles passed; config deprecation notice retained",
+  "typecheck": "Latest full check has no owned diagnostics; fails in nativeNotifications.test.ts missing meta plus parent-owned nativeHomeRuntime in-progress exports/module. Parent owns final combined check after freeze.",
+  "runtimeAPI": {
+    "factory": "createNativeEmailRepository(provider,homePlaneId,keys)",
+    "scope": "withHomeEmailRepository(repository,homePlaneId,work)",
+    "keys": "EmailOutboxKeyProvider {homePlaneId,keyId,withKey<T>(work:(key:Uint8Array)=>T):T}; explicit protected32byte key source, no default/env fallback",
+    "queue": [
+      "claim(workerId,leaseMs,now?)",
+      "delivery(lease,now?)",
+      "defer(lease,notBefore,errorCode,now?)",
+      "sent(lease,providerMessageId,now?)",
+      "read(id)"
+    ]
+  },
+  "semantics": [
+    "Native sendEmail only enqueues, delivered:false/status:queued; no SES/console transport invoked",
+    "Canonical verification link sensitive:true and console body redaction",
+    "Encrypted retry body uses canonical explicit-key vaultCipher AES256GCM/HMAC derivation and purpose/home/message AAD",
+    "Local immutable request/payload fingerprints use keyed HMAC to avoid offline OTP guessing",
+    "Same immutable request id+payload deduplicates; changed payload conflicts",
+    "Native repositories bind exact CollectionProvider and home/lifetime with pre/post-await checks",
+    "Fresh policy checks before queue payload release; transactional mail ignores newsletter-only unsubscribe",
+    "Lease result/status transition tests are synthetic state tests, not provider acceptance"
+  ],
+  "remaining": [
+    "Runtime must supply stable protected profile key; no keychain/profile-key integration is established by fixture",
+    "Native enqueue must be awaited inside active home scope, including verify-email admin notice; parent owns orchestration",
+    "No transport worker/delivery/exactly-once remote send or physical-device acceptance provided",
+    "Expired lease recovery and local enqueue idempotency do not guarantee remote exactly-once delivery; future worker must reconcile ambiguous provider acceptance",
+    "Real hosted Mongo integration remains parent-owned; no server/build/app/native runtime activation in this batch"
+  ],
+  "reporting": "Parent-reported; child prepare previously refused exact workspace binding, no new IDs invented"
+}

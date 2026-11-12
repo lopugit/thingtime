@@ -1,0 +1,31 @@
+{
+  "scope": "Actual bell/Chakra/guard browser regression; synthetic account/API/avatar only; no app/Mongo acceptance",
+  "browserVersion": "149.0.7827.55",
+  "sourceSha256": "45d20599ef37100d95d03f8e213235453c502e2b2e83ca0a645ab852f0c76996",
+  "observations": [
+    {
+      "case": "cold-closed-authenticated",
+      "guard": true,
+      "dialogs": [
+        {
+          "tag": "SECTION",
+          "role": "dialog",
+          "notificationPopover": true,
+          "children": 0,
+          "visibility": "hidden"
+        }
+      ],
+      "calls": [
+        {
+          "operation": "list",
+          "limit": 1
+        }
+      ]
+    },
+    {
+      "case": "identity-withdrawal",
+      "panelRemoved": true,
+      "lateResultNotRendered": true
+    }
+  ]
+}

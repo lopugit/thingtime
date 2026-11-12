@@ -1,3 +1,4 @@
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import assert from 'node:assert/strict';
@@ -1534,6 +1535,17 @@ test('a checkpointed Action result reaches the resumed provider without rerunnin
  assert.equal(runs, 1);
 });
 
+test('unverified instruction capacity is an explicit nonretryable chat outcome before any provider request', async () => {
+  const { InstructionInferenceCapacityError } = await import('./instructionInference');
+  const { events, outcome } = await collect(turn('hi', 'claude-opus-5', { deps: { getPromptSettings: async (_ownerId: string, options: any) => {
+    assert.equal(options.modelId, 'claude-opus-5');
+    throw new InstructionInferenceCapacityError(options.modelId, null);
+  } } }));
+  assert.equal(outcome.stopReason, 'error');
+  assert.match(outcome.error!, /No instructions were truncated or sent/);
+  assert.deepEqual(events.filter(event => event.type === 'error').map(event => event.retryable), [false]);
+  assert.equal(anthropicRequests.length + openAiRequests.length + responsesRequests.length, 0);
+});
 
 test('Console vault mode uses native SDK streaming with the selected key and a complete tool round trip', async () => {
  rewriteToFake('https://api.anthropic.com');
@@ -1624,4 +1636,45 @@ test('Console supported model keeps its selected effort', async () => {
  assert.equal(text(events), 'Opus reply'); assert.equal(outcome.provider, 'vault');
  assert.equal(meta(events).effort, 'high'); assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'high' });
  assert.equal(openAiRequests.length, 0); assert.equal(waterfallReads, 0);
+});
+
+for (const fails of [false, true]) test(`abandoned parallel tool stream retains shutdown admission through ${fails ? 'rejected' : 'successful'} remaining tool cleanup`, async () => {
+ anthropicPlans.push({ blocks: [
+  { type: 'tool_use', id: 'fast', name: 'get_thing', inputChunks: ['{"id":"first"}'] },
+  { type: 'tool_use', id: 'slow', name: 'get_thing', inputChunks: ['{"id":"second"}'] }
+ ], stopReason: 'tool_use' });
+ let release!: () => void;
+ const work = new Promise<void>(resolve => { release = resolve; });
+ let releaseCleanup!: () => void;
+ const cleanup = new Promise<void>(resolve => { releaseCleanup = resolve; });
+ let cleaning!: () => void;
+ const cleanupStarted = new Promise<void>(resolve => { cleaning = resolve; });
+ const calls: string[] = [];
+ const generator = turn('read both', 'claude-opus-5', { deps: { runTool: async (call: ToolCallRecord) => {
+  calls.push(call.id);
+  if (call.id === 'slow') {
+   try { await work; if (fails) throw new Error('tool failed'); }
+   finally { cleaning(); await cleanup; }
+  }
+  return { ok: true, summary: 'Read once', data: {} };
+ } } });
+ for (;;) {
+  const step = await generator.next();
+  assert.equal(step.done, false);
+  if (!step.done && step.value.type === 'tool_result' && step.value.id === 'fast') break;
+ }
+ assert.deepEqual(calls, ['fast', 'slow']);
+ await generator.return(undefined as any);
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ release();
+ await cleanupStarted;
+ assert.equal(isGatewayWorkIdle(), false);
+ assert.equal(reserveGatewayWorkShutdown(), null);
+ releaseCleanup();
+ await new Promise<void>(resolve => setImmediate(resolve));
+ assert.equal(isGatewayWorkIdle(), true);
+ assert.deepEqual(calls, ['fast', 'slow']);
+ const reservation = reserveGatewayWorkShutdown();
+ assert.ok(reservation);
+ reservation.release();
 });

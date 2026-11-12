@@ -1,0 +1,39 @@
+{
+  "recordedAt": "2026-11-11T08:18:18.431Z",
+  "source": "Unauthenticated Node fetch of canonical GitHub Releases feed and published installer asset; redirects validated before following.",
+  "catalogue": {
+    "url": "https://api.github.com/repos/lopugit/thingtime/releases?per_page=5",
+    "status": 200,
+    "nonDraftSampleReleaseId": 441335926,
+    "tag": "widgets-v1.0.0+build.40.g981036caaf58"
+  },
+  "asset": {
+    "id": 734518897,
+    "name": "Thingtime-Recovery-App-Release-1.0.0+build.40.g981036caaf58-macos-arm64.zip",
+    "bytes": 727368
+  },
+  "request": {
+    "range": "bytes=0-15",
+    "acceptEncoding": "identity",
+    "credentials": "omit"
+  },
+  "observedRedirect": {
+    "fromHost": "github.com",
+    "status": 302,
+    "toHost": "release-assets.githubusercontent.com"
+  },
+  "response": {
+    "status": 206,
+    "contentRange": "bytes 0-15/727368",
+    "contentLength": 16,
+    "receivedBytes": 16,
+    "contentEncoding": null
+  },
+  "limitations": [
+    "This proves canonical publication storage byte-range support using an existing public installer ZIP.",
+    "It does not prove a signed native-web envelope or deterministic stored ZIP has been published.",
+    "No native-web publisher key was provisioned, and no production write or deployment occurred."
+  ],
+  "credentialsUsed": false,
+  "signedRedirectUrlRetained": false
+}

@@ -1,0 +1,45 @@
+{
+  "observedAt": "2026-11-11T14:51:01.007214+00:00",
+  "baseCommit": "40c57f919ac1824103cb8307a1fcda145ceb25f5",
+  "scope": "Remix typecheck, zero-error ratchet and full lint at the recorded source hashes. Later Electron-only lifecycle changes have separate focused verification; these gates do not establish deployed or installed acceptance.",
+  "sourceHashes": {
+    "electron/lib/web-bundle-activation.cjs": "7c5f3749a8a249b138c69550f4ac1af76f3c75468ecfda826ba36833315a5571",
+    "electron/main.cjs": "50fee11ff7a16e2a4990ba974567b3cbd9bc943919ed2e3a161e3d67c27bf896",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bd6607577325f93752d9999949705ca420eacd0cb5301dd7bea2ee554421c9d5",
+    "electron/test/web-bundle-activation.test.cjs": "859969004dcfaf6d2d0b90b0304eae052252cbc785c4d5407e17b58d4c822621",
+    "remix/app/api/utils/storage/userStorage.ts": "51cefb7b323ce3a1fdc0b6214f32c9aa9e4c4b6295c3ada339cfb0a3acc59a20",
+    "remix/app/utils/desktopBundleActivation.test.ts": "191706ccb9d6b9287e2ff7607148f4bd10a7322b545e0154bf94bd0be85659cf",
+    "remix/app/utils/desktopBundleActivation.ts": "8b57d7cd6bc849e3c49e6ae85acb0f115bfb1cd049800499f834f25fc453d6ec",
+    "remix/app/utils/desktopBundleSafety.test.ts": "591c7cbfd8a89d168a745ac6dab0090cbfa34324a8d4e2903214ae609b48bc77",
+    "remix/app/utils/desktopBundleSafety.ts": "52f5cc0867d0adb58d06b9ff0f4c992308343652c1d14da96ae69ffbb151dc47",
+    "remix/app/utils/electronBridge.ts": "a5eff71749435660307f9d53f0f22b55406dd34f82f41a2f6f41a3412f5ed892",
+    "remix/app/api/utils/documentStore/nativeUserStorage.ts": "a5737c092a94ab626a1c0f17738d57e9602235585590295b389d637290c4d37a",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts": "1770c5d35883b0be68da342106c96d417056870760b8b6a776d3c58bb5fe3c42",
+    "remix/app/api/utils/storage/userStorageAdmission.ts": "facd3f803adbc10da844118df1c7b02f327f8718ba3d00faf42788af491e137c",
+    "remix/app/utils/desktopBundleActivation.browser.test.mjs": "a3ff71e5718cd060c03eacf55e98a9817049cdfcf9561e1fded4e85638c93530"
+  },
+  "checks": [
+    {
+      "name": "types",
+      "command": "corepack pnpm --dir remix run typecheck",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-ledger-final-types.log",
+      "diagnostics": 0
+    },
+    {
+      "name": "ratchet",
+      "command": "corepack pnpm --dir remix run typecheck:ratchet",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-ledger-final-ratchet.log",
+      "diagnostics": 0
+    },
+    {
+      "name": "lint",
+      "command": "corepack pnpm --dir remix run lint",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-ledger-final-lint.log",
+      "errors": 0,
+      "warnings": 372
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "stage": "exact cold readback",
+  "error": "page.goto: Navigation to \"http://127.0.0.1:18724/things\" is interrupted by another navigation to \"chrome-error://chromewebdata/\"\nCall log:\n  - navigating to \"http://127.0.0.1:18724/things\", waiting until \"load\"\n",
+  "body": "",
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    }
+  ],
+  "errors": [],
+  "widths": [
+    {
+      "width": 1440,
+      "dialog": {
+        "width": 512,
+        "client": 512,
+        "scroll": 512
+      }
+    },
+    {
+      "width": 390,
+      "dialog": {
+        "width": 342,
+        "client": 342,
+        "scroll": 342
+      }
+    },
+    {
+      "width": 320,
+      "dialog": {
+        "width": 272,
+        "client": 272,
+        "scroll": 272
+      }
+    }
+  ],
+  "peerEvidence": {},
+  "offlineReloadFailure": "page.goto: net::ERR_FAILED at http://127.0.0.1:18724/things\nCall log:\n  - navigating to \"http://127.0.0.1:18724/things\", waiting until \"load\"\n"
+}

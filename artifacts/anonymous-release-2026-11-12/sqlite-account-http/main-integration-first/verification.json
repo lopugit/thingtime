@@ -1,0 +1,63 @@
+{
+  "status": "failed",
+  "baseCommit": "13313f03c80311d35e6b56470916a175b10bb467",
+  "attribution": "Base commit plus frozen source inventory, not a clean-commit build",
+  "startedAt": "2026-11-11T21:01:57.110328+00:00",
+  "endedAt": "2026-11-11T21:02:36.325220+00:00",
+  "checks": [
+    {
+      "name": "installer",
+      "command": [
+        "node",
+        "--test",
+        "electron/test/install-local-app.test.cjs"
+      ],
+      "startedAt": "2026-11-11T21:01:57.122348+00:00",
+      "endedAt": "2026-11-11T21:01:59.488869+00:00",
+      "exitCode": 0,
+      "log": "installer.log"
+    },
+    {
+      "name": "sync",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "exec",
+        "node",
+        "--import",
+        "tsx",
+        "--test",
+        "app/components/Devices/SyncConfigActivity.test.ts",
+        "app/fileSync/savedIntentRecoveryEligibility.test.ts"
+      ],
+      "startedAt": "2026-11-11T21:01:59.488933+00:00",
+      "endedAt": "2026-11-11T21:02:01.879104+00:00",
+      "exitCode": 0,
+      "log": "sync.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "startedAt": "2026-11-11T21:02:01.879164+00:00",
+      "endedAt": "2026-11-11T21:02:36.000427+00:00",
+      "exitCode": 2,
+      "log": "typecheck.log"
+    }
+  ],
+  "sourceUnchanged": true,
+  "sourceChanges": [],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "c6fb3c4cc80fb7021f3a7056e5972459334090e7174a6deebd9e707e0adecfa2",
+    "electron/dist/web-integrity.json": "204de180ec152ff933296a51f3cd4c1b64cb60401bd411dea3dbf0202d583b4e",
+    "electron/dist/web/metadata.json": "da6dd85e315b29737773b5580c1e47feef34410cb33b4fae47c43da7d0d8c454"
+  }
+}

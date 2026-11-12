@@ -289,7 +289,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
 	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; delete props[MODIFIER_ACTION_INPUTS]; delete props[ACTION_BATCH_ATTRIBUTE]; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
-	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
+	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]) || undefined;
 	if (tag === 'option') return <HtmlSelectOption key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlSelectOption>;
 	if (tag === 'select' && props.multiple) return <HtmlMultipleSelect key={key} props={props}>{renderChildren(node.children, depth + 1, state)}</HtmlMultipleSelect>;
 

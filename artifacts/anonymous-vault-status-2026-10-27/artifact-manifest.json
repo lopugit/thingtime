@@ -1,0 +1,883 @@
+{
+  "scope": "New evidence only; signature scan does not claim comprehensive secret detection",
+  "textFilesScanned": 149,
+  "signatureFindings": [],
+  "files": {
+    "artifacts/anonymous-vault-status-2026-10-27/regression.log": {
+      "sha256": "85af4422e3b78ffaa176b2f98faa4e32bd905adffc79dc96abd4aa923b45a071",
+      "bytes": 7433
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/package-and-source-parity.json": {
+      "sha256": "59ed643647c80926ee5dd4b240ee4dfe6111fced105d6e5b77537fb8bb6801c6",
+      "bytes": 3145
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/run-plan.cjs": {
+      "sha256": "9c0cc8d4e532158dde591cfddf9f8553160a5bde321af806039e9699932f420d",
+      "bytes": 8982
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/passwords-suite.log": {
+      "sha256": "63c28bdd95893a2a7170bf06fda09b57eaac907ecee249aee12121e8d7b5a12b",
+      "bytes": 6838
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/executed-identity-test.mjs": {
+      "sha256": "afdbba8af1384652527ae26b6d6333c75f5b7c0075f1c11fe5382b97e17d2216",
+      "bytes": 12030
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/source-hashes.json": {
+      "sha256": "96146e81b0804c393d0c22a425eee4d00605d8ae59d5c0d10a11bbb8a45c776b",
+      "bytes": 883
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/lint.log": {
+      "sha256": "ae2cea898160b94c1a44c064ed4d718726273eab55d741a61f75c62b9246a73c",
+      "bytes": 311
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/README.md": {
+      "sha256": "e1c1660f0673ec4fc8767a53180b69c0d9a005b2fdcd849e2afa34f86c59e4b8",
+      "bytes": 3925
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/native.log": {
+      "sha256": "4788e282f71296ca4421361c11f34a37433d50bf770997f928f3d7a337d87d7b",
+      "bytes": 1458
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/typecheck-comparison.json": {
+      "sha256": "7cfa2da4b219804c118841744df7d82f10258e26f438e40b7eac7e5a9d7f7a63",
+      "bytes": 217
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/executed-native-runner.cjs": {
+      "sha256": "d99229725906bb293588c443372b26065059b95c431c8ba0d483f8b06149c439",
+      "bytes": 19269
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/package-vault-status.py": {
+      "sha256": "05eb0f1a638f63c6f48fd98840091020b17860c2856ed5273dde8a9d1f97256f",
+      "bytes": 2619
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/build-result.json": {
+      "sha256": "3de4f6e3ff640dfdd09d8b58942450c546d9f86e533ec71f581756398c460fdc",
+      "bytes": 687
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/anonymous-local-first.html": {
+      "sha256": "6ddcd2360acec76720cb8350eebed4b4e1ec3c3036d23ad5219c4f64a2012bed",
+      "bytes": 116184
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-390-artifacts.png": {
+      "sha256": "906ed1810f8f670ec77ca86dcb7db22bfbdf3063655e1534c0f20222b0f63cba",
+      "bytes": 90358
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/security-package-source.json": {
+      "sha256": "d0a9d19fb9a259914c4a8231f954cddc3b1597d0937106e435572b801310a2ff",
+      "bytes": 11488
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-390-footer.png": {
+      "sha256": "767b19771e38f3ab74e8219373a434ae0a7d9fd2dc5e3bebf6830881bed4494d",
+      "bytes": 60636
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-320-search.png": {
+      "sha256": "b59f0fd9d064f555648b46e16756d2767826699e87f27920a68a42f3673f120a",
+      "bytes": 67625
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-390-testing.png": {
+      "sha256": "669c25e3b191d09514ad1b41bfc8aaeac673b22cce7b49c96ee19440fec60146",
+      "bytes": 107453
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/thingtime-plan-acceptance.mjs": {
+      "sha256": "70d9b8023c91472929fc36a51511ba92aee7dbbc46f0570d8d849e01fe07dafa",
+      "bytes": 7209
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-320-artifacts.png": {
+      "sha256": "d42f47c19b66eefc2b1525646d8aa4f2911e5e04461d3de1acd923a9b947bfca",
+      "bytes": 81949
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-1440-footer.png": {
+      "sha256": "b1ea0e966a8f30bbb61b51614b421355215a441a4ccd4f4cf1e3ba2185a77207",
+      "bytes": 205678
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-1440-artifacts.png": {
+      "sha256": "9f9aef2af7dd4b7c4e196ef214fdaf8b3514bf5c6817f6935a09ea7818a00cc8",
+      "bytes": 246973
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-320-testing.png": {
+      "sha256": "fd9a5d922bb95bbc5e290facd223f7e958bfc1a524ed08651d13a2879a07ee27",
+      "bytes": 87489
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-1440-testing.png": {
+      "sha256": "6aabcef398237a776113e0906bd91c281fefbfee8aaca52e563e7ac10b451249",
+      "bytes": 302478
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/cleanup.json": {
+      "sha256": "c931f2805a19bcc9997c3d31077dbb50c3d5e3c3ff6cbe9b13f150a816c2df1e",
+      "bytes": 74
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-1440-top.png": {
+      "sha256": "307686ed715abba312b19d5e88dc979a08e15237b9386d9c9a14ead2ecd811b7",
+      "bytes": 235538
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-1440-search.png": {
+      "sha256": "2a5eb0ac4810b7b5d8d13f9cb7bed766dfa0fa6a2ae0d985ffb470230a9a9c87",
+      "bytes": 298690
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/network.json": {
+      "sha256": "f7f011a709db1973109ebb7f75b1fbfe88811a255eec3f90bd1f8b5e1f50a879",
+      "bytes": 231
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/verification.json": {
+      "sha256": "8ef369f3ef95ee76d64919e37d26eca5276caccf5cd65275d9156d3bc8c977ef",
+      "bytes": 3601
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-390-top.png": {
+      "sha256": "5beb6f3fd22bbf9b03bdd09de1fc029f7a2f94ec4d3efe71194888d69779199f",
+      "bytes": 80125
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-390-search.png": {
+      "sha256": "e5cc6de1a85b33856b376997b1e74f64f6ad0187b5f4663d754a8af3f55888b0",
+      "bytes": 82937
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-320-footer.png": {
+      "sha256": "a7cb9f0256bb94b89a824cd354e16cde8192280296d47977bc2dd749598bc8de",
+      "bytes": 52721
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan/plan-320-top.png": {
+      "sha256": "c28ff6e473182b1067d47da1c0694e8f569eb81841a645f1ce5f1cdb1db10c61",
+      "bytes": 81038
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/b-offline-1440.png": {
+      "sha256": "2281637670fce324ff131d825c40fb29555a76d51da98d0cbbb5a9e34d6eec6d",
+      "bytes": 154930
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/export-dialog-320.png": {
+      "sha256": "8bd61cfd5a3ed61c880982a061132cde45220f7f3b1c1ffbb40e716cc02cab7c",
+      "bytes": 91627
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/test-1.log": {
+      "sha256": "dfa308119432a39829118e819da8f3b7b9e94618e8e004d0514ff25d1426622a",
+      "bytes": 233
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/queue-status-known-failure-1440.png": {
+      "sha256": "2236d1dbdd4bd121e7790872c36ea2c2b7e9f45b974fe4c991bd02824d88ff5c",
+      "bytes": 56164
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/test-2.log": {
+      "sha256": "5fec593bf3d6e383c7f925d563416e47b69a1b097fd055699d80c18c6f5441db",
+      "bytes": 215
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/resources.json": {
+      "sha256": "506bd0bac9c7215941a32b73f883fcb9ee679042a38e5b7aafc32e5e3fda606a",
+      "bytes": 578
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/cleanup.json": {
+      "sha256": "ad00d976d468955af3ac1f179f456cf63fe2063fea2b29eefd67a27bff817cf2",
+      "bytes": 74
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/queue-status-known-failure-390.png": {
+      "sha256": "07a5a74b3d159cc8772286726573948603ec3fe846ac1ef44d452cb3032b9dbe",
+      "bytes": 54362
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/package.json": {
+      "sha256": "0da08f5f5dd6b62e853f968a63da4d346d75aa59c9d1b874195a0124e121decb",
+      "bytes": 242
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/b-offline-390.png": {
+      "sha256": "037951d3be53258294e67186605290e5c0d9a1c964a8256139384144347dc829",
+      "bytes": 143164
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/queue-status-verification.json": {
+      "sha256": "4fd6743fd6743e76d9df4a2316ef52522c9fee2823913ac93abbb7157c5fec3c",
+      "bytes": 646
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/verification.json": {
+      "sha256": "307b887233a29129e168108e19489b08b2a67262582cec99db8d64f458079c59",
+      "bytes": 5192
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/b-offline-320.png": {
+      "sha256": "487971186c0fd2ba98eab7a56e8824a060762c57afd96fd41043ca40ba30118a",
+      "bytes": 145457
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/boundary.json": {
+      "sha256": "8e8e6434b7ed089b05571802332166b0fa09074d9da42deb023e37dff03ea151",
+      "bytes": 263
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/vault-identity/queue-status-known-failure-320.png": {
+      "sha256": "76af5785f4c0def4f8d986ca7dc49c651693bd62acdad900ea2e117d39521e64",
+      "bytes": 54437
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/anonymous-local-first.html": {
+      "sha256": "ad4f9b9669708b48df967e5433e052d79c3b2522bb784d9e853320afb188b9b0",
+      "bytes": 116184
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/security-package-source.json": {
+      "sha256": "d5e58b0195ea233e8b4d24351ff4515d3dc43c26b63eac3766c707cc2d1d6ab3",
+      "bytes": 11488
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/thingtime-plan-acceptance.mjs": {
+      "sha256": "70d9b8023c91472929fc36a51511ba92aee7dbbc46f0570d8d849e01fe07dafa",
+      "bytes": 7209
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/cleanup.json": {
+      "sha256": "372d68cfe290c8699967703f7815535fc937bc07f6003c1f9b92c57e9cc26733",
+      "bytes": 74
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/network.json": {
+      "sha256": "f7f011a709db1973109ebb7f75b1fbfe88811a255eec3f90bd1f8b5e1f50a879",
+      "bytes": 231
+    },
+    "artifacts/anonymous-vault-status-2026-10-27/plan-initial-count-failure/verification.json": {
+      "sha256": "072f7051ad41b4257b59b57b1f9049c98f28d5f5ba84a16a5f5615263c0df12f",
+      "bytes": 319
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/resources.json": {
+      "sha256": "01b30cd2f9f0b4cc491553d5715c687c8048610665e84e13072d25a4dce3d270",
+      "bytes": 575
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/cleanup.json": {
+      "sha256": "5567d0658067abdda7b6c42d44f124925f07e5f0c0e3f35ad9a005e1bfe234eb",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/package.json": {
+      "sha256": "8cacc84a9ce37f1b3a5f78285d36b3ed5dbe5750763fa49ba2d915cdda458a0e",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/failure.png": {
+      "sha256": "325a2467fac5e8e4ee4e3a200597df707933247eaa744b3009b52990c3c97c30",
+      "bytes": 49960
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/failure.json": {
+      "sha256": "b37b899126fd4f442b115d9819930947e02d210dcc6474b6b51193d40b25346e",
+      "bytes": 287
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r7/vault-identity/boundary.json": {
+      "sha256": "33bc67195b609a23f31535bd2d6e924b135cdaa879e13fba8a7568af9957e051",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/resources.json": {
+      "sha256": "1d876c75a6800f7e4a1f1e431e32d08d8d166287a5a75292a912cff36d1a9bc6",
+      "bytes": 577
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/cleanup.json": {
+      "sha256": "fcf7cb7ad9ed50bda2f62bc9672cdb752351d52b1e0b19e401b94a8ebe376035",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/package.json": {
+      "sha256": "2a85a53bf92927407144c8d1b970285302bd3810637319f20f52d2eea1e38198",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/failure.png": {
+      "sha256": "688af4009d9c5d8eaf64567154918cdebd4f0dc255305b8e94468e970334b25b",
+      "bytes": 81679
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/failure.json": {
+      "sha256": "ae3cfcd02f4595eb28b71c24e07926dcd4e8a6045b53c91c5b8f4ec3e5b69a48",
+      "bytes": 744
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r9/vault-identity/boundary.json": {
+      "sha256": "76a83f54d3ca656634d929c77c663daa269e57e13f796b294019863aee35686e",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/resources.json": {
+      "sha256": "7d85ba7a7f9c9f7cb5243aead7f79e8815297a6248cb6b687cfbd811da258d94",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/cleanup.json": {
+      "sha256": "b55844ffdb6e5507e7262bdd8fedda21b28cd56e2c9e961480108fab702d5167",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/package.json": {
+      "sha256": "277711e86b1bea482f6ea54c96095d3925f31e5102e9c7b90433fb0ec000de47",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/failure.png": {
+      "sha256": "a7866a58bb0aef71300bad90f840115fde399272b570e2af823a0d90d70eb834",
+      "bytes": 50066
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/failure.json": {
+      "sha256": "4ca14a3a59afa67ef796d3574751b0b0ea2bd41816835bbef7cc023d13376291",
+      "bytes": 484
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r8/vault-identity/boundary.json": {
+      "sha256": "ea1d3d558bac24aa8564971285f44751640fe8962f2a868b369677ac24ee21a1",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/resources.json": {
+      "sha256": "b1a495ee216e09f1c078cc4a85ed8da81bd3cb52e023b55bed6b7761e86da206",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/cleanup.json": {
+      "sha256": "bc4cf08f41005f508b1199e1f2b18c9b25884afcc19cdc0a45b41c988c23728c",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/package.json": {
+      "sha256": "5b998e643e212e1600c161c139c88d66edd0526c85e0b31c742339fcf39a0931",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/failure.png": {
+      "sha256": "b7ecd8f7dd3e3c79b0a7f42060e5aa5265ce0592a2ab61e33968448e18dfb0d1",
+      "bytes": 39270
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/failure.json": {
+      "sha256": "b37b899126fd4f442b115d9819930947e02d210dcc6474b6b51193d40b25346e",
+      "bytes": 287
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r6/vault-identity/boundary.json": {
+      "sha256": "ada8e9c71b6ede3ed2fc0a6195a3714ad74be99d57f77acbca9ae860e8d5b199",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/b-offline-1440.png": {
+      "sha256": "ad5d3fadc3d81ee2e70586f714e518903b0c1e5049961203640d5f2e0362338f",
+      "bytes": 154929
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/resources.json": {
+      "sha256": "a3b45e9dbc3a007b6f0dbad75e3fcc86e36cd016f314feb5e58f375c9414baa6",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/cleanup.json": {
+      "sha256": "0ca50e2fcbd43a6c3e272978a6ead9e8c236c94b8ad767c3cdacd65f401a158d",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/package.json": {
+      "sha256": "6a5ff3c18b0421071b431c90fb9c500d6b207ae6b34552e44e72512fc2f1d184",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/b-offline-390.png": {
+      "sha256": "37aae3d104bf67da03b33bd27189eb2c6d21f91c6b6b1743b57163b1b1bc3d04",
+      "bytes": 143182
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/verification.json": {
+      "sha256": "e5e2dca881cccf370f180e16598c5e5f97b10c85f1a7557a6511512e8f77313c",
+      "bytes": 5127
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/b-offline-320.png": {
+      "sha256": "4eb63b7f70ea28f35b3b6ee27d84ef1dd8bdb4e3f5bc58c50168c1557172f00b",
+      "bytes": 145453
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r13/vault-identity/boundary.json": {
+      "sha256": "9995ff356100854b661af45f1701a8fa96a2fdca68d82a98ccac421f662bff40",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/b-offline-1440.png": {
+      "sha256": "dd7ab68e320051b52ee4e8a512b5cd9ca52e95cc454dc1d351a643112a09c5d5",
+      "bytes": 154932
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/resources.json": {
+      "sha256": "5a4331dbafd4e6e5a60dff341cc8514f9c34689588d01bacccdde2f047007da1",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/cleanup.json": {
+      "sha256": "e265d4c89f566705c90cee9f67695ad367e1286af936008a8633512d97563d49",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/package.json": {
+      "sha256": "eed55ff87b1dca141153693a1f55eab6c57cd739771b9113df6e44cdc74d08dd",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/b-offline-390.png": {
+      "sha256": "8e00d0c5b037e3f32718ba0b884bb99bc5f5573d69582023963a4c7520ed106b",
+      "bytes": 143171
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/b-offline-320.png": {
+      "sha256": "1c22be554cfeadc1bb5c406a438d686720a12cdf68f5c38c650fe58e3f541263",
+      "bytes": 145466
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/failure.png": {
+      "sha256": "4691fefaf9a18c33796565634a46cbb1c4056ceafa53f9286aad21ba8c949a56",
+      "bytes": 39040
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/failure.json": {
+      "sha256": "8a24545b78591fa728cd4979f496055d44f9da51fbf92cb74360b26cc6396cea",
+      "bytes": 2048
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r12/vault-identity/boundary.json": {
+      "sha256": "e688f781164987909125fc070033b57cc3805a92c0ac0906699da0317296c206",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/resources.json": {
+      "sha256": "4c8ea34818629636ad8b522c3f395cafc0506ede3b9d0da442e20db75c21b9ef",
+      "bytes": 575
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/cleanup.json": {
+      "sha256": "5b33e700cd5e463edc35c17d909b6a8d75343104b88d16399a0406e8ed118d04",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/package.json": {
+      "sha256": "f017b8a17ebe3e5d26f35bafe680a555110fca856bec9647acdab07b88cfcceb",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/failure.png": {
+      "sha256": "cb9c3b8047859412e8abcaed51ad9ecefb4bd820c8849af4992e593d500d1836",
+      "bytes": 6489
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/failure.json": {
+      "sha256": "fac7d5d174c4b628203abb636c14b2f8f2423b107788ffbd570ba869dfd24387",
+      "bytes": 103
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity/vault-identity/boundary.json": {
+      "sha256": "f27e4c5e9aed5865fedccdc590839fd011e0e957d6e621b6e96dbe08f0012bea",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/resources.json": {
+      "sha256": "1c629e7079a740acffcf71fbcc3268122c0e401fa31a0f6f0408949d77368474",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/cleanup.json": {
+      "sha256": "daeccac9d8a487159bc491482200e42550b65f786e2d6784c56e074feb75f92c",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/package.json": {
+      "sha256": "8713c9fe26a9ffe3d46d93a270d64f0bc0353284b3eb221a77f1a2138811494a",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/failure.png": {
+      "sha256": "5aeb0165218707a1367550c746b5c42c9d298e3ab1cb6e93ea3fd50ca3ec5353",
+      "bytes": 61915
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/failure.json": {
+      "sha256": "978dfc1998067e281178f435985eb3055c53894ce97f5b3c7efb4d5a61000da8",
+      "bytes": 137
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r3/vault-identity/boundary.json": {
+      "sha256": "e66cb54d201d1658a369990654faa7e591cc767d773df0e1ba8c5b9830f76cae",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/resources.json": {
+      "sha256": "4d7a0a15da7c1a6296b393c4ae97621e8792fdb5a02ee390720c3d41039a441f",
+      "bytes": 575
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/cleanup.json": {
+      "sha256": "9a27914a6584a5c894a1c932fada96550f21eb03bad4fdce91659ea22571479c",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/package.json": {
+      "sha256": "3b44df10a62ff45d067c48715ac48b60bb36bd1479cf1eb167aa12f725ce3375",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/failure.png": {
+      "sha256": "5aeb0165218707a1367550c746b5c42c9d298e3ab1cb6e93ea3fd50ca3ec5353",
+      "bytes": 61915
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/failure.json": {
+      "sha256": "978dfc1998067e281178f435985eb3055c53894ce97f5b3c7efb4d5a61000da8",
+      "bytes": 137
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r4/vault-identity/boundary.json": {
+      "sha256": "ed20cf938d089f4bdefe05aa2e0972ddddb41653543d8e950fca5be5ea31cede",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/resources.json": {
+      "sha256": "8f91115a9c7473f4a618259baeedc1ad59331eddc816039b088d7031cca77777",
+      "bytes": 575
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/cleanup.json": {
+      "sha256": "1ecf09c9b9a2ec124a255caccf2dc9edb4450efec48e0dc1044841c2fee983ea",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/package.json": {
+      "sha256": "7c934c260a19e31d890988ad75aee373a2e632ca78c2d65dea06f4bc39bf3f61",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/failure.png": {
+      "sha256": "5aeb0165218707a1367550c746b5c42c9d298e3ab1cb6e93ea3fd50ca3ec5353",
+      "bytes": 61915
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/failure.json": {
+      "sha256": "e50951aa78a4421b7828d6b8fa50c8ca6625ca5a8f6b1905c0805cb4d1e2001f",
+      "bytes": 116
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r5/vault-identity/boundary.json": {
+      "sha256": "03ca14a3a9eedc1b2f5ddf7a4e91f19a33329538a07ab87e0f3bbac5e877ab7c",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/resources.json": {
+      "sha256": "2545b7463310a23b49cec4706d9a4e3bf5d1c81c2f5becbb4767514359d51cdb",
+      "bytes": 575
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/cleanup.json": {
+      "sha256": "eb787f153b80d0a378371d9ee78bc2d91dfd5e7a81a3caf30d09805363614c29",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/package.json": {
+      "sha256": "038a6640fc31c618d67a96486419b2377047f427d907a3e3ac8c73ad685f025d",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/failure.png": {
+      "sha256": "cb9c3b8047859412e8abcaed51ad9ecefb4bd820c8849af4992e593d500d1836",
+      "bytes": 6489
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/failure.json": {
+      "sha256": "e506f277ef4e587fac0d3d649f050865e729127c0aeca84e16a1dff5922aa272",
+      "bytes": 125
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r2/vault-identity/boundary.json": {
+      "sha256": "ffa4ef0328271a4c3332e5bfe0dc31ef0e987ee2b210ef086d3bbd4a17aadbe4",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/b-offline-1440.png": {
+      "sha256": "11730d8f4abd5395903b1fcfc96029189a7366f153d0cf54227a2956c3bc5ed8",
+      "bytes": 154933
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/resources.json": {
+      "sha256": "37178d81c1c37f1f9c6f60424c49bd405ecc31189328a9cbaf35cc94e0e535ce",
+      "bytes": 578
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/cleanup.json": {
+      "sha256": "373010d693b162315695a964d8101d0743c1f0b06e1677142bff1c76198dbce6",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/package.json": {
+      "sha256": "57a31199c09017ddefeca5728a68013a41819beeb41b771c97a0aaa366313d76",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/b-offline-390.png": {
+      "sha256": "70167aae77b684b47da3b9847791412eec5044513465d1d8b834783fcf64c4f0",
+      "bytes": 143170
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/b-offline-320.png": {
+      "sha256": "e18ed2822d93e0bd89e8f05e6e75669082e8cae8579ee48c3f4eb9dd140e8618",
+      "bytes": 145454
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/failure.png": {
+      "sha256": "4691fefaf9a18c33796565634a46cbb1c4056ceafa53f9286aad21ba8c949a56",
+      "bytes": 39040
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/failure.json": {
+      "sha256": "f44c9211a5f3c3c8f6d71388dd3ce5c8e537d06366ff99f8135be654bb5ae924",
+      "bytes": 852
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r10/vault-identity/boundary.json": {
+      "sha256": "4284f51879ef8f71f0c06e908bca92d07619d3f12e566100799d560e697374b7",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/source-parity.json": {
+      "sha256": "94ef21b6e25f9fcb779f7accd59e15097df5458b44f08dee3866ab10abb11e3b",
+      "bytes": 2678
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/b-offline-1440.png": {
+      "sha256": "da820666a61f2827cd4eb2a293c6d1dcd4fae57a70b49b0ec106bf0dda917519",
+      "bytes": 154927
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/export-dialog-320.png": {
+      "sha256": "d42d3f458b300b79442f01e567c9aeafc3e0c3202127568f0eddd295ba131c76",
+      "bytes": 91225
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/test.log": {
+      "sha256": "405d1006898914c9b7d3e100096c180d86e957936361dafb3c2ce6f7b38436f0",
+      "bytes": 1243
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/resources.json": {
+      "sha256": "425852b15d09099eed39074a2840749e0db9a1d8e568014345fbd2e1632c0410",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/README.md": {
+      "sha256": "499462426b5a0dba8389f98d9e9e532cf0e2d3b4d48182dd1060b02f512aad0a",
+      "bytes": 2982
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/cleanup.json": {
+      "sha256": "536d2810dd68bada718dd6b42f26dcac9555a6b2fb834a34fa38d5b908ab21d4",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/package.json": {
+      "sha256": "28612546956d058a558103873b85b985e7e4c04ffec59e21c3ed6a770389cdd1",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/executed-runner.cjs": {
+      "sha256": "c3fd70af7b71a87a46985139fa128baf8419737bc5745cd60ec5cfbeb47bf81b",
+      "bytes": 18433
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/b-offline-390.png": {
+      "sha256": "25eeaa9cc17a4ca0808ddd776bddc9fcf93fdfac18e19390116ed44fa7cfe70d",
+      "bytes": 143185
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/verification.json": {
+      "sha256": "0bb4f1e430dc74f265669f130c638715e2bcc362e88088293f8c677c204722e5",
+      "bytes": 5300
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/executed-test.mjs": {
+      "sha256": "afdbba8af1384652527ae26b6d6333c75f5b7c0075f1c11fe5382b97e17d2216",
+      "bytes": 12030
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/b-offline-320.png": {
+      "sha256": "3e016a822524fa6287dc81e0863f8102461a920163ed0cd1c6c7486e6dc080f3",
+      "bytes": 145457
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/boundary.json": {
+      "sha256": "9ad62ea71ed188ced7781ea9ff9949dc496ad062459df9880641084354386b8f",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/pending-cleared.png": {
+      "sha256": "8503278a149c5805bcffe9f4ac66d41bf7c59c181a61e40b00ffc3c90c465666",
+      "bytes": 18740
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/b-offline-1440.png": {
+      "sha256": "73970e367966339cd2907bdd9514595012920225aad6af4de4659c44b089fdc8",
+      "bytes": 154929
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/resources.json": {
+      "sha256": "b50309d4f01f6e7cac78f894390240674e961c9958f8073f30af3535efc88929",
+      "bytes": 578
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/cleanup.json": {
+      "sha256": "ec66eef49a52388f94a318a18704409acd12f348187fd981dc20b0e42b398516",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/package.json": {
+      "sha256": "58c0a4dc0eb3150f2966153d49b8355762eaceb49dd5ed1f270f443685bae798",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/b-offline-390.png": {
+      "sha256": "7e8ec2cb7a856f5142d5585ba433994a33c6ff8198c4da51dd0f848cbcba182f",
+      "bytes": 143181
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/b-offline-320.png": {
+      "sha256": "f071cb3c8b23c5d8c47c1fcbcd65a14058ea5d5a0456ec39143f86e7dc9b31af",
+      "bytes": 145453
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/failure.png": {
+      "sha256": "4691fefaf9a18c33796565634a46cbb1c4056ceafa53f9286aad21ba8c949a56",
+      "bytes": 39040
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/failure.json": {
+      "sha256": "2bb69d5c2912b2f4badcbbc7c121829e6c8f7a07c5d38fcbe6b089f2b74c05e2",
+      "bytes": 852
+    },
+    "artifacts/anonymous-local-first-2026-10-27-vault-identity-r11/vault-identity/boundary.json": {
+      "sha256": "19b18590a6b87dd8ebabbb825d2dfffc82c8c10e1893c9390560b187fabadef1",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic/instructions/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic/instructions/resources.json": {
+      "sha256": "9ce3b183c0994118bedc2e87980517426778a4c2a1b1ab8f88a8b702f5793bd0",
+      "bytes": 571
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic/instructions/cleanup.json": {
+      "sha256": "1bc5175830bba6c6de44ee59020c245c8e1e501e9d0a1646183b690954ca9515",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic/instructions/package.json": {
+      "sha256": "4f0a7c6ce1095e25b9ce0a69153654a0b593923235b6cfedfe531e0798dc4e76",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic/instructions/boundary.json": {
+      "sha256": "c80c1098164d89bf9a7b20a143adf19a14a9151ac64dae753d32dcf5713aaf19",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/run.log": {
+      "sha256": "2cc9187f7d2e885a9d773c0ead310ecb52d7ae7687950fabcfba095b4c80d9b4",
+      "bytes": 1368
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/observer-state.json": {
+      "sha256": "ee2064c2033f337f3169582bcd040d4b846c74906d9efd86d60ff374ef2cca8d",
+      "bytes": 1203
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/README.md": {
+      "sha256": "4f3e0ceb64c6901ab3d509df1246a43d8e46be2804c902f067e8f543f44da3ce",
+      "bytes": 2158
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/executed-instructions.browser.test.ts": {
+      "sha256": "288243209560726e6270c6461a75c07a4d9cf755a87762b5e62fec0dfa569e67",
+      "bytes": 39835
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/source-provenance.json": {
+      "sha256": "9967364523bb87ca89f4fb5d367c4a7643f70cf56f0ad52350aa02c6d44874c7",
+      "bytes": 321
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/executed-native-runner.cjs": {
+      "sha256": "0ebe9e700c928bd5b4ef969e6a7835c552513ef7b2d8da18aa7520cc864d47c3",
+      "bytes": 17490
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/ci-preview-checkpoint.json": {
+      "sha256": "3ef4d0b463949af1285ffdb9690876979e0581f68a5b04d5e258bee147195b01",
+      "bytes": 6157
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-320-top.png": {
+      "sha256": "5cf31f65a11bb93ffd4ce505ca1a706502d21028148124898ea78b5927a04683",
+      "bytes": 69519
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-390-top.png": {
+      "sha256": "3b727d1d2093b4e5724496dc85cfeb724645d959753676838b90fdbf21c8e1fb",
+      "bytes": 75278
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/capacity-paste-result.json": {
+      "sha256": "34f79d66033c5037c92763d4ef7f50ede5154663a1faac656ded3972657c5324",
+      "bytes": 4097
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-1440-bottom.png": {
+      "sha256": "bbb83e00254f304b26584318463edfa7ff9ca0db1168dafbc99989d87213514c",
+      "bytes": 103198
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-320-bounds.json": {
+      "sha256": "0b61e5cdf678365b49182e3426c11c7a38dc86ab5d41ed06870f9011dd653a36",
+      "bytes": 1182
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/network-proof.json": {
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b",
+      "bytes": 422
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/legacy-read-result.json": {
+      "sha256": "a45de18b98578f3c6ac3c28500ea2228c8a61c6b361678e7b5ffeca575c797e1",
+      "bytes": 302
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-390-bottom.png": {
+      "sha256": "d464fb773ab165a6c9b67bbb49146853f9cb0de12d5e2a0fc6a2685d30194b84",
+      "bytes": 60370
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/capacity-input-readiness.json": {
+      "sha256": "cb1c42a90663fa66736093f9b69143d866d5ec0eec9a48ea57445dc4b0c83a38",
+      "bytes": 177
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-390-bounds.json": {
+      "sha256": "7da079119f23c4671439efaa2ac0491c51392a3a91563d398a8fdfb9bd945886",
+      "bytes": 1182
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-before-input.png": {
+      "sha256": "11e4c68d2e560633377ba084b3bced38491c1894ed8204c05cb29229d38bca04",
+      "bytes": 98137
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/resources.json": {
+      "sha256": "1e62eddeaa4168f422a7ded330526abab10262dccfbfd0521ec36737fcc23af4",
+      "bytes": 576
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-offline-320.png": {
+      "sha256": "def12a418f6a496e2655ab727f7e4df703c30490987479115543369097a6dc98",
+      "bytes": 68176
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-1440-bounds.json": {
+      "sha256": "07a455d6dde79d24904f8e4bdda8353959751cc4d06d6d22e4ced2f65607281f",
+      "bytes": 1170
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/cleanup.json": {
+      "sha256": "6f3a5244ad9faafd5925c19d7436c106ba5cd292afa0c6863b2ef321c4a299fd",
+      "bytes": 74
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/legacy-protocol-result.json": {
+      "sha256": "8bec785a6d470cb69e71a090187470d9d233dc797cab34c76be8662ee19d330f",
+      "bytes": 343
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/capacity-paste-preflight.json": {
+      "sha256": "3c2d1e415562fe27aa5ccbc0c9d6dc70d25d4e235908657c18e21b8ea764b893",
+      "bytes": 3870
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-1440-top.png": {
+      "sha256": "0871d43afe00ea8ce1af00dfbd96b0162cad820a9281728598710ed6241ec6ab",
+      "bytes": 113878
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-320.png": {
+      "sha256": "ffc5278f844a0d07b64229a2b11c2cb5a0983b2b366a798db16ce994023babed",
+      "bytes": 55668
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-320-bottom.png": {
+      "sha256": "364d3125c478b9f675dccb58b9d985a987d5d8287b267efb4777376c88fef307",
+      "bytes": 48514
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/package.json": {
+      "sha256": "7ae92c7301395c03cd5bd94b71625be7f91540ba240b6b6de54c76bb2c69784f",
+      "bytes": 242
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-1440.png": {
+      "sha256": "a39118cffac1af68a5634da81da877099c5067753775a6c1457dc69168915264",
+      "bytes": 108922
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/verification.json": {
+      "sha256": "a4c3d675a80ab17cd22cbb51dd887d9ef25baba0afc49bfb44bd1a28c8dbfe1e",
+      "bytes": 7394
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/boundary.json": {
+      "sha256": "177cb3ec0718fb808c1f3fd0eb415e83ddb623905199adf8027cbd89f0487458",
+      "bytes": 263
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-capacity-guidance-390.png": {
+      "sha256": "a23766091b34dc6a32e6427a2e0e6bc571497323a0c152c6eba6b2528ced937e",
+      "bytes": 65732
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-offline-1440.png": {
+      "sha256": "3e0a11d7ec99e0124e625a45b7fd5aba6359ad0da2f64651168d5bf7777fba83",
+      "bytes": 103375
+    },
+    "artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/instructions/instructions-offline-390.png": {
+      "sha256": "906795a0e33bbcf721e4925b1c9189ca07eef149422e3fa3ee306bab55d466b4",
+      "bytes": 71712
+    }
+  }
+}

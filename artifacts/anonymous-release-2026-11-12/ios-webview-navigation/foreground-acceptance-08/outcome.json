@@ -1,0 +1,64 @@
+{
+  "passed": true,
+  "scope": "iOS27 arm64 simulator separate opt-in development app, actual canonical Vite/Nitro/normal WKWebView",
+  "actualUiAssertions": [
+    "ordinary Work on this device click; recovery exits to Things",
+    "visible New > New folder > Create",
+    "visible shared Rename > edited name > Rename",
+    "sameID/name DOM readback before reload",
+    "nativeWKWebView.reload; new documentTimeOrigin; independently observed sameID/name rendered DOM after reload"
+  ],
+  "thingId": "local-0f2a9df5-afa8-4250-9033-5053ee2d8224",
+  "exactNitroSha256": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50",
+  "signedInstalledAppInventory": {
+    "sha256": "716a8b234d671c9f4383e7d604139ce34c8135122357675ffc7a01c7cafb0bdb",
+    "files": 1840,
+    "bytes": 409090703
+  },
+  "nativeBinarySha256": "5136e82e5b72ac03b5687f6fae4222edca87bd864d7cf738ba3a8e78470a7437",
+  "runtimeFrameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "frozen125NativeInputInventorySha256": "85f3f2fe6bd24607bd4b5a3964e5f10ccce58d9cda90e668fe73ccd94f65b0d8",
+  "frozenProductInputsStillMatch": true,
+  "currentRunnerSha256": "d4e7c87847b12b68758c745eafccb33137f1cea919b3435534ea6fbbb9b7c306",
+  "accountApi": {
+    "status": 503,
+    "code": "LOCAL_API_NOT_CONFIGURED"
+  },
+  "cloudFallback": false,
+  "exactOSKeyActuallyPreserved": true,
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "cleanupIndependentSimulatorAbsence": true,
+  "uiLimits": {
+    "activationLimitSeconds": 180,
+    "uiPhaseLimitSeconds": 120,
+    "budgetInherited": true,
+    "activeAdmissionObserved": true,
+    "outcome": "ui-result"
+  },
+  "networkEvidence": "DevelopmentWK rejected externalfetch; Node externalcounter0 startup-only. Not OS/Node all-lifecycle offline proof.",
+  "unsupported": [
+    "SQLite full account HTTP APIs",
+    "physical-device acceptance",
+    "production signing/distribution trust",
+    "importedNode source-to-binary reproduction"
+  ],
+  "historicalEvidencePreserved": true,
+  "noFurtherRun": true,
+  "persistenceScope": "Existing explicit device-home client workspace/IndexedDB retention across a real WK page reload. This does not verify app-process restart or full SQLite HTTP account wiring; real account API remains503 LOCAL_API_NOT_CONFIGURED."
+}

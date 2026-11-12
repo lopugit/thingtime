@@ -1,0 +1,6 @@
+{
+  "message": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByLabel('Exact Unicode note', { exact: true })\n    - locator resolved to <textarea rows=\"3\" id=\"field-_r_a_\" autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Exact Unicode note\" class=\"chakra-textarea cha-198s6hc\"></textarea>\n    - fill(\"  Exact synthetic 🦄 é 漢字\n\t  Exact synthetic 🦄 é 漢字\n\t  Exact synthetic 🦄 é 漢字\n\t  Exact ",
+  "errors": [],
+  "writes": [],
+  "passwordRequests": []
+}

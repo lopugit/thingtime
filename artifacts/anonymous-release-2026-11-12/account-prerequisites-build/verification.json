@@ -1,0 +1,172 @@
+{
+  "artifactHashes": {
+    "auth-introspection.log": "9a905905a16a03914afed24493f710e84a989d661d9285e01748d0067d75ca67",
+    "build.log": "5e537a3e41c6ddd0dca0aeb450eaa990af4a6d1645dd2095481a468c4e47173c",
+    "document-store.log": "9ca574641b17959a09647143d26d73479efc0ab9aa3596e6b72c2a889a5dfab1",
+    "lint.log": "ceeab6b2ebbb616fbbb6489423af6da1360f8ab63fc93afd616a60e17c1abe6c",
+    "metadata.json": "2d3fb4de96e513da945f4729798a265adfb6cb2b9eecc75895e25526357ae754",
+    "mongo-http.log": "52309932e138bb8e6ceff88df99c5b3b716d9e973d73392bfe67d022667bcd27",
+    "notifications.log": "06f01176dbd2035ddb025fdcb12ca6ee0132b344249db78df747204b25744255",
+    "ratchet.log": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+    "source-after.json": "b277e2b7b33e41d6d234bfc28f2565659289b51042abb0cc721ec34abcd93204",
+    "source-before.json": "769008869dd3fd342da30db13f86da987f768be81c16b0af60b03905f6b507c9",
+    "typecheck.log": "836e35b3993422b2acbdf820ba37992e9d61d12a5acea8a3a3c722a9e0ae3818",
+    "verify.log": "5f2aa8f5faa0716f6c3bb9ad9773dd115b420f2356cbc84a00718c7d90e16127",
+    "web-integrity.json": "f08c80ed946a13c9d246440e95eef937cbf359a20d3b5e43031be03c3189a399"
+  },
+  "attribution": "base commit plus frozen dirty tracked/untracked source, not a clean commit build",
+  "baseCommit": "5a03111cdda16a8d4af3385fb3fec5f0f010259c",
+  "checks": [
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:document-store"
+      ],
+      "endedAt": "2026-11-11T19:23:23.554456+00:00",
+      "exitCode": 0,
+      "log": "document-store.log",
+      "name": "document-store",
+      "startedAt": "2026-11-11T19:23:19.613553+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:auth-introspection"
+      ],
+      "endedAt": "2026-11-11T19:23:23.907217+00:00",
+      "exitCode": 0,
+      "log": "auth-introspection.log",
+      "name": "auth-introspection",
+      "startedAt": "2026-11-11T19:23:23.554642+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "test:notifications"
+      ],
+      "endedAt": "2026-11-11T19:23:25.937700+00:00",
+      "exitCode": 0,
+      "log": "notifications.log",
+      "name": "notifications",
+      "startedAt": "2026-11-11T19:23:23.907397+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck"
+      ],
+      "endedAt": "2026-11-11T19:23:59.956011+00:00",
+      "exitCode": 0,
+      "log": "typecheck.log",
+      "name": "typecheck",
+      "startedAt": "2026-11-11T19:23:25.937896+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "typecheck:ratchet"
+      ],
+      "endedAt": "2026-11-11T19:24:33.406385+00:00",
+      "exitCode": 0,
+      "log": "ratchet.log",
+      "name": "ratchet",
+      "startedAt": "2026-11-11T19:23:59.956274+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "remix",
+        "run",
+        "lint"
+      ],
+      "endedAt": "2026-11-11T19:25:08.289012+00:00",
+      "errors": 0,
+      "exitCode": 0,
+      "log": "lint.log",
+      "name": "lint",
+      "startedAt": "2026-11-11T19:24:33.406595+00:00",
+      "warnings": 374
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "build:web"
+      ],
+      "endedAt": "2026-11-11T19:25:33.157082+00:00",
+      "exitCode": 0,
+      "log": "build.log",
+      "name": "build",
+      "startedAt": "2026-11-11T19:25:08.290278+00:00"
+    },
+    {
+      "command": [
+        "corepack",
+        "pnpm",
+        "--dir",
+        "electron",
+        "run",
+        "verify:web"
+      ],
+      "endedAt": "2026-11-11T19:25:33.729982+00:00",
+      "exitCode": 0,
+      "log": "verify.log",
+      "name": "verify",
+      "startedAt": "2026-11-11T19:25:33.157440+00:00"
+    },
+    {
+      "command": [
+        "node",
+        "electron/scripts/test-bundled-local-runtime.cjs"
+      ],
+      "endedAt": "2026-11-11T19:25:42.397855+00:00",
+      "exitCode": 0,
+      "log": "mongo-http.log",
+      "name": "mongo-http",
+      "startedAt": "2026-11-11T19:25:33.730174+00:00"
+    }
+  ],
+  "endedAt": "2026-11-11T19:25:42.858871+00:00",
+  "outputHashes": {
+    "electron/dist/web-integrity.json": "f08c80ed946a13c9d246440e95eef937cbf359a20d3b5e43031be03c3189a399",
+    "electron/dist/web/.output/server/index.mjs": "36e46bb6a372227c6ab251da9a918de48b510c39a1852afc0ebf1a2e475946d3",
+    "electron/dist/web/metadata.json": "2d3fb4de96e513da945f4729798a265adfb6cb2b9eecc75895e25526357ae754"
+  },
+  "sourceChanges": {},
+  "sourceUnchanged": true,
+  "startedAt": "2026-11-11T19:23:19.613379+00:00",
+  "status": "passed",
+  "testCounts": {
+    "authIntrospection": 10,
+    "documentStore": 88,
+    "notifications": [
+      55,
+      14
+    ]
+  }
+}

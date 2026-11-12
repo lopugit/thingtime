@@ -1,0 +1,90 @@
+{
+  "observedAt": "2026-11-11T18:09:31.626501+00:00",
+  "baseCommit": "c039dee85 (parent-supplied; plus nine owned dirty files)",
+  "scope": "Real canonical createUserAccount integration on fresh real SQLite files; not full Nitro/API registration or provider activation",
+  "sourceHashes": {
+    "remix/app/api/utils/auth/accountCreationRepository.ts": "d6e9913d6a05b94babcb33ef8db9922acaf817b3676c222b1227c845f3c80d75",
+    "remix/app/api/utils/auth/registerUser.ts": "c398f0b9198c5db242e11a5cad4d865c3a36a801668494f779ae9ee3bceca26e",
+    "remix/app/api/utils/subscriptions/subscriptions.ts": "0aa34c4442b95d820372c7c5dc6f70b7bbb54256dc578fd4d319aeb1c0673216",
+    "remix/app/api/utils/subscriptions/tierCatalogStore.ts": "629cd171e043fcd1751ee044dcddee332f25f0aeda491928f6455a1b0a12ba5d",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "1733b86edb9ec7b348d414bb172d1a7b39dc5cb1b4cf7b72dbdede9290fbf671",
+    "remix/app/api/utils/documentStore/nativeAccountTransaction.ts": "c9ffcf4009c57f0f65a196af03a4dcc14ad702f014c05a7abe99c22ecf1b7e1c",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.ts": "dd1c5fddc8f2759708f652efacf9f144b50ef1a8f77049b251c723495ed942f6",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.test.ts": "4f00f98ec3d1972de9360b5cb68a275805318aa121092be2597790e16cc981eb",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.mongo.fixture.mts": "dc824bee1850e9931110e96e9122df02b27e8f3fa756f6a0a02673d538a337f2"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "exitCode": 0,
+      "tests": 68,
+      "pass": 68,
+      "fail": 0,
+      "skip": 0,
+      "log": "all.log",
+      "sha256": "795af538c9186a562e9e4bdc63cd30d3854f3b77e365a339e6d37ca881927208"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:subscriptions",
+      "exitCode": 0,
+      "tests": 15,
+      "pass": 15,
+      "fail": 0,
+      "skip": 0,
+      "stages": [
+        13,
+        2
+      ],
+      "log": "subscriptions.log",
+      "sha256": "7be07f37bc2bd2475dea611c539565b8d06adb51fb50e7436d5a7bc80b3bf07e"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:storage",
+      "exitCode": 0,
+      "tests": 41,
+      "pass": 41,
+      "fail": 0,
+      "skip": 0,
+      "log": "storage.log",
+      "sha256": "0be94408071d3c777877d49190fb19d31a763514f6e7e78f7a2db257ec37ecb8"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit",
+      "exitCode": 0,
+      "log": "types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/auth/accountCreationRepository.ts app/api/utils/auth/registerUser.ts app/api/utils/subscriptions/subscriptions.ts app/api/utils/subscriptions/tierCatalogStore.ts app/api/utils/documentStore/nativeUserIdentities.ts app/api/utils/documentStore/nativeAccountTransaction.ts app/api/utils/documentStore/nativeAccountCreation.ts app/api/utils/documentStore/nativeAccountCreation.test.ts app/api/utils/documentStore/nativeAccountCreation.mongo.fixture.mts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "lint.log",
+      "sha256": "e983e16976f2dc22a02f6d3cf0599e6ca8a7198f4a15fcb7c7dbfb1f9e2183cb"
+    }
+  ],
+  "evidence": [
+    "Actual canonical normalization/bcrypt/protected metadata/user envelope and initial ledger builder",
+    "Identity and trusted ready zero ledger in one owner/home/lifetime-bound real SQLite transaction",
+    "Username/hashed-email competing claims return one complete winner and409 loser",
+    "Canonical allowance failure rolls back identity and ledger",
+    "Reserved tier collision atomicity and provider-local bootstrap",
+    "Persisted valid revision body/title/quotas remain authoritative as canonical Mongo bootstrap; not bytewise compared to current static descriptors",
+    "Same-provider reopen and canonical applyUserStorageDelta admission",
+    "Foreign/expired/fabricated session refusal; borrowed live handle poisons borrower only",
+    "Caught malformed second identity admission rolls back completed pair without running accessors",
+    "Completed unawaited transaction cannot commit after parent home/auth scope exits",
+    "Default Mongo orchestration/onCreated/session forwarding and hosted no-native-import regression in controlled subprocess"
+  ],
+  "limitations": [
+    "No native HTTP/provider selection; registerUser refuses before invite or completion work",
+    "Invites/onCreated/Character/service-account creation refused before tier/account writes",
+    "Native tier publishing/recovery, archived reassignment and general subscription mutations unsupported",
+    "Existing valid stored tier revision is authoritative; no source-to-persisted quota/body integrity-hash claim",
+    "Vault binding, verification/outbox, notifications, roster, rate limits, full session entitlement and Nitro readiness remain integration gaps",
+    "No production account/env/profile mutation or direct successful account seeds",
+    "Canonical private Things/Timeline and complete offline parity not accepted",
+    "No shared electron web build/output changes by this worker; genuine new-source Mongo HTTP regression still requires parent-coordinated final build"
+  ],
+  "cleanup": "Tests close owned stores and remove task-owned temporary profile directories using test.after; no app/server/native browser launched"
+}

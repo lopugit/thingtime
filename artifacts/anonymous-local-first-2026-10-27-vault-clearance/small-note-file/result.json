@@ -1,0 +1,5 @@
+{
+  "kind": "small-note-file",
+  "passed": false,
+  "message": "cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set."
+}

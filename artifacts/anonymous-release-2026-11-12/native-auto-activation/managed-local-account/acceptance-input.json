@@ -1,0 +1,21 @@
+{
+  "head": "c039dee857dcd3558192111e956921395648cd69",
+  "verifiedHashes": {
+    "electron/dist/web/.output/server/index.mjs": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50",
+    "electron/dist/web/metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "electron/dist/web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "88b9fedacdb59ea57d32b993d5f2b2d8634ebc67b6f1ad1b004e6289c2b50e55",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "2cc0cca6abd61285991b8dd68661dbbb686bc4e095055e5de01ec8ec6aab82dc",
+    "electron/test/fixtures/native-auto-local.cjs": "39cea698322480f7e3f07ef139155bcdb7558982b1c81ba0bba4a990d7b68e00",
+    "electron/test/native-auto-local.test.cjs": "47ec79c289d2a106b837036e9a61ce002625d26273cb6b9cac2e8cc11c285dc3"
+  },
+  "ports": [
+    23670,
+    23671,
+    23672
+  ],
+  "noExistingTaskProcesses": true,
+  "requiredPortsFree": true,
+  "preparedSourceFreeze": "managed-local-fixture/source-freeze.json",
+  "actualRunAuthorizedAfterParentBuild": true
+}

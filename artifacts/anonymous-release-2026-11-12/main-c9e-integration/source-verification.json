@@ -1,0 +1,53 @@
+{
+  "observedAt": "2026-11-11T18:15:54.432720+00:00",
+  "scope": "Resolve only three assigned main-c9e1bf9c merge conflicts; no index/commit/build/graph mutations",
+  "sourceHashes": {
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "2fe9625593cdf05e2edec1b815a45a53c0bcf0a3b4cfedd323fa649b0b856a53",
+    "remix/app/components/Passwords/passwordIconBlocks.ts": "b0e88b7b9adef473a609209b207e5bbec716becf1d53b0bb986c202b2bcef3f1",
+    "remix/app/passwords/icons.test.ts": "84afaf1d66a5ed2083b6259e07b322cd58178cca83b6be984d6406679464f273"
+  },
+  "sqliteNineFilesUnchanged": true,
+  "sqliteSourceHashes": {
+    "remix/app/api/utils/auth/accountCreationRepository.ts": "d6e9913d6a05b94babcb33ef8db9922acaf817b3676c222b1227c845f3c80d75",
+    "remix/app/api/utils/auth/registerUser.ts": "c398f0b9198c5db242e11a5cad4d865c3a36a801668494f779ae9ee3bceca26e",
+    "remix/app/api/utils/subscriptions/subscriptions.ts": "0aa34c4442b95d820372c7c5dc6f70b7bbb54256dc578fd4d319aeb1c0673216",
+    "remix/app/api/utils/subscriptions/tierCatalogStore.ts": "629cd171e043fcd1751ee044dcddee332f25f0aeda491928f6455a1b0a12ba5d",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "1733b86edb9ec7b348d414bb172d1a7b39dc5cb1b4cf7b72dbdede9290fbf671",
+    "remix/app/api/utils/documentStore/nativeAccountTransaction.ts": "c9ffcf4009c57f0f65a196af03a4dcc14ad702f014c05a7abe99c22ecf1b7e1c",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.ts": "dd1c5fddc8f2759708f652efacf9f144b50ef1a8f77049b251c723495ed942f6",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.test.ts": "4f00f98ec3d1972de9360b5cb68a275805318aa121092be2597790e16cc981eb",
+    "remix/app/api/utils/documentStore/nativeAccountCreation.mongo.fixture.mts": "dc824bee1850e9931110e96e9122df02b27e8f3fa756f6a0a02673d538a337f2"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "tests": 206,
+      "pass": 206,
+      "fail": 0,
+      "skip": 0,
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main-c9e-capabilities.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/passwords/icons.test.ts",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "skip": 0,
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main-c9e-icons.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/capabilities/thingtimeCapabilities.test.ts app/components/Passwords/passwordIconBlocks.ts app/passwords/icons.test.ts",
+      "errors": 0,
+      "warnings": 0,
+      "exitCode": 0,
+      "log": "/tmp/pr1000-main-c9e-conflicts-lint.log"
+    }
+  ],
+  "behavior": "Union incoming exact-shipped icon grid minmax track and shared defaults with branch missing-min-width repair that merges defaults before authored CSS; retain both regression cases; manifest Files1.13.1 and higher branch minors",
+  "limitations": [
+    "Focused source tests; no merged-source browser or native rendered acceptance in this batch",
+    "No shared payload rebuild; prior runtime receipts remain source-specific"
+  ]
+}

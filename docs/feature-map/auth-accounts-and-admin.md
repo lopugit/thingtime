@@ -1,5 +1,25 @@
 # Auth, accounts and admin
 
+Native app-shell `/api/root-data` runs canonical `loadRootData` inside the same
+protected home composition as account APIs. `nativeHomeRuntime` supplies the
+public data-plane identity and shared request fences; hosted dataEnvironment is
+null and request Mongo selectors cannot redirect reads. Negotiate api.root-data
+1.2.0. Regressions: test:root-data, nativeHomeDispatch and the compiled SQLite
+account fixture, including fresh-process and logout projections.
+
+
+## Explicit native account home
+
+`documentStore/nativeAccountHttpHome.ts` composes the existing account routes
+with same-provider identity/session, roster, subscription, verification,
+notification, encrypted email-outbox and rate-limit repositories. The trusted
+host alone selects the protected profile; `server/utils/nativeHomeRuntime.ts`
+checks origin, actor/data-plane identity and the concrete operation allowlist.
+`nativeHomeSelection.ts` prevents both new and cached Mongo access while that
+profile is selected. Unsupported APIs remain unavailable. Run `test:document-store`
+plus the protected-profile/runtime and bundled SQLite HTTP acceptance checks in
+`docs/native-web-bundles.md`. Queueing email is not external delivery.
+
 ## Connector confirmation preferences
 
 `settings/connector-protections` exposes private current-account preferences.
@@ -117,8 +137,9 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Lopu prompt settings
 
-`GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
+`GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` validates canonical entries and composes enabled preferences. Revision comparisons reject stale writes. `api.settings-lopu-prompt` 2.0.0 adds owner-fenced, resumable instruction generations with a compact private account reference. Immutable parts preserve complete content beyond the unchanged 96 KiB per-request boundary; base-only reads avoid loading personal content. Committed generations are retained for backup/recovery, and abandoned staging is cleaned in accounted batches. Ordinary inference remains functional; large enabled inference requires verified provider capacity and currently fails explicitly without truncation.
 
+`LopuPromptSettings.tsx` uses `local-workspace/lopuInstructions.ts` for anonymous and offline device saves, with root-bound account/origin isolation and home-pinned account preferences. `lopuInstructions.client.tsx` runs an independent confirmed-account sync worker with immutable attempts, lost-reply reconciliation and explicit conflict review. Anonymous work never uses account transport or becomes an account queue. The existing workspace database and canonical instruction shape are reused. Admin base edits keep their authenticated API path. Prompt text never grants tool authority. See [local workspace coverage](../local-workspaces.md) for browser evidence and remaining account-UI acceptance. Regressions: `lopuInstructions*.test.ts`, `test:lopu`, `test:settings`, `test:api-capabilities`; the opt-in browser fixture requires a claimed isolated full-app runtime.
 
 ## Password manager
 
@@ -144,6 +165,7 @@ See `password-manager.md` for packaging, separate sign-in and acceptance, Swift
 `AuthenticatorSetupTests`, web `authenticatorSetup*.test.ts` and the isolated
 `test-authenticator-setup-ui.mjs` browser regression.
 
+See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
 The controlled `ThingFields.tsx` password rows opt into `CopyPasswordButton.tsx`
 only for non-passkey manager entries. Copy uses an already-authorized draft and
 browser Clipboard API with secret-free inline status; it never reads clipboard
@@ -254,6 +276,39 @@ concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
 managed profile-media restore and product restore orchestration remain separate gates.
 See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
 
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
+
+Offline account roots contain only a local workspace pointer and `user: null`
+(`local-workspace/rootFallback.ts`), never a cached authenticated profile. Local
+and remote leases are separate. `createRootDataLoader` installs workspace binding
+only after its latest-request fence; a stale success/failure cannot change a
+newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
+hydration does not silently claim data for an account. Test `test:root-data`,
+`test:local-workspace` and `test:autosave` for these boundaries.
+
+Delegated composer APIs and explicit Character submissions capture their local
+workspace lease when the callback is created (`characterRequest.client.ts`,
+`useApi.tsx`, `useAsyncFetcher.tsx`). A retained callback cannot acquire a later
+root account or database; remote confirmation is checked again for each request.
+`characterCallbacks.test.ts` exercises the real submission hook, while
+`characterDelegation.test.ts` covers the API facade, confirmation loss and
+same-account/new-generation retirement. This does not grant delegated offline
+workspace access or queue Character writes as the owner.
+
+
+The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
+and identity BroadcastChannel across three clean browser tabs. Held device reads
+and a delayed successful private-comment response cannot enter the next account;
+the original account retains edits, recovery sources and exactly one acknowledged
+comment. This is local account-switch acceptance, not coverage of every origin,
+data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
+
 ## AI provider model availability
 
 `api/utils/ai/modelDiscovery.ts` reads complete credential-scoped provider lists;
@@ -271,6 +326,83 @@ native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
 that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
 reasoning and tool-result replay through the real SDK against an HTTP fixture.
 
+### Anonymous device passwords
+
+`components/Passwords/DevicePasswordManager.tsx` gates the existing password UI
+with an independent local passphrase. `local-workspace/passwordVault.ts` owns
+scoped encrypted storage, transactional revisions, leases and idle locking;
+`passwords/vaultCrypto.ts` implements WebCrypto with the shared
+`passwords/vaultEnvelopeContract.ts` used by server `vaultEnvelope.ts`.
+No anonymous network/session adapter or native AutoFill grant is available.
+`local-workspace/deviceVaultSession.ts` owns shared key lifetime, independent
+password/provider key domains and legacy password-envelope compatibility.
+`deviceVaultSession.test.ts` uses the fixed synthetic legacy fixture and checks
+domain/scope separation, retirement and missing-key preservation.
+
+Account device UI/sync now uses `components/Passwords/AccountPasswordWorkspace.tsx`,
+`local-workspace/passwordVault.ts` and the direct fenced
+`local-workspace/passwordTransport.client.ts`. Local encrypted writes finish before
+network sync, and conflict choices preserve independent copies.
+`passwordSync.test.ts`, `passwordTransport.test.ts` and the opt-in
+`accountPasswords.browser.test.ts` cover the new boundary. Settings provider
+credentials and signed native offline integration are still outstanding.
+
+`passwordReconcile.test.ts` covers traversal past 200 pages, partial retry,
+cancel/lock/account retirement, malformed pages and cross-connection stale-pull
+fencing, including a newer pull that fails or races final cleanup. One scoped
+token in `password-vault-pulls` prevents stale retention/pruning; no secret data
+or remote authority is added. `storage.ts` discovers retained account partitions
+through an identity-checked key cursor; `accountHomeStorage.test.ts` verifies 257
+partitions, interruption, unchanged data and exact account/origin boundaries.
+
+File sync groundwork: `local-workspace/passwordFileSync.ts`,
+`passwordFileReconcile.ts` and `passwordFileTransport.client.ts` expose separate
+account queue/retention methods with whole-transfer authority fences. The normal account UI now uses the encrypted device backend and activates
+independent entry/file push/pull pumps. Encrypted remote-only metadata keeps failed
+downloads visible; complete file-list/byte availability gates 1PUX backup and
+conflict copies. Per-parent traversal tokens fence older-tab pruning. Explicit
+file retry preserves operation identity; availability 409s keep Export open.
+The opt-in `accountPasswordFiles.browser.test.ts` covers native offline save,
+transfer, reconnect and fresh-device retention through disposable normal APIs.
+See the [native file checkpoint](../local-workspaces.md#native-account-password-files--2026-10-18)
+for local evidence and remaining acceptance. `passwordFileSync.test.ts` and
+`passwordFileTransport.test.ts` are included in `test:local-workspace`.
+`passwords/vaultCrypto.test.ts` verifies server interoperability;
+`local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
+storage isolation, cancellation, conflicts and real offline editor/transfer use.
+
+
+### Local provider and environment vault
+
+Anonymous Settings → Security → Secure Vault reuses `SecureVault.tsx` through
+`DeviceProviderVault.tsx` and the shared `DeviceVaultGate`. `userVaultModel.ts`
+is the browser-safe canonical metadata/value validator; `userVaultCore.ts`
+retains server-only outbound-host restrictions. `local-workspace/providerVault.ts`
+encrypts metadata and values with the independent provider key domain and
+commits revisions/tombstones with quota and lease checks. Anonymous operations
+never create account commands. The account variant now uses the same encrypted device forms with independent
+sync and reviewed conflicts through `AccountProviderWorkspace.tsx`. Account
+values arrive only through explicit fresh selected-value retention.
+
+`providerVault.test.ts` covers atomic group membership, replay, quota, lock and
+corruption. `providerVault.browser.test.ts` is the opt-in actual offline Settings
+fixture. The opt-in `accountProviders.browser.test.ts` interrupts a page
+blocks refresh and verifies that the unlocked vault, focused field and draft
+survive. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
+validation and rejection of malformed replacement tokens (`api.lopu-vault`
+1.2.1). See [local provider setup and verification](../local-workspaces.md#anonymous-provider-vault).
+
+Account provider groundwork adds `userVaultMetadata.ts` and `userVaultVersion.ts`
+for complete bounded, value-free snapshots of actual stored Things. The existing
+Vault POST delegates `sync-metadata` to `routes/api/v1/lopu/vault/metadata.ts`
+(`api.lopu-vault` 1.3.0); selected personal reveals optionally return the same
+record's version after fresh proof (`api.vault-reveal` 1.2.0). The device adapter
+retains explicit remote-only metadata and exact-version selected values through
+`providerTransport.client.ts`. `providerMetadata.api.test.ts` is an opt-in
+loopback API fixture; `test:lopu`, `test:sensitive-reveal`, `test:api-capabilities`
+and `test:local-workspace` include the corresponding unit contracts. Account Settings and conditional synchronization are described in the latest
+provider workspace checkpoint below.
+
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
@@ -283,11 +415,80 @@ Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
 immutable repository/owner, main workflow, event and source checks; it grants no
 admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).
 
+`userVaultIntegrity.ts` runs from the shared ordinary Thing mutation recorder,
+inside its content transaction, so generic and dedicated account Vault writes
+share environment validation and the owner Timeline-folder concurrency fence.
+`userVaultIntegrity.test.ts` covers the invariant; the opt-in
+`local-workspace/providerIntegrity.api.test.ts` reproduces the former generic
+delete bypass and verifies real API rollback and concurrent membership changes.
+Versions: `api.things` 1.34.1, `api.lopu-vault` 1.3.1. No account sync sender is
+enabled by this correction.
+
+
+`userVaultWrites.ts` now uses canonical create/update/delete utilities and protected
+Timeline effects for exact-write acknowledgments (`api.lopu-vault` 1.4.0).
+`routes/api/v1/lopu/vault/write.ts` admits only current full sessions with the
+expected owner, exact same origin and selected plane. `providerVault.ts` freezes
+an encrypted request before transmission; `providerTransport.client.ts` negotiates
+the write contract and independently fences each request. `providerSync.test.ts`,
+`userVaultWriteReceipt.test.ts`, the route tests and the opt-in
+`providerWrites.api.test.ts` cover these boundaries. Account Settings now binds the retained account scope even when offline root
+identity has `user:null`. `AccountProviderWorkspace.tsx` owns independent pull/
+push workers and exact-snapshot review; `VaultReveal.tsx` offers explicit retention
+after scoped fresh proof (`api.vault-reveal` 1.3.0).
+See [the write checkpoint](../local-workspaces.md#conditional-account-provider-writes--2026-10-17).
+
+Provider conflict review and account Settings acceptance: `providerReview.test.ts`
+checks atomic dependent copies/discards, quota, stale reviews, cross-tab winners
+and unknown outcomes. `providerReview.api.test.ts` and
+`accountProviders.browser.test.ts` are opt-in loopback fixtures with normal API
+registration and entry cleanup. They do not grant broader native, multi-account
+race, CI or deployed acceptance.
+
 Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
 `transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
+
+### Anonymous password files and shared archive storage
+
+`passwords/storage.ts` is the explicit backend contract for the existing
+attachment UI and 1PUX writer. `local-workspace/passwordFiles.ts` supplies the
+anonymous device adapter, using canonical encrypted frames, encrypted metadata,
+scoped IDB chunks, atomic completion and parent-delete cleanup. Incomplete
+staging expires after 24 hours on a subsequent upload; completed files do not
+expire. The normal anonymous importer/exporter has no HTTP fallback. Test
+`passwordFiles.test.ts` and the opt-in `passwordVault.browser.test.ts` through
+`test:local-workspace`. Account file retention/synchronization and larger entry
+codec coverage remain outstanding; see the local workspace acceptance matrix.
+
+
+Account password file deletion replay/conflict preservation: `api.passwords`
+1.2.0 retains protected parent-bound cancellation receipts through canonical
+attachment cleanup. `passwords/fileLifecycle.test.ts`, attachment tests and
+opt-in `local-workspace/passwordFileLifecycle.api.test.ts` cover replay and owner
+isolation. `passwordSync.test.ts` verifies atomic file/source-archive copies and
+pending-file review after remote parent removal. Account UI activation and native
+file acceptance remain open; see the [checkpoint](../local-workspaces.md#password-file-deletion-replay-and-conflict-preservation--2026-10-18).
+
+
+Password entry/file-metadata device codecs use `passwords/passwordValueCrypto.ts`
+and the account writer's shared `passwords/capacity.ts` ceiling. Generic provider
+credential defaults remain separate. `vaultCrypto.test.ts`, `passwordVault.test.ts`,
+`passwordSync.test.ts` and `passwordFileSync.test.ts` cover large-value parity,
+exact export/replay and conflict copies. Aggregate workspace capacity policy and
+native large-value acceptance remain open; this is not an unlimited-storage claim.
+
+
+`local-workspace/storage.ts` uses browser storage capacity for IndexedDB
+admission while preserving scoped atomic accounting and identity leases.
+`storageTestFixture.ts` injects quota-class errors only in tests;
+`storageCapacity.test.ts` verifies data beyond the removed application budgets.
+`accountReadRevocation.ts` frees clean display snapshots before refusal markers
+without deleting authored work. Settings shows accounted usage, not a fixed
+quota. Remaining buffered adapters and native acceptance are tracked in
+[local workspaces](../local-workspaces.md).
 
 Claude keyless discovery reads the official public lifecycle table through
 `modelDiscovery.ts`. `modelSync.ts` stores public provenance separately from
@@ -334,6 +535,40 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
 
+### Delegated editor draft storage
+
+`local-workspace/characterDrafts.client.ts` reuses the account draft/catalog/file
+services in a principal-and-actor partition. `drafts/draftClient.ts` routes a
+composer’s selected Character there without changing the root account binding.
+`characterRoster.client.ts` retains only selector labels; `useCharacters` keeps
+remote loading fenced and uses these labels offline. Neither retained labels nor
+local draft access grants remote Character authority. See `characterDrafts.test.ts`,
+`characterRoster.test.ts` and the opt-in `characterDrafts.browser.test.ts`.
+
+Character History cache separation uses optional device-only `TimelineScope.delegatedBy`
+and `accountTimelineScope`, with lease-checked assembly in `timeline/localBackend.client.ts`.
+`local-workspace/characterTimeline.test.ts` proves principal/actor isolation,
+legacy authored-version preservation and separate branch/note/name queues.
+The canonical Timeline event/receipt schema and server authority are unchanged.
+
+
+Delegated content now shares `accountWorkspaceWorker` through `useApi` and
+`characterDraftWorkspace`; `CharacterContentScope` owns reloadable post/History
+context. `characterWorkspace.test.ts` covers actual-hook offline files/posts,
+canonical History export and stale-principal refusal. The opt-in browser test
+uses disposable accounts and the normal upload approval API. Remote-operation
+connectivity is checked by `assertAccountSyncAllowed`; the profile transport
+regression covers a disconnect during capability discovery.
+
+### Character content navigation and selectors
+
+`CharacterContentRoute` gates content routes against the current principal's
+retained roster; `CharacterWorkspacePicker` exposes that selection in Things.
+`characterContentPath` retains it only on internal content navigation.
+`useApi` accepts an explicit editor actor for quick comments, preserving local
+completion and the existing remote delegation checks. Anonymous display users
+stay anonymous. Regressions: `characterWorkspace.test.ts`,
+`thingsLocation.test.ts` and opt-in `characterWorkspace.browser.test.ts`.
 ## Account storage recovery
 
 `storage/userStorage.ts` owns transactional admission and exact recovery;
@@ -525,6 +760,9 @@ Messages SDK with only the selected owner credential; `lopu/vaultProviderClient.
 applies the existing host/DNS/redirect fences and `lopu/chat.ts` reuses native tool
 streaming. Console keys use separate provider billing. Save rejects setup tokens
 and mode changes without a new key. No platform/admin credential is migrated.
+The portable `userVaultModel.ts` and local vault writer preserve these rules in
+encrypted offline workspaces. The combined `api.lopu-vault` contract is 1.5.0;
+Console saves negotiate that version before remote persistence.
 Run `anthropicApiKey.test.ts`, `userVaultCore.test.ts`, `vaultProviders.test.ts`,
 `voice.test.ts`, `chat.streaming.test.mts`, `completion.test.ts` and capability
 coverage. Live Console inference and installed-native acceptance remain separate.
@@ -567,3 +805,76 @@ full request hashing retains AppID in the verification/session binding.
 `browser-extension/page-hook.js` adapter 0.5.1 preserves input/output serialization
 and delegates unsupported AppIDs/extensions unchanged. Run browserPasskey,
 browserProviderAppId client, extension tests and `browser-extension/test/appid-browser.mjs`.
+
+## Native session persistence boundary
+
+`auth/sessions.ts` retains the canonical helpers and revocation exports while
+`auth/sessionRepository.ts` supplies default home-pinned Mongo persistence or an
+explicit internal home-scoped native adapter. `documentStore/nativeSessions.ts`
+uses actual collection transactions; it cannot select an API profile or create
+accounts. The normal Mongo HTTP fixture and real SQLite session module tests are
+separate acceptance layers. Native signup still requires identity/vault, tier,
+roster, notification, verification/outbox and readiness integration.
+
+Anonymous device password vaults do not have account-password approval settings:
+`PasswordManagerScope` omits both global and entry account controls for an
+anonymous vault while retaining its independent passphrase and lock lifecycle.
+The same controls remain active for account scopes. Run the actual-component
+`test-authenticator-setup-ui.mjs` account and anonymous variants.
+
+### Explicit native home identities
+
+`auth/userIdentityRepository.ts` binds canonical identity and session operations
+to one native home scope. `documentStore/nativeUserIdentities.ts` uses the shared
+`nativeThingsCollection.ts` protected uniqueness definition; `auth/users.ts` keeps
+canonical envelope construction/projection and the normal Mongo/legacy path.
+Unsupported native user mutations refuse. Batch reads use one scan/transaction.
+`nativeUserIdentities.test.ts` covers scope, persistence, uniqueness, Mongo
+compatibility and same-provider accounting. This does not activate SQLite signup;
+the wider registration/readiness chain remains required.
+
+### Native account creation transaction
+
+`auth/accountCreationRepository.ts` and
+`documentStore/nativeAccount{Creation,Transaction}.ts` connect existing
+`createUserAccount` to the native home provider. Identity and initial trusted
+zero ledger commit together; scopes, handles and failed admissions fence commit.
+Canonical tiers bootstrap per provider without overwriting valid published bodies.
+Run `test:document-store`, `test:subscriptions`, `test:storage`, and the fresh built
+Mongo HTTP fixture after changes. `registerUser` refuses native activation until
+vault, outbox, notification, roster, entitlement and readiness adapters exist.
+
+`auth/rosterRepository.ts` separates account-switcher persistence from the
+canonical cookie ownership and live-session checks in `auth/accounts.ts`.
+`documentStore/nativeRosters.ts` stores the same roster/session references in an
+explicit native home scope. Canonical persist/reopen/delete, concurrent version
+guards, expiry, planted cookie/Bearer refusal and expired/foreign scope tests are
+part of `test:document-store`; a controlled Mongo fixture preserves driver query
+shapes. This does not enable native HTTP registration or replace session/identity
+authorization. Native TTL cleanup and full authenticated switching acceptance
+remain required before profile activation.
+
+Canonical vault/password helpers now use `UserIdentityRepository` secure-blob
+snapshots and `SessionRepository.bindVaultEnvelope` for native persistence.
+`nativeVault.test.ts` runs actual cryptography/JWTs against temporary SQLite
+files in a credential-sanitized child process. It covers reset/reopen/revocation,
+concurrent email-flag CAS, typed legacy versions and private-preimage isolation.
+The existing hosted Mongo secure-CAS/session filters are preserved. Production
+native profile-key provisioning remains required; synthetic test keys do not
+establish protected profile key lifecycle or full HTTP signup.
+
+`auth/singleUseTokenRepository.ts` and `documentStore/nativeSingleUseTokens.ts`
+extend the canonical email-verification helpers with exact-provider native
+storage. SQLite stores SHA-256 token digests, claims once transactionally and
+rechecks expiry after queued admission. Hosted Mongo retains the deployed token
+format so older binaries can consume newly issued links after rollback.
+`nativeSingleUseTokens.test.ts` covers actual files, process/handle contention,
+reopen, replay, expired scopes, queued expiry and same-label foreign providers.
+Unsupported native password-reset persistence refuses Mongo fallback. Delivery,
+notifications, wider account verification transactions and runtime activation
+remain separate prerequisites.
+
+`auth/homeRepositoryScope.ts` binds native repositories to an opaque shared
+provider identity, not merely a matching home label. Identity/session, roster and
+verification composition must reject different SQLite providers bearing the same
+label. The registry contains no database paths, credentials or public selectors.

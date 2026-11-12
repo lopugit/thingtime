@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
+import { isGatewayWorkIdle, reserveGatewayWorkShutdown } from '../deployment/environmentGateway';
+let beforeAssistantSave: (() => Promise<void>) | null = null;
 let savedText = '', providerContext: any, writes = 0, savedContinuation = false, savedMeta: any, stopReason = 'fallback', events: any[] = [], allowContinuation = true;
 let providerCheckpointResults: any, checkpointReads = 0;
 mock.module('./backgroundTasks', { namedExports: { readCheckpointToolResults: async (_request: Request, chatId: string, requestId: string) => {
@@ -22,11 +24,26 @@ mock.module('../messenger/lopuChats', { namedExports: {
  createLopuChat: async () => ({ok:true,chat:{id:'test-chat'}}), deleteLopuChat:ok,
  getLopuChat:async()=>({ok:true,settings:{}}), loadLopuHistory:async()=>({ok:true,history:[]}), updateLopuChat:ok,
  persistLopuUserTurn:async (_owner: string, input: any)=>{ writes++; savedText=input.text; savedContinuation=input.continuation; return {ok:true,message:{id:'user-message'}}; },
- persistLopuAssistantTurn:async(_owner: string, input: any)=>{ savedMeta=input.lopu; return {ok:true,messages:[{id:'assistant-message'}]}; }
+ persistLopuAssistantTurn:async(_owner: string, input: any)=>{ await beforeAssistantSave?.(); savedMeta=input.lopu; return {ok:true,messages:[{id:'assistant-message'}]}; }
 } });
 const { replyAsUser } = await import('../../../routes/api/v1/lopu/chats/reply/_reply.tsx');
 const viewer = {id:'test-owner',username:'context-test',temporary:false} as any;
 const request = (context: unknown) => new Request('https://thingtime.test/api/v1/lopu/chats/reply', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Review these pages',requestId:'page-context-test',context})});
+test('canceled reply response cannot permit shutdown before transcript persistence settles', async () => {
+ let enter!: () => void, finish!: () => void;
+ const entered = new Promise<void>(resolve => { enter = resolve; });
+ const pending = new Promise<void>(resolve => { finish = resolve; });
+ beforeAssistantSave = async () => { enter(); await pending; };
+ try {
+  const response = await replyAsUser(request({}), viewer);
+  await entered;
+  const cancel = response.body!.cancel();
+  assert.equal(reserveGatewayWorkShutdown(), null);
+  finish(); await cancel;
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(isGatewayWorkIdle(), true);
+ } finally { finish(); beforeAssistantSave = null; writes = 0; }
+});
 test('actual reply route validates references before writes and forwards/persists sanitized pages', async () => {
  for (const pages of [[{url:'//evil.test'}], [{url:'/invite#secret'}], Array.from({length:11},()=>({url:'/feed'}))]) {
   const response = await replyAsUser(request({pages}),viewer);

@@ -1,0 +1,2317 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T15:49:21.301Z",
+  "finishedAt": "2026-11-11T15:55:06.259Z",
+  "phase": "automatic-idle-process-replacement",
+  "cleanupVerified": true,
+  "verifierSourceHashes": {
+    "scripts/verify-web-bundle-auto-activation.mjs": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8",
+    "test/fixtures/native-web-auto-api.mts": "ecedfd2d75b7bd26218a09cbb55ada7aa37cff330b3e29d58a71e384b33ca56e",
+    "test/fixtures/configure-native-auto-qa.cjs": "df81d60b777767cefa6268a783f480f10095fadc4091416f5105e4d05048c4ce"
+  },
+  "persistenceReaderSourceHashes": {
+    "remix/app/local-workspace/editorTree.ts": "a6a13907c0aee83d3821fc8ecf389c20df31651342739507b79de2f150b5c731",
+    "remix/app/local-workspace/storage.ts": "049cdb4badc2e7750411dd4382272817561d8b5e3121e90190de45f3bab637c4",
+    "remix/app/Providers/thingtimeSerialization.ts": "41ce10a450dcd775b01167ad1216bec4b0df5125d01c0a73266403e7aba3a03f"
+  },
+  "preparedSourceHashes": {},
+  "observations": [
+    {
+      "case": "editor-input-ready",
+      "initialReconciliationSettled": true,
+      "commanderFocusCommitted": true,
+      "sameConnectedEditor": true,
+      "typedOnce": true
+    },
+    {
+      "case": "signed-live-delivery",
+      "processUnchanged": true,
+      "releaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "pending": true
+    },
+    {
+      "case": "native-control",
+      "action": "minimize",
+      "beforePid": 6855,
+      "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-http/runtime/Electron.app/Contents/MacOS/Electron",
+      "result": {
+        "version": "2.6",
+        "ok": false,
+        "command": "minimize",
+        "error": {
+          "code": "TIMEOUT",
+          "message": "Accessibility surface read failed for AXMinimized",
+          "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+          "details": {
+            "attribute": "AXMinimized",
+            "ax_error": -25204,
+            "kind": "surface_read",
+            "retryable": true,
+            "steps": [
+              {
+                "label": "window_minimize",
+                "mechanism": "semantic_api",
+                "outcome": "succeeded",
+                "verified": false
+              }
+            ],
+            "target": {
+              "id": "w-3334",
+              "kind": "window",
+              "process": {
+                "instance": "macos-proc-v1:1794412178:68168",
+                "pid": 6855
+              },
+              "title": "[Native QA] Thingtime - Your Home for Everything"
+            }
+          },
+          "disposition": {
+            "delivery": "delivered_unverified",
+            "retry": "unsafe"
+          }
+        }
+      },
+      "repeated": false,
+      "postcondition": {
+        "focused": false,
+        "visibility": "hidden"
+      }
+    },
+    {
+      "case": "dirty-background",
+      "durationMs": 70453,
+      "processUnchanged": true,
+      "pending": true,
+      "checkpointRequests": 2
+    },
+    {
+      "case": "native-control",
+      "action": "restore",
+      "beforePid": 6855,
+      "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-http/runtime/Electron.app/Contents/MacOS/Electron",
+      "result": {
+        "version": "2.6",
+        "ok": false,
+        "command": "restore",
+        "error": {
+          "code": "TIMEOUT",
+          "message": "Accessibility surface read failed for AXMinimized",
+          "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+          "details": {
+            "attribute": "AXMinimized",
+            "ax_error": -25204,
+            "kind": "surface_read",
+            "retryable": true,
+            "steps": [
+              {
+                "label": "window_restore",
+                "mechanism": "semantic_api",
+                "outcome": "succeeded",
+                "verified": false
+              }
+            ],
+            "target": {
+              "id": "w-3334",
+              "kind": "window",
+              "process": {
+                "instance": "macos-proc-v1:1794412178:68168",
+                "pid": 6855
+              },
+              "title": "[Native QA] Thingtime - Your Home for Everything"
+            }
+          },
+          "disposition": {
+            "delivery": "delivered_unverified",
+            "retry": "unsafe"
+          }
+        }
+      },
+      "repeated": false,
+      "postcondition": {
+        "focused": true,
+        "visibility": "visible"
+      }
+    },
+    {
+      "case": "native-control",
+      "action": "focus-window",
+      "beforePid": 6855,
+      "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-http/runtime/Electron.app/Contents/MacOS/Electron",
+      "result": {
+        "version": "2.6",
+        "ok": true,
+        "command": "focus-window",
+        "data": {
+          "focused": {
+            "accessible": true,
+            "app_name": "Electron",
+            "bounds": {
+              "height": 860,
+              "width": 1280,
+              "x": 384,
+              "y": 171
+            },
+            "id": "w-3334",
+            "is_focused": true,
+            "minimized": false,
+            "pid": 6855,
+            "process_instance": "macos-proc-v1:1794412178:68168",
+            "title": "[Native QA] Thingtime - Your Home for Everything",
+            "visible": true
+          }
+        }
+      },
+      "repeated": false,
+      "postcondition": {
+        "focused": true,
+        "visibility": "visible"
+      }
+    },
+    {
+      "case": "submitted-and-persisted",
+      "normalEnter": true,
+      "canonicalValueMatched": true,
+      "storageKey": "thingtime:workspace:[\"anonymous\",1]",
+      "integrityChecked": true,
+      "valueMatched": true
+    },
+    {
+      "case": "closed-drawer-home",
+      "defaultEmojiFieldsUnmounted": true,
+      "blockerCount": 0
+    },
+    {
+      "case": "native-control",
+      "action": "minimize",
+      "beforePid": 6855,
+      "executable": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-pr1000-http/runtime/Electron.app/Contents/MacOS/Electron",
+      "result": {
+        "version": "2.6",
+        "ok": false,
+        "command": "minimize",
+        "error": {
+          "code": "TIMEOUT",
+          "message": "Accessibility surface read failed for AXMinimized",
+          "suggestion": "Retry after the application finishes updating its accessibility surfaces",
+          "details": {
+            "attribute": "AXMinimized",
+            "ax_error": -25204,
+            "kind": "surface_read",
+            "retryable": true,
+            "steps": [
+              {
+                "label": "window_minimize",
+                "mechanism": "semantic_api",
+                "outcome": "succeeded",
+                "verified": false
+              }
+            ],
+            "target": {
+              "id": "w-3334",
+              "kind": "window",
+              "process": {
+                "instance": "macos-proc-v1:1794412178:68168",
+                "pid": 6855
+              },
+              "title": "[Native QA] Thingtime - Your Home for Everything"
+            }
+          },
+          "disposition": {
+            "delivery": "delivered_unverified",
+            "retry": "unsafe"
+          }
+        }
+      },
+      "repeated": false,
+      "postcondition": {
+        "focused": false,
+        "visibility": "hidden"
+      }
+    }
+  ],
+  "activationDiagnostics": [
+    {
+      "at": "2026-11-11T15:51:49.340Z",
+      "pathname": "/",
+      "focused": true,
+      "visibility": "visible",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "automaticUpdates",
+          "windowUnfocused",
+          "idleInterval",
+          "ipcWork"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": false,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": false,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": false,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 1,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:51:50.903Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "automaticUpdates",
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": false,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:51:55.946Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:01.001Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:06.052Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:11.098Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:16.135Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": false,
+        "blockers": [
+          "idleInterval"
+        ],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": false,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:21.168Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": true,
+        "blockers": [],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": true,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:26.214Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": true,
+        "blockers": [],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": true,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:31.262Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": true,
+        "blockers": [],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": true,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:36.315Z",
+      "pathname": "/",
+      "focused": false,
+      "visibility": "hidden",
+      "featureVersions": {
+        "native.web-bundle-activation": "1.3.0"
+      },
+      "featureOriginMatches": true,
+      "activation": {
+        "format": 1,
+        "eligible": true,
+        "blockers": [],
+        "gates": {
+          "closeAccepted": true,
+          "closePending": true,
+          "nativeAuthority": true,
+          "automaticUpdates": true,
+          "rendererReady": true,
+          "windowAvailable": true,
+          "windowUnfocused": true,
+          "servicesOpen": true,
+          "authorityStable": true,
+          "idleInterval": true,
+          "otherWindows": true,
+          "rendererRequests": true,
+          "ipcWork": true,
+          "shutdownReservation": true,
+          "embeddedHttpIdle": true,
+          "embeddedChatgptIdle": true,
+          "embeddedRuntimeIdle": true,
+          "speechIdle": true,
+          "mailIdle": true,
+          "uploadsIdle": true,
+          "fileExportIdle": true,
+          "folderSyncIdle": true,
+          "folderStreamIdle": true,
+          "folderRequestIdle": true,
+          "folderQueueIdle": true,
+          "aiSyncIdle": true,
+          "syncWindowIdle": true,
+          "agentBrowserIdle": true,
+          "contextAvailable": true
+        },
+        "counts": {
+          "otherWindows": 0,
+          "rendererRequests": 0,
+          "ipcWork": 0,
+          "mailWork": 0,
+          "attachmentUploads": 0,
+          "folderQueue": 0,
+          "aiSyncWork": 0
+        },
+        "idle": {
+          "reserved": false,
+          "http": "idle",
+          "chatgpt": "idle",
+          "runtime": "idle",
+          "reservation": "absent"
+        },
+        "checkpoint": {
+          "ready": false,
+          "reason": "unknown-draft"
+        },
+        "cancellation": "renderer-refused"
+      },
+      "updateStatus": "pending",
+      "updateReleaseId": "a40e252e7239baefcea585095819f4e0d7cab94de538f38d2ce6461ce636b738",
+      "activeReleaseId": null,
+      "buildIdentityPresent": true,
+      "localRuntimeActive": false,
+      "localRuntimeEnabled": false,
+      "rendererReady": true,
+      "closedDrawerEmojiFields": 0,
+      "blockers": [],
+      "receivedMessages": []
+    },
+    {
+      "at": "2026-11-11T15:52:45.373Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:52:50.382Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:52:55.390Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:00.400Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:05.424Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:10.433Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:15.448Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:20.467Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:25.481Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:30.489Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:35.505Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:40.521Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:45.535Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:50.544Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:53:55.562Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:54:00.594Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:54:05.618Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:54:10.627Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:54:15.639Z",
+      "observationUnavailable": "Task public state observation timed out"
+    },
+    {
+      "at": "2026-11-11T15:54:20.649Z",
+      "observationUnavailable": "Task public state observation timed out"
+    }
+  ],
+  "hostActivationDiagnostics": [
+    {
+      "observedAt": 1794412233901,
+      "format": 1,
+      "eligible": false,
+      "blockers": [
+        "windowUnfocused"
+      ],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": false,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": null,
+      "cancellation": null
+    },
+    {
+      "observedAt": 1794412238485,
+      "format": 1,
+      "eligible": false,
+      "blockers": [
+        "idleInterval"
+      ],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": false,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": null,
+      "cancellation": null
+    },
+    {
+      "observedAt": 1794412268489,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": null,
+      "cancellation": null
+    },
+    {
+      "observedAt": 1794412268493,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "renderer-recent-activity"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412298493,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "renderer-recent-activity"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412298495,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "unknown-draft"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412315149,
+      "format": 1,
+      "eligible": false,
+      "blockers": [
+        "idleInterval"
+      ],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": false,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "unknown-draft"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412358497,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "unknown-draft"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412358506,
+      "format": 1,
+      "eligible": true,
+      "blockers": [],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": true,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": false,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "absent"
+      },
+      "checkpoint": {
+        "ready": true,
+        "reason": "renderer-ready"
+      },
+      "cancellation": null
+    },
+    {
+      "observedAt": 1794412358508,
+      "format": 1,
+      "eligible": false,
+      "blockers": [
+        "closePending"
+      ],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": false,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": true,
+        "windowUnfocused": true,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": true,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": true,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "idle"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "cancel-pagehide"
+      },
+      "cancellation": "renderer-refused"
+    },
+    {
+      "observedAt": 1794412358509,
+      "format": 1,
+      "eligible": false,
+      "blockers": [
+        "closePending",
+        "windowAvailable",
+        "windowUnfocused",
+        "idleInterval"
+      ],
+      "gates": {
+        "closeAccepted": true,
+        "closePending": false,
+        "nativeAuthority": true,
+        "automaticUpdates": true,
+        "rendererReady": true,
+        "windowAvailable": false,
+        "windowUnfocused": false,
+        "servicesOpen": true,
+        "authorityStable": true,
+        "idleInterval": false,
+        "otherWindows": true,
+        "rendererRequests": true,
+        "ipcWork": true,
+        "shutdownReservation": true,
+        "embeddedHttpIdle": true,
+        "embeddedChatgptIdle": true,
+        "embeddedRuntimeIdle": true,
+        "speechIdle": true,
+        "mailIdle": true,
+        "uploadsIdle": true,
+        "fileExportIdle": true,
+        "folderSyncIdle": true,
+        "folderStreamIdle": true,
+        "folderRequestIdle": true,
+        "folderQueueIdle": true,
+        "aiSyncIdle": true,
+        "syncWindowIdle": true,
+        "agentBrowserIdle": true,
+        "contextAvailable": true
+      },
+      "counts": {
+        "otherWindows": 0,
+        "rendererRequests": 0,
+        "ipcWork": 0,
+        "mailWork": 0,
+        "attachmentUploads": 0,
+        "folderQueue": 0,
+        "aiSyncWork": 0
+      },
+      "idle": {
+        "reserved": true,
+        "http": "idle",
+        "chatgpt": "idle",
+        "runtime": "idle",
+        "reservation": "idle"
+      },
+      "checkpoint": {
+        "ready": false,
+        "reason": "cancel-pagehide"
+      },
+      "cancellation": "host-authority"
+    }
+  ],
+  "hostLifecycleDiagnostics": [
+    {
+      "observedAt": 1794412358506,
+      "stage": "close-dispatch"
+    },
+    {
+      "observedAt": 1794412358507,
+      "stage": "close-event"
+    },
+    {
+      "observedAt": 1794412358508,
+      "stage": "close-cancel-pending"
+    },
+    {
+      "observedAt": 1794412358509,
+      "stage": "contents-destroyed"
+    },
+    {
+      "observedAt": 1794412358510,
+      "stage": "window-closed"
+    }
+  ],
+  "hostHttpDiagnostics": [
+    {
+      "observedAt": 1794412238485,
+      "format": 1,
+      "requests": 0,
+      "upgradedSockets": 0,
+      "upgradeHandlers": 0,
+      "classes": {
+        "root-data": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "discovery": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-me": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-accounts": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "profile": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-prompt": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-chat": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-access": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "themes": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-catalogue": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-content": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "document": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "asset": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "other": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        }
+      }
+    },
+    {
+      "observedAt": 1794412268490,
+      "format": 1,
+      "requests": 0,
+      "upgradedSockets": 0,
+      "upgradeHandlers": 0,
+      "classes": {
+        "root-data": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "discovery": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-me": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-accounts": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "profile": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-prompt": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-chat": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-access": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "themes": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-catalogue": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-content": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "document": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "asset": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "other": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        }
+      }
+    },
+    {
+      "observedAt": 1794412298492,
+      "format": 1,
+      "requests": 0,
+      "upgradedSockets": 0,
+      "upgradeHandlers": 0,
+      "classes": {
+        "root-data": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "discovery": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-me": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-accounts": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "profile": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-prompt": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-chat": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-access": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "themes": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-catalogue": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-content": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "document": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "asset": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "other": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        }
+      }
+    },
+    {
+      "observedAt": 1794412328495,
+      "format": 1,
+      "requests": 0,
+      "upgradedSockets": 0,
+      "upgradeHandlers": 0,
+      "classes": {
+        "root-data": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "discovery": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-me": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-accounts": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "profile": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-prompt": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-chat": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-access": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "themes": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-catalogue": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-content": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "document": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "asset": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "other": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        }
+      }
+    },
+    {
+      "observedAt": 1794412358497,
+      "format": 1,
+      "requests": 0,
+      "upgradedSockets": 0,
+      "upgradeHandlers": 0,
+      "classes": {
+        "root-data": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "discovery": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-me": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "auth-accounts": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "profile": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-prompt": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-chat": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "settings-access": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "themes": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-catalogue": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "release-content": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "document": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "asset": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        },
+        "other": {
+          "requests": 0,
+          "middlewarePending": 0,
+          "responsePending": 0,
+          "oldestAgeMs": 0
+        }
+      }
+    }
+  ],
+  "failure": {
+    "name": "Error",
+    "message": "Idle native process did not automatically replace itself"
+  },
+  "retainedDiagnostics": "/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/thingtime-native-auto-OUVbdZ"
+}

@@ -1,3 +1,4 @@
+import { currentRateLimitRepository } from './repository';
 import { getSettingsCollection } from '../mongodb/collections';
 import { NETWORK_PROBE_UPLOAD_REQUESTS } from '../networkProbe';
 
@@ -11,6 +12,8 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  // Public signed-release metadata and bounded file windows; no account data.
+  'releases.read': { limit: 600, windowMs: 60_000, enabled: true },
   'social-previews.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.write': { limit: 60, windowMs: 60_000, enabled: true },
@@ -112,6 +115,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous browse shape as schemas.browse; it only ever returns public theme
   // projections, but each call is two indexed reads and up to 60 token docs
   'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
+  'algorithms.sync': { limit: 60, windowMs: 60_000, enabled: true },
+  'themes.sync': { limit: 60, windowMs: 60_000, enabled: true },
   // third-party connections (/api/v1/connections) — reads of stored feed
   // pages and connection lists, bounded like the other authenticated reads
   'connections.read': { limit: 120, windowMs: 60_000, enabled: true },
@@ -450,6 +455,8 @@ export const normalizeRateLimitConfig = (endpoints: any, uploadStartPolicyVersio
 };
 
 export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig> => {
+	const native = currentRateLimitRepository();
+	if (native) return native.readConfig();
 	if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
 	try {
 		const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
@@ -463,7 +470,19 @@ export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig
 };
 
 export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: string): Promise<RateLimitConfig> => {
+	const native = currentRateLimitRepository();
+	if (native) return native.patchConfig(patch, updatedBy);
 	const current = await getRateLimitConfig(true);
+	const endpoints = mergeRateLimitConfig(current, patch);
+	await (
+		await getSettingsCollection()
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, uploadStartPolicyVersion: 1, updatedAt: new Date(), updatedBy } }, { upsert: true });
+	cache = { at: Date.now(), config: endpoints };
+	return endpoints;
+};
+
+/** One canonical partial-patch policy for hosted and native persistence. */
+export const mergeRateLimitConfig = (current: RateLimitConfig, patch: RateLimitConfig): RateLimitConfig => {
 	const endpoints: RateLimitConfig = {};
 	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
 		// Merge the patch OVER the current stored rule, so a partial patch (e.g.
@@ -472,9 +491,5 @@ export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: stri
 		const p = patch?.[name] && typeof patch[name] === 'object' ? patch[name] : {};
 		endpoints[name] = clampRule({ ...current[name], ...p }, def);
 	}
-	await (
-		await getSettingsCollection()
-	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, uploadStartPolicyVersion: 1, updatedAt: new Date(), updatedBy } }, { upsert: true });
-	cache = { at: Date.now(), config: endpoints };
 	return endpoints;
 };

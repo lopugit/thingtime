@@ -1,0 +1,249 @@
+{
+  "baseRevision": "b3eba7dbf293fe3cf4552d37416408f02283cbe1",
+  "files": [
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/SaveIfAbsentTests.swift",
+      "sha256": "45c508cf6f90326d9c6994cb38df14082cc61e94251238e30945a4555e017b7b"
+    },
+    {
+      "path": "electron/scripts/password-helper-identity.mjs",
+      "sha256": "931d115702bc1caa2e1bb0f7aced398ead1595217664909eac06579f09f67577"
+    },
+    {
+      "path": "electron/scripts/verify-isolated-password-helper.mjs",
+      "sha256": "c39348e977e6026bf1d0353d69bb5923e5c35883464aba8a5dfd2bece5eebcdc"
+    },
+    {
+      "path": "macos/ThingtimePasswords/PasswordFixture.swift",
+      "sha256": "45b3060e0e68f601e6fb491bf1598486a65ae7d14e66d8096042d244dfa69678"
+    },
+    {
+      "path": "macos/ThingtimePasswords/PasswordHostIdentity.swift",
+      "sha256": "b89278df59611e1070f6421cc3ff5b01b04381637876f1db4f9ed7ee4c4b8dc4"
+    },
+    {
+      "path": "apple/PasswordProvider/CredentialProviderViewController.swift",
+      "sha256": "4715928f19b3afbd7c014601ababe3bb9328148ecb6ae5f07f65f589266911db"
+    },
+    {
+      "path": "apple/PasswordProvider/tests/render-preview.sh",
+      "sha256": "3ab1f47ec605b1ba040d4c185a46df19beefc7b56824b03baeceaa50862d9a4b"
+    },
+    {
+      "path": "apple/PasswordProvider/tests/render-preview.swift",
+      "sha256": "f91e6de989187a6c67caf223d5cafb243c963b5e85eaa212d575021e56f99477"
+    },
+    {
+      "path": "apple/Passwords/.gitignore",
+      "sha256": "acc718146d21aae829cba1761475e05de39d73209d83af2ab8487a74843cead0"
+    },
+    {
+      "path": "apple/Passwords/Host/AuthenticatorSetupBridge.swift",
+      "sha256": "df1fbdfe035f23e00fbd111bee691cf0865f952012bfbefac70b53c2fb5355df"
+    },
+    {
+      "path": "apple/Passwords/Host/PasswordApplicationMenu.swift",
+      "sha256": "5b0f810a74fda7f6a198aa62d1c229d0b49987a38a2b57bf6662fcd7135cc339"
+    },
+    {
+      "path": "apple/Passwords/Package.swift",
+      "sha256": "d1964ea32f42f2681f8bc2246e63c17b3eb4b09958654d1cc1e42e90d749b756"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/AuthenticatorSetup.swift",
+      "sha256": "c79ed1d90cc75c62ecb63f7457ec29b8c4dcf3b9b9ca128bc25c508175ca2924"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/CatalogSelection.swift",
+      "sha256": "bc5a6b108f1b810daa0f9d37d65eeccb463cef325b0c8b85bc67350b22d2ff10"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/DeviceVerification.swift",
+      "sha256": "28fb6471276dddf75c71c804b68cd43558b01273094c359a47c00ae770e6a029"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/HostConnection.swift",
+      "sha256": "80e3e661a8bf289a5a2edbfcd1e71a1788d01c483047646ac88ac2e2ebd5e23a"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/IdentityIndex.swift",
+      "sha256": "b6aee6d36e523d07ed0cb59fba3a63063b05c0d53cb4ef8bdc889f451c1b721d"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/Passkey.swift",
+      "sha256": "4fff19701920bf9d352e7940f4a2c78f568e7c04156413428bc9093e9b35eee1"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/PasskeyRegistrationPolicy.swift",
+      "sha256": "d41effffa4402548fb178faac4fb39b7d2ea227f3ed424c62c6989bc6c5eaf70"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/PasswordClient.swift",
+      "sha256": "279e1b7e1dc7e8cb71f2e66b0b27e4aaf11e6a593e0a6e26f8c4c359786ee59b"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/PasswordConnectionStatus.swift",
+      "sha256": "c39f89ffaac2f78f4d58021d7a8ef2e4f6176b70a92d901a4fa52ad5fba74ed5"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/PasswordModels.swift",
+      "sha256": "b743f703028bffbee38c2cc1ad8b26e19b5cdee583589df4015dd17cf3bc0fc8"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/PasswordProviderIdentity.swift",
+      "sha256": "7352951b1032984dde728a4d3e37c33c66f2f003362aea79e327fa273cc4f8f6"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/ProviderFeedback.swift",
+      "sha256": "133d6cc3be5514634191629ff69080fb350a0298cb9cd1f30104a933353de2cb"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/SessionStore.swift",
+      "sha256": "a8a11f60f2f3168a7d7e4f16bbbf62b794dcf5fad93ea310c88a7c691724ed1c"
+    },
+    {
+      "path": "apple/Passwords/Sources/ThingtimePasswordCore/TOTP.swift",
+      "sha256": "c50e2d61ef785f485829ab034eca8daf814b87c9db999f629f2d22f95a22cbdf"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/AuthenticatorSetupBridgeStatusTests.swift",
+      "sha256": "ec54e2bdfafaa870ea48ee2c6a11f85d8e4b163ddee03ac05c85d8fcdf687979"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/AuthenticatorSetupTests.swift",
+      "sha256": "97e53b8306d4d4d6959721fb082f7d929a179bc98d1ff43c655d60d01476e3ee"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/CatalogSelectionTests.swift",
+      "sha256": "4fc5b9254d63f3477523f78781b9a0a192f24d3fe2e6807b1c3cecdc29f702af"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/ClientTests.swift",
+      "sha256": "47bffbe631f46c7e97ba7f20c4eb0bb3b613326ea59de2f07f5680c8a65c42fd"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/ConnectionStatusTests.swift",
+      "sha256": "b650a1de823aadefa6d68e3a6a8712efdb12242aca7c9fd22229dad215c1f828"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/CoreTests.swift",
+      "sha256": "2762265c3d236d1f9f56f780f1037d1a899b87d79bf633d13c40b116c73ed1c8"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/DeviceVerificationTests.swift",
+      "sha256": "4232094d530e739cef77336941537e9f5b171ef62ea2b56f099ef48293edb857"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/HostConnectionTests.swift",
+      "sha256": "c01b967a643323d1897d5a43aea6a548bc66cffa6f9af3f05ca355bcaec3b24d"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/IdentityIndexTests.swift",
+      "sha256": "5a2cd3cdd1a3cfa5086089a616adf39341fb245dc48cad44fed17a3b35ed6f48"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/PasskeyRegistrationPolicyTests.swift",
+      "sha256": "1a76bf8316149d4ea3658e60d847f2aeaae5d755c11746f14577b950e3cb0e6f"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/PasswordApplicationMenuTests.swift",
+      "sha256": "8b9d9826576cfe9dc4cc61cc66dc9d484b02fa046c99babbcbb10607a0cf78ce"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/ProviderFeedbackTests.swift",
+      "sha256": "19f1f330fabca07e6fffbc4c6ae4a8d98bf663c769dc118f9e7f06984a05cc4a"
+    },
+    {
+      "path": "apple/Passwords/Tests/ThingtimePasswordCoreTests/ProviderIdentityTests.swift",
+      "sha256": "72a70a6cba5377a167c637cc3415e980f4d8bb5e2903a8201c701c1e3530ae3b"
+    },
+    {
+      "path": "electron/scripts/build-native-passwords.mjs",
+      "sha256": "9e2a356c654a155f6ecdc630c8e24d974c197695aa8be50ec6fe12c99c03c3b8"
+    },
+    {
+      "path": "electron/scripts/verify-password-provider.mjs",
+      "sha256": "9f4ba203cd93fcc1bc79aef5bfc529ffa3cec4dbe5c6b53135953bcc27b54fa4"
+    },
+    {
+      "path": "macos/ThingtimePasswords/.gitignore",
+      "sha256": "3190bac2f955b5946f952c73772c61fc459fc0271fcdcb881c2a3036a968e234"
+    },
+    {
+      "path": "macos/ThingtimePasswords/PasswordApp.swift",
+      "sha256": "f8ae0178a45ece4506ebc0751d4f99a79b1937dd210bb278c856d3f4dad99d70"
+    },
+    {
+      "path": "macos/ThingtimePasswords/PasswordSetupEditor.swift",
+      "sha256": "5c821fdd9ec30ff81973f9216bf3fba2e0f0f552f54bb88ba781a3c72cd0fdd9"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Contents.json",
+      "sha256": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/Contents.json",
+      "sha256": "b58f8b3b12a9a5862d91ed6da2f4e1c728deb3373c793023f1b9c8a120a8555a"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-1024x1024.png",
+      "sha256": "0498d110ea1427af2bf0b4b348b8b27fc1c3a999b528ce251dbd98af7eb984e3"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-128x128.png",
+      "sha256": "8acce2bd71f00102dcf78eef3ffa07826f8197eeb38ed96ed0136516f8c3da69"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-16x16.png",
+      "sha256": "46c7064107a538a539a4254aa306219da780e29f5d9a7196f83d835c55649e33"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-256x256.png",
+      "sha256": "722ff1baac1012b0dffee7cc05b75cf1ee870c1c79a81287cf7fef2f7ddba708"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-32x32.png",
+      "sha256": "980ee41cc03aec79343648fee490ae1743a0c61c23fdc37ea72b484f11865597"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-512x512.png",
+      "sha256": "93227fd2ca5f6bcd0f26dc683393670dfd462692030d98a223213d6ade36a91f"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Assets.xcassets/Thingtime.appiconset/thingtime-icon-64x64.png",
+      "sha256": "b2b57c2d71b56a3f300e809e3fef162767deda2f6253a08ed24611014e6f4e08"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Extension-Info.plist",
+      "sha256": "de58da9349693d11cb1db3ddeae8bc8fc3110b4d8ef87dfab07bba9b421439d2"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Host.entitlements",
+      "sha256": "c3f18dbca9615a22c754cbd287bc26adb88fcdef1bec9adfc5ca0feb8093114b"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Info.plist",
+      "sha256": "dbcce5ffca3ea2da9d19ff0886442921c17bb5171e791f54c971394ba9263d97"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Provider.entitlements",
+      "sha256": "c3f18dbca9615a22c754cbd287bc26adb88fcdef1bec9adfc5ca0feb8093114b"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/Thingtime.icns",
+      "sha256": "d2054e99e061057049a1774b28ebfd4773b5a6cbc2d01775da5403730dc0bb2d"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/ThingtimeTree.png",
+      "sha256": "93227fd2ca5f6bcd0f26dc683393670dfd462692030d98a223213d6ade36a91f"
+    },
+    {
+      "path": "macos/ThingtimePasswords/Resources/en.lproj/InfoPlist.strings",
+      "sha256": "497af840a82e7d9af326b279b02d7d3d867c080a48ff4fa23f304bb8390d35e7"
+    },
+    {
+      "path": "macos/ThingtimePasswords/project.yml",
+      "sha256": "c2b509b5a19b69c6892169d792f902d2a49ba83b62fcb49cbd8f54ad776a4d54"
+    }
+  ]
+}

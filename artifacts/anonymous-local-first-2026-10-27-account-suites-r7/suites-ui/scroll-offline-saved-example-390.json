@@ -1,0 +1,52 @@
+{
+  "label": "offline-saved-example",
+  "width": 390,
+  "attempt": 0,
+  "ready": {
+    "stable": true,
+    "observations": [
+      {
+        "height": 2708,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      },
+      {
+        "height": 2710,
+        "reviewPanes": 0,
+        "componentReady": false,
+        "notFound": false
+      }
+    ]
+  },
+  "skippedHidden": 3,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "reviewPane": false,
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 2710,
+      "maxScroll": 1866,
+      "rect": {
+        "width": 390,
+        "height": 2709.953125
+      },
+      "points": [
+        0,
+        622,
+        1244,
+        1866
+      ],
+      "observed": [
+        0,
+        622,
+        1244,
+        1866
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}

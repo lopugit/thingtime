@@ -1,0 +1,108 @@
+{
+  "host": "Current Codex desktop chat",
+  "entry": "mcp__thingtime_drafts__thingtime_render_and_export",
+  "capabilities": {
+    "renderExport": "thingtime_render_and_export",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "content": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 262144
+            },
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          ],
+          "description": "Caller-supplied canonical Thing or thingtime.transfer v1; text/CSS only, all dependencies included"
+        },
+        "root": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "viewports": {
+          "default": [
+            {
+              "width": 1440,
+              "height": 1000
+            },
+            {
+              "width": 390,
+              "height": 844
+            }
+          ],
+          "minItems": 1,
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 320,
+                "maximum": 1920
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 320,
+                "maximum": 1440
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "crop": {
+          "default": {
+            "enabled": true
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            },
+            "blockId": {
+              "type": "string",
+              "pattern": "^[\\w-]{1,128}$"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "content",
+        "viewports",
+        "crop"
+      ],
+      "additionalProperties": false
+    },
+    "artifacts": [
+      "embedded application/json resource",
+      "image/png image and embedded blob resource"
+    ],
+    "persistence": false,
+    "accountAccess": false
+  },
+  "successfulRender": true,
+  "invalidInput": {
+    "content": "{invalid",
+    "isError": true,
+    "artifacts": 0,
+    "observed": true
+  },
+  "scope": "Actual connected desktop tool calls; preceding render-only connection, not unified server acceptance"
+}

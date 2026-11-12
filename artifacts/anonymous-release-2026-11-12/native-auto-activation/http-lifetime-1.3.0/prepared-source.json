@@ -1,0 +1,41 @@
+{
+  "rows": [
+    {
+      "path": "main.cjs",
+      "sha256": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+      "matchesSource": true
+    },
+    {
+      "path": "preload.cjs",
+      "sha256": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+      "matchesSource": true
+    },
+    {
+      "path": "lib/renderer-server.cjs",
+      "sha256": "f4b821b727e186b86a7dfe0daa993687cd07962f480f8bf43a95668cddb09471",
+      "matchesSource": true
+    },
+    {
+      "path": "lib/web-bundle-activation.cjs",
+      "sha256": "2231bdefcad6990ee90cc978e748311583502257a955c31affc5dcabeebfb283",
+      "matchesSource": true
+    },
+    {
+      "path": "scripts/verify-web-bundle-auto-activation.mjs",
+      "sha256": "d66b1826790537146772657a83f9163cb47fb49a4103c2fbf0972fb3c6174aa8",
+      "matchesSource": true
+    },
+    {
+      "path": "dist/web/metadata.json",
+      "sha256": "3ca8f08766f5be7401bcd3d4d7163c5ebc273152ff85aa2eb47bdcd5a78cf6d8",
+      "matchesSource": true
+    },
+    {
+      "path": "dist/web-integrity.json",
+      "sha256": "8bfab7b39b9f4d51560667ab07d642e91d7a03560393a3fef75f96ae9892aa25",
+      "matchesSource": true
+    }
+  ],
+  "exactShellCopy": true,
+  "retainedWebPayload": true
+}

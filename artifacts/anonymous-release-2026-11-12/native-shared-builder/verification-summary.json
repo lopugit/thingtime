@@ -1,0 +1,228 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "name": "native-things-services",
+      "exitCode": 0,
+      "counts": {
+        "tests": 45,
+        "pass": 45,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "native-host",
+      "exitCode": 0,
+      "counts": {
+        "tests": 8,
+        "pass": 8,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "document-store",
+      "exitCode": 0,
+      "counts": {
+        "tests": 168,
+        "pass": 168,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "things",
+      "exitCode": 0,
+      "counts": {
+        "tests": 458,
+        "pass": 455,
+        "fail": 0,
+        "skipped": 3
+      }
+    },
+    {
+      "name": "actions",
+      "exitCode": 0,
+      "counts": {
+        "tests": 184,
+        "pass": 183,
+        "fail": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "name": "webpages",
+      "exitCode": 0,
+      "counts": {
+        "tests": 263,
+        "pass": 258,
+        "fail": 0,
+        "skipped": 5
+      }
+    },
+    {
+      "name": "file-sync",
+      "exitCode": 0,
+      "counts": {
+        "tests": 931,
+        "pass": 931,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "attachments",
+      "exitCode": 0,
+      "counts": {
+        "tests": 423,
+        "pass": 423,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "schemas",
+      "exitCode": 0,
+      "counts": {
+        "tests": 317,
+        "pass": 317,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "subspaces",
+      "exitCode": 0,
+      "counts": {
+        "tests": 75,
+        "pass": 75,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "timeline",
+      "exitCode": 0,
+      "counts": {
+        "tests": 278,
+        "pass": 278,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "storage",
+      "exitCode": 0,
+      "counts": {
+        "tests": 41,
+        "pass": 41,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "root-data",
+      "exitCode": 0,
+      "counts": {
+        "tests": 55,
+        "pass": 55,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "capabilities",
+      "exitCode": 0,
+      "counts": {
+        "tests": 212,
+        "pass": 212,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "typecheck",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "ratchet",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "lint",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "verify",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "mongo-http",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "sqlite-http",
+      "exitCode": 0,
+      "counts": {
+        "tests": 0,
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "counts": {
+    "tests": 3458,
+    "pass": 3449,
+    "fail": 0,
+    "skipped": 9
+  },
+  "scope": "Counts span canonical commands and may overlap; opt-in skips are not acceptance",
+  "integratedMain": "f2538e19257bcfdf35ba050e7b187c94ea2252c0",
+  "nitroSha256": "7942080863847d31b3f70f97a5204cfe0e1548f4b3a249524a58f224827c147b",
+  "sourceInventory": "integration/source-before.json",
+  "nativeLibrary": "native/filesync-verification.json",
+  "iosCompile": "native/ios-compile-verification.json",
+  "plan": "plan/verification.json"
+}

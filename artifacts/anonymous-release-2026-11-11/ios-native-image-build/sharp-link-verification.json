@@ -1,0 +1,10 @@
+{
+  "sharpVersion": "0.35.5",
+  "libvipsVersion": "8.18.7",
+  "addonLinked": false,
+  "sharpExecuted": false,
+  "nitroImported": false,
+  "apiStarted": false,
+  "storageTested": false,
+  "error": "Actual Sharp compile/link exited 1; see compile.log"
+}

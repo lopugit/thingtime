@@ -1,0 +1,5 @@
+
+> @1.0.0 typecheck:ratchet /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node scripts/typecheck-ratchet.mjs
+
+Typecheck ratchet: 0 errors, at baseline.

@@ -1,0 +1,17 @@
+✔ canonical verification mail queues encrypted and redacted, reopens, and decrypts only under the bound home/message key (24.613834ms)
+✔ immutable operation identity deduplicates concurrent handles and rejects changed payload (5.559083ms)
+✔ queued payload is a frozen snapshot across blocked admission and caller mutation (4.896125ms)
+✔ one active lease wins, retry remains pending, stale/foreign receipts cannot settle, and expiry allows recovery (8.009709ms)
+✔ canonical suppression and newsletter unsubscribe survive reopen and are rechecked immediately before payload release (8.976791ms)
+✔ missing/invalid protected key refuses and same-label foreign provider/scoped descendants cannot access queue (5.354583ms)
+✔ queue-waiting cannot extend a lease and scope exit after insertion rolls the transaction back (97.021791ms)
+✔ hosted email queries/outcomes stay compatible and verification links are redacted (354.760916ms)
+✔ explicit protected-key cipher interoperates with unchanged legacy key derivation and fences purpose/home/message (1.035291ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 651.498125

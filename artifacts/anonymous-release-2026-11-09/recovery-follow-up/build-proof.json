@@ -1,0 +1,12 @@
+{
+  "source": {
+    "remix/app/local-workspace/accountSync.ts": "ecf819b59237738ad4d0766e5143d485f466942074115062b0663de7d6d0b54d",
+    "remix/app/local-workspace/accountFiles.ts": "df8b847168900d6db7d2cdc7277da92ea0ce668964c2424dc85b2d25415c1301",
+    "remix/app/local-workspace/things.ts": "3a83e44c71c04a9ad60124d515e3a8df3b0f07c94cc8a4548ed075e65c3a8f49"
+  },
+  "artifacts": {
+    "remix/dist/draft-preview/runner.js": "5314793f93fdf205ae7508c6fdb22efa948f982fb35ffb06077cd9dfcf904376",
+    "remix/.vercel/output/static/index.html": "3bf87da341dd1d1066619181ec715a87b90390eacd31125ec36563a54142e2d6",
+    "remix/.vercel/output/functions/__server.func/index.mjs": "3a19b66d353569558e84fded9e47efdbc7e39cd6ce11d888c32debba92fc4722"
+  }
+}

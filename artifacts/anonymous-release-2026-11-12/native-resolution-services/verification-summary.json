@@ -1,0 +1,295 @@
+{
+  "status": "passed-with-retained-corrected-typecheck-attempt",
+  "sourceBase": "8efe93a53cccb087985d3b545cb6c448a9885693",
+  "integratedMain": "f2538e19257bcfdf35ba050e7b187c94ea2252c0",
+  "passingCommands": 25,
+  "reportedTestTotals": {
+    "pass": 3484,
+    "fail": 0,
+    "skipped": 9
+  },
+  "countsAreExecutionTotalsNotUniqueCases": true,
+  "initialFailedCheck": {
+    "name": "typecheck",
+    "diagnostics": 6,
+    "scope": "test source only; no compiler settings changed"
+  },
+  "sourceUnchangedWithinEachBatch": true,
+  "runtimeSourceUnchangedBetweenBatches": true,
+  "betweenBatchTestOnlyChanges": [
+    "electron/scripts/test-bundled-local-runtime.cjs",
+    "electron/scripts/test-bundled-sqlite-account.cjs",
+    "electron/test/bundled-sqlite-account-fixture.test.cjs",
+    "remix/app/api/utils/serviceWorkspaces/nativeAccess.test.ts",
+    "remix/app/api/utils/things/contentExecutionGate.native.test.ts",
+    "remix/app/api/utils/things/nativeExternalAudienceReads.test.ts"
+  ],
+  "checks": [
+    {
+      "name": "native-things-services",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 55,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "workspace-hosted-and-client",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 13,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "native-host",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "document-store",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 168,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "things",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 455,
+        "fail": 0,
+        "skipped": 3
+      }
+    },
+    {
+      "name": "actions",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 183,
+        "fail": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "name": "webpages",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 258,
+        "fail": 0,
+        "skipped": 5
+      }
+    },
+    {
+      "name": "file-sync",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 931,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "attachments",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 423,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "schemas",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 317,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "subspaces",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 75,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "timeline",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 278,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "storage",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 41,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "root-data",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 55,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "capabilities",
+      "folder": "verification",
+      "exitCode": 0,
+      "counts": {
+        "pass": 212,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "native-changed-tests",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "workspace-roles-after-test-fix",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "fixture-manifest-unit",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 4,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "typecheck",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "ratchet",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "lint",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "build",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "verify",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "mongo-http",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "sqlite-http",
+      "folder": "verification-final",
+      "exitCode": 0,
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "outputHashes": {
+    "electron/dist/web/.output/server/index.mjs": "6add91618637e6b62040e8e849359eaf7f684e09e3bef07ea20f610454600f5d",
+    "electron/dist/web-integrity.json": "5e2b16601a56abe041523a1926275d62de06398f141d2c3c257815c6ae82c1e0",
+    "electron/dist/web/metadata.json": "228e9e00e4fc8873196fbf10bb31bc3ce935e4a3ce6924dbf06161d05e4f69e1"
+  },
+  "notEstablished": [
+    "full native Things/workspace/resolve HTTP",
+    "actual offline Builder UI",
+    "iOS runtime/Keychain/physical device",
+    "connected agent-host artifacts",
+    "production deployment"
+  ],
+  "lint": {
+    "errors": 0,
+    "warnings": 376
+  }
+}

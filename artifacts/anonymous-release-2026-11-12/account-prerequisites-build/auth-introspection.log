@@ -1,0 +1,25 @@
+
+> @1.0.0 test:auth-introspection /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/getCurrentUser.introspection.test.mts
+
+(node:50531) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:50531) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ a live browser session is active, with iat/exp read from the session record (0.881958ms)
+✔ an unverifiable token is inactive and never reaches the session or user reads (0.092625ms)
+✔ a revoked or expired session is inactive — getLiveSession is the kill switch (0.083917ms)
+✔ a session owned by another user is inactive — a live jti alone never proves the subject (0.081542ms)
+✔ a deleted owner is inactive even while the session record survives (0.111083ms)
+✔ a service account past its email-verification deadline is inactive (0.112917ms)
+✔ a legacy session with no purpose reports browser, matching sessionPurposeCanActAsAccount (0.111ms)
+✔ a non-expiring session reports exp: null rather than dropping the field (0.100542ms)
+✔ app-scoped tokens report active even though resolveSessionUser rejects them (0.088167ms)
+✔ sandbox tokens stay active without an owner document and skip the user read (0.113167ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144.819

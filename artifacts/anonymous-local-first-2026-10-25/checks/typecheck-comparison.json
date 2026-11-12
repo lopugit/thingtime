@@ -1,0 +1,7 @@
+{
+  "baseline": 91,
+  "current": 91,
+  "added": [],
+  "removed": [],
+  "normalization": "Ignore only source line and column offsets; retain diagnostic file/code/message."
+}

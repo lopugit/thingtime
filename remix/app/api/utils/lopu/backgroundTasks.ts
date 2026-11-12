@@ -401,10 +401,10 @@ const executeBackgroundTaskWithLease = async (request: Request, execute: (reques
 			});
 			return saving;
 		};
-		let checking = false;
-		const heartbeat = setInterval(async () => {
+		let checking: Promise<void> | null = null;
+		const heartbeat = setInterval(() => {
 			if (checking) return;
-			checking = true;
+			checking = withGatewayWork(async () => {
 			try {
 				const current = await things.findOne(filter, { projection: { cancelRequested: 1 } });
 				const root = row.rootTaskId ? await things.findOne({ shareId: row.rootTaskId, ownerId: user.id, thingtime: AI_TASK_KIND }, { projection: { cancelRequested: 1 } }) : current;
@@ -417,9 +417,8 @@ const executeBackgroundTaskWithLease = async (request: Request, execute: (reques
     }
 			} catch {
 				abort.abort();
-			} finally {
-				checking = false;
 			}
+			}).catch(() => { abort.abort(); }).finally(() => { checking = null; });
 		}, 1500);
 		try {
    // Admission can be delayed after its root reservation. Check persisted
@@ -503,6 +502,7 @@ const executeBackgroundTaskWithLease = async (request: Request, execute: (reques
 		} finally {
 			clearInterval(heartbeat);
 			abort.abort();
+			await checking;
 			await save();
    if (row.crystal.management === 'server' && finalSaveAcknowledged) {
     const rootId = row.rootTaskId || row.shareId;

@@ -1,5 +1,158 @@
 # Local development and worktrees
 
+## Current managed-local update acceptance
+
+The `managed-local-dialog` receipt on the36e46bb6 payload proves actual
+safeStorage/bundled Mongo, normal browser login, signed staging,70-second dirty
+refusal, canonical persistence/reload,45-second real HTTP-work protection and
+automatic fresh app/Mongo processes with the same account sessions, exact private
+Thing/revision/edit and encrypted profile. The pending release clears after
+confirmation; desktop/mobile drawer checks and cleanup pass. The idle leg is the
+library, not Home-specific idle or native AutoFill recovery. Source, focused UI,
+build/API, installed development acceptance and production trust remain distinct.
+[Actual receipt](../../artifacts/anonymous-release-2026-11-12/native-auto-activation/managed-local-dialog/verification.json).
+
+## Native web bundle releases
+
+`native-bundles/{release,inventory,host}.cjs` owns signed executable inventories and
+runtime compatibility; `package-release.mjs` packages verified immutable releases
+from the actual Electron web build. `electron/lib/web-bundle-store.cjs` retains
+confirmed versions separately from launch trials. Run
+`node --test native-bundles/*.test.cjs electron/test/web-bundle-store.test.cjs electron/test/native-bundle-build.test.cjs`.
+The real `build:web`/`verify:web` paths prove build metadata and complete inventory;
+unit tests alone do not prove installed updates. See [native web bundles](../native-web-bundles.md)
+for the remaining API and iOS work. `electron/lib/web-bundle-launch.cjs`,
+`main.cjs` and `desktopRendererReady.ts` gate trial promotion on real server and
+renderer startup. `verify-web-bundle-startup.mjs` exercises the installed isolated
+development app, including early-import failure and fresh-process rollback;
+its React-boundary fixture uses a separate Chromium process. Run launch/host,
+renderer-readiness and desktop-shutdown tests with the store checks.
+`archive.mjs` streams the shared stored ZIP/ZIP64 format; the registered catalogue
+and exact-range content routes are mapped in [API capabilities](api-endpoints-and-capabilities.md#native-web-release-catalogue-and-content).
+`web-bundle-download.cjs` negotiates them, resumes exact 2 MiB windows and checks
+signed file hashes; `web-bundle-updates.cjs` stages after healthy startup for the
+next normal process start, without live-editor reload. Cover both modules' tests
+with cancellation/retry/cleanup and keep real selected-origin downloads distinct
+from synthetic transport fixtures. Empty shipped trust disables production
+background download until supported provisioning.
+
+`iOS/scripts/native-runtime-probe/` and `iOS/scripts/native-image-probe/`
+preserve isolated actual Node 24/bcrypt and Sharp/libvips experiments. Genuine
+image operations, canonical Nitro and its manifest through native Fetch now pass
+on the recorded prior bundle. The probe preserves the runtime's required
+`UNDICI_NO_WASM_SIMD=1` default. See the [current image probe](../../iOS/scripts/native-image-probe/README.md).
+The separate `iOS/scripts/native-sqlite-probe/` runs frozen real document/collection
+modules in the imported Node runtime. It proves transactions, BSON fidelity and
+committed WAL recovery after an ownership-verified SIGKILL in a disposable
+simulator. Exact receipts and cleanup are retained; canonical API selection,
+full app integration, physical devices and runtime reproducibility remain open.
+[SQLite probe](../../iOS/scripts/native-sqlite-probe/README.md).
+
+`electron/scripts/verify-web-bundle-auto-activation.mjs` uses a separate
+remote-mode development workspace and synthetic signed catalogue/content fixture.
+It verifies real download/staging after baseline startup before dirty/background
+checks. Actual native control, dirty refusal and submitted/persisted/hard-reload value
+now pass on a recorded checkpoint. Automatic replacement timed out; a closed
+editor projection fix is observed in the next actual renderer, whose text-entry
+readiness assertion then stopped the run. Automatic replacement remains open. See [partial acceptance](../../artifacts/anonymous-release-2026-11-11/native-auto-activation/README.md).
+
+## Embedded document storage foundation
+
+Keep both local providers. macOS packaging embeds pinned MongoDB through
+`electron/scripts/build-mongodb.mjs` and `lib/bundled-mongodb.cjs`, including
+source/license/notices. `lib/local-runtime.cjs` owns its authenticated replica,
+profile data and lifecycle. `scripts/test-bundled-local-runtime.cjs` uses the
+actual `startRendererServer` owner around compiled `node_middleware`; running
+that middleware file alone does not start an HTTP listener. The disposable
+offline check covers normal API registration, private CRUD, two-account ACLs,
+session/content retention after API+database restart and stale-revision refusal.
+Build the desktop web/database artifacts first. This does not substitute for
+signed app acceptance. [Evidence](../../artifacts/anonymous-release-2026-11-12/mongo-provider/README.md).
+
+`remix/app/api/utils/documentStore/{contract,sqliteStore}.ts` provides a
+transaction-scoped file store for exact BSON bytes, with ordered paged scans,
+rollback and serialized async callbacks. The caller supplies an absolute path;
+no account authority, API capabilities or Mongo-compatible behavior is inferred.
+`test:document-store` runs actual SQLite file and fresh-process recovery checks
+and is included in `test:unit`. The runtime needs Node 24 with `node:sqlite`.
+`collectionContract.ts` and `collectionProvider.ts` add an explicit typed native
+collection vocabulary over that transaction boundary: conditional mutation,
+ordered paging and durable sparse/multikey single-field uniqueness. The existing
+test command also runs `collectionProvider.test.ts`, including cross-collection
+rollback, competing revision claims and hostile/unsupported input admission.
+This scan-based adapter is not Mongo syntax/parity or an activated API provider.
+Canonical query translation, complete ledger/history and ACL route acceptance,
+efficient indexes and native profile bootstrap are still required.
+Do not select this store in production merely because these foundation tests pass.
+
+`documentStore/nativeUserStorage.ts` consumes canonical `applyUserStorageDelta`
+through an opaque owner/home-plane transaction capability. The persisted ordinary
+account and trusted ready ledger are validated before entering the callback.
+`storage/userStorageAdmission.ts` shares existing allowance/ready/quota policy
+with Mongo. `nativeUserStorage.test.ts`, included in `test:document-store`, covers
+real-file accounting, competing claims, rollback and escaped-session refusals.
+Synthetic history rows do not prove the canonical Timeline adapter. Character,
+pending/reconciliation/deletion recovery and API identity/session bootstrap
+remain disabled gaps. [Evidence](../../artifacts/anonymous-release-2026-11-12/sqlite-accounting/README.md).
+
+The native 1.3 activation host negotiates the process-local Nitro runtime-work
+contract and combines its reservation with the HTTP and ChatGPT admissions.
+The existing `getInfo` bridge adds an allowlisted activation projection used by
+the actual gate; the isolated verifier negotiates its origin/version. Development
+pending-release heartbeats distinguish main-process observation from renderer
+IPC failure. Keep diagnostic callbacks read-only and test throwing discovery.
+Optional closed-enum checkpoint/cancellation reasons preserve the exact current
+window/nonce checks and old two-field clients. Run the renderer/safety unit tests
+and `node --test remix/app/utils/desktopBundleActivation.browser.test.mjs`;
+the latter uses real Chromium MutationObserver with synthetic host controls.
+The close coordinator retains operation/nonce ownership after cancellation until
+the dispatched close actually ends. Its focused tests cover delayed veto/closed
+events and exactly-once release/relaunch. Closed-enum development lifecycle
+observations distinguish close, disconnect, send completion and service cleanup;
+they never authorize shutdown or claim a replacement process exists.
+`CustomDrawerItems` omits its known closed editor from the rendered projection;
+open drafts and Builder layouts retain every saved block. The global unknown-draft
+guard still protects hidden unsaved editors. Run `test:nav` for the projection.
+Stream cancellation and request timeout tests must retain actual producer,
+cleanup and write lifetimes. Run the native activation/launch/runtime checks,
+`test:environment-gateway`, and the changed provider, backup, moderation,
+notification, inventory, catalogue and overview regressions. Actual automatic
+replacement remains an independent installed-app acceptance requirement.
+
+`auth/{sessions,sessionRepository,sessionCore}.ts` now separates canonical
+session persistence from driver syntax. Mongo remains the default; the internal
+`documentStore/nativeSessions.ts` adapter requires an exact, active home scope.
+Real SQLite tests exercise the existing creation/live-read/revocation helpers,
+unique identities, restart retention and detached-scope refusal. The BSON encoder
+rejects hostile metadata before serialization. `test:document-store` includes
+these checks. Native registration, wider transactions, TTL cleanup and API
+selection remain incomplete; this module does not activate a database provider.
+[Session evidence](../../artifacts/anonymous-release-2026-11-12/sqlite-sessions/README.md).
+
+### First-launch local home and isolated helper acceptance
+
+`local-workspace/localHomeBootstrap{,.client}.ts` and the ordinary `RootRecovery`
+provide explicit device-home initialization only after compatible exact-origin
+native negotiation. `ThingtimeLocalWorkspaceFence.swift` and `WebView.swift`
+retire document identity on every navigation and recheck live document state against the immutable bundled runtime origin
+after async cookie proof. Existing/pending workspaces and account authority refuse
+initialization. Run `test:local-workspace` and the native fence fixture; actual iOS
+New/Rename/reload remains required beyond controlled browser evidence.
+
+`electron/scripts/password-helper-identity.mjs` and `build-native-passwords.mjs`
+validate isolated signed helper identities/resources before/after dev-snapshot
+copy. `verify-isolated-password-helper.mjs` uses the separate compile-guarded
+native fixture and canonical atomic `PasswordSessionStore.saveIfAbsent` to verify
+exact synthetic authority without overwriting unrelated state. Run the focused
+password-helper tests and shared Swift package, then the real helper proof.
+`verify-web-bundle-auto-activation.mjs` accepts the explicit
+`--password-helper-app=`, `--password-helper-host=`, `--password-helper-team=`
+and `--password-helper-signing-identity=` options together. Its opt-in QA workspace
+follows actual signed download, dirty refusal, normal persistence, automatic
+replacement and readback. No production credential or release trust is supplied
+by these fixtures. Retain the verified
+development build separately from disposable QA profiles/processes.
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,
@@ -71,6 +224,8 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | What | Command |
 | --- | --- |
 | Unit suites (node --test via tsx) | `npm --prefix remix run test:<suite>` — `test:attachments`, `test:things`, `test:feed`, `test:api-capabilities`, `test:acl`, … (`test:unit` runs them all) |
+| Local workspace regressions | `corepack pnpm --dir remix run test:local-workspace` discovers TypeScript and MJS tests, then checks the offline shell. Browser tests remain explicit opt-ins; `accountThemeHistoryCustom.browser.test.mjs` uses its own isolated loopback origin, artifact directory and task session settings. |
+| Unified Thingtime MCP | `npm --prefix MCP test` includes the artifact extractor and isolated transport regressions. `MCP/test/render-export.integration.test.ts` additionally needs explicit pinned-image/socket settings and `TT_DRAFT_BROWSER_TEST=1`; it verifies actual native crop-enabled/disabled resources. See `MCP/README.md` for host configuration and the desktop acceptance boundary. |
 | Headless API suite against a live stack | `npm --prefix remix run test:api -- --base http://127.0.0.1:<nitro>` |
 | Editable app composition fixture | `remix/scripts/test-builder-app-local.ts`, with explicit `TT_BUILDER_QA_ORIGIN` and private `TT_BUILDER_QA_SESSION`; loopback-only, real API, stable synthetic IDs. See README "Builder component SDK". |
 | Lint changed files | `corepack pnpm --dir remix run lint:files -- <files>` |
@@ -159,6 +314,60 @@ Keep dedicated test credentials in place. Backend/browser network isolation is
 optional and is not required for AI-agent work.
 
 
+The no-login draft host uses `draftPreviewCsp` in Vite, Nitro `routeRules` and
+Vercel output headers. Keep all three serving paths aligned; HTML meta CSP
+cannot provide the opaque-origin sandbox. `MCP/test/render-export.integration.test.ts`
+checks the real response and storage denial; `TT_DRAFT_TEST_SESSION` permits the
+explicit isolated runtime origin after health/session verification. See
+[no-login draft preview](../no-login-draft-preview.md).
+
+## Isolated Linux browser acceptance
+
+`remix/scripts/isolated-linux-browser.mjs` runs the packaged `node-server` build
+through the existing agent-browser `application.cjs` adapter on Linux. It uses
+Bubblewrap user/network/PID/mount namespaces, a fresh Mongo replica and generated
+signing material. `copyApplication` snapshots the packaged server/client before
+launch; `artifacts/build.json` records its aggregate content hash. Subsequent
+worktree builds cannot change the running fixture. The only network is task-local
+loopback. Explicit source and
+runtime mounts omit host profiles, project config and credentials; nested dotenv
+files are masked. `run` verifies the owning process/namespace and admits only
+listed fixture URLs, artifact paths and generated session IDs. Browser tests keep
+Chromium's sandbox enabled. `inside-check` proves browser/backend direct-IP,
+hostname and redirect refusal plus missing host state; `stop` removes private
+browser/database state and records cleanup while retaining artifacts.
+The exact read-only `memory.current` and `memory.events` diagnostics cover the
+managed workspace cgroup, including concurrent jobs; they are not per-fixture
+memory or OOM counters.
+
+Optional `start ... --admin-fixture` first registers an ordinary generated account
+through the real API, then restarts only its owned server with that exact username
+allowlisted. It enables the existing private local attachment store and verifies
+the same account's administrator login. Its mode-0600 credential file lives under
+the disposable private home, never artifacts; only the exact
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE` path is admitted by `run`. Guest and ordinary
+accounts still cannot grant upload access. `--vault-fixture` separately generates
+a new 32-byte server vault key for encrypted settings tests. No inherited admin,
+storage or vault configuration is accepted. Cleanup removes the private files,
+local objects and database together.
+
+`application.cjs::verifyApplicationAssets` requires JavaScript responses for
+the draft-preview, platform, library and embed bundles as well as the matching
+SPA entry. A partial main-only Vite build that returns HTML 200 for a missing
+bundle fails preflight. `agent-browser-application.test.cjs` covers that refusal.
+
+Build client, offline shell, Nitro template and `NITRO_PRESET=node-server` server
+first, without loading real configuration. Pass an independently verified local
+`mongod` executable to `start`; no production database is accepted. See TESTING's
+**Linux isolated anonymous/offline acceptance** for commands and prerequisites.
+This proves the native web renderer in an isolated Linux browser. Installed Mac
+app controls, native runtime claims and deployed previews need separate evidence.
+
+The offline service worker serves a previous complete shell when a replacement
+worker activates before its new cache is ready. Both document and asset reads
+check the cache completion marker. Run `node --test remix/scripts/offline-shell.test.mjs`
+and verify the worker controller, cached document and shell assets before taking
+the transport offline in browser acceptance.
 ## Commander native background indexing
 
 `Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
@@ -208,3 +417,38 @@ Swift sources, authorization, rates and native active-slot policy are unchanged.
 attachment UI against a separate synthetic storage origin. It rejects missing
 GET CORS, then verifies an exact-origin response downloads decrypted bytes at
 desktop and mobile widths. See TESTING.md for invocation and production checks.
+
+### Native bundle activation verification
+
+`electron/lib/web-bundle-activation.cjs` owns close/relaunch reservations;
+`renderer-server.cjs` fences live HTTP/stream/websocket work and the Nitro
+ChatGPT runtime plugin exposes an in-process queue/OAuth reservation. Renderer
+persistence participants live in `desktopBundleSafety.ts`. Full local API mode
+remains pending until detached background work participates. Run the Electron
+unit suite, renderer safety/persistence and ChatGPT runtime tests, then the
+separate development startup verifier. Positive remote-mode automatic activation
+still needs its own real downloader/dirty-edit/relaunch acceptance fixture; see
+`docs/native-web-bundles.md`.
+
+### Isolated iOS local-runtime app
+
+`iOS/scripts/local-development/` derives a separate simulator-only target from
+`iOS/project.yml` and guards startup with `THINGTIME_LOCAL_DEVELOPMENT`. It reuses
+the actual SwiftUI/WebView app, validated canonical Nitro payload and pinned native
+runtime/addons. Its README documents preparation, strict inventories, environment
+boundaries and cleanup. Current evidence proves native HTTP startup, not rendered
+WebView acceptance or complete SQLite account APIs; see
+`artifacts/anonymous-release-2026-11-12/ios-local-development-app/README.md`.
+
+
+### Frozen native reuse and foreground acceptance
+
+The development iOS runner can reuse a verified built app only with exact signed
+and installed inventory equality. A separately pinned full native-source inventory
+covers staged native inputs absent from the short runner-tool list; changed source
+or digest refuses reuse. Harness-only exceptions remain explicit. Verify actual
+Simulator foreground/active scene before claiming WK/create/edit/reload acceptance;
+`simctl launch` and a healthy native URLSession alone do not establish that state.
+The run08 foreground-controlled device-home flow passes creation, rename and
+native reload with the same ID/value, while account APIs still refuse with503.
+This is existing local-workspace UI persistence, not SQLite HTTP activation.

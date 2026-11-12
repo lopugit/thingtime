@@ -1,0 +1,28 @@
+{
+  "featureParent": "385eee2a4f3218d385467eb41d628e6a4c2f606d",
+  "developParent": "cd6f8b8abc94270980bac216da2412ffef8578b1",
+  "build": {
+    "command": "sanitized build:client, sync:nitro-template, NITRO_PRESET=node-server build:server",
+    "exitCode": 0,
+    "warnings": [
+      "WASM parser fallback warnings for existing resvg/magick modules; built acceptance is separate"
+    ]
+  },
+  "sha256": {
+    "remix/dist/draft-preview/runner.js": "d56b0a8f26925ff24f7f6df4253a50dbdffc22a471b5eae363ee9ab897275467",
+    "remix/.output/server/index.mjs": "9286ebf7fdf44e4df804ba34e16fb9bb233ad6c4f23a644b96dac47f6ac8984b"
+  },
+  "finalServerBuild": {
+    "command": "sanitized NITRO_PRESET=node-server build:server",
+    "exitCode": 0,
+    "serverSha256": "74e94ee6ce7c4ce8fc620be361c0bbcac447a7743a93110db44b5862f7c5d150",
+    "rendererSha256": "d56b0a8f26925ff24f7f6df4253a50dbdffc22a471b5eae363ee9ab897275467"
+  },
+  "changedSourceLint": {
+    "exitCode": 0,
+    "files": [
+      "remix/app/api/utils/notifications/notifications.ts",
+      "remix/app/api/utils/deployment/environmentGateway.ts"
+    ]
+  }
+}

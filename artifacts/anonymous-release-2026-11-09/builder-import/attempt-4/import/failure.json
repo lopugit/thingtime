@@ -1,0 +1,164 @@
+{
+  "stage": "no public readback",
+  "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ [Function: status]\n- 404\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\nI don't compare\nmyself to others\nbecause I am\nnot meant to be\na copy of anyone else.\n\nI was born to be me,\nan original,\none-of-a-kind.\n\nI am happy to be me.\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 4ms\n\nMongoDB: connected (1ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister",
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/root-data"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/marketing/publications"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/nitro"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/frontend"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/health/mongodb"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/account-hints"
+    }
+  ],
+  "errors": [],
+  "widths": [
+    {
+      "width": 1440,
+      "dialog": {
+        "width": 512,
+        "client": 512,
+        "scroll": 512
+      },
+      "rendered": {
+        "left": 0,
+        "right": 400,
+        "height": 560,
+        "docWidth": 1440,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    },
+    {
+      "width": 390,
+      "dialog": {
+        "width": 342,
+        "client": 342,
+        "scroll": 342
+      },
+      "rendered": {
+        "left": 0,
+        "right": 390,
+        "height": 546,
+        "docWidth": 390,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    },
+    {
+      "width": 320,
+      "dialog": {
+        "width": 272,
+        "client": 272,
+        "scroll": 272
+      },
+      "rendered": {
+        "left": 0,
+        "right": 320,
+        "height": 448,
+        "docWidth": 320,
+        "foreground": "rgb(164, 95, 77)",
+        "whiteSpace": "pre-wrap"
+      }
+    }
+  ],
+  "peerEvidence": {},
+  "offlineReloadFailure": "page.goto: net::ERR_FAILED at http://127.0.0.1:18724/things\nCall log:\n  - navigating to \"http://127.0.0.1:18724/things\", waiting until \"load\"\n"
+}

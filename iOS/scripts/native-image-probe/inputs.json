@@ -1,0 +1,106 @@
+{
+  "recipeCommit": "987c467028a20f4813523f6c821a037adc1f8ae0",
+  "recipeFiles": {
+    "env.sh": "f2284a978acc180a7d780f69e2e7bffa7b83c4eaf70a8ab8082f880414b59727",
+    "utils.sh": "b805bbaf05600c64b3e7a5e3bc9ec663207fab668134d21a82e03eb4bffe3aa3",
+    "cross-files/ios-sim-arm64.ini": "db097d09e56b650f22d9a599a30526d7ea2ad8669fb278f542648af451246fbd",
+    "toolchains/ios.toolchain.cmake": "c5a43005b8d84f11dada30c41378eb0c88ec869f0e21d2316b02283700b14bb2",
+    "build-expat.sh": "81a6a9fd4df49f90a9b00d56c80f17eb865fa6419d5ae0207e91bbca34c634c2",
+    "build-libffi.sh": "3597a25eda5f209dbab74928635dd7efefe32d47155cb0b5714d399021bfbcd6",
+    "build-pcre2.sh": "96ed8fc794a6a39bc1cc7fa2adcb2620a8e1eaa80c0e608c08907b525c26c578",
+    "build-libjpeg-turbo.sh": "a8b2db785bf585115385eede7cbec4ef71bfd571082c13da1eea4499bf7c9964",
+    "build-libpng.sh": "a25fff0b1a8d6aa41771e7601f0f803bbb79ddb46ad8a657bf960a3205dd6a8c",
+    "build-libwebp.sh": "ab56b3d407a64fba1dcda7fb92bd8f71abc3ad6134206a1b31e43375f9121ac4",
+    "build-glib.sh": "1bcfb7dba36471b003327fa1102a44e8bc5497cd43dc211e865ddf07a367aaf1",
+    "build-libexif.sh": "db2deeec7a9d36dfdba85ae6a30a233058e14657397f22e76f2acfb1bbde3f92",
+    "build-lcms2.sh": "822b56f76fd70de0364d83fcc6bb0f67bc35a2c3a8a3980f0ccbd46495cd01bc",
+    "build-libvips.sh": "d7b7d0fcdbe598768885b4fcf245a4a65ec2d4c3c62928352bb88a244134378e"
+  },
+  "sources": [
+    {
+      "name": "expat",
+      "version": "2.7.4",
+      "url": "https://github.com/libexpat/libexpat/releases/download/R_2_7_4/expat-2.7.4.tar.gz",
+      "sha256": "461ecc8aa98ab1a68c2db788175665d1a4db640dc05bf0e289b6ea17122144ec"
+    },
+    {
+      "name": "libffi",
+      "version": "3.5.2",
+      "url": "https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz",
+      "sha256": "f3a3082a23b37c293a4fcd1053147b371f2ff91fa7ea1b2a52e335676bac82dc"
+    },
+    {
+      "name": "pcre2",
+      "version": "10.47",
+      "url": "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.gz",
+      "sha256": "c08ae2388ef333e8403e670ad70c0a11f1eed021fd88308d7e02f596fcd9dc16"
+    },
+    {
+      "name": "libjpeg-turbo",
+      "version": "3.1.3",
+      "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.3/libjpeg-turbo-3.1.3.tar.gz",
+      "sha256": "075920b826834ac4ddf97661cc73491047855859affd671d52079c6867c1c6c0"
+    },
+    {
+      "name": "libpng",
+      "version": "1.6.54",
+      "url": "https://downloads.sourceforge.net/project/libpng/libpng16/1.6.54/libpng-1.6.54.tar.gz",
+      "sha256": "472db714567391842e410090df5a37e0f5b2ec67148a3007678b0482d2ba5219"
+    },
+    {
+      "name": "libwebp",
+      "version": "1.6.0",
+      "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+      "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564"
+    },
+    {
+      "name": "glib",
+      "version": "2.87.2",
+      "url": "https://download.gnome.org/sources/glib/2.87/glib-2.87.2.tar.xz",
+      "sha256": "d6eb74a4f4ffc0b56df79ae3a939463b1d92c623f6c167d51aab24e303a851f3"
+    },
+    {
+      "name": "libexif",
+      "version": "0.6.25",
+      "url": "https://github.com/libexif/libexif/releases/download/v0.6.25/libexif-0.6.25.tar.bz2",
+      "sha256": "7c9eba99aed3e6594d8c3e85861f1c6aaf450c218621528bc989d3b3e7a26307"
+    },
+    {
+      "name": "lcms2",
+      "version": "2.18",
+      "url": "https://github.com/mm2/Little-CMS/releases/download/lcms2.18/lcms2-2.18.tar.gz",
+      "sha256": "ee67be3566f459362c1ee094fde2c159d33fa0390aa4ed5f5af676f9e5004347"
+    },
+    {
+      "name": "libvips",
+      "version": "8.18.7",
+      "url": "https://github.com/libvips/libvips/releases/download/v8.18.7/vips-8.18.7.tar.xz",
+      "sha256": "5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94"
+    }
+  ],
+  "tools": [
+    "meson==1.10.2",
+    "ninja==1.13.0",
+    "cmake==3.31.10"
+  ],
+  "sharpSources": {
+    "common.cc": "c3c56a37bb780dfd97ee53d3556d9ba3d674b1b9cf7d57caf94248f982207a75",
+    "common.h": "70a4f13f5e56a956edd8340066240865e39d3039157bd511930de2bf5aa17ba9",
+    "metadata.cc": "a127c134c9e537db9c63962ff1aa1d0762a8d517d746a844e6b43b299e11a581",
+    "metadata.h": "5e02c25ec821a525b0caf31161b1e8675ff32cfd098c17cda0b888440362b057",
+    "operations.cc": "a61e6545cde7d2f2ae508b4eceeeec9db9ef711211d5cba1ed470f9325f914fb",
+    "operations.h": "6f41d329634471dff8e093d12e38ff356293079e2aeecc5b922fc23ba99799e6",
+    "pipeline.cc": "445ed9aa726806dc01188cf13a2866ee47ccd38504cddd049e4e639703edc0e9",
+    "pipeline.h": "e09c3dbd873071a373e6d95679b470a6fe1be5fc2ef781b00fd87958b5ab5e98",
+    "sharp.cc": "9f407b50bb2d02e5eb711b769f05d3e6659028430e055c4271e5ab1593f5a257",
+    "stats.cc": "72f8f2ad0e4315951c88b115511eb96741fd0479385ed094141f7bd254739791",
+    "stats.h": "db854f0c3c4a0db1751021ed676413c6d5ca00becc08bdc13258b29047450b8c",
+    "utilities.cc": "91c164bb740529156e15dedbfcb4236dd2b5fbf94c7a3a4f1639929d034f700e",
+    "utilities.h": "0b126ab63cf1aedf8e71e6cb8179899d3ef02c46419100e847b2ca4284b8901b"
+  },
+  "addonApiHeaders": {
+    "napi.h": "5e0eff20229ba021fa7c5ff6f62dfecc36f8c29f2da365b25cde3d6489d8b924",
+    "napi-inl.h": "83f7520e9028cee918ca876def8cd982ee67906f2b587c60a9d8d79183b881eb",
+    "napi-inl.deprecated.h": "b66ed1e565e735bbfabcc2f72d466ab7c5414d3ef8851d1af440b81be7f2375c"
+  }
+}

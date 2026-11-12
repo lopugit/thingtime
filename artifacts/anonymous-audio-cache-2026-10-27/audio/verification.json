@@ -1,0 +1,212 @@
+{
+  "postId": "f4c04088-beb5-47ce-a081-ef4f413a6c8c",
+  "attachments": [
+    "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+    "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c"
+  ],
+  "selectedTrackRaceFenced": true,
+  "ownerToAnonymousRaceFenced": true,
+  "pendingRootSourceRemoved": true,
+  "equivalentRefreshPreserved": true,
+  "exactOriginalSha256": "2306db4a36f05df914c236ab92c40fff4d4124b810c708cec18965774c420137",
+  "anonymousPublicSave": true,
+  "offlineReloadPlayback": true,
+  "decoded": {
+    "duration": 1,
+    "readyState": 4,
+    "paused": false
+  },
+  "offlineDecoded": {
+    "duration": 1,
+    "readyState": 4,
+    "paused": false
+  },
+  "removal": true,
+  "boundaries": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440,
+      "left": 430,
+      "right": 1010,
+      "audioWidth": 580
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "left": 46,
+      "right": 344,
+      "audioWidth": 298
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "left": 46,
+      "right": 274,
+      "audioWidth": 228
+    }
+  ],
+  "requests": [
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "validate",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "validate",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "original-bytes",
+      "expectedActor": "6adfc35f199f09d30b53d204",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "original-bytes",
+      "plane": "home",
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "plane": "home",
+      "serviceWorker": null
+    }
+  ],
+  "audioResponses": [
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "original-bytes",
+      "status": 200
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": "original-bytes",
+      "interceptedStatus": 200,
+      "serviceWorker": null
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": null,
+      "status": 206
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "original-bytes",
+      "status": 200
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": "validate",
+      "status": 200
+    },
+    {
+      "id": "att_6de670b458a18bdab8e2f8a63e3d9352ef975dc9b09f92a705724e57794c5a1d",
+      "mode": null,
+      "status": 503
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": null,
+      "status": 503
+    },
+    {
+      "id": "att_aae78983ea7e79a2d78dcdf5139cf91bfc4fbb66fb90da0d066f17b5f00f636c",
+      "mode": null,
+      "status": 206
+    }
+  ],
+  "errors": []
+}

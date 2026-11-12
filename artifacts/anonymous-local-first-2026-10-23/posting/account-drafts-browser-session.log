@@ -1,0 +1,28 @@
+✖ native account drafts survive offline reload and draft sync failures never block posting (2930.458559ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3459.129359
+
+✖ failing tests:
+
+test at app/local-workspace/accountDraftSync.browser.test.ts:2:1271
+✖ native account drafts survive offline reload and draft sync failures never block posting (2930.458559ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":"Too many sign-up attempts — take a breather 🌸"}
+  
+  429 !== 200
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountDraftSync.browser.test.ts:62:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 429,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

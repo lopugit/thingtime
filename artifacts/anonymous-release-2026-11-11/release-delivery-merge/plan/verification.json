@@ -1,0 +1,187 @@
+{
+  "observedAt": "2026-11-11T09:06:52.318Z",
+  "source": "docs/progress/anonymous-local-first.html",
+  "sourceSha256": "689f4c19f441a7eaf338bcfcbf05b5dda0f4b1f54547ff96c62ac18f87d0bb57",
+  "scope": "Read-only progress-plan HTML layout, derived counts, filters, search and in-page navigation",
+  "chromiumSandbox": true,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 32831,
+      "bottomReached": true,
+      "positionsChecked": 42,
+      "maxWidth": 1440,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 390,
+      "height": 68265,
+      "bottomReached": true,
+      "positionsChecked": 102,
+      "maxWidth": 390,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    },
+    {
+      "width": 320,
+      "height": 85389,
+      "bottomReached": true,
+      "positionsChecked": 127,
+      "maxWidth": 320,
+      "filters": [
+        {
+          "value": "all",
+          "count": 94
+        },
+        {
+          "value": "todo",
+          "count": 29
+        },
+        {
+          "value": "done",
+          "count": 65
+        },
+        {
+          "value": "local",
+          "count": 25
+        },
+        {
+          "value": "p0",
+          "count": 83
+        }
+      ],
+      "searchMatched": 1,
+      "emptySearch": true,
+      "navigationTargets": 14
+    }
+  ],
+  "requests": [
+    "http://127.0.0.1:63790/plan.html"
+  ],
+  "blockedRequests": [],
+  "errors": [],
+  "artifacts": [
+    {
+      "name": "plan-1440-top.png",
+      "bytes": 256915,
+      "sha256": "1fff8916ed4fd1483ab76e0e97780add847f1d4aefc25a318b9c4d1bb204ff15"
+    },
+    {
+      "name": "plan-1440-bottom.png",
+      "bytes": 225154,
+      "sha256": "7ec05865b81440812d17607a412eb7c41103cfabc9d5f47e3c3e348c4e833374"
+    },
+    {
+      "name": "plan-1440-counts.png",
+      "bytes": 256884,
+      "sha256": "29c47873123c5de0b88b10b81780f101ecaf1e16aa45f3d448b3751b4b1be145"
+    },
+    {
+      "name": "plan-390-top.png",
+      "bytes": 90507,
+      "sha256": "3af681b9fe98c58947b77371af7c193b2e9af64a69349677dd7b02c658088fb8"
+    },
+    {
+      "name": "plan-390-bottom.png",
+      "bytes": 63197,
+      "sha256": "05a83bee3508b953519f9beefae2a1acb702faa57bb9d0b7c8e72a9ec9cc4163"
+    },
+    {
+      "name": "plan-390-counts.png",
+      "bytes": 75290,
+      "sha256": "ec7f1e52543e710cf2e9d3331a86fe2a15c3a24c59e7a889f7854118642b717b"
+    },
+    {
+      "name": "plan-320-top.png",
+      "bytes": 88441,
+      "sha256": "da3068ced7f5b8344eef74307e5b3427b4ea4ce46131ebad0019a8158c63e846"
+    },
+    {
+      "name": "plan-320-bottom.png",
+      "bytes": 58872,
+      "sha256": "fc7724c0e3c60fd9c6307e5dba8f17cc383ee2aa4d64e3a7846a014135766e73"
+    },
+    {
+      "name": "plan-320-counts.png",
+      "bytes": 69120,
+      "sha256": "cb8f461283c7c616feba5e75dd82151a992891fdf04e95416004ae9379fdb1d9"
+    }
+  ],
+  "ok": true,
+  "browserClosed": true,
+  "serverClosed": true,
+  "chromiumVersion": "149.0.7827.55",
+  "counts": {
+    "total": 94,
+    "done": 65,
+    "local": 25,
+    "todo": 4,
+    "displayed": [
+      65,
+      25,
+      4
+    ]
+  },
+  "visualInspection": {
+    "observedAt": "2026-11-11T09:08:11.321Z",
+    "files": [
+      "plan-1440-top.png",
+      "plan-390-top.png",
+      "plan-320-counts.png",
+      "plan-320-bottom.png"
+    ],
+    "result": "Header, task counts and narrow artifact/footer layout reviewed. Content wraps within page bounds, counters remain distinct, and no clipping or overlap observed."
+  },
+  "command": "THINGTIME_FINAL_PLAN_READY=1 node artifacts/anonymous-release-2026-11-11/release-delivery-merge/verify-plan.mjs",
+  "limits": [
+    "Only the standalone progress HTML and in-page navigation were exercised; external artifact and GitHub destinations were not opened.",
+    "This task performed no source edits, builds, production configuration or native application changes."
+  ]
+}

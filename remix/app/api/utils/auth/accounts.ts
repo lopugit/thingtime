@@ -1,4 +1,4 @@
-import { getRostersCollection } from '../mongodb/collections';
+import { currentRosterRepository } from './rosterRepository';
 
 import { appendAccountHintPointer } from './accountHintsCookie';
 import { clearAccountsCookie, parseAccountsCookie, serializeAccountsCookie } from './accountsCookie';
@@ -88,7 +88,7 @@ export const getCookieAuthToken = async (request: Request): Promise<string | nul
 };
 
 const findLiveRosterDoc = async (rosterId: string): Promise<RosterDoc | null> => {
-  const doc = await (await getRostersCollection()).findOne({ rosterId });
+  const doc = await currentRosterRepository().findById(rosterId);
   if (!doc) return null;
   if (doc.expiresAt && new Date(doc.expiresAt).getTime() < Date.now()) return null;
   return doc as unknown as RosterDoc;
@@ -202,14 +202,13 @@ export const persistRoster = async (
   entries: Array<{ userId: string; jti: string; addedAt: Date }>,
   expectedVersion?: string | null
 ): Promise<RosterWriteResult> => {
-  const rosters = await getRostersCollection();
+  const rosters = currentRosterRepository();
   const now = new Date();
 
   if (!entries.length) {
     if (rosterId) {
-      const filter = expectedVersion ? { rosterId, version: expectedVersion } : { rosterId };
-      const res = await rosters.deleteOne(filter);
-      if (expectedVersion && res.deletedCount === 0 && (await rosters.findOne({ rosterId }))) {
+      const res = await rosters.remove(rosterId, expectedVersion);
+      if (expectedVersion && !res.deleted && res.exists) {
         return { cookies: [], conflict: true, rosterId: null };
       }
     }
@@ -221,11 +220,8 @@ export const persistRoster = async (
   const version = crypto.randomUUID();
 
   if (rosterId) {
-    const filter = expectedVersion ? { rosterId, version: expectedVersion } : { rosterId };
-    const res = await rosters.updateOne(filter, {
-      $set: { entries: stored, updatedAt: now, expiresAt, version }
-    });
-    if (res.matchedCount > 0) {
+    const matched = await rosters.replace(rosterId, { entries: stored, updatedAt: now, expiresAt, version }, expectedVersion);
+    if (matched) {
       return { cookies: [await serializeAccountsCookie(rosterId)], conflict: false, rosterId };
     }
     // Guarded miss = a concurrent write moved the version → conflict. An
@@ -245,7 +241,7 @@ export const persistRoster = async (
     version,
     expiresAt
   };
-  await rosters.insertOne(created);
+  await rosters.insert(created);
   return { cookies: [await serializeAccountsCookie(created.rosterId)], conflict: false, rosterId: created.rosterId };
 };
 

@@ -1,0 +1,45 @@
+{
+  "observedAt": "2026-11-11T08:48:02.089Z",
+  "implementation": {
+    "main.cjs": "873322c895cd73974fb2bc48c037a29de9bbe4e2f2d6789d7045104785fa7194",
+    "preload.cjs": "73d781609d4e29c7ae6e15a74f9f6a2daadba9dd6f0ec08b0902b1d23dd33468",
+    "lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "lib/web-bundle-launch.cjs": "b4547e68e29213051133c7e8a8897e7b2df19003d5652b772265336f41c7180b",
+    "lib/web-bundle-download.cjs": "d850da9c514f2b0e3fedb016880fd8cf4d46563b07a0fe34797b24aef4b6388a",
+    "lib/web-bundle-updates.cjs": "846b794f6b5b0dd3a1d4cc2cef7d5f30c5fa1c93aa628488a4beb94d3465da88",
+    "../native-bundles/host.cjs": "5e12b298aa2cac9c8082a947b7547bd6a65cc3d0ab2de69552e3135a4b2808aa",
+    "../native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "../native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e"
+  },
+  "syntheticSigner": true,
+  "realNitroAndRendererAcknowledgment": true,
+  "actualReactRouterErrorBoundaryRefusal": true,
+  "automaticFreshProcessRollback": true,
+  "goodReleaseId": "6e5a705b8122ceb06ab4eb26faf9185b33fec05de0cb9af269302e4d1323deea",
+  "failedReleaseId": "9fb5ecd040a55475950c7118c9369045cd0316002ff68be513a4dfc9c557eb6b",
+  "stableOrigin": "http://127.0.0.1:29511",
+  "productionActivation": false,
+  "installedDevelopmentApp": "/Users/lopu/Applications/Thingtime Dev native-bundle-qa-pr1000.app",
+  "profile": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-pr1000/profile",
+  "passed": true,
+  "startedAt": "2026-11-11T08:47:14.215Z",
+  "finishedAt": "2026-11-11T08:48:03.443Z",
+  "phase": "complete",
+  "cleanupVerified": true,
+  "rendererBoundaryHost": "isolated Chromium; native startup and rollback use the installed development app",
+  "rendererBoundaryVersion": "Chrome/140.0.7339.16",
+  "rendererBoundaryCases": [
+    {
+      "broken": false,
+      "acknowledged": 1,
+      "renderErrors": 0,
+      "routerErrors": null
+    },
+    {
+      "broken": true,
+      "acknowledged": 0,
+      "renderErrors": 1,
+      "routerErrors": null
+    }
+  ]
+}

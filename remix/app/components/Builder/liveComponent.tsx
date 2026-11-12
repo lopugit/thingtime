@@ -14,7 +14,7 @@ import { ContentExecutionBoundary, useContentExecutionHeld } from './ContentExec
 import { useLocation, useNavigate } from 'react-router';
 import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
 import { LOCAL_UI_ACTION, reduceLocalUi, localQueryHref } from '../Actions/localUiAction';
 import { ActionResult, type ControlResult } from './ActionResult';
 import { Box } from '@chakra-ui/react';
@@ -124,7 +124,7 @@ export const useThingSource = ({
 	apiRef.current = api;
 	const sourceKey = JSON.stringify(cursorPages ? { source, cursorPages, collectionMinimum } : loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
-	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
+	const canRun = runtime.canRunSources || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
 	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
 	// Only the resolved inputs identify a read. Selecting an unrelated panel
@@ -141,11 +141,11 @@ export const useThingSource = ({
 			binding,
 			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
 			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding)
+				? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding)
 				: undefined,
 			error: null as string | null
 		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
 	);
 	const [storedState, setState] = React.useState(initial);
 	// A new target must never render the preceding target's controls, even
@@ -177,7 +177,7 @@ export const useThingSource = ({
 	// sources read the current loader when mounted, rebound, or refetched.
 	const automaticLoader = !manual && source?.refresh !== 'live' ? runtime.load : null;
 	const signedIn = runtime.viewer.signedIn;
-	const viewerId = runtime.viewer.id;
+	const cacheScope = runtime.cacheScope;
 	const pageId = runtime.pageId;
 
 	React.useEffect(() => {
@@ -209,13 +209,13 @@ export const useThingSource = ({
 			const controller = new AbortController();
 			const receiveSnapshot = (result: unknown) => {
 				if (stale()) return;
-				writeSourceCache(viewerId, pageId, cacheId, result, binding);
+				writeSourceCache(cacheScope, pageId, cacheId, result, binding);
 				setState({ identity: runtime.identity, binding, status: 'ok', result, error: null });
 				backoff = 500;
 			};
 			const revoke = () => {
 				forbidden = true;
-				clearSourceCache(viewerId, pageId, cacheId);
+				clearSourceCache(cacheScope, pageId, cacheId);
 				if (!stale()) setState({ identity: runtime.identity, binding, status: 'signed-out', result: undefined, error: 'Live source access is no longer available' });
 			};
 			setState((current) => current.identity === runtime.identity && current.binding === binding
@@ -272,7 +272,7 @@ export const useThingSource = ({
 		const fail = (error: unknown) => {
 			const failure = sourceFailure(error, !!runtime.sharedRun);
 			const clear = failure.clear || !!cursorPages;
-			if (clear) clearSourceCache(viewerId, pageId, cacheId);
+			if (clear) clearSourceCache(cacheScope, pageId, cacheId);
 			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(clear ? { result: undefined } : {}) }));
 		};
 
@@ -294,14 +294,14 @@ export const useThingSource = ({
 				}
 				const response: any = cursorPages ? await loadCollectionPages(cursorPages, run, stale, inputs[cursorPages.cursorInput]) : loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor, (page) => {
 					if (stale()) return;
-					if (page.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
+					if (page.cache === 'no-store') clearSourceCache(cacheScope, pageId, cacheId);
 					setState({ identity: runtime.identity, binding, status: 'ok', result: page.result, error: null });
 				}) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
-						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
-						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null, binding);
+						if (response.cache === 'no-store') clearSourceCache(cacheScope, pageId, cacheId);
+						else writeSourceCache(cacheScope, pageId, cacheId, response.result ?? null, binding);
 					}
 					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
 				} else {
@@ -323,7 +323,7 @@ export const useThingSource = ({
 		runtime.sharedRun,
 		runtime.identity,
 		automaticLoader,
-		viewerId,
+		cacheScope,
 		sourceKey,
 		inputsKey,
 		runVersion,
@@ -404,8 +404,8 @@ export const LiveTemplate = ({
 	const held = useContentExecutionHeld(executionHeld);
 	interactive = interactive && !held;
 	const runtime = useWebpageRuntime();
+	const workspaceScope = useWorkspaceScope();
 	const instanceIdentity = React.useContext(ComponentInstanceIdentity);
-	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const location = useLocation();
 	const lopu = useLopu();
@@ -415,7 +415,7 @@ export const LiveTemplate = ({
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
-	const draftKey = JSON.stringify([user?.id, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope, argumentKey]);
+	const draftKey = JSON.stringify([workspaceScope, runtime.pageId, location.key, alreadyResolved ? null : render, instanceIdentity ?? baseScope, argumentKey]);
 	// eslint-disable-next-line react-hooks/exhaustive-deps -- opaque local state generation
 	const identity = React.useMemo(() => ({}), [runtime.identity, draftKey]);
 	const [local, setLocal] = React.useState<{ identity: object; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });

@@ -1,0 +1,28 @@
+{
+  "status": "failed",
+  "stage": "manifest",
+  "httpStatus": 200,
+  "exitCode": 1,
+  "nitroSha": "c6fb3c4cc80fb7021f3a7056e5972459334090e7174a6deebd9e707e0adecfa2",
+  "fixtureSha": "20f193a2127347ee4a7db23b7aa88c4c1e52acdb8730bf718e33bcb6fe65b6cb",
+  "logSha": "7047cc4b90e91a4d34ce8346272544c6f0bc9affb4670d76225b2d8dc5a6f0f9",
+  "entryProbe": {
+    "exitCode": 0,
+    "mainIsModule": false,
+    "electron": true,
+    "mainProcess": true
+  },
+  "reached": {
+    "realElectronOsSafeStorage": true,
+    "encryptedTaskProfile": true,
+    "actualCompiledSqliteComposition": true,
+    "anonymousAuthMe200": true,
+    "accountRegistration": false
+  },
+  "cleanup": {
+    "fixtureFinallyCompleted": true,
+    "port19885Free": true,
+    "taskProcessAbsent": true
+  },
+  "concreteHarnessCause": "One validator required body.origin on both manifest shapes; canonical flat /api/v1/capabilities has ok/schemaVersion and no body.origin. Next correction will bind exact response URL and validate documented shape."
+}

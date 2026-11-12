@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
+import { platformRuntimePlugin } from './platform-runtime-plugin.mjs';
 const root = resolve(import.meta.dirname, '..'), require = createRequire(join(root, 'package.json'));
 const esbuild = createRequire(require.resolve('tsx'))('esbuild');
 const { chromium } = require(process.env.THINGTIME_TEST_PLAYWRIGHT_MODULE || 'playwright');
@@ -19,13 +20,18 @@ const original = { title: 'Imported fixture', passwordType: 'identity', importAr
 let browser, server;
 try {
   await mkdir(evidence, { recursive: true });
-  await esbuild.build({ entryPoints: [join(root, 'scripts/password-editor.browser.tsx')], bundle: true, format: 'esm', platform: 'browser', target: 'esnext', outfile: join(work, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error' });
+  const platformRuntime = platformRuntimePlugin();
+  const platformDocument = { name: 'password-fixture-platform-document', setup(build) {
+    build.onResolve({ filter: /^virtual:thingtime-platform-document$/ }, args => ({ path: args.path, namespace: 'platform-document' }));
+    build.onLoad({ filter: /.*/, namespace: 'platform-document' }, args => ({ contents: platformRuntime.load(platformRuntime.resolveId(args.path)), loader: 'js' }));
+  } };
+  await esbuild.build({ entryPoints: [join(root, 'scripts/password-editor.browser.tsx')], bundle: true, format: 'esm', platform: 'browser', target: 'esnext', outfile: join(work, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, plugins: [platformDocument], logLevel: 'error' });
   const script = await readFile(join(work, 'fixture.js'));
   server = createServer((request, response) => { if (request.url === '/fixture.js') response.writeHead(200, { 'Content-Type': 'application/javascript' }).end(script); else response.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>'); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
-  for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844]]) {
+  for (const [label, width, height] of [['desktop', 1440, 900], ['phone', 390, 844], ['narrow', 320, 844]]) {
     const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
     const layouts = new Map(), errors = [], genericActions = [];
     let entry = structuredClone(original), revision = 1, saves = 0, currentOwner = ownerId;
@@ -94,7 +100,13 @@ try {
       await page.getByRole('button', { name: 'Close builder', exact: true }).click();
       await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
       await editor.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
-      assert.ok(JSON.stringify(layouts.get('settings-password-entry-editor')).includes('Entry title'));
+      const serverLayout = JSON.stringify(layouts.get('settings-password-entry-editor')) || '';
+      const deviceLayout = await page.evaluate(async () => {
+        const db = await new Promise((resolve, reject) => { const request = indexedDB.open('thingtime.local-workspaces.v1'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+        try { return await new Promise((resolve, reject) => { const request = db.transaction('records').objectStore('records').getAll(); request.onsuccess = () => resolve(JSON.stringify(request.result)); request.onerror = () => reject(request.error); }); }
+        finally { db.close(); }
+      });
+      assert.ok(serverLayout.includes('Entry title') || deviceLayout.includes('Entry title'), 'Edited nested layout must persist through its selected account/device adapter');
       const toolbar = page.locator('[data-settings-document="password-workspace-toolbar"]');
       await toolbar.getByRole('button', { name: 'Edit layout', exact: true }).click();
       await toolbar.locator('[data-block-id="pw-add-label"]').click();

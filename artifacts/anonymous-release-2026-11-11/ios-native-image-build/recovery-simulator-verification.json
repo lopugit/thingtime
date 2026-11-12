@@ -1,0 +1,7 @@
+{
+  "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+  "simulatorDeleted": true,
+  "apiStarted": false,
+  "storageTested": false,
+  "error": "No native image receipt within60seconds"
+}

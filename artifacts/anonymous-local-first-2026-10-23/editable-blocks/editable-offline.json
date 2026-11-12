@@ -1,0 +1,162 @@
+{
+  "format": "thingtime.transfer",
+  "version": 1,
+  "roots": [
+    "local-5c81816b-140d-438e-ba43-9dd55fbfa2b0"
+  ],
+  "things": [
+    {
+      "id": "local-5c81816b-140d-438e-ba43-9dd55fbfa2b0",
+      "thingtime": [
+        "webpage"
+      ],
+      "crystal": {
+        "name": "Editable offline fixture",
+        "version": 3,
+        "blocks": [
+          {
+            "id": "frame",
+            "type": "container",
+            "css": {
+              "padding": "24px",
+              "max-width": "600px",
+              "margin": "0 auto"
+            },
+            "direction": "column",
+            "gap": 4,
+            "children": [
+              {
+                "id": "button",
+                "type": "element",
+                "tag": "button",
+                "text": "Saved while offline",
+                "props": {
+                  "type": "button"
+                }
+              },
+              {
+                "id": "title",
+                "type": "element",
+                "css": {
+                  "color": "#8b4334"
+                },
+                "tag": "h1",
+                "text": "Edited nested title"
+              },
+              {
+                "id": "icon",
+                "type": "element",
+                "tag": "span",
+                "text": "★",
+                "props": {
+                  "title": "Fixture icon"
+                }
+              },
+              {
+                "id": "icon-1",
+                "type": "element",
+                "tag": "span",
+                "text": "✦",
+                "props": {
+                  "title": "Fixture icon"
+                }
+              },
+              {
+                "id": "component",
+                "type": "component",
+                "args": {
+                  "label": "Local component argument"
+                },
+                "component": "local-66dfbec5-bc0d-4843-b34f-29f7b55a7879"
+              },
+              {
+                "id": "rows",
+                "type": "container",
+                "source": {
+                  "action": "local-69bb154d-bb71-4df2-82a2-cf0afdd673c1"
+                },
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "list",
+                    "type": "collection",
+                    "props": {
+                      "itemsPath": "result.items",
+                      "hideSearch": true,
+                      "hideSize": true,
+                      "size": "all"
+                    },
+                    "children": [
+                      {
+                        "id": "row-name",
+                        "type": "element",
+                        "tag": "p",
+                        "text": "Edited row: {item.name}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "local-66dfbec5-bc0d-4843-b34f-29f7b55a7879",
+      "thingtime": [
+        "component"
+      ],
+      "crystal": {
+        "name": "Fixture component",
+        "library": "custom",
+        "category": "general",
+        "componentKey": "fixture-editable-component",
+        "version": 1,
+        "args": [
+          {
+            "name": "label",
+            "type": "string",
+            "default": "Default label"
+          }
+        ],
+        "render": {
+          "tag": "p",
+          "children": [
+            "{label}"
+          ]
+        }
+      }
+    },
+    {
+      "id": "local-69bb154d-bb71-4df2-82a2-cf0afdd673c1",
+      "thingtime": [
+        "action"
+      ],
+      "crystal": {
+        "name": "Fixture rows",
+        "actionKey": "fixture-editable-rows",
+        "category": "general",
+        "version": 1,
+        "steps": [
+          {
+            "op": "return",
+            "value": {
+              "items": [
+                {
+                  "id": "one",
+                  "name": "First row"
+                },
+                {
+                  "id": "two",
+                  "name": "Second row"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "files": []
+}

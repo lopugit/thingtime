@@ -1,0 +1,62 @@
+{
+  "passed": false,
+  "simulatorDeleted": true,
+  "sourceToBinaryReproducibility": "unproven",
+  "localAccountApiSupported": false,
+  "networkUnavailableScope": "development WebView external HTTP(S) only; OS networking not disabled",
+  "preparation": {
+    "entrySha256": "45f073449493c2b9b72a9a161b760517f263ada4e10893fb2b127b962d64a657",
+    "canonicalOutputInventory": {
+      "sha256": "4b6b215b6d4ba8abd3b2b4d294000e00b57d14d3a8fd8cf2b73a508c4a3e0e1c",
+      "files": 1821,
+      "bytes": 270026924
+    },
+    "runtimeArchiveSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+    "sourceToBinaryReproducibility": "unproven",
+    "origin": "http://127.0.0.1:29741",
+    "bundleId": "com.thingtime.localdevelopment",
+    "localAccountApiSupported": false,
+    "nativeAddonSha256": {
+      ".output/server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9",
+      ".output/server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    },
+    "toolCheckoutHead": "6d96a617792968e7bca0fc9d72c343ea2141310f"
+  },
+  "executedToolSha256": {
+    "iOS/scripts/local-development/run.py": "deb7d647b7859a1a0dc5821958739ffde3f96c0b24326ca1b75ba8f9a4fd8848",
+    "iOS/scripts/local-development/prepare.py": "28b22159ca94ed73f9d36399fa4209216cdf8aef522023feccd4c3417fda400e",
+    "iOS/scripts/local-development/entry.mjs": "577773e36494591bbfa53c4639ef06b457940041013387ef1252ef3f81460e89",
+    "iOS/scripts/local-development/acceptance.js": "4399873d50986269e5baf218e5aa1d1d7370bc82ff8b3bfd9c11c5618eb72e40",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalRuntime.swift": "0c96e838fedebcad474ae874a6293fce277a7ef3cdcb1819c27d14c1cbfee124",
+    "iOS/Thingtime/LocalRuntime/ThingtimeLocalNode.mm": "4f965422aabfcbe3144cee2f4641e26a4ea78156104821b8db500cc4f5c706e5",
+    "iOS/Thingtime/App/ThingtimeApp.swift": "c074f71d9e55944059937adb63288f8219883988ed094b145e7e29b5817d1285",
+    "iOS/Thingtime/Web/WebView.swift": "bfdbd14c0e160f45d5ffb8444fccb082a7f096922897b174e8626580da51ae48",
+    "iOS/Thingtime/Web/ThingtimeWebDestination.swift": "9d614cb1df16b9088adad18b1da4a7d0f238e182b6986378998d2cec6e0e52cd"
+  },
+  "binarySha256": "941f419fda32829577f3a682a38f0b42c42e33048f79ac3c9933b2962a09ca0c",
+  "frameworkSha256": "56f53a4363ff44d0d73a6cf53cf41250dc3afd01fae6829dac49280d86f67d88",
+  "startup-error.json": {
+    "ready": false,
+    "error": "Error Domain=WKErrorDomain Code=6 \"(null)\" UserInfo={NSHelpAnchor=Rule list compilation failed: Invalid or unsupported regular expression.}",
+    "cloudFallback": false,
+    "stage": "native-startup"
+  },
+  "cleanup": [
+    {
+      "operation": "terminate",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "shutdown",
+      "passed": true,
+      "returncode": 0
+    },
+    {
+      "operation": "delete",
+      "passed": true,
+      "returncode": 0
+    }
+  ],
+  "observedAt": "2026-11-11T16:07:18.756229+00:00"
+}

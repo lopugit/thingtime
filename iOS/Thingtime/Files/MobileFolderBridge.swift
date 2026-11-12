@@ -567,7 +567,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             try await transport.require([("api.attachment-upload-complete", [1,4,0])])
             guard let verifyDevice else { throw MobileFolderStore.Failure.unavailable }
             let authorization = fileRequest.authorization
-            if authorization.configuration.uploadPolicy != nil { try await transport.require([("api.things", [1,64,0]), ("api.file-sync-transfer-admissions", [1,7,0])]) }
+            if authorization.configuration.uploadPolicy != nil { try await transport.require([("api.things", [1,65,0]), ("api.file-sync-transfer-admissions", [1,7,0])]) }
             try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
             guard !NativeDeferredUpload.shared.ownsPhotoRun(scope: scope, configurationId: authorization.id,
                 rootId: rootId, deviceId: authorization.scope.deviceId) else { throw MobileFolderStore.Failure.changed }

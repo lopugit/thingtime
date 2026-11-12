@@ -1,0 +1,29 @@
+{
+  "head": "5a03111cdda16a8d4af3385fb3fec5f0f010259c",
+  "verifiedHashes": {
+    "electron/dist/web/.output/server/index.mjs": "36e46bb6a372227c6ab251da9a918de48b510c39a1852afc0ebf1a2e475946d3",
+    "electron/dist/web/metadata.json": "2d3fb4de96e513da945f4729798a265adfb6cb2b9eecc75895e25526357ae754",
+    "electron/dist/web-integrity.json": "f08c80ed946a13c9d246440e95eef937cbf359a20d3b5e43031be03c3189a399",
+    "remix/app/components/Nav/NotificationsBell.tsx": "f8ab16e8f2e69eb81a3c4cf3b8b0f01ce869b086012cdc4586333d0c7bc5dab5",
+    "remix/app/components/Nav/NotificationsBell.browser.test.mjs": "e57f34427cf1ba9c006f9d77d8ba8c7004429d135beb117e26e83fa6fb1af9aa",
+    "electron/test/fixtures/native-auto-local.cjs": "0aeb1933797c99b226a7c2af8b8dc7de1be4a998ec0121e82daa0f2b9370f3e3",
+    "electron/test/native-auto-local.test.cjs": "16716667b9dd89cb16bf1f811a806c2e627e18eb33c9865a6653fc11aa0f6181",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bc227f899829029cde4cecc571ef77a976627f7564d554c6f038ab39288eaa33",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "2cc0cca6abd61285991b8dd68661dbbb686bc4e095055e5de01ec8ec6aab82dc"
+  },
+  "unchangedDraftGuard": {
+    "path": "remix/app/utils/desktopBundleActivation.ts",
+    "sha256": "8b57d7cd6bc849e3c49e6ae85acb0f115bfb1cd049800499f834f25fc453d6ec",
+    "matchesHead": true
+  },
+  "ports": [
+    52056,
+    52057,
+    52058
+  ],
+  "newWorkspaceVerified": true,
+  "changedPrerequisite": "Actual NotificationsBell closed content unmount and document-start observer correction",
+  "oneChangedPrerequisiteAttempt": true,
+  "buildReceipt": "../account-prerequisites-build/verification.json",
+  "priorFailuresPreserved": true
+}

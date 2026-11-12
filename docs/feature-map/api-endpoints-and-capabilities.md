@@ -1,5 +1,90 @@
 # API endpoints and capabilities
 
+`api.root-data` 1.2.0 adds the protected native app-shell bootstrap. Runtime
+availability comes from `nativeAccountHttpHome` and is projected by both manifest
+generators. The hosted contract remains compatible; unready native homes expose
+no root-data authority. Tests: root-data, runtimeAvailability/native dispatcher,
+and the opt-in compiled SQLite HTTP fixture.
+
+
+The merged Things contract is `api.things` 1.65.0: it combines retained attachment
+receipts/atomic generic PATCH, parent Component argument bindings and v5 upload
+policy. Both historical 1.64 variants are insufficient; sync and authoring clients
+negotiate the combined minimum before dependent writes. Dedicated Things update is 1.28.0
+and webpage resolve is 1.19.0.
+
+Native draft preview compares the protected host's public database identity with
+root-data through `things/contentDataPlane.ts`; HTTP inputs cannot choose that
+identity. The full native webpage-resolve operation remains unavailable pending
+workspace/external-source audience parity. Verify real authenticated handler
+preview, stale owner/plane refusals and native scope lifetime; do not advertise
+the whole GET/POST feature from the handler fixture alone.
+
+## Embedded runtime activity
+
+`server/plugins/runtime-work.ts` exposes an in-process-only lifecycle hook over
+`api/utils/deployment/environmentGateway.ts`. No HTTP operation or account
+authority is added. `test:environment-gateway` covers detached completion,
+reservation races and pool drains; the Messenger, error-log and background-task
+suites cover their own completion lifetimes. Full local-mode native activation
+remains disabled pending the remaining producer audit and actual app acceptance.
+
+## Native web release catalogue and content
+
+GET `/api/v1/releases/native-web` and `/api/v1/releases/native-web/content`
+register `api.releases-native-web` and `api.releases-native-web-content` 1.0.0.
+Routes delegate to `api/utils/releases/nativeWebHttp.ts` and `nativeWeb.ts`;
+both manifest generators derive their entries from the canonical docs registry.
+Reads use fail-closed `releases.read` admission, private/no-store responses and
+fixed canonical GitHub publication assets, never caller URLs/credentials.
+The catalogue returns `{ok:true,release:envelope|null}` after signature/scope/
+compatibility/sequence selection. Content requires release ID, signed path,
+exact `Range` (at most 2 MiB) and quoted SHA-256 `If-Match`; it derives the
+canonical stored-ZIP offset and refuses changed upstream windows. Metadata and
+body work have bounded budgets, deadlines and cancellation.
+
+The native client omits credentials, rejects API redirects and verifies exact
+206 range/length/ETag plus final file hashes before independent staging.
+Run release service/HTTP tests, both API capability suites and compiled-route
+smokes, native archive/contract tests and Electron download/updater tests.
+Synthetic fixtures do not establish deployed routes, real signed publication,
+production trust or the installed API delivery journey. See
+[native bundle delivery](../native-web-bundles.md#implemented-api-delivery-and-native-download-path).
+
+## Hosted anonymous draft render and export
+
+The canonical `/api/v1/integrations/chatgpt/mcp` endpoint is `api.chatgpt-mcp`
+2.3.0. Exact-origin ChatGPT discovery advertises `chatgpt.render-export`
+1.0.0 and `thingtime_render_and_export` only with the verified snapshot
+configuration. `plugin.ts` dispatches only this exact tool without account
+resolution; `hostedRender.server.ts` enforces the canonical in-bundle validator,
+distributed admission and nonpersistent deny-all worker lifecycle. The
+adapter checks the fixed non-root identity, drops and verifies all five Linux
+capability sets, and checks the work directory and runner hash before writing
+the private input. Probe, command
+and file transfer stay on the same verified Session.
+Keep the HTTP resource and local stdio formats on the shared renderer contract in
+`MCP/src/renderContract.ts`. Run `test:chatgpt`, `test:api-capabilities`, the
+built MCP manifest smoke and the [operator preflight and deployed
+acceptance](../no-login-draft-preview.md#hosted-thingtime-mcp).
+
+## Anonymous/local-first contracts after main reconciliation
+
+Run `remix/scripts/smoke-built-content-execution.mjs` after the Vercel build to exercise both compiled manifest responses, route methods and the reconciled endpoint documentation in a synthetic runtime.
+
+The combined contract distinguishes main’s existing features from the local-first
+receipt additions: `api.things` 1.65.0, `api.things-search` 1.8.0,
+`api.attachment-content` 1.20.0,
+`api.attachment-link` 1.3.0, `api.attachment-upload-abort` 1.4.0,
+`api.attachment-delete` 1.9.0 and
+`api.attachment-annotate` 1.4.0. Clients that require retained-byte reads,
+request-ID replay or conditional metadata writes reject the older colliding
+versions. Account-derived caches retain protected execution holds; Actions
+must not run a restored held definition through a local adapter. Keep both
+manifest generators and the direct account transport’s requirement map aligned.
+Run `test:api-capabilities`, the affected local-workspace transport/cache tests,
+and built-origin negotiation before acceptance.
+
 `api.lopu-chats-reply` 1.23.2 provides fixed safe Console failure diagnostics
 for recognized structured billing, spend-limit, model-access and unsupported
 parameter responses. `ai/anthropicApiKey.ts` classifies complete known templates;
@@ -247,6 +332,44 @@ explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
 and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
 private-Thing creation. See README and TESTING for limits and acceptance.
 
+Attachment content 1.19.0 includes private `cache=retain-bytes&download=1` for owned
+originals, reusing descriptor authorization and the existing route/import entry.
+`apiDocs.ts` versions both manifests; account retention negotiates 1.19.0 before
+fetching. The byte body streams with exact descriptor ETag/length and private
+no-store headers; generic media-cache policy is unchanged. Run `test:attachments`,
+`test:api-capabilities`, `test:local-workspace` and the isolated built-manifest smoke.
+See the [streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
+Attachment content 1.19.0 includes `cache=original-bytes&download=1` for existing
+shared/public read authority. A fresh `cache=validate&download=1` receipt supplies
+the required exact `If-Match`; no owner retention exemption is granted. The
+stream stays on the selected origin, rejects redirects, counts exact original
+bytes and withholds its last chunk until EOF plus current ACL/version checks.
+Server and negotiated client allow ten minutes per file and thirty seconds
+waiting for upstream progress; consumer backpressure does not spend that idle
+budget. Metadata reads retain their separate thirty-second budget. Cancellation,
+revocation, replacement, short/extra bytes and stalled cleanup/authentication
+are regressions in the existing route and transfer suites. Anonymous Shared
+Copy negotiates 1.18.0 for larger files, rechecks receipts and the full export,
+then imports privately and atomically. Portable JSON includes no access receipts.
+
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. The durable local metadata queue now consumes these contracts; deletion
+reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
@@ -304,7 +427,7 @@ requests preserve their header and selection through the same fallback as root
 data; the upstream enforces the precondition. `app/api/utils/mongodb/dataPlane.ts` owns the identity and guard;
 `app/utils/dataPlane.ts` owns the shared public validation/header/link helpers.
 
-Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
+Saved theme history uses `api.themes` / `api.themes-delete` 1.1.1 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
@@ -479,7 +602,8 @@ revision and validated local wall time from an exact private Data Thing.
 The Action route verifies the settings, page and Action revisions before
 automatic writes. Ordered ensure batches use the same existing Action
 authorization, operation budget and protected intent keys. Saved definitions
-require `api.things` 1.57.0 or `api.things-update` 1.23.0. See the
+require `api.things` 1.58.0 or `api.things-update` 1.23.0 in this combined build.
+The older main and feature builds both advertised 1.57.0 for different behavior. See the
 [cutoff and batch contracts](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
 
 JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
@@ -614,7 +738,7 @@ Native traversal and editable synchronous callback objects/functions require `ap
 
 ## Lopu schemas, files and prompt settings
 
-`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. The new `api.settings-lopu-prompt` 1.0.0 route supports authenticated personal checklists and admin base edits with revision conflicts. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
+`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. `api.settings-lopu-prompt` 2.0.0 supports resumable private instruction transfer, immutable references and admin base edits with revision conflicts. Public `GET ?scope=base` reads no personal data; legacy full reads of referenced content return explicit 413. Multipart operations preserve same-origin, current account/data-plane fences, the 96 KiB body boundary, normal request limits and quota accounting. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
 
 
 Named-branch comparison uses `preview-branch-merge` on that same endpoint;
@@ -678,6 +802,14 @@ Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 
 
+Standalone recording retention extends attachment content to 1.14.0 (the owned
+retention descriptor includes immutable `purpose`). Deletion 1.5.0 extends both
+durable receipt modes to recordings with exact-purpose claim fences. Routes keep
+full-user, same-origin, private/no-store and owner-only restrictions. Both
+manifests derive from `apiDocs.ts`; coverage includes `attachmentsRoutes.test.ts`,
+attachment service tests, both capability suites and the local recording browser
+fixture. No new route or public publishing endpoint is added.
+
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
@@ -691,6 +823,68 @@ single-use GitHub OIDC credential delivery or explicitly enabled create-only
 migration. No origin fallback is allowed. Run `test:ios-release`, capability and
 API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
 
+
+`api.themes-sync` 1.0.0 is the private full-session prerequisite for conditional
+account theme synchronization. `api/utils/themes/themeSync.ts` extends the
+canonical writer with in-transaction hooks and protected Timeline receipts;
+`things/storedSnapshot.ts` supplies the shared complete BSON comparison used by
+both themes and Vault. The route, import map, rate rule and docs registration are
+kept together. `test:theme-sync`, the opt-in `themeSync.api.test.ts` and
+`themeQuota.api.test.ts` cover admission, immutable retries, cross-writer conflicts,
+transactional quota and active-pointer cleanup. Client account theme sync remains
+pending in the [local workspace matrix](../local-workspaces.md).
+
+`api.themes` and `api.themes-delete` 1.1.1 preserve the request shape while fixing concurrent quota admission and transactional active-pointer cleanup.
+
+Account theme selection uses `themes/sync` operations `selection`/`select` under
+`api.themes-sync` 1.1.0. `themes/themeSelection.ts` reuses the secure account CAS
+writer and transactional Timeline receipts. `themeSelectionContract.ts` is shared
+with the device queue. Run selection contract/API and themes/sync route tests;
+verify normal-writer conflicts, replay after deletion and all identity boundaries.
+
+The local `accountApi.client.ts` online handler forces theme catalogue and
+selection reads past their normal refresh throttle. Each refresh still verifies
+the active account/source lease; home-view access does not authorize generic
+home queues under a selected custom plane. `accountReconnect.test.ts` verifies
+fast reconnect after failed reads, cleared errors and retired-worker silence.
+
+Catalogue reads require `api.themes-sync` 1.2.0 for explicit home `folderId`/null.
+This additive projection supports complete offline theme export without exposing
+ownership or sharing metadata. Both manifests derive the version from `apiDocs.ts`;
+write and selection minima remain 1.0.1 and 1.1.0. Test incompatible cached
+contracts, missing placement, managed folder moves and pending-edit preservation
+with theme transport, sync API and account export tests.
+
+api.themes-sync 1.3.0 adds optional command.folderId to conditional saves. The
+canonical theme writer reuses lockFolderDestination and prepareManagedPlacement
+inside its accounted home transaction. Normal token writes omit the property;
+imported placement negotiates 1.3.0. Retained catalogue reads still require 1.2.0.
+Both manifests derive from apiDocs.ts. Run theme contract/receipt/transport and
+capability suites plus guarded themeImport.api.test.ts for the new write boundary.
+
+## Locally executable account Actions
+
+`local-workspace/accountApi.client.ts` selects the existing `LocalActions`
+interpreter for retained owned programs with a supported local dependency
+closure. `AccountThingSync.withLease` carries content queue and Timeline hooks
+into both data and browser requests, including deletion. Remote-only Actions
+retain the original authenticated/capability-negotiated adapter. Device run
+details are distinct from server receipts and never enter content sync.
+`accountActions.test.ts`, `accountApi.test.ts` and the opt-in
+`accountActions.browser.test.ts` cover this boundary; see
+[local workspaces](../local-workspaces.md#account-local-action-execution--2026-10-18).
+
+
+`api.algorithms-sync` 1.3.0 preserves optional library display titles in private
+catalogues and canonical content. The existing shared parser bounds the title;
+omission preserves stored metadata and null clears it. Catalogue retention and
+title-bearing writes negotiate 1.3.0; placement and selection keep their existing
+minima. Both generated manifests derive from the same endpoint documentation.
+
+Normal remote algorithm title transfers also require `api.things-export` 1.17.0
+and `api.things-import` 1.13.0. The shared client negotiates these before normal
+remote transfer, and both live manifests are checked by the API fixture.
+
 Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
 `transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
 `api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
@@ -703,6 +897,15 @@ produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
 Public docs and capability discovery remain local and available.
 
 
+### Combined password contract after main integration
+
+`api.passwords` 1.3.0 combines main's title search with PR #1000's durable encrypted
+file deletion/abort receipts. The registry, both manifests, search client and file
+worker negotiate the combined contract; tests reject older/breaking versions.
+`installSuiteForWorkspace` keeps local anonymous installation while negotiating
+media-tools 1.4.0 for remote installation. The built-server fixture and isolated
+Nitro/Vite failure checks are recorded in the PR #1000 integration note.
+
 `api.ai-chatgpt-plan` 1.2.0 adds OS-protected device storage and redacted text
 availability to the signed desktop's existing loopback flow. The desktop
 verifies the current session against its selected account API and leaves remote
@@ -714,9 +917,32 @@ The transcript route cannot invoke models, tools, actions, or billing. Both
 manifests use the canonical docs registry. Verify the plan, API capabilities,
 API fallback and Lopu stream suites, then run installed-app acceptance in TESTING.
 
-General compressor storage adds `api.things` 1.41.0, `api.things-update`
-1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
-with separately editable children. `api.webpages-suites-install` 1.7.0 installs
+
+`api.things-search` 1.4.0 adds optional `scope: "mine"` to GET/POST search. `searchOwnerScope` supplies an authenticated owner predicate in conjunction with existing access fences; anonymous mine-search refuses. Both manifests and Agent Tasks Actions use the same version. `local-workspace/actionRequests.ts` adapts only explicit structural mine-search to the leased device snapshot, with partial account metadata. Run capability/workspace tests and the isolated `actionSearch.browser.test.ts`; see the [offline Agent Tasks checkpoint](../local-workspaces.md#offline-agent-tasks-search--2026-10-19).
+
+
+### Character profile sync
+
+`themes/sync/_sync.tsx` (1.7.0) and `algorithms/sync/_sync.tsx` (1.5.0)
+resolve the requested/session-selected actor through `resolveTokenUser` on every
+admission. Delegated `themeTransport.client.ts` and `algorithmTransport.client.ts`
+negotiate those contracts and `api.auth-characters` 1.0.0. Both manifests derive
+versions from `apiEndpointDocs`. The additive `catalogue` operation returns a
+backpressured NDJSON stream from one home Mongo snapshot. The shared
+`catalogue/catalogueStream.ts` reader validates identity, ordered chunks, digest,
+counts and clean EOF. Scoped IndexedDB staging and one atomic admission in
+`local-workspace/catalogueStaging.ts` preserve device edits on any incomplete read.
+Legacy JSON snapshots and per-profile write contracts remain supported. Run the route `sync.test.ts` suites,
+`characterProfileSync.test.ts`, capability coverage, and the opt-in native
+`characterProfileSync.browser.test.ts`; see [Characters](../characters.md).
+
+The combined storage contract publishes `api.things` 1.42.0 and
+`api.things-update` 1.13.0, retaining durable local-first deletion receipts, Vault
+membership safety and transactional attachment binding alongside intrinsic media
+containers. General compressor storage also uses `api.webpages-resolve` 1.8.0
+for separately editable children. The account transport requires the combined
+versions for retained deletion receipts and atomic attachment edits; tests reject
+the uncombined 1.41.0/1.12.0 contracts before mutation. `api.webpages-suites-install` 1.6.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
@@ -755,6 +981,9 @@ manifests. The existing `useApi` connection methods negotiate these requirements
 There is no new endpoint. Owner-private encrypted grants replace shared tokens;
 OAuth app configuration is exact-origin/environment scoped. Read the auth map,
 README social OAuth setup and TESTING before provider acceptance.
+`api.connections-feed` 2.0.1 adds fixed, redacted provider diagnostics and reports
+total YouTube uploads-playlist failure as an error. The provider-error tests and
+compiled Connections smoke cover this patch; earlier merged contracts stay unchanged.
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the
@@ -772,6 +1001,18 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+
+Owned theme/algorithm pagination uses the existing GET routes, shared
+`api/utils/ownedListPage.ts`, and `hooks/ownedListClient.ts`. Negotiate themes
+1.3.0 / algorithms 1.2.0; follow non-null cursors even after empty pages. Live
+pages do not authorize deletion. Canonical creation removes the old count
+ceilings while retaining byte quotas; sync 1.8.0 / 1.6.0 and things-import
+1.14.0 publish that change. Theme focus-token History uses optional v2 snapshots
+under timeline 1.23.0, preserving the frozen v1 reader. Run
+`test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
+`test:api-capabilities`, then built `test:environment-gateway:acceptance` in
+its disposable replica-set sandbox. See the local-workspace capacity checkpoint.
 
 ## Public social metadata
 
@@ -979,18 +1220,24 @@ Saved private page activation uses `schemas/webpageActivation.ts`,
 `components/Builder/WebpageActivation.tsx` and the existing Actions run
 route. The route verifies the exact private owner/page/revision/action/date
 and uses the literal saved inputs; the viewer protects manual page query
-selection and keeps preview/edit/shared execution inert. See
+selection and keeps preview/edit/shared execution inert. The account-local
+viewer accepts activation only for a freshly verified, synced page revision,
+and always dispatches automatic runs through the saved-account server route. See
 [Builder Actions](../builder-browser-actions.md#run-an-action-when-a-private-page-opens).
 
 ## Anthropic Console API-key mode
 
 The additive saved-provider kind `anthropic-api-key` is published by
-`api.lopu-vault` 1.3.0 and `api.ai-models` 1.9.0, and consumed by
+`api.lopu-vault` 1.5.0 and `api.ai-models` 1.9.0, and consumed by
 `api.lopu-chats-reply` 1.23.0, `api.lopu-voice-reply` 1.5.0 and
 `api.ai-complete` 1.3.0. No route or permission was added. Existing `anthropic`
 records retain their original Claude Code runtime; Console keys never infer
 subscription access or fall back to platform billing. Both manifests derive
 these versions from `apiDocs.ts`. Test the negotiated floors and compiled manifests.
+The merged vault version also preserves encrypted offline workspaces and exact
+write acknowledgments from 1.4.0. Local and remote writers require a fresh token
+when switching between OAuth and Console modes; an existing saved credential
+cannot silently change meaning.
 
 ## Shared owner-library Archive actions
 
@@ -1002,10 +1249,10 @@ predicate serve single actions, bulk placement and archived lists. Dedicated
 message/community/subspace content uses static private library descriptors;
 source bodies, participants, media bindings and credential/control Things stay
 behind their own APIs. Full-content inherited Things retain the canonical
-ancestor ACL check. Versions Things 1.63.0, Things search 1.7.0 and Things bulk
+ancestor ACL check. Versions Things 1.64.0, Things search 1.8.0 and Things bulk
 1.9.0 advertise the expanded placement and safe projection contracts. The
-Archive read minimum is 1.63, while upstream Component argument bindings keep
-their 1.62 floor; `libraryArchiveCapabilities.client.ts` composes canonical
+Archive read minimum is 1.64, while upstream Component argument bindings keep
+their existing 1.63 floor; `libraryArchiveCapabilities.client.ts` composes canonical
 origin and active-API checks to prevent mixed-deployment false positives.
 Run the Things actions, owner-library predicate, comment projection and both
 capability suites, plus the real API/Chrome library Archive acceptance script.

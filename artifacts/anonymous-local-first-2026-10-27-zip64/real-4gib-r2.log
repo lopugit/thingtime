@@ -1,0 +1,79 @@
+
+  #  /Users/lopu/.nvm/versions/node/v24.18.0/bin/node[45200]: static void node::Blob::ToSlice(const FunctionCallbackInfo<Value> &) at ../src/node_blob.cc:277
+  #  Assertion failed: args[1]->IsUint32()
+
+----- Native stack trace -----
+
+ 1: 0x102e3ecac node::Assert(node::AssertionInfo const&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 2: 0x105025860 node::Blob::ToSlice(v8::FunctionCallbackInfo<v8::Value> const&) (.cold.1) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 3: 0x102dfaf80 node::Blob::HasInstance(node::Environment*, v8::Local<v8::Value>) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 4: 0x103d2e94c Builtins_CallApiCallbackOptimizedNoProfiling [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 5: 0x135f71c50 
+ 6: 0x135ef9b8c 
+ 7: 0x103d6b7e8 Builtins_AsyncFunctionAwaitResolveClosure [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 8: 0x103e40e58 Builtins_PromiseFulfillReactionJob [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+ 9: 0x103d5abd0 Builtins_RunMicrotasks [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+10: 0x103d2a7b0 Builtins_JSRunMicrotasksEntry [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+11: 0x103254840 v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+12: 0x1032550b4 v8::internal::(anonymous namespace)::InvokeWithTryCatch(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+13: 0x1032551f0 v8::internal::Execution::TryRunMicrotasks(v8::internal::Isolate*, v8::internal::MicrotaskQueue*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+14: 0x103283f94 v8::internal::MicrotaskQueue::RunMicrotasks(v8::internal::Isolate*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+15: 0x1032848f4 v8::internal::MicrotaskQueue::PerformCheckpoint(v8::Isolate*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+16: 0x102d1f0b8 node::InternalCallbackScope::Close() [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+17: 0x102d1f3b0 node::InternalMakeCallback(node::Environment*, v8::Local<v8::Object>, v8::Local<v8::Object>, v8::Local<v8::Function>, int, v8::Local<v8::Value>*, node::async_context, v8::Local<v8::Value>) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+18: 0x102d37fcc node::AsyncWrap::MakeCallback(v8::Local<v8::Function>, int, v8::Local<v8::Value>*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+19: 0x102dfd91c std::__1::__function::__func<node::Blob::Reader::Pull(v8::FunctionCallbackInfo<v8::Value> const&)::$_0, std::__1::allocator<node::Blob::Reader::Pull(v8::FunctionCallbackInfo<v8::Value> const&)::$_0>, void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>::operator()(int&&, node::DataQueue::Vec const*&&, unsigned long&&, std::__1::function<void (unsigned long)>&&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+20: 0x102d5ce48 std::__1::__function::__func<node::(anonymous namespace)::IdempotentDataQueueReader::Pull(std::__1::function<void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>, int, node::DataQueue::Vec*, unsigned long, unsigned long)::'lambda'(int, node::DataQueue::Vec const*, unsigned long long, std::__1::function<void (unsigned long)>), std::__1::allocator<node::(anonymous namespace)::IdempotentDataQueueReader::Pull(std::__1::function<void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>, int, node::DataQueue::Vec*, unsigned long, unsigned long)::'lambda'(int, node::DataQueue::Vec const*, unsigned long long, std::__1::function<void (unsigned long)>)>, void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>::operator()(int&&, node::DataQueue::Vec const*&&, unsigned long&&, std::__1::function<void (unsigned long)>&&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+21: 0x102d5ce48 std::__1::__function::__func<node::(anonymous namespace)::IdempotentDataQueueReader::Pull(std::__1::function<void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>, int, node::DataQueue::Vec*, unsigned long, unsigned long)::'lambda'(int, node::DataQueue::Vec const*, unsigned long long, std::__1::function<void (unsigned long)>), std::__1::allocator<node::(anonymous namespace)::IdempotentDataQueueReader::Pull(std::__1::function<void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>, int, node::DataQueue::Vec*, unsigned long, unsigned long)::'lambda'(int, node::DataQueue::Vec const*, unsigned long long, std::__1::function<void (unsigned long)>)>, void (int, node::DataQueue::Vec const*, unsigned long, std::__1::function<void (unsigned long)>)>::operator()(int&&, node::DataQueue::Vec const*&&, unsigned long&&, std::__1::function<void (unsigned long)>&&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+22: 0x102d5a1dc node::(anonymous namespace)::FdEntry::ReaderImpl::OnStreamRead(long, uv_buf_t const&) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+23: 0x102e458a8 node::fs::FileHandle::ReadStart() [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+24: 0x102e601b8 node::fs::FileHandle::ReadStart()::$_0::__invoke(uv_fs_s*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+25: 0x102e34b5c node::MakeLibuvRequestCallback<uv_fs_s, void (*)(uv_fs_s*)>::Wrapper(uv_fs_s*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+26: 0x103d0485c uv__work_done [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+27: 0x103d082ac uv__async_io [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+28: 0x103d1cba4 uv__io_poll [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+29: 0x103d08c00 uv_run [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+30: 0x102d206a8 node::SpinEventLoopInternal(node::Environment*) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+31: 0x102e98314 node::NodeMainInstance::Run() [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+32: 0x102debaa0 node::Start(int, char**) [/Users/lopu/.nvm/versions/node/v24.18.0/bin/node]
+33: 0x18846fbec start [/usr/lib/dyld]
+
+----- JavaScript stack trace -----
+
+1: slice (node:internal/blob:278:21)
+2: blobChecksum (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/binary.ts:2:1367)
+
+
+✖ app/utils/thingTransfer/zip64Capacity.test.ts (45485.595167ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45495.60775
+
+✖ failing tests:
+
+test at app/utils/thingTransfer/zip64Capacity.test.ts:1:1
+✖ app/utils/thingTransfer/zip64Capacity.test.ts (45485.595167ms)
+  'test failed'
+       45.56 real        35.85 user         3.38 sys
+           219529216  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               19428  page reclaims
+                 255  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                  86  messages sent
+                  80  messages received
+                   0  signals received
+                 173  voluntary context switches
+              261985  involuntary context switches
+           415300042  instructions retired
+           197892989  cycles elapsed
+            17319976  peak memory footprint

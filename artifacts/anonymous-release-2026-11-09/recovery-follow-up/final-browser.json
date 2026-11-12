@@ -1,0 +1,45 @@
+{
+  "buildProof": "final-build-proof.json",
+  "browserTestSha256": "1b1fb6913d15d98c064cbc086f37f69f7981e0acc4f5ee9a3089f4f369f5dbe8",
+  "boundRecovery": {
+    "exactBytes": true,
+    "private": true,
+    "coldOfflineReload": true,
+    "groupedRecovery": true,
+    "uploads": 4,
+    "deletes": 0,
+    "offlineWrites": [],
+    "viewports": [
+      1440,
+      390,
+      320
+    ],
+    "errors": []
+  },
+  "freshParentAttachmentReceipt": true,
+  "freshChildAttachmentReceipt": true,
+  "plainRecovery": {
+    "completedRemoteDeletion": true,
+    "nativeOfflineRecovery": true,
+    "coldOfflineReload": true,
+    "privateCanonicalRecreate": true,
+    "guestRefused": true,
+    "viewports": [
+      1440,
+      390,
+      320
+    ],
+    "offlineWrites": [],
+    "errors": []
+  },
+  "scope": [
+    "Disposable API and sandboxed Chromium; no production account data",
+    "Parent deletion owns the remote attachment cascade; separate file DELETE count is not the acceptance criterion",
+    "Review screens captured at all three widths; restored images and exact authenticated file bytes asserted by the browser fixture",
+    "Initial plain run had a transient disabled Reconnect button after automatic sync; final plain rerun passed"
+  ],
+  "cleanup": {
+    "ownedContainerRemoved": true,
+    "browserSlotReleased": true
+  }
+}

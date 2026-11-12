@@ -20,29 +20,93 @@ if (process.argv[2] !== '--worker') {
 	process.env.THINGTIME_DATA_AUTHORITY_ORIGIN = 'https://thingtime.test';
 	const { default: app } = await import(pathToFileURL(resolve(import.meta.dirname, '../.vercel/output/functions/__server.func/index.mjs')).href);
 	assert.equal(typeof app.fetch, 'function');
-	const contracts = {
-		'api.things': '1.52.0', 'api.actions-run': '1.43.0',
-		'api.components-browse': '1.1.0', 'api.webpages-resolve': '1.13.0',
-		'api.files': '1.12.1', 'api.things-bulk': '1.7.1', 'api.things-delete': '1.1.1'
-	};
-	for (const path of ['/.well-known/thingtime-capabilities.json', '/api/v1/capabilities']) {
+	const contracts = [
+		['passwords', 'passwords', '1.10.0', ['GET', 'POST']],
+		['things', 'things', '1.65.0', ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+		['things-search', 'things/search', '1.8.0', ['GET', 'POST']],
+		['things-actions', 'things/actions', '1.1.0', ['GET', 'POST']],
+		['things-update', 'things/update', '1.27.0', ['POST']],
+		['actions-run', 'actions/run', '1.46.0', ['POST']],
+		['components-browse', 'components/browse', '1.1.0', ['GET']],
+		['webpages-resolve', 'webpages/resolve', '1.19.0', ['GET', 'POST']],
+		['files', 'files', '1.13.0', ['GET', 'POST']],
+		['things-bulk', 'things/bulk', '1.9.0', ['POST']],
+		['things-delete', 'things/delete', '1.1.1', ['POST']],
+		['timeline', 'timeline', '1.23.0', ['GET', 'POST']],
+		['things-export', 'things/export', '1.18.0', ['POST']],
+		['things-import', 'things/import', '1.15.0', ['POST']],
+		['attachment-content', 'attachments/content', '1.20.0', ['GET', 'POST']],
+		['attachment-link', 'attachments/link', '1.3.0', ['POST']],
+		['attachment-upload-abort', 'attachments/uploads/abort', '1.4.0', ['POST']],
+		['attachment-annotate', 'attachments/annotate', '1.4.0', ['POST']],
+		['attachment-delete', 'attachments/delete', '1.9.0', ['POST']],
+		['chatgpt-mcp', 'integrations/chatgpt/mcp', '2.3.0', ['POST']],
+		['lopu-vault', 'lopu/vault', '1.5.0', ['GET', 'POST']],
+		['ai-models', 'ai/models', '1.9.0', ['GET']],
+		['lopu-chats-reply', 'lopu/chats/reply', '1.23.2', ['POST']],
+		['lopu-voice-reply', 'lopu/voice/reply', '1.5.0', ['POST']],
+		['ai-complete', 'ai/complete', '1.3.0', ['POST']],
+		['releases-native-web', 'releases/native-web', '1.0.0', ['GET']],
+		['releases-native-web-content', 'releases/native-web/content', '1.0.0', ['GET']]
+	];
+	const readJson = async path => {
 		const response = await app.fetch(new Request('https://thingtime.test' + path), { waitUntil() {} });
 		assert.equal(response.status, 200, path);
-		assert.match(response.headers.get('content-type') || '', /application\/json/);
-		const body = await response.json();
-		if (path.startsWith('/.well-known')) assert.equal(body.origin, 'https://thingtime.test');
-		for (const [feature, expected] of Object.entries(contracts)) {
-			const entry = body.features[feature];
-			assert.equal(typeof entry === 'string' ? entry : entry.version, expected, feature);
-		}
+		assert.match(response.headers.get('content-type') || '', /application\/json/, path);
+		return response.json();
+	};
+	const manifest = await readJson('/.well-known/thingtime-capabilities.json');
+	const registry = await readJson('/api/v1/capabilities');
+	assert.equal(manifest.features['api.devices-sync-control']?.version, '1.6.0');
+	assert.equal(registry.features['api.devices-sync-control'], '1.6.0');
+	const lifecycle = Reflect.get(global, Symbol.for('thingtime.runtime-work.lifecycle'));
+	assert.equal(lifecycle?.version, '1.0.0', 'Compiled Nitro must register its in-process work lifecycle');
+	// Database warmup is now correctly tracked beyond these discovery responses.
+	// Let the synthetic unreachable pool settle; never treat response completion
+	// as proof that background initialization has already stopped.
+	const idleDeadline = Date.now() + 15_000;
+	while (!lifecycle.isIdle() && Date.now() < idleDeadline) await new Promise(resolve => setTimeout(resolve, 25));
+	const reservation = lifecycle.reserveShutdown();
+	assert.ok(reservation?.isCurrent(), 'Completed reads and startup cleanup leave no active work');
+	try {
+		const response = await app.fetch(new Request('https://thingtime.test/api/v1/capabilities'));
+		assert.equal(response.status, 503);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.equal(response.headers.get('retry-after'), '1');
+		assert.equal((await response.json()).ok, false);
+	} finally { reservation.release(); }
+	assert.equal((await readJson('/api/v1/capabilities')).features['api.passwords'], '1.10.0');
+	assert.equal(manifest.origin, 'https://thingtime.test');
+	for (const [id, route, version, methods] of contracts) {
+		const feature = `api.${id}`;
+		const endpoint = `/api/v1/${route}`;
+		assert.equal(manifest.features[feature]?.version, version, feature);
+		assert.equal(registry.features[feature], version, feature);
+		assert.ok(registry.features[`route.v1.${route.replaceAll('/', '.')}`], endpoint);
+		const operation = manifest.operations.find(operation => operation.feature === feature && operation.path === endpoint);
+		assert.deepEqual([...operation?.methods ?? []].sort(), [...methods].sort(), endpoint);
+		const body = await readJson(`${endpoint}-docs`);
+		assert.equal(body.ok, true, endpoint);
+		assert.equal(body.docs.id, id, endpoint);
+		assert.equal(body.docs.contractVersion, version, endpoint);
 	}
-	for (const [path, feature] of [['things', 'api.things'], ['actions/run', 'api.actions-run'], ['components/browse', 'api.components-browse'], ['webpages/resolve', 'api.webpages-resolve'], ['files', 'api.files'], ['things/bulk', 'api.things-bulk'], ['things/delete', 'api.things-delete']]) {
-		const response = await app.fetch(new Request(`https://thingtime.test/api/v1/${path}-docs`), { waitUntil() {} });
-		assert.equal(response.status, 200, path);
-		assert.match(response.headers.get('content-type') || '', /application\/json/);
-		const body = await response.json();
-		assert.equal(body.ok, true);
-		assert.equal(body.docs.contractVersion, contracts[feature], path);
-	}
-	console.log('PASS: compiled Vercel origin manifest, registry and seven content-execution and file-restore fence docs contracts; synthetic loopback database configuration, no installed-app acceptance.');
+	const connector = await readJson('/.well-known/thingtime-chatgpt-capabilities.json');
+	assert.equal(connector.origin, 'https://thingtime.test');
+	assert.equal(connector.features['chatgpt.mcp'], '2.1.0');
+	assert.equal(connector.features['chatgpt.render-export'], undefined, 'An unconfigured build must not advertise rendering');
+	const mcp = (method, params) => app.fetch(new Request('https://thingtime.test/api/v1/integrations/chatgpt/mcp', {
+		method: 'POST', headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
+	}), { waitUntil() {} });
+	const list = await mcp('tools/list', {});
+	assert.equal(list.status, 200);
+	const tools = (await list.json()).result.tools;
+	assert.ok(tools.some(tool => tool.name === 'login_thingtime'));
+	assert.ok(!tools.some(tool => tool.name === 'thingtime_render_and_export'));
+	const unavailable = await mcp('tools/call', { name: 'thingtime_render_and_export', arguments: { content: '{}' } });
+	assert.equal(unavailable.status, 200);
+	assert.equal(unavailable.headers.get('cache-control'), 'no-store');
+	assert.equal((await unavailable.json()).result.structuredContent.code, 'RENDER_UNAVAILABLE');
+	assert.equal((await mcp('tools/call', { name: 'get_thingtime_thing', arguments: {} })).status, 401);
+	console.log(`PASS: compiled Vercel manifests and docs agree on ${contracts.length} content execution, restore, attachment and transfer contracts.`);
 }

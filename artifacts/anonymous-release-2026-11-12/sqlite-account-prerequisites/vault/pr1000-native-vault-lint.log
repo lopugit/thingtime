@@ -1,0 +1,5 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/api/utils/auth/users.ts app/api/utils/auth/vaultKeys.ts app/api/utils/auth/sessionRepository.ts app/api/utils/auth/userIdentityRepository.ts app/api/utils/documentStore/nativeUserIdentities.ts app/api/utils/documentStore/nativeSessions.ts app/api/utils/documentStore/nativeVault.test.ts app/api/utils/documentStore/nativeVault.crypto.fixture.mts app/api/utils/documentStore/nativeVault.mongo.fixture.mts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.

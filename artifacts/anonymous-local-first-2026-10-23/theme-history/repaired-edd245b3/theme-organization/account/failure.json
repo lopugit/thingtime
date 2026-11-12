@@ -1,0 +1,22 @@
+{
+  "error": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByRole('link', { name: 'Organization peach e0a052', exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\n\nTHINGTIME · THINGS\n\nBrowse files\nUnfiled files\nSelected library\nHome library\nThings\nNew\nImport…\nPaste\n\nVIEW\n\nGrid\nList\nColumns\n\nSHOW\n\nNames\nPreviews\n\nARRANGE\n\nNewest first\nGroup\n\nKIND\n\n🌀 All\n📁 Folders\n💾 Files\n📝 Posts\n📦 Data\n💎 Schemas\n🧩 Components\n⚡ Actions\n💬 Comments\n🏠 All things\n\n🏠\n\nAll things\n\nNew folder +\n\n🪺\n\nNothing here yet — create something with New ✨\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 25ms\n\nMongoDB: connected (13ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "writes": [
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "method": "POST"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "method": "POST"
+    }
+  ],
+  "errors": []
+}

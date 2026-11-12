@@ -1,5 +1,6 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
 import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+import { hasNativeHomeSelection } from '../../app/api/utils/documentStore/nativeHomeSelection';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -23,6 +24,7 @@ const normaliseOrigin = (value?: string | null) => {
 };
 
 export const getApiFallbackOrigin = () => {
+  if (hasNativeHomeSelection()) return null;
   if (process.env.THINGTIME_AGENT_TEST_MODE === '1') throw new Error('Isolated tests cannot use an API fallback.');
   return normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
 };
@@ -47,12 +49,14 @@ export const getMissingSelfHostedApiEnv = () => {
 // An explicit desktop remote selection must never accidentally activate an
 // inherited local database/signing configuration (including startup plugins).
 export const hasSelfHostedApiEnv = () =>
+  !hasNativeHomeSelection() &&
   !(process.env.THINGTIME_DESKTOP === '1' && process.env.THINGTIME_DESKTOP_API_MODE === 'remote') &&
   getMissingSelfHostedApiEnv().length === 0;
 
 // Only the installed desktop shell may deliberately bridge to a selected API.
 // Incomplete development/preview servers must never become production clients.
 export const shouldProxyApiToFallback = (request: Request) => {
+  if (hasNativeHomeSelection()) return false;
   if (agentTestEnvironment()) return false;
   if (hasSelfHostedApiEnv() || process.env.NODE_ENV === 'test') return false;
   if (process.env.THINGTIME_DESKTOP !== '1') return false;

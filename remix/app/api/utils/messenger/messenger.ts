@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { ensureViewerSubspaceMessaging } from './subspaceMessages';
 import { activeSubspaceMemberCounts, currentSubspaceChatMembers, filterSubspaceMessagingChats, linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Chats, membership, messages, reactions, read receipts and message requests.
@@ -1562,7 +1563,7 @@ export const toggleChatReaction = async (viewerId: string, input: { messageId?: 
     }
     // unicode recents feed the shared picker; custom tokens stay messenger-local
     if (!isCustomReactionToken(token)) {
-      pushUserRecentReaction(viewerId, token).catch(() => {});
+      void withGatewayWork(() => pushUserRecentReaction(viewerId, token)).catch(() => {});
     }
   }
   const projected = await projectMessages(viewerId, String(message.targetId), [message], { withThreadCounts: false });

@@ -1,7 +1,7 @@
 import { parseSourceInputArgument } from './sourceInputs';
 
 export const COMPONENT_ARGUMENT_BINDING_REQUIREMENTS = {
-	'api.things': '1.62.0',
+	'api.things': '1.63.0',
 	'api.things-update': '1.27.0',
 	'api.webpages-resolve': '1.19.0'
 } as const;
@@ -21,7 +21,7 @@ export const MAP_POINTS_SOURCE_REQUIREMENTS = {
 } as const;
 
 export const PASSIVE_SOURCE_REQUIREMENTS = {
-	'api.things': '1.57.0',
+	'api.things': '1.58.0',
 	'api.things-update': '1.23.0',
 	'api.webpages-resolve': '1.15.0'
 } as const;

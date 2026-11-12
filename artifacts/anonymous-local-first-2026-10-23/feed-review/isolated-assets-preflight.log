@@ -1,0 +1,11 @@
+✔ a stale embedded shell or HTML substituted for JavaScript cannot pass app preflight (35.225186ms)
+✔ a successful HTTP response alone cannot establish private database readiness (0.294224ms)
+✔ a partial client build cannot substitute the SPA for an isolated renderer bundle (3.524266ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.777652

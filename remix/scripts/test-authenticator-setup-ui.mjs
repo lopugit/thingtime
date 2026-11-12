@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { enableCurrentPageBuilder } from './lib/current-page-builder.mjs';
+import { platformRuntimePlugin } from './platform-runtime-plugin.mjs';
 import { createRequire } from 'node:module';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,9 +15,16 @@ let browser, server;
 const results = [], errors = [];
 try {
   await mkdir(evidence, { recursive: true });
-  await esbuild.build({ entryPoints: [join(root, 'scripts/authenticator-setup.browser.tsx')], bundle: true, format: 'esm', platform: 'browser', target: 'esnext', outfile: join(scratch, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, logLevel: 'error' });
+  const platformRuntime = platformRuntimePlugin();
+  const platformDocument = { name: 'authenticator-fixture-platform-document', setup(build) {
+    build.onResolve({ filter: /^virtual:thingtime-platform-document$/ }, args => ({ path: args.path, namespace: 'platform-document' }));
+    build.onLoad({ filter: /.*/, namespace: 'platform-document' }, args => ({ contents: platformRuntime.load(platformRuntime.resolveId(args.path)), loader: 'js' }));
+  } };
+  await esbuild.build({ entryPoints: [join(root, 'scripts/authenticator-setup.browser.tsx')], bundle: true, format: 'esm', platform: 'browser', target: 'esnext', outfile: join(scratch, 'fixture.js'), tsconfig: join(root, 'tsconfig.json'), define: { 'process.env.NODE_ENV': '"development"' }, loader: { '.wasm': 'file' }, plugins: [platformDocument], logLevel: 'error' });
   const bundle = await readFile(join(scratch, 'fixture.js'));
+  const brandIcon = await readFile(join(root, 'public/branding/generated/icon/thingtime-icon-128x128.png'));
   server = createServer((request, response) => {
+    if (request.url === '/branding/generated/icon/thingtime-icon-128x128.png') { response.writeHead(200, { 'Content-Type': 'image/png' }); response.end(brandIcon); return; }
     response.writeHead(200, { 'Content-Type': request.url === '/fixture.js' ? 'application/javascript' : 'text/html', 'Cache-Control': 'no-store' });
     response.end(request.url === '/fixture.js' ? bundle : '<!doctype html><title>[LC] Synthetic authenticator setup</title><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script type="module" src="/fixture.js"></script>');
   });
@@ -28,6 +36,8 @@ try {
     const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
     try {
       await page.goto(origin);
+      await page.getByRole('heading', { name: 'Password confirmation', exact: true }).waitFor();
+      await page.waitForFunction(() => window.nativeSetupFixture.verificationRequests() > 0);
       const create = page.getByRole('button', { name: 'Create new entry', exact: true });
       await create.waitFor();
       await page.waitForFunction(() => ![...document.querySelectorAll('button')].find(button => button.textContent === 'Create new entry')?.disabled);
@@ -65,6 +75,59 @@ try {
       await setupLayout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
       await page.screenshot({ path: join(evidence, `${label}.png`), fullPage: true });
       results.push({ label, width, checks: ['cold intake', 'explicit review', 'masked setup', 'no automatic save', 'warm cancellation preserves draft', 'explicit saved-code write', 'editable nested blocks', 'top/bottom overflow'] });
+    } catch (error) {
+      await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
+      await writeFile(join(evidence, `${label}-failure.json`), JSON.stringify({ errors, body: await page.locator('body').innerText().catch(() => ''), message: error.message }, null, 2));
+      throw error;
+    } finally { await context.close(); }
+  }
+  // Full device-vault UI and actual encrypted local storage, separate contexts
+  // from the account setup cases above. No real account or credential source.
+  for (const [label, width, height] of [['local-desktop', 1440, 1000], ['local-mobile', 390, 844], ['local-narrow', 320, 844]]) {
+    const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
+    const page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', error => errors.push(error.message));
+    try {
+      await page.goto(origin + '/?local=1');
+      await page.getByLabel('Device vault passphrase', { exact: true }).fill('Disposable fixture device phrase');
+      await page.getByLabel('Confirm device vault passphrase', { exact: true }).fill('Disposable fixture device phrase');
+      await page.getByRole('button', { name: 'Create device vault', exact: true }).click();
+      const toolbar = page.locator('[data-settings-document="password-workspace-toolbar"]');
+      await toolbar.getByText('Encrypted on this device · never uploaded', { exact: true }).waitFor();
+      await toolbar.getByRole('button', { name: 'Lock vault', exact: true }).waitFor();
+      assert.equal(await page.getByRole('heading', { name: 'Password confirmation', exact: true }).count(), 0);
+      assert.equal(await page.getByLabel('Password confirmation interval', { exact: true }).count(), 0);
+      await toolbar.getByRole('button', { name: 'Add password', exact: true }).click();
+      await page.getByRole('button', { name: 'Save entry', exact: true }).waitFor();
+      assert.equal(await page.getByLabel('Password confirmation interval', { exact: true }).count(), 0);
+      await page.locator('[data-settings-document="password-workspace-entry-heading"]').getByRole('button', { name: 'Close', exact: true }).click();
+      assert.equal(await page.getByRole('button', { name: 'Create new entry', exact: true }).count(), 0);
+      assert.deepEqual(await page.evaluate(() => window.nativeSetupFixture.bridgeSnapshot().acceptedOwners), []);
+      assert.ok((await page.evaluate(() => window.nativeSetupFixture.bridgeSnapshot().ignoredOwners)).includes('local-workspace'));
+      await enableCurrentPageBuilder(page);
+      await toolbar.getByRole('button', { name: 'Edit layout', exact: true }).click();
+      await toolbar.locator('[data-block-id="pw-session"]').click();
+      const selected = page.getByRole('combobox', { name: 'Select block', exact: true });
+      assert.equal(await selected.inputValue(), 'pw-session');
+      await selected.selectOption('pw-lock-label');
+      assert.equal(await selected.inputValue(), 'pw-lock-label');
+      await page.screenshot({ path: join(evidence, `${label}-builder.png`), fullPage: true });
+      await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+      await toolbar.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+      for (const position of ['top', 'bottom']) {
+        await page.evaluate(position => window.scrollTo(0, position === 'top' ? 0 : document.documentElement.scrollHeight), position);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      }
+      await page.screenshot({ path: join(evidence, `${label}.png`), fullPage: true });
+      await toolbar.getByRole('button', { name: 'Lock vault', exact: true }).click();
+      await page.getByRole('button', { name: 'Unlock device vault', exact: true }).waitFor();
+      assert.equal(await toolbar.count(), 0);
+      assert.deepEqual(await page.evaluate(() => window.nativeSetupFixture.snapshot()), { saves: 0, totpEntries: 0 });
+      assert.equal(await page.evaluate(() => window.nativeSetupFixture.verificationRequests()), 0);
+      results.push({ label, width, checks: ['actual anonymous LocalPasswordVault', 'device-only session label', 'actual Lock vault transition', 'editable session and lock labels', 'no account setup intake', 'no account verification controls or transport for anonymous vault/draft', 'top/bottom overflow'] });
+    } catch (error) {
+      await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
+      await writeFile(join(evidence, `${label}-failure.json`), JSON.stringify({ errors, body: await page.locator('body').innerText().catch(() => ''), message: error.message }, null, 2));
+      throw error;
     } finally { await context.close(); }
   }
   assert.deepEqual(errors, []);

@@ -1,0 +1,15 @@
+✔ canonical issue hashes persisted token; normalization, BSON Dates, expiry and single use survive SQLite reopen (19.742458ms)
+✔ independent SQLite handles race one atomic claim winner; account and separate home files remain isolated (9.663416ms)
+✔ scope expires before detached or queued work; native insertion rejects malformed credentials (3.441958ms)
+✔ separate real Node processes issue and consume once across process restart (1377.136042ms)
+✔ native claim rechecks expiry inside the blocked transaction queue (116.934166ms)
+✔ scope exiting after a collection mutation rolls the native transaction back (3.204875ms)
+✔ matching home labels cannot bind token reads/writes to a different SQLite provider (5.716ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1867.075458

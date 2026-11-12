@@ -4,9 +4,13 @@ import type { VerificationWindow } from '~/passwords/verificationPolicy';
 import { characterIdentity, type CharacterIdentity } from './characterCore';
 import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
+import { currentUserIdentityRepository, UserIdentityRepositoryError } from './userIdentityRepository';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId, type ClientSession } from 'mongodb';
+import { parseInstructionRecord, type InstructionRecord } from '../../../lopu/instructionTransfer';
+import { Binary, ObjectId, BSON, type ClientSession } from 'mongodb';
+import type { AlgorithmSelection } from '../algorithms/algorithmSelectionContract';
+import type { ThemeSelection } from '../themes/themeSelectionContract';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -27,7 +31,8 @@ import {
 // Identity is control-plane: user things ALWAYS live on the home deployment
 // DB, regardless of any active data-plane endpoint override (see endpoint.ts) —
 // aliased so every things access in this file is home-pinned.
-import { getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { getHomeThingsCollection as getMongoThingsCollection, getUsersCollection as getMongoUsersCollection, withHomeMongoTransaction as withMongoHomeTransaction } from '../mongodb/collections';
+
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS } from '~/schemas/registry';
 import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type ProfileAttachmentRefs } from '../attachments/attachmentStore';
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
@@ -37,6 +42,15 @@ import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
 import { toBin, fromBin } from './binary';
 export { toBin, fromBin } from './binary';
+
+// Unadapted user mutations/directories must refuse in an explicit native scope,
+// never borrow the hosted legacy store. Default Mongo behavior is unchanged.
+const assertMongoUserPersistence = () => {
+	if (currentUserIdentityRepository()) throw new UserIdentityRepositoryError('USER_IDENTITY_SCOPE', 'This user operation has no native repository implementation');
+};
+const getThingsCollection: typeof getMongoThingsCollection = () => { assertMongoUserPersistence(); return getMongoThingsCollection(); };
+const getUsersCollection: typeof getMongoUsersCollection = () => { assertMongoUserPersistence(); return getMongoUsersCollection(); };
+const withHomeMongoTransaction: typeof withMongoHomeTransaction = (work) => { assertMongoUserPersistence(); return withMongoHomeTransaction(work); };
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -404,6 +418,8 @@ const findUserThing = async (filter: Record<string, unknown>) => (await getThing
 // two back-to-back round trips on the hottest path. Mirrors searchUsersForAdmin.
 export const findUserByUsername = async (username: string) => {
 	const normalized = username.trim().toLowerCase();
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingByUsername(normalized); return thing ? userThingToDoc(thing) : null; }
 	const [thing, legacy] = await Promise.all([
 		findUserThing({ 'crystal.username': normalized }),
 		getUsersCollection().then((c) => c.findOne({ username: normalized }))
@@ -421,6 +437,12 @@ export const findUserByUsername = async (username: string) => {
 export const findUsersByUsernames = async (usernames: readonly string[]): Promise<any[]> => {
 	const unique = [...new Set(usernames.map((username) => username.trim().toLowerCase()).filter(Boolean))];
 	if (!unique.length) return [];
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const rows = await native.findUserThingsByUsernames(unique);
+		const byName = new Map(rows.map(row => { const user = userThingToDoc(row); return [user.username, user] as const; }));
+		return unique.map(name => byName.get(name)).filter(Boolean);
+	}
 	const [thingRows, legacyRows] = await Promise.all([
 		getThingsCollection().then((collection) => collection.find({ thingtime: 'user', 'crystal.username': { $in: unique } } as any).toArray()),
 		getUsersCollection().then((collection) => collection.find({ username: { $in: unique } } as any).toArray())
@@ -431,6 +453,8 @@ export const findUsersByUsernames = async (usernames: readonly string[]): Promis
 };
 
 export const findUserByEmail = async (email: string) => {
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingByEmailKey(userEmailKey(email)); return thing ? userThingToDoc(thing) : null; }
 	// the hashed uniqueKey is the exact-match path — no email string in any index
 	const [thing, legacy] = await Promise.all([
 		getThingsCollection().then((c) => c.findOne({ uniqueKeys: userEmailKey(email) } as any)),
@@ -441,6 +465,8 @@ export const findUserByEmail = async (email: string) => {
 };
 
 export const findUserById = async (id: string) => {
+	const native = currentUserIdentityRepository();
+	if (native) { const thing = await native.findUserThingById(String(id)); return thing ? userThingToDoc(thing) : null; }
 	const [thing, legacy] = await Promise.all([
 		findUserThing({ shareId: String(id) }),
 		ObjectId.isValid(id) ? getUsersCollection().then((c) => c.findOne({ _id: new ObjectId(id) })) : Promise.resolve(null)
@@ -507,6 +533,12 @@ export async function fencePrivateUploadPermission(id: string, token: string, se
 export const findUsersByIds = async (ids: readonly string[]) => {
 	const uniqueIds = [...new Set(ids.map((id) => String(id)).filter(Boolean))];
 	if (!uniqueIds.length) return [];
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const rows = await native.findUserThingsByIds(uniqueIds);
+		const byId = new Map(rows.map(row => { const user = userThingToDoc(row); return [String(user._id), user] as const; }));
+		return uniqueIds.map(id => byId.get(id)).filter(Boolean);
+	}
 
 	const legacyIds = uniqueIds.filter(ObjectId.isValid).map((id) => new ObjectId(id));
 	const [thingRows, legacyRows] = await Promise.all([
@@ -652,6 +684,7 @@ export const insertUser = async (
 		session?: any;
 	} = {}
 ) => {
+	const native = currentUserIdentityRepository();
 	const shareId = new ObjectId().toHexString();
 	const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
 	const { secure, admin, recentReactions } = buildUserSecure(doc);
@@ -689,7 +722,8 @@ export const insertUser = async (
 		createdAt: now,
 		updatedAt: now
 	};
-	await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
+	if (native) await native.insertUserThing(thing, options.session);
+	else await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
 	return userThingToDoc(thing);
 };
 
@@ -714,21 +748,24 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void | Promise<void>, strict = false): Promise<SecureMutateResult> => {
-	const things = await getThingsCollection();
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload, stored: any) => void | Promise<void>, strict = false, session?: ClientSession): Promise<SecureMutateResult> => {
+	const native = currentUserIdentityRepository();
+	const things = native ? null : await getThingsCollection();
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
-		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
+		const snapshot = native ? await native.readUserSecure(userId, session) : null;
+		const thing = native ? snapshot?.stored : await things!.findOne(base, { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
 		if (!thing) return 'missing';
 		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
 		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
 		if (!secure.meta) secure.meta = {};
-		await mutate(secure);
+		await mutate(secure, thing);
 		// guard on the exact version we read — a missing field guards on its absence
 		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
-		const res = await things.updateOne(
+		const res = native ? { modifiedCount: await native.replaceUserSecure(snapshot!, packSecure(secure), new Date()) ? 1 : 0 } : await things!.updateOne(
 			{ ...base, ...guard },
-			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } }
+			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } },
+			{ ...(session ? { session } : {}) }
 		);
 		if (res.modifiedCount) return 'mutated';
 		// lost the CAS — another writer won; small jittered backoff so a burst of
@@ -750,8 +787,10 @@ const strictVaultPayload = (value: unknown): SecurePayload => {
 // Key material never enters UserDoc/public projections. This bounded registry
 // lives in the home user secure blob; session wrappers live on session rows.
 export const readUserVaultKey = async (userId: string): Promise<UserVaultKeyRegistry | null> => {
- const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
+ const native = currentUserIdentityRepository();
+ const thing = native ? (await native.readUserSecure(userId))?.stored : await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
  if (thing) return strictVaultPayload(thing.secure).vaultKey ?? null;
+ if (native) throw new Error('Vault owner was not found.');
  if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
  const legacy = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { vaultKey: 1 } });
  if (!legacy) throw new Error('Vault owner was not found.');
@@ -771,6 +810,7 @@ export const mutateUserVaultKey = async (
  const result = await mutateUserThingSecure(userId, apply, true);
  if (result === 'mutated') return saved;
  if (result === 'contended') throw new SecureWriteContendedError(userId);
+ if (currentUserIdentityRepository()) throw new Error('Vault owner was not found.');
  if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
  const users = await getUsersCollection();
  for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
@@ -819,14 +859,23 @@ class SecureWriteContendedError extends Error {
 	}
 }
 
-export const markEmailVerified = async (userId: string) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.emailVerified = true;
-	});
-	if (result === 'mutated') return;
+export const markEmailVerified = async (userId: string, expectedEmail?: string): Promise<boolean> => {
+	const mismatch = new Error('Verification email no longer matches the account');
+	const expected = expectedEmail?.trim().toLowerCase();
+	if (expectedEmail !== undefined && !expected) return false;
+	let result: SecureMutateResult;
+	try {
+		result = await mutateUserThingSecure(userId, (s) => {
+			// Rechecked on every secure-version CAS retry, so an old proof cannot
+			// verify a newly changed address between the read and the write.
+			if (expected !== undefined && (typeof s.email !== 'string' || s.email.trim().toLowerCase() !== expected)) throw mismatch;
+			s.emailVerified = true;
+		});
+	} catch (error) { if (error === mismatch) return false; throw error; }
+	if (result === 'mutated') return true;
 	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set: { emailVerified: true, updatedAt: new Date() } });
+	if (currentUserIdentityRepository() || !ObjectId.isValid(userId)) return false;
+	return (await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId), ...(expected === undefined ? {} : { email: expected }) }, { $set: { emailVerified: true, updatedAt: new Date() } })).matchedCount > 0;
 };
 
 // Rotate the user's password hash. Returns whether a store actually accepted
@@ -883,6 +932,12 @@ export const setUserTwoFactorEmailEnabled = async (userId: string, enabled: bool
 // place). Merged as a patch so two devices flipping different switches don't
 // clobber each other.
 export const getUserNotificationPrefs = async (userId: string): Promise<Record<string, boolean>> => {
+	const native = currentUserIdentityRepository();
+	if (native) {
+		const snapshot = await native.readUserSecure(userId);
+		const prefs = snapshot ? unpackSecure(snapshot.stored.secure).meta?.notificationPrefs : undefined;
+		return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+	}
 	const things = await getThingsCollection();
 	const thing = await things.findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
 	if (thing) {
@@ -916,6 +971,7 @@ export const setUserNotificationPrefs = async (userId: string, patch: Record<str
 	});
 	if (result === 'mutated') return true;
 	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (currentUserIdentityRepository()) return false;
 	if (!ObjectId.isValid(userId)) return false;
 	const sets: Record<string, any> = { updatedAt: new Date() };
 	for (const [key, value] of Object.entries(patch)) {
@@ -1312,55 +1368,114 @@ export const removeUserDeploymentLink = async (
   return removed;
 };
 
-// Set (or clear, with null) the user's active theme shareId in meta.
-export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.meta!.activeThemeId = themeShareId;
-	});
-	if (result === 'mutated') return;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (
-		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } });
+export class ActiveThemeConflictError extends Error {
+ constructor() { super('The account theme selection changed. Keep your device choice for review.'); }
+}
+const themeSelectionId = (value: unknown): string | null => {
+ if (value === null || value === undefined) return null;
+ if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) throw new Error('Saved theme selection is invalid.');
+ return value;
+};
+const themeSelectionVersion = (ownerId: string, stored: any) => {
+ if (BSON.calculateObjectSize(stored) > 1024 * 1024) throw new Error('Theme selection state exceeds the read limit.');
+ return 'theme-selection-v1:' + createHash('sha256').update(ownerId).update('\0').update(BSON.serialize(stored)).digest('hex');
+};
+/** Private projection. The opaque comparison includes the actual secure CAS
+ * preimage, but never discloses any secure fields or infers session authority. */
+export const readUserThemeSelection = async (userId: string, session?: ClientSession): Promise<ThemeSelection> => {
+ const things=await getThingsCollection();
+ const thing=await things.findOne({shareId:String(userId),thingtime:'user'} as any,{projection:{secure:1,secureVersion:1},...(session?{session}:{})});
+ if(thing)return {themeId:themeSelectionId(strictVaultPayload((thing as any).secure).meta?.activeThemeId),version:themeSelectionVersion(userId,thing)};
+ if(!ObjectId.isValid(userId))throw new ActiveThemeConflictError();
+ const legacy=await (await getUsersCollection()).findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+ if(!legacy)throw new ActiveThemeConflictError();
+ return {themeId:themeSelectionId(legacy.meta?.activeThemeId),version:themeSelectionVersion(userId,legacy)};
+};
+
+// Normal and conditional selection changes share the same secure CAS writer.
+export const setUserActiveTheme = async (userId: string, themeShareId: string | null, options: {session?: ClientSession;expectedVersion?: string} = {}) => {
+ const result = await mutateUserThingSecure(userId, (s, stored) => {
+  if(options.expectedVersion !== undefined && themeSelectionVersion(userId,stored)!==options.expectedVersion)throw new ActiveThemeConflictError();
+  s.meta!.activeThemeId = themeShareId;
+ }, options.expectedVersion !== undefined, options.session);
+ if(result==='mutated')return;
+ if(result==='contended')throw new SecureWriteContendedError(userId);
+ if(!ObjectId.isValid(userId)){if(options.expectedVersion!==undefined)throw new ActiveThemeConflictError();return;}
+ const users=await getUsersCollection(),session=options.session;
+ if(options.expectedVersion!==undefined){
+  const before=await users.findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+  if(!before||themeSelectionVersion(userId,before)!==options.expectedVersion)throw new ActiveThemeConflictError();
+  const result=await users.updateOne({_id:before._id,$expr:{$eq:['$$ROOT',{$literal:before}]}} as any,{$set:{'meta.activeThemeId':themeShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+  if(result.matchedCount!==1)throw new ActiveThemeConflictError();
+ }else await users.updateOne({_id:new ObjectId(userId)},{$set:{'meta.activeThemeId':themeShareId,updatedAt:new Date()}},{...(session?{session}:{})});
 };
 
 // Clear the user's active theme pointer ONLY if it still points at the given
 // theme shareId — theme deletion uses this so it never stomps a pointer the
 // user has since moved to another theme.
-export const clearUserActiveTheme = async (userId: string, themeShareId: string) => {
+export const clearUserActiveTheme = async (userId: string, themeShareId: string, session?: ClientSession) => {
 	const cleared = await mutateUserThingSecure(userId, (s) => {
 		if (s.meta!.activeThemeId === themeShareId) s.meta!.activeThemeId = null;
-	});
+	}, false, session);
 	// A matched user thing (cleared or pointer already moved) needs no legacy write.
 	if (cleared === 'mutated') return;
 	if (cleared === 'contended') throw new SecureWriteContendedError(userId);
 	if (!ObjectId.isValid(userId)) return;
 	await (
 		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } });
+	).updateOne({ _id: new ObjectId(userId), 'meta.activeThemeId': themeShareId }, { $set: { 'meta.activeThemeId': null, updatedAt: new Date() } }, { ...(session ? { session } : {}) });
 };
 
-// Set (or clear, with null) the user's active feed algorithm shareId in meta.
-export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.meta!.activeFeedAlgorithmId = algorithmShareId;
-	});
-	if (result === 'mutated') return;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (
-		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeFeedAlgorithmId': algorithmShareId, updatedAt: new Date() } });
+export class ActiveFeedAlgorithmConflictError extends Error {
+ constructor() { super('The account algorithm selection changed. Keep your device choice for review.'); }
+}
+const algorithmSelectionId = (value: unknown): string | null => {
+ if (value === null || value === undefined) return null;
+ if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) throw new Error('Saved algorithm selection is invalid.');
+ return value;
 };
+const algorithmSelectionVersion = (ownerId: string, stored: any) => {
+ if (BSON.calculateObjectSize(stored) > 1024 * 1024) throw new Error('Algorithm selection state exceeds the read limit.');
+ return 'algorithm-selection-v1:' + createHash('sha256').update(ownerId).update('\0').update(BSON.serialize(stored)).digest('hex');
+};
+/** Private projection. The opaque comparison includes the actual secure CAS
+ * preimage, but never discloses any secure fields or infers session authority. */
+export const readUserAlgorithmSelection = async (userId: string, session?: ClientSession): Promise<AlgorithmSelection> => {
+ const things=await getThingsCollection();
+ const thing=await things.findOne({shareId:String(userId),thingtime:'user'} as any,{projection:{secure:1,secureVersion:1},...(session?{session}:{})});
+ if(thing)return {algorithmId:algorithmSelectionId(strictVaultPayload((thing as any).secure).meta?.activeFeedAlgorithmId),version:algorithmSelectionVersion(userId,thing)};
+ if(!ObjectId.isValid(userId))throw new ActiveFeedAlgorithmConflictError();
+ const legacy=await (await getUsersCollection()).findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+ if(!legacy)throw new ActiveFeedAlgorithmConflictError();
+ return {algorithmId:algorithmSelectionId(legacy.meta?.activeFeedAlgorithmId),version:algorithmSelectionVersion(userId,legacy)};
+};
+
+// Normal and conditional selection changes share the same secure CAS writer.
+export const setUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string | null, options: {session?: ClientSession;expectedVersion?: string} = {}) => {
+ const result = await mutateUserThingSecure(userId, (s, stored) => {
+  if(options.expectedVersion !== undefined && algorithmSelectionVersion(userId,stored)!==options.expectedVersion)throw new ActiveFeedAlgorithmConflictError();
+  s.meta!.activeFeedAlgorithmId = algorithmShareId;
+ }, options.expectedVersion !== undefined, options.session);
+ if(result==='mutated')return;
+ if(result==='contended')throw new SecureWriteContendedError(userId);
+ if(!ObjectId.isValid(userId)){if(options.expectedVersion!==undefined)throw new ActiveFeedAlgorithmConflictError();return;}
+ const users=await getUsersCollection(),session=options.session;
+ if(options.expectedVersion!==undefined){
+  const before=await users.findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+  if(!before||algorithmSelectionVersion(userId,before)!==options.expectedVersion)throw new ActiveFeedAlgorithmConflictError();
+  const result=await users.updateOne({_id:before._id,$expr:{$eq:['$$ROOT',{$literal:before}]}} as any,{$set:{'meta.activeFeedAlgorithmId':algorithmShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+  if(result.matchedCount!==1)throw new ActiveFeedAlgorithmConflictError();
+ }else await users.updateOne({_id:new ObjectId(userId)},{$set:{'meta.activeFeedAlgorithmId':algorithmShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+};
+
 
 // Clear the active feed-algorithm pointer only if it still points at the given
 // algorithm — the twin of clearUserActiveTheme, so algorithm delete stops
 // hand-rolling the users-store layout (was inlined in deleteAlgorithm).
-export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string) => {
+export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShareId: string, session?: ClientSession) => {
 	const cleared = await mutateUserThingSecure(userId, (s) => {
 		if (s.meta!.activeFeedAlgorithmId === algorithmShareId) s.meta!.activeFeedAlgorithmId = null;
-	});
+	}, false, session);
 	if (cleared === 'mutated') return;
 	if (cleared === 'contended') throw new SecureWriteContendedError(userId);
 	if (!ObjectId.isValid(userId)) return;
@@ -1368,7 +1483,8 @@ export const clearUserActiveFeedAlgorithm = async (userId: string, algorithmShar
 		await getUsersCollection()
 	).updateOne(
 		{ _id: new ObjectId(userId), 'meta.activeFeedAlgorithmId': algorithmShareId },
-		{ $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: new Date() } }
+		{ $set: { 'meta.activeFeedAlgorithmId': null, updatedAt: new Date() } },
+		{ session }
 	);
 };
 
@@ -2291,28 +2407,42 @@ export const setUserConnectorConfirmations = async (
 
 // Personal instructions are private secure metadata: never part of a profile,
 // Thing crystal, search index, admin roster, or another viewer's prompt.
-export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
-  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
+export const getUserLopuInstructionRecord = async (userId: string, session?: ClientSession): Promise<InstructionRecord> => {
+  const options = { projection: { secure: 1 }, ...(session ? { session } : {}) };
+  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, options);
   const legacy = !thing && ObjectId.isValid(userId)
-    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 } }) : null;
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 }, ...(session ? { session } : {}) }) : null;
   const stored = (thing ? unpackSecure((thing as any).secure).meta : legacy?.meta)?.lopuInstructions;
-  if (!stored) return { revision: null, instructions: [] };
-  return { revision: stored.revision, instructions: validateLopuInstructions(stored.instructions) };
+  return stored ? parseInstructionRecord(stored) : { revision: null, instructions: [] };
 };
-export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
-  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
+  const stored = await getUserLopuInstructionRecord(userId);
+  if (!('reference' in stored)) return stored;
+  const { materializeInstructions } = await import('../settings/lopuInstructionStore');
+  return { revision: stored.revision, instructions: await materializeInstructions(userId, stored.reference) };
+};
+/** The immutable parts and live pointer commit in one home transaction. Ordinary
+ * atomic settings writes share this revision fence, including after migration. */
+export const setUserLopuInstructionRecord = async (userId: string, raw: InstructionRecord, expectedRevision: string | null, session?: ClientSession): Promise<InstructionRecord> => {
+  const settings = parseInstructionRecord(raw);
   const result = await mutateUserThingSecure(userId, secure => {
     if ((secure.meta!.lopuInstructions?.revision ?? null) !== expectedRevision) throw new LopuPromptConflictError();
     secure.meta!.lopuInstructions = settings;
-  });
+  }, false, session);
   if (result === 'mutated') return settings;
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
   const legacy = await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId), 'meta.lopuInstructions.revision': expectedRevision } as any,
-    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } }
+    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } },
+    { ...(session ? { session } : {}) }
   );
   if (!legacy.matchedCount) throw new LopuPromptConflictError();
+  return settings;
+};
+export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
+  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+  await setUserLopuInstructionRecord(userId, settings, expectedRevision);
   return settings;
 };
 

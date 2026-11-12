@@ -1,0 +1,14 @@
+{
+  "scope": "Main1125 integration preserves the frozen web/native checkpoint; separate imported Swift checks. No new installed-app or iOS runtime acceptance implied.",
+  "previousHead": "6d96a617792968e7bca0fc9d72c343ea2141310f",
+  "mergedMain": "1125ca1a95bdb8a1946a58b14a53c4c5981d408b",
+  "resolvedConflicts": [
+    "TESTING.md",
+    "remix/CHANGELOG.md"
+  ],
+  "resolution": "Retained both complete documentation blocks; preserved frozen checkpoint through exact stash ab90e6691570bcf6b1c30ba40c22a91f37ea2236.",
+  "frozenSourceFilesVerified": 15,
+  "mismatches": [],
+  "priorEvidence": "../native-integration-build/source-inventory.json",
+  "nativeAcceptanceLimit": "Incoming shared Passwords bridge/menu/companion changes were not in earlier built helper or iOS app; prior exact-source runtime receipts remain historical."
+}

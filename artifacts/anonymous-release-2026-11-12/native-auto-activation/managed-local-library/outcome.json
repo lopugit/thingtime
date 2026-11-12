@@ -1,0 +1,37 @@
+{
+  "passed": false,
+  "phase": "ordinary-library-idle-navigation",
+  "receiptSha256": "c6daf66e15041ce6f2848f9ad274d2411e94bc91c0a6788d59b7333bcdb64297",
+  "selectorSpecificBlockers": [
+    {
+      "tag": "SECTION",
+      "role": "dialog",
+      "ariaBusy": null,
+      "contenteditable": null
+    }
+  ],
+  "dialogComponentOwner": "unproven; metadata insufficient",
+  "noVisibleDialogInReviewedScreenshot": true,
+  "activityObservationAvailable": false,
+  "retainedLogObserverNodeTypeErrors": 0,
+  "activityCause": "not established",
+  "newActiveWorkLegReached": false,
+  "automaticReplacementReached": false,
+  "postRestartAccountOrMongoRetentionVerified": false,
+  "priorHomeFailureRemainsOpen": true,
+  "cleanupVerified": true,
+  "independentNoOwnedProcesses": true,
+  "independentPortsFree": [
+    29625,
+    29626,
+    29627
+  ],
+  "helperGroupEmptyBeforeAndAfter": true,
+  "copiedHelperSha256": "542b8ff8af8cd23f1b784379180ce42defb0ca40b4482e390c0ddfc63133bbcf",
+  "copiedHelperMatchesVerifiedInstalled": true,
+  "sourceAndWebHashesUnchanged": true,
+  "stoppedFailedQaProfile": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-qa-auto-local-library-pr1000/profile",
+  "retainedVerifiedDevelopmentAppUntouched": "/Users/lopu/Applications/Thingtime Dev native-bundle-dev-pr1000.app",
+  "sourceEditsAfterRun": false,
+  "furtherRetryRun": false
+}

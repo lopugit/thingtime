@@ -1,0 +1,20 @@
+{
+  "sourceCommit": "7814f1c565d93a812fecc71bd1cddf282bd17e5b",
+  "sourceSha256": {
+    "remix/scripts/hosted-render-preflight.ts": "7177551bdcf610880025e4bc19f0388928fa751fa2cf0c3d9e200e5f7bca1a68",
+    "remix/app/api/utils/chatgpt/hostedRender.server.ts": "b670ece06c08ed9282493f818952e72d7a4d0c3e8c30a5de6588af4bc02c32a5",
+    "MCP/scripts/hosted-render.Dockerfile": "a8576208f512354d486df31d8da97c510e73b3943daee5e0c16521245dba3a64",
+    "MCP/src/renderContract.ts": "bc7d3cdeabfd182e365a45fb938debc53ce2523ef8d7954fd32bc6e7f7121089",
+    "MCP/src/renderJob.ts": "ad5deb6841ebb5371deb6cc210e814201d571c33d7ed69c210d12039c4c579b6"
+  },
+  "rendererHash": "6eeb428b545c553b4aea0f0158faee8855b68ae99a1a697ec8ba0c52b33df448",
+  "providerPreflightPassed": true,
+  "artifactCount": 5,
+  "invalidCropRefused": true,
+  "cleanupRequiredForSuccess": true,
+  "registryAnonymousStatus": 401,
+  "productionApiMcpVersion": "2.2.0",
+  "productionRenderExportAvailable": false,
+  "productionVaultWrite": false,
+  "connectedHostArtifactCall": false
+}

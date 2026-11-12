@@ -4,6 +4,8 @@ import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import { SUPPORT_CAMPAIGN_URL, SUPPORT_EMAIL, SUPPORT_INQUIRIES, SUPPORT_PATH, supportMailto } from './supportContent.ts';
+// @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
+import { SITE_PAGE_SEEDS } from '../../schemas/sitePages.ts';
 
 // The support page's destinations and copy are a public commitment: the landing
 // section, the shared footer, README, FUNDING.yml and TESTING.md all assert the
@@ -42,11 +44,16 @@ test('every inquiry ships a default draft that fits the form limits and the mail
 test('the funding section keeps its saved-page key while the retired campaign claims stay gone', async () => {
 	const landing = await readFile(new URL('../Landing/landingSections.tsx', import.meta.url), 'utf8');
 	const native = await readFile(new URL('../Builder/nativeSections.tsx', import.meta.url), 'utf8');
-	const seed = await readFile(new URL('../../api/utils/webpages/seed.ts', import.meta.url), 'utf8');
 
 	// Saved builder pages reference sections by key, so 'home-back' and the
 	// '#back' anchor must outlive any rename of the section's visible title.
-	for (const source of [landing, native, seed]) assert.match(source, /'home-back'/u);
+	for (const source of [landing, native]) assert.match(source, /'home-back'/u);
+	// The seeded home page composes the same keys into native blocks. Assert the
+	// table itself rather than the text of whichever module hosts it — it now
+	// lives in schemas/sitePages so offline Builder creation shares it with the
+	// server seeder (api/utils/webpages/seed re-exports it).
+	const home = SITE_PAGE_SEEDS.find((page) => page.key === 'home');
+	assert.ok(home?.sections?.includes('home-back'), "the seeded home page must keep its 'home-back' section");
 	assert.match(landing, /id="back"/u);
 	assert.match(landing, /href: '#back'/u);
 

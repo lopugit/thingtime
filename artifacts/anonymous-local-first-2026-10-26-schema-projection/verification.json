@@ -1,0 +1,26 @@
+{
+  "command": "npm --prefix remix run test:schemas",
+  "tests": 277,
+  "passed": 277,
+  "failed": 0,
+  "skipped": 0,
+  "scope": "Local schema suite after repairing the two private instruction projection pins",
+  "sourceSha256": "746561979487246b6e5668db641ba244dcba0d0bcf14153610b912b2981f5d0f",
+  "priorCI": {
+    "head": "8c690d2984b0cff8322c408625fe2c36488232f5",
+    "url": "https://github.com/lopugit/thingtime/actions/runs/40289045213",
+    "build": "passed",
+    "typecheckRatchet": "passed",
+    "unitTests": "failed: three schema projection assertions"
+  },
+  "deployedAcceptance": false,
+  "nativeProtocol": {
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "artifact": "legacy-protocol/legacy-protocol-result.json",
+    "scope": "Isolated built-server multipart storage and authenticated browser legacy refusal; not full editor acceptance",
+    "sourceSha256": "288243209560726e6270c6461a75c07a4d9cf755a87762b5e62fec0dfa569e67"
+  },
+  "lint": "passed"
+}

@@ -1,0 +1,1650 @@
+{"sha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476", "fileCount": 2975}
+
+> @1.0.0 build:client /workspace/thingtime/remix
+> node scripts/ensure-dependencies.js && npm run build:platform && vite build && npm run build:library && npm run build:embed && npm run build:draft && npm run build:offline
+
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> build:platform
+> vite build --config vite.platform.config.ts
+
+vite v8.1.4 building client environment for production...
+[2Ktransforming...✓ 37 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/platform/runtime.html    0.66 kB │ gzip:  0.45 kB
+dist/platform/runtime.js    148.22 kB │ gzip: 45.05 kB
+
+✓ built in 99ms
+vite v8.1.4 building client environment for production...
+[2Ktransforming...✓ 4619 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/platform/runtime.html                               0.66 kB │ gzip:     0.45 kB
+dist/assets/aiTasks.worker-CKRd9k1s.js                   2.03 kB
+dist/tt-preview-freshness.js                             4.47 kB
+dist/index.html                                         14.35 kB │ gzip:     3.37 kB
+dist/platform/runtime.js                               148.22 kB
+dist/assets/mediaWorker-BoV8L5k2.js                    470.65 kB
+dist/assets/index-CYUcBQH4.css                          10.86 kB │ gzip:     2.50 kB
+dist/assets/lopu-voice-B43vOlsW.js                       0.05 kB │ gzip:     0.07 kB
+dist/assets/p-5jom6hv5.js                                0.06 kB │ gzip:     0.08 kB
+dist/assets/expectedActor-DeM3Thkp.js                    0.10 kB │ gzip:     0.11 kB │ map:     0.96 kB
+dist/assets/history-BZ9GAgF_.js                          0.12 kB │ gzip:     0.13 kB │ map:     0.24 kB
+dist/assets/box-7XyDsKb6.js                              0.12 kB │ gzip:     0.14 kB │ map:     0.50 kB
+dist/assets/builder-demos-DWCKZkwN.js                    0.13 kB │ gzip:     0.14 kB │ map:     0.35 kB
+dist/assets/check-kWpI1l2W.js                            0.16 kB │ gzip:     0.17 kB │ map:     0.77 kB
+dist/assets/chevron-down-D2nX8Hvp.js                     0.17 kB │ gzip:     0.17 kB │ map:     0.81 kB
+dist/assets/chevron-right-DyIaIeMq.js                    0.18 kB │ gzip:     0.17 kB │ map:     0.82 kB
+dist/assets/x-Bov-Xyij.js                                0.19 kB │ gzip:     0.18 kB │ map:     0.85 kB
+dist/assets/loader-circle-Djmmjtk2.js                    0.19 kB │ gzip:     0.19 kB │ map:     0.83 kB
+dist/assets/actions-DFh0PY7C.js                          0.19 kB │ gzip:     0.18 kB │ map:     0.33 kB
+dist/assets/call-all-CvnVcB5B.js                         0.20 kB │ gzip:     0.16 kB │ map:     0.77 kB
+dist/assets/schemas-Df3bFra8.js                          0.20 kB │ gzip:     0.19 kB │ map:     0.48 kB
+dist/assets/search-CNJUXjL8.js                           0.21 kB │ gzip:     0.20 kB │ map:     0.92 kB
+dist/assets/userIdentity-CNlrJ64X.js                     0.22 kB │ gzip:     0.18 kB │ map:     0.97 kB
+dist/assets/circle-check-Brd5K6Xj.js                     0.22 kB │ gzip:     0.20 kB │ map:     0.95 kB
+dist/assets/play-BeGuapwr.js                             0.23 kB │ gzip:     0.21 kB │ map:     0.87 kB
+dist/assets/createWithDraft-CDFao1xr.js                  0.23 kB │ gzip:     0.18 kB │ map:     0.93 kB
+dist/assets/lock-G-OzztxM.js                             0.24 kB │ gzip:     0.23 kB │ map:     0.99 kB
+dist/assets/rotate-ccw-GESIjRin.js                       0.24 kB │ gzip:     0.22 kB │ map:     0.94 kB
+dist/assets/children-rDSpZAbD.js                         0.25 kB │ gzip:     0.21 kB │ map:     0.58 kB
+dist/assets/circle-x-RVW4pFzb.js                         0.25 kB │ gzip:     0.21 kB │ map:     1.02 kB
+dist/assets/code-xml-CI0O2NYV.js                         0.25 kB │ gzip:     0.21 kB │ map:     1.00 kB
+dist/assets/card-BekJjnX-.js                             0.25 kB │ gzip:     0.19 kB │ map:     0.65 kB
+dist/assets/useCurrentUser-Dsq6iEQC.js                   0.25 kB │ gzip:     0.21 kB │ map:     3.02 kB
+dist/assets/suiteComponentBindings-LhXiW2iD.js           0.27 kB │ gzip:     0.21 kB │ map:     1.03 kB
+dist/assets/copy-Bka8Z6ju.js                             0.27 kB │ gzip:     0.24 kB │ map:     1.02 kB
+dist/assets/link-2-dl_XnCy8.js                           0.28 kB │ gzip:     0.24 kB │ map:     1.07 kB
+dist/assets/panel-left-open-DwTVwAv7.js                  0.28 kB │ gzip:     0.24 kB │ map:     1.11 kB
+dist/assets/panel-left-close-D38EP9BO.js                 0.29 kB │ gzip:     0.24 kB │ map:     1.12 kB
+dist/assets/electronBridge-CsSTpHQ6.js                   0.29 kB │ gzip:     0.23 kB │ map:    16.91 kB
+dist/assets/settings-2-D6cXoUFa.js                       0.30 kB │ gzip:     0.23 kB │ map:     1.17 kB
+dist/assets/external-link-F4DmZDSr.js                    0.30 kB │ gzip:     0.23 kB │ map:     1.07 kB
+dist/assets/ode-CXD0Mqeh.js                              0.31 kB │ gzip:     0.25 kB │ map:     0.89 kB
+dist/assets/braces-CQwR29-N.js                           0.32 kB │ gzip:     0.24 kB │ map:     1.05 kB
+dist/assets/mongodb-status-g7VQPt13.js                   0.34 kB │ gzip:     0.27 kB │ map:     1.08 kB
+dist/assets/capabilityContract-YGZd7r3F.js               0.34 kB │ gzip:     0.26 kB │ map:     1.14 kB
+dist/assets/heading-n5Xlp-qo.js                          0.35 kB │ gzip:     0.27 kB │ map:     1.34 kB
+dist/assets/shield-check-Cg_AYeIa.js                     0.37 kB │ gzip:     0.28 kB │ map:     1.10 kB
+dist/assets/square-DSnkr35m.js                           0.37 kB │ gzip:     0.28 kB │ map:     1.77 kB
+dist/assets/status-DHnZdkER.js                           0.37 kB │ gzip:     0.28 kB │ map:     1.25 kB
+dist/assets/themes-xWESLYH0.js                           0.38 kB │ gzip:     0.30 kB │ map:     0.75 kB
+dist/assets/link-DESGrlWr.js                             0.39 kB │ gzip:     0.30 kB │ map:     1.43 kB
+dist/assets/responsive-DDqOHO-S.js                       0.40 kB │ gzip:     0.30 kB │ map:     2.06 kB
+dist/assets/key-round-CAau3BOX.js                        0.40 kB │ gzip:     0.29 kB │ map:     1.16 kB
+dist/assets/shield-alert-BbV_YpBa.js                     0.40 kB │ gzip:     0.29 kB │ map:     1.20 kB
+dist/assets/badge-Bmwd7qsR.js                            0.42 kB │ gzip:     0.31 kB │ map:     1.46 kB
+dist/assets/dataPlane-BTHPadiy.js                        0.43 kB │ gzip:     0.32 kB │ map:     1.39 kB
+dist/assets/input-D67GTdIb.js                            0.43 kB │ gzip:     0.31 kB │ map:     1.63 kB
+dist/assets/trash-2-C-cazxIi.js                          0.47 kB │ gzip:     0.29 kB │ map:     1.99 kB
+dist/assets/textarea-l7zfdTmn.js                         0.47 kB │ gzip:     0.33 kB │ map:     1.69 kB
+dist/assets/rocket-DyANsLm_.js                           0.49 kB │ gzip:     0.34 kB │ map:     1.37 kB
+dist/assets/sparkles-rN-UN3Pq.js                         0.54 kB │ gzip:     0.32 kB │ map:     1.41 kB
+dist/assets/modal-close-button-BGswzGPU.js               0.55 kB │ gzip:     0.37 kB │ map:     1.61 kB
+dist/assets/icon-button-B05hsXz7.js                      0.55 kB │ gzip:     0.39 kB │ map:     1.56 kB
+dist/assets/use-update-effect-BE1ht6Vv.js                0.56 kB │ gzip:     0.34 kB │ map:     2.20 kB
+dist/assets/center-BQqw8sKr.js                           0.57 kB │ gzip:     0.37 kB │ map:     1.72 kB
+dist/assets/grid-Xqnp1IxO.js                             0.57 kB │ gzip:     0.35 kB │ map:     1.62 kB
+dist/assets/chatAttachmentInput-Cszu5l7r.js              0.61 kB │ gzip:     0.34 kB │ map:     2.00 kB
+dist/assets/useWorkspaceScope-n6TA5nvz.js                0.62 kB │ gzip:     0.41 kB │ map:     1.81 kB
+dist/assets/builderLinks-Bg1RHXr0.js                     0.62 kB │ gzip:     0.44 kB │ map:     2.72 kB
+dist/assets/rainbow-DtBW-T4E.js                          0.66 kB │ gzip:     0.26 kB │ map:     1.61 kB
+dist/assets/bundledComponentCatalog-BWbyiWHP.js          0.69 kB │ gzip:     0.43 kB │ map:     1.80 kB
+dist/assets/CharacterScope-DB1aJao6.js                   0.69 kB │ gzip:     0.46 kB │ map:     1.96 kB
+dist/assets/simple-grid-DuUn8lnM.js                      0.71 kB │ gzip:     0.45 kB │ map:     2.27 kB
+dist/assets/rows-3-DbHu6PQA.js                           0.71 kB │ gzip:     0.33 kB │ map:     3.34 kB
+dist/assets/popover-arrow-hY_4i3Br.js                    0.74 kB │ gzip:     0.46 kB │ map:     2.28 kB
+dist/assets/requireCapability.client-00U_blSP.js         0.79 kB │ gzip:     0.51 kB │ map:     2.47 kB
+dist/assets/server-cog-BqpmM_Ua.js                       0.87 kB │ gzip:     0.41 kB │ map:     2.27 kB
+dist/assets/form-label-Dp4GFCxa.js                       0.88 kB │ gzip:     0.50 kB │ map:     3.05 kB
+dist/assets/settings-DxRKgZ9o.js                         0.88 kB │ gzip:     0.57 kB │ map:     1.98 kB
+dist/assets/mediaPolicy-k4nddYNP.js                      0.98 kB │ gzip:     0.53 kB │ map:     2.40 kB
+dist/assets/shared-BBW-V60T.js                           0.98 kB │ gzip:     0.61 kB │ map:     7.31 kB
+dist/assets/branding_old-BhlE71LD.js                     1.03 kB │ gzip:     0.55 kB │ map:     2.28 kB
+dist/assets/icon-CCpHsQCx.js                             1.05 kB │ gzip:     0.62 kB │ map:     3.23 kB
+dist/assets/tr-CEbt8r7Y.js                               1.06 kB │ gzip:     0.52 kB │ map:     5.81 kB
+dist/assets/useComponentVersionDraft-CAQMDiRr.js         1.08 kB │ gzip:     0.64 kB │ map:     3.00 kB
+dist/assets/supportContent-Djc1q7Mh.js                   1.15 kB │ gzip:     0.63 kB │ map:     1.88 kB
+dist/assets/preload-helper-Czpn1I53.js                   1.19 kB │ gzip:     0.67 kB
+dist/assets/transition-utils-DzB2lp8D.js                 1.20 kB │ gzip:     0.49 kB │ map:     4.22 kB
+dist/assets/switch-CMR_auj0.js                           1.25 kB │ gzip:     0.67 kB │ map:     4.06 kB
+dist/assets/rolldown-runtime-DAXXjFlN.js                 1.26 kB │ gzip:     0.70 kB
+dist/assets/BrutalButton-Brg4gFD7.js                     1.29 kB │ gzip:     0.70 kB │ map:     2.88 kB
+dist/assets/delimiter-BTbxXW7b.js                        1.29 kB │ gzip:     0.71 kB │ map:     3.90 kB
+dist/assets/focusable-BYQTYkiY.js                        1.30 kB │ gzip:     0.65 kB │ map:     6.84 kB
+dist/assets/createLucideIcon-CJkvbz5V.js                 1.48 kB │ gzip:     0.84 kB │ map:     9.18 kB
+dist/assets/stack-DJRsJfGO.js                            1.50 kB │ gzip:     0.81 kB │ map:     5.83 kB
+dist/assets/thingsLocation-DX_mauxD.js                   1.57 kB │ gzip:     0.77 kB │ map:     5.45 kB
+dist/assets/PageShell-KupXtgqn.js                        1.65 kB │ gzip:     0.91 kB │ map:     5.15 kB
+dist/assets/image-BOTlCInl.js                            1.70 kB │ gzip:     0.89 kB │ map:     6.49 kB
+dist/assets/subspaceTypes-BZSt8cs9.js                    1.73 kB │ gzip:     0.84 kB │ map:    13.69 kB
+dist/assets/InlineRichTextEditor-_Sby5uTo.js             1.74 kB │ gzip:     0.99 kB │ map:     7.32 kB
+dist/assets/logoMatrix-Cxlc8DF0.js                       1.76 kB │ gzip:     0.99 kB │ map:     7.69 kB
+dist/assets/shapes-BINtgSkR.js                           1.78 kB │ gzip:     0.70 kB │ map:     4.99 kB
+dist/assets/Logo-CjmmV38u.js                             1.78 kB │ gzip:     1.02 kB │ map:     6.44 kB
+dist/assets/tslib.es6-DgPp1qHM.js                        1.85 kB │ gzip:     0.87 kB │ map:    20.57 kB
+dist/assets/collapse-DQ40UYNG.js                         1.87 kB │ gzip:     0.92 kB │ map:     5.66 kB
+dist/assets/underline-B12G3vhk.js                        1.97 kB │ gzip:     0.95 kB │ map:     4.83 kB
+dist/assets/select-D0ZrvrKd.js                           1.97 kB │ gzip:     1.08 kB │ map:     6.87 kB
+dist/assets/inline-code-OICaDcZE.js                      2.03 kB │ gzip:     1.00 kB │ map:     4.95 kB
+dist/assets/marker-CBQxBDDu.js                           2.08 kB │ gzip:     1.07 kB │ map:     4.83 kB
+dist/assets/odeSections-CPIwHb75.js                      2.11 kB │ gzip:     1.14 kB │ map:     3.87 kB
+dist/assets/catalogRecordsSuite-l4xMGTz3.js              2.12 kB │ gzip:     0.86 kB │ map:     4.60 kB
+dist/assets/rainbow._-Cu1wKDDc.js                        2.27 kB │ gzip:     1.08 kB │ map:     6.93 kB
+dist/assets/builder-Ckv6U5CL.js                          2.42 kB │ gzip:     1.16 kB │ map:     5.40 kB
+dist/assets/marketingDownload-DTCr0zJT.js                2.48 kB │ gzip:     1.17 kB │ map:     9.82 kB
+dist/assets/SubspaceMessagesPanel-CjwKNwmQ.js            2.49 kB │ gzip:     1.26 kB │ map:     6.34 kB
+dist/assets/code-CO6TCXBs.js                             2.64 kB │ gzip:     1.33 kB │ map:     8.10 kB
+dist/assets/suites-C8qvLG5T.js                           2.66 kB │ gzip:     1.26 kB │ map:    10.29 kB
+dist/assets/input-element-D8uURpTH.js                    2.67 kB │ gzip:     1.20 kB │ map:     9.60 kB
+dist/assets/checkbox-2W6Igtyv.js                         2.77 kB │ gzip:     1.30 kB │ map:    10.23 kB
+dist/assets/useMessengerApi-Bet4ltzK.js                  2.81 kB │ gzip:     1.14 kB │ map:     7.47 kB
+dist/assets/use-clipboard-Dxz0qjsJ.js                    2.87 kB │ gzip:     1.38 kB │ map:     8.99 kB
+dist/assets/schemaBrowseTypes-vgf70_xb.js                2.92 kB │ gzip:     1.22 kB │ map:    16.01 kB
+dist/assets/welcomeSections-CfA6Bjqo.js                  2.97 kB │ gzip:     1.33 kB │ map:     8.13 kB
+dist/assets/tools-DesmGT0t.js                            2.99 kB │ gzip:     1.23 kB │ map:    14.27 kB
+dist/assets/use-form-control-9iAJMeje.js                 3.03 kB │ gzip:     1.32 kB │ map:    10.58 kB
+dist/assets/warning-DRYaYCEN.js                          3.25 kB │ gzip:     1.36 kB │ map:     7.53 kB
+dist/assets/templateBlocks-BWIfLaUW.js                   3.25 kB │ gzip:     1.44 kB │ map:    10.87 kB
+dist/assets/installSuite-BWrswMFW.js                     3.28 kB │ gzip:     1.57 kB │ map:     9.34 kB
+dist/assets/embedSections-BxcVjJzj.js                    3.46 kB │ gzip:     1.70 kB │ map:     5.38 kB
+dist/assets/BuilderViewport-ChZ_gM87.js                  3.51 kB │ gzip:     1.75 kB │ map:     9.21 kB
+dist/assets/useDeviceApi-DoIMr6GE.js                     3.60 kB │ gzip:     1.32 kB │ map:    18.97 kB
+dist/assets/use-descendant-DuwvFhU0.js                   3.84 kB │ gzip:     1.56 kB │ map:    14.38 kB
+dist/assets/TierCard-BuR4_S4O.js                         3.85 kB │ gzip:     1.80 kB │ map:    10.34 kB
+dist/assets/BuilderThingMenu-Dtb746vG.js                 3.90 kB │ gzip:     1.65 kB │ map:    11.39 kB
+dist/assets/themes.gallery-BjqDqNxq.js                   4.10 kB │ gzip:     1.87 kB │ map:    11.15 kB
+dist/assets/esm-C_wvsA3c.js                              4.31 kB │ gzip:     1.94 kB │ map:    20.73 kB
+dist/assets/componentBrowseTypes-DKmTBvyU.js             4.52 kB │ gzip:     1.97 kB │ map:    19.63 kB
+dist/assets/lopu.tasks-CTjcuwye.js                       4.57 kB │ gzip:     2.03 kB │ map:    11.19 kB
+dist/assets/concepts-tDHGvvjp.js                         4.58 kB │ gzip:     1.64 kB │ map:    11.20 kB
+dist/assets/page-CS_9Us-e.js                             4.81 kB │ gzip:     1.95 kB │ map:    12.94 kB
+dist/assets/LopuMarkdown-CPHARbEX.js                     4.88 kB │ gzip:     2.03 kB │ map:    14.04 kB
+dist/assets/docsCode-C_5W9bXT.js                         4.91 kB │ gzip:     2.33 kB │ map:    15.15 kB
+dist/assets/statusSections-DJjJcYah.js                   5.03 kB │ gzip:     1.85 kB │ map:    13.04 kB
+dist/assets/marketingPublicationsStore-D2oyxRIf.js       5.05 kB │ gzip:     2.23 kB │ map:    22.26 kB
+dist/assets/runtime.client-DWX1awdX.js                   5.17 kB │ gzip:     2.11 kB │ map:    18.08 kB
+dist/assets/accordion-panel-DthbZFzK.js                  5.22 kB │ gzip:     2.28 kB │ map:    20.18 kB
+dist/assets/arrow-left-FSzb0Tv7.js                       5.28 kB │ gzip:     2.44 kB │ map:    19.70 kB
+dist/assets/use-checkbox-DsAWMG1e.js                     5.33 kB │ gzip:     2.17 kB │ map:    29.11 kB
+dist/assets/designEntries-DIN1r8f8.js                    5.42 kB │ gzip:     2.06 kB │ map:     8.19 kB
+dist/assets/DefinitionValueEditor-SgxNm-4Y.js            5.55 kB │ gzip:     2.38 kB │ map:    16.47 kB
+dist/assets/connections-feed-jf7awpVO.js                 5.82 kB │ gzip:     2.49 kB │ map:    21.39 kB
+dist/assets/apiRequestLog-BW_s4VAC.js                    5.93 kB │ gzip:     2.63 kB │ map:    26.17 kB
+dist/assets/notificationCore-DpFYi1TW.js                 6.05 kB │ gzip:     2.41 kB │ map:    17.95 kB
+dist/assets/header-BItiNjlJ.js                           6.27 kB │ gzip:     2.12 kB │ map:    14.95 kB
+dist/assets/legal-DSaZiotw.js                            6.41 kB │ gzip:     2.40 kB │ map:    15.06 kB
+dist/assets/checklist-pjZ-epDe.js                        6.71 kB │ gzip:     2.50 kB │ map:    15.62 kB
+dist/assets/mcpDemoCore-CmPU2gZl.js                      6.96 kB │ gzip:     2.77 kB │ map:    13.38 kB
+dist/assets/apps--E2bltSf.js                             6.98 kB │ gzip:     2.89 kB │ map:    20.77 kB
+dist/assets/simple-image-KPixhfPZ.js                     7.09 kB │ gzip:     2.33 kB │ map:    14.52 kB
+dist/assets/ThingDefinitionEditor-D1L7-vUy.js            7.17 kB │ gzip:     3.11 kB │ map:    18.62 kB
+dist/assets/category-DyPs497X.js                         7.51 kB │ gzip:     3.11 kB │ map:    23.33 kB
+dist/assets/jsx-runtime-CBD9r_Rc.js                      7.94 kB │ gzip:     3.02 kB │ map:    29.12 kB
+dist/assets/LopuModelPicker-Dy8dug2s.js                  8.05 kB │ gzip:     3.26 kB │ map:    25.37 kB
+dist/assets/watch.pair-CrW6-1Xk.js                       8.13 kB │ gzip:     3.61 kB │ map:    22.11 kB
+dist/assets/portal-DicUj6Kp.js                           8.27 kB │ gzip:     3.30 kB │ map:    36.22 kB
+dist/assets/algorithms-DSBN-T14.js                       8.49 kB │ gzip:     3.29 kB │ map:    22.21 kB
+dist/assets/button-iiVVfedf.js                           8.56 kB │ gzip:     3.48 kB │ map:    35.25 kB
+dist/assets/lopu-BwoBNrhO.js                             8.73 kB │ gzip:     3.46 kB │ map:    24.10 kB
+dist/assets/support-BCz1B-iP.js                          8.89 kB │ gzip:     3.37 kB │ map:    18.59 kB
+dist/assets/design-CYrT-LJM.js                           9.55 kB │ gzip:     3.37 kB │ map:    27.31 kB
+dist/assets/schemas-DR2MItML.js                          9.66 kB │ gzip:     3.25 kB │ map:    24.01 kB
+dist/assets/brandingAssets.generated-DDHK2-QI.js         9.68 kB │ gzip:     1.98 kB │ map:    18.86 kB
+dist/assets/storage-DlMZ7x42.js                          9.82 kB │ gzip:     3.52 kB │ map:    33.80 kB
+dist/assets/design-system-C2VD-s85.js                    9.88 kB │ gzip:     2.64 kB │ map:    25.99 kB
+dist/assets/docs-CUIYjcJn.js                            10.31 kB │ gzip:     2.62 kB │ map:    21.03 kB
+dist/assets/SettingsSection-DR-vcRyl.js                 10.80 kB │ gzip:     3.12 kB │ map:   163.32 kB
+dist/assets/_index-Cx647wUa.js                          10.87 kB │ gzip:     3.59 kB │ map:    28.61 kB
+dist/assets/useLopuChat-ip4EIM9C.js                     10.88 kB │ gzip:     4.64 kB │ map:    43.63 kB
+dist/assets/useLopuSettings-CjOApxxe.js                 10.96 kB │ gzip:     3.92 kB │ map:    48.25 kB
+dist/assets/SubspaceEmbeddedThings-D5-OaN3G.js          11.10 kB │ gzip:     3.94 kB │ map:    32.75 kB
+dist/assets/migrations-zmjOxwpP.js                      11.24 kB │ gzip:     3.81 kB │ map:    34.86 kB
+dist/assets/notifications-w-2kMGR8.js                   11.29 kB │ gzip:     4.33 kB │ map:    34.76 kB
+dist/assets/subspaces-DDNHiziR.js                       11.52 kB │ gzip:     4.35 kB │ map:    34.44 kB
+dist/assets/connections-B78nmHZp.js                     12.24 kB │ gzip:     3.78 kB │ map:    35.47 kB
+dist/assets/library-BDjU2Qkj.js                         12.29 kB │ gzip:     4.83 kB │ map:    30.47 kB
+dist/assets/embed-Bx3lAay6.js                           12.37 kB │ gzip:     3.96 kB │ map:    24.73 kB
+dist/assets/mcp-BtPcBP04.js                             12.43 kB │ gzip:     4.30 kB │ map:    29.13 kB
+dist/assets/mongodbStatusSections-R2fC8CHc.js           13.09 kB │ gzip:     4.54 kB │ map:    41.03 kB
+dist/assets/MarketingPublishingTab-TBt8xOwb.js          13.21 kB │ gzip:     4.01 kB │ map:    35.82 kB
+dist/assets/agent-browsers-BFbmhMOI.js                  13.41 kB │ gzip:     4.68 kB │ map:    34.26 kB
+dist/assets/apps-manage-BIf7atb2.js                     13.58 kB │ gzip:     4.70 kB │ map:    43.49 kB
+dist/assets/smartphone-Bo6mwSjI.js                      13.63 kB │ gzip:     5.43 kB │ map:    55.02 kB
+dist/assets/builder-demo-detail-B5vtbGqe.js             13.99 kB │ gzip:     4.83 kB │ map:    40.80 kB
+dist/assets/social-media-g_pGnsS3.js                    14.28 kB │ gzip:     4.86 kB │ map:    40.85 kB
+dist/assets/vercel-C5LYfdXa.js                          14.40 kB │ gzip:     4.15 kB │ map:    41.69 kB
+dist/assets/schema-detail-UV9gIbTK.js                   14.89 kB │ gzip:     5.27 kB │ map:    46.43 kB
+dist/assets/action-detail-DkxBM9m7.js                   14.99 kB │ gzip:     5.11 kB │ map:    47.49 kB
+dist/assets/LiveWebpage-0Tt2jSkt.js                     15.46 kB │ gzip:     6.49 kB │ map:    33.97 kB
+dist/assets/crypto-MmWgtcEc.js                          16.58 kB │ gzip:     4.40 kB │ map:    49.85 kB
+dist/assets/ThingsViews-CsjZ4mNT.js                     17.86 kB │ gzip:     5.89 kB │ map:    57.29 kB
+dist/assets/SeamlessPageEditor-CJ0nKg5P.js              18.04 kB │ gzip:     6.71 kB │ map:    47.14 kB
+dist/assets/DeviceCard-DTbRi3rB.js                      18.41 kB │ gzip:     6.29 kB │ map:    56.50 kB
+dist/assets/embed-hmyS11nO.js                           18.50 kB │ gzip:     6.77 kB │ map:    35.88 kB
+dist/assets/useLopu-C99NhklG.js                         18.53 kB │ gzip:     7.59 kB │ map:    70.33 kB
+dist/assets/mail-ByXBYmD3.js                            19.01 kB │ gzip:     5.93 kB │ map:    58.52 kB
+dist/assets/_index-DMy4jn1h.js                          19.83 kB │ gzip:     6.51 kB │ map:    53.15 kB
+dist/assets/DemoLibraryPage-fmMaHupF.js                 20.01 kB │ gzip:     7.03 kB │ map:    67.06 kB
+dist/assets/componentTemplate-BtbE723f.js               20.23 kB │ gzip:     7.24 kB │ map:    93.46 kB
+dist/assets/ActionsPage-CZw5qUGj.js                     20.96 kB │ gzip:     6.99 kB │ map:    63.64 kB
+dist/assets/builder-DNZCLYzT.js                         21.24 kB │ gzip:     7.66 kB │ map:    66.47 kB
+dist/assets/lopu.recordings-B0TlDbtY.js                 22.15 kB │ gzip:     7.65 kB │ map:    66.34 kB
+dist/assets/landingSections-DipsgwTh.js                 22.43 kB │ gzip:     7.01 kB │ map:    56.12 kB
+dist/assets/search-CpVTRB33.js                          22.61 kB │ gzip:     7.58 kB │ map:    82.87 kB
+dist/assets/lib-C0yaoKJR.js                             23.54 kB │ gzip:     8.58 kB │ map:   163.59 kB
+dist/assets/quote-CO_4WnvR.js                           24.15 kB │ gzip:     7.36 kB │ map:    58.19 kB
+dist/assets/api-LC1b9Cuj.js                             24.58 kB │ gzip:     7.65 kB │ map:    74.01 kB
+dist/assets/table-CP571soE.js                           25.98 kB │ gzip:     6.96 kB │ map:    58.08 kB
+dist/assets/subspace-BULqLfqy.js                        26.15 kB │ gzip:     9.06 kB │ map:    66.38 kB
+dist/assets/species-CvNO-5AZ.js                         26.22 kB │ gzip:     4.60 kB │ map:    65.11 kB
+dist/assets/component-detail-LY-3CsCY.js                27.12 kB │ gzip:     8.87 kB │ map:    84.93 kB
+dist/assets/documents-CfVrKuaJ.js                       27.85 kB │ gzip:    10.10 kB │ map:    32.61 kB
+dist/assets/DocsLayout-C8h2s8m_.js                      28.10 kB │ gzip:     8.19 kB │ map:    81.46 kB
+dist/assets/ThemeStudio-D5t-yL4z.js                     31.38 kB │ gzip:     9.49 kB │ map:    87.26 kB
+dist/assets/components-DqoL85_w.js                      31.38 kB │ gzip:    10.24 kB │ map:    95.02 kB
+dist/assets/builderGuide-CADsLqSx.js                    32.66 kB │ gzip:    12.57 kB │ map:    37.80 kB
+dist/assets/popover-trigger-C6P49pQG.js                 34.94 kB │ gzip:    12.49 kB │ map:   162.22 kB
+dist/assets/aiTasks.client-DfiwmlJE.js                  36.78 kB │ gzip:    13.56 kB │ map:   146.83 kB
+dist/assets/modal-overlay-Cs9dwNll.js                   38.64 kB │ gzip:    13.32 kB │ map:   181.75 kB
+dist/assets/SchemasBrowsePage-CVETHCdv.js               41.27 kB │ gzip:    12.42 kB │ map:   133.69 kB
+dist/assets/raw-Bg4UjBIo.js                             42.14 kB │ gzip:    11.52 kB │ map:   121.98 kB
+dist/assets/messages-g4Wtu40g.js                        46.62 kB │ gzip:    13.39 kB │ map:   144.47 kB
+dist/assets/editorjs-list-CN_D_H1V.js                   48.44 kB │ gzip:    12.86 kB │ map:   121.46 kB
+dist/assets/LopuVoiceControls-BloSF98K.js               50.03 kB │ gzip:    16.71 kB │ map:   157.98 kB
+dist/assets/subspace-mod-CSgnJ1Ki.js                    50.75 kB │ gzip:    13.35 kB │ map:   154.57 kB
+dist/assets/LopuChatView-GeoQCAN2.js                    58.02 kB │ gzip:    18.16 kB │ map:   181.95 kB
+dist/assets/ChatDetailsDrawer-BBzyVxEJ.js               58.60 kB │ gzip:    18.21 kB │ map:   195.02 kB
+dist/assets/zip-reader-Bo8v8QL7.js                      62.58 kB │ gzip:    23.05 kB │ map:   347.60 kB
+dist/assets/ServiceWorkspace-DmbPGL6Q.js                64.45 kB │ gzip:    19.23 kB │ map:   175.44 kB
+dist/assets/nativeBridge-Dz6WyTti.js                    64.89 kB │ gzip:    21.87 kB │ map:   279.54 kB
+dist/assets/text-DV3zdfuN.js                            66.91 kB │ gzip:    23.83 kB │ map:   281.48 kB
+dist/assets/hooks-CcwhGgAu.js                           71.39 kB │ gzip:    23.65 kB │ map:   334.40 kB
+dist/assets/LibraryDemo-BxLBbU5v.js                     72.37 kB │ gzip:    24.58 kB │ map:   141.89 kB
+dist/assets/editorJsHtml-DXSPwe5g.js                    78.16 kB │ gzip:    25.42 kB │ map:   257.22 kB
+dist/assets/entries-DQtzGpgo.js                         80.89 kB │ gzip:    26.53 kB │ map:   197.93 kB
+dist/assets/MarketingGate-N-f-cinZ.js                   86.42 kB │ gzip:    23.66 kB │ map:   251.36 kB
+dist/assets/proxy-B0NPJtdG.js                          109.63 kB │ gzip:    36.14 kB │ map:   596.54 kB
+dist/assets/behaviourSuites-DMmrTN1x.js                113.73 kB │ gzip:    31.19 kB │ map:   286.31 kB
+dist/assets/useDrawer-dQsLgLrW.js                      126.15 kB │ gzip:    35.95 kB │ map:   471.66 kB
+dist/assets/tests-HF9dM5_e.js                          128.11 kB │ gzip:    30.77 kB │ map:   268.11 kB
+dist/assets/admin-wKIVb-3P.js                          159.23 kB │ gzip:    43.84 kB │ map:   451.81 kB
+dist/assets/publishing-D8n_IwfD.js                     165.46 kB │ gzip:    51.98 kB │ map:   349.67 kB
+dist/assets/things-1z22Kxb6.js                         171.01 kB │ gzip:    49.03 kB │ map:   512.10 kB
+dist/assets/WebPlatformSurface-DG0M7fEX.js             177.83 kB │ gzip:    53.79 kB │ map:    90.86 kB
+dist/assets/ThingTransferControls-By0zlwiF.js          203.87 kB │ gzip:    67.10 kB │ map:   685.93 kB
+dist/assets/editorjs-BXL59_A0.js                       240.62 kB │ gzip:    64.69 kB │ map:   616.47 kB
+dist/assets/appSuites-BWUJut6h.js                      259.58 kB │ gzip:    68.86 kB │ map:   607.30 kB
+dist/assets/data-by-group-C36KjNdV.js                  277.00 kB │ gzip:    30.55 kB │ map:   481.56 kB
+dist/assets/registry-DZc3KZ2m.js                       305.44 kB │ gzip:    90.64 kB │ map:   829.40 kB
+dist/assets/passwords-Dx0G5-dH.js                      311.85 kB │ gzip:   121.11 kB │ map:   925.73 kB
+dist/assets/useApi-B6J1si7m.js                         362.08 kB │ gzip:    96.58 kB │ map: 1,192.54 kB
+dist/assets/things-D2CRVDhi.js                         374.99 kB │ gzip:   117.30 kB │ map: 1,320.00 kB
+dist/assets/entries-BgA2JezU.js                        422.56 kB │ gzip:   127.01 kB │ map:   703.33 kB
+dist/assets/useDeviceStore-LCO83fzU.js                 507.24 kB │ gzip:   141.33 kB │ map: 1,618.33 kB
+dist/assets/apiDocs-HvxkzjAP.js                        842.13 kB │ gzip:   250.19 kB │ map: 1,259.66 kB
+dist/assets/index-C5fW5qvk.js                          966.22 kB │ gzip:   283.65 kB │ map: 3,199.97 kB
+dist/assets/ThingDrafts-fioVoyoY.js                  1,040.51 kB │ gzip:   311.79 kB │ map: 3,563.54 kB
+dist/assets/heic-to--P4BHcfs.js                      2,995.23 kB │ gzip:   750.97 kB │ map: 2,998.55 kB
+dist/assets/actions-BHIN-kcM.js                     10,291.47 kB │ gzip: 1,506.78 kB │ map: 2,081.88 kB
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:317:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m317 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m[38;5;249m([0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m`[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m    │[0m                    ──┬─  
+ [38;5;240m    │[0m                      ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:566:9 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m566 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m
+ [38;5;240m    │[0m            ──┬─  
+ [38;5;240m    │[0m              ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1602:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1602 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1781:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1781 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1887:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1887 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[PLUGIN_TIMINGS] [0mYour build spent significant time in plugins. Here is a breakdown:
+  - thingtime-platform-document (54%)
+  - vite:asset (14%)
+  - vite:css-post (13%)
+  - vite:worker (8%)
+  - vite:build-import-analysis (6%)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✓ built in 12.76s
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> build:library
+> vite build --config vite.library.config.ts
+
+vite v8.1.4 building client environment for production...
+[2Ktransforming...✓ 13 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/library/runner.js  69.42 kB │ gzip: 22.75 kB
+
+✓ built in 108ms
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> build:embed
+> vite build --config vite.embed.config.ts && npm run verify:embed
+
+vite v8.1.4 building client environment for production...
+[2Ktransforming...[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/input-track.js:264:87 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m264 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249m_[0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249mc[0m[38;5;249mk[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m.[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mP[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m.[0m[38;5;249m_[0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249mc[0m[38;5;249mk[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m.[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mP[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m![0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m [0m0n[38;5;249m;[0m
+ [38;5;240m    │[0m                                                                                       ─┬  
+ [38;5;240m    │[0m                                                                                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:185:18 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m185 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                  ─┬  
+ [38;5;240m    │[0m                   ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:185:24 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m185 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m8n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                        ─┬  
+ [38;5;240m    │[0m                         ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:188:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m188 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m6[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:188:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m188 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m16n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:191:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m191 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m2[0m[38;5;249m4[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:191:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m191 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m24n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:194:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m194 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m3[0m[38;5;249m2[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:194:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m194 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m32n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:197:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m197 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m4[0m[38;5;249m0[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:197:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m197 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m40n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:200:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m200 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m4[0m[38;5;249m8[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:200:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m200 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m48n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:203:23 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m203 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m5[0m[38;5;249m6[0m[38;5;249mn[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                       ─┬  
+ [38;5;240m    │[0m                        ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:203:29 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m203 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249me[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m1[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m56n[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                             ─┬─  
+ [38;5;240m    │[0m                              ╰─── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:313:79 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m313 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mt[0m[38;5;249mh[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249mh[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mV[0m[38;5;249mi[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m.[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m8[0m[38;5;249m([0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249ms[0m[38;5;249m+[0m[38;5;249m+[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mN[0m[38;5;249mu[0m[38;5;249mm[0m[38;5;249mb[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249m([0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m>[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m8[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m&[0m[38;5;249m [0m0xffn[38;5;249m)[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m    │[0m                                                                               ──┬──  
+ [38;5;240m    │[0m                                                                                 ╰──── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:519:17 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m519 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m0n[38;5;249m;[0m
+ [38;5;240m    │[0m                 ─┬  
+ [38;5;240m    │[0m                  ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/ebml.js:521:19 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m521 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m=[0m[38;5;249m [0m8n[38;5;249m;[0m
+ [38;5;240m    │[0m                   ─┬  
+ [38;5;240m    │[0m                    ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/mp3/mp3-demuxer.js:204:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m204 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/wave/wave-demuxer.js:385:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m385 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/adts/adts-demuxer.js:159:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m159 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/flac/flac-demuxer.js:451:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m451 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/ogg/ogg-demuxer.js:333:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m333 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/hls/hls-demuxer.js:229:46 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m229 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m:[0m[38;5;249m [0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m)[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                                              ─┬  
+ [38;5;240m    │[0m                                               ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/hls/hls-demuxer.js:271:50 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m271 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m:[0m[38;5;249m [0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m)[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                                                  ─┬  
+ [38;5;240m    │[0m                                                   ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/hls/hls-demuxer.js:307:46 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m307 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m:[0m[38;5;249m [0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m)[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                                              ─┬  
+ [38;5;240m    │[0m                                               ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/hls/hls-demuxer.js:346:50 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m346 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mM[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249mk[0m[38;5;249m:[0m[38;5;249m [0m1n[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m [0m[38;5;249mB[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mI[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m([0m[38;5;249mi[0m[38;5;249m)[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                                                  ─┬  
+ [38;5;240m    │[0m                                                   ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/matroska-demuxer.js:1871:16 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1871 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m     │[0m                ─┬  
+ [38;5;240m     │[0m                 ╰── 
+[38;5;246m──────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/isobmff/isobmff-demuxer.js:2446:16 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m2446 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m     │[0m                ─┬  
+ [38;5;240m     │[0m                 ╰── 
+[38;5;246m──────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/mpeg-ts/mpeg-ts-demuxer.js:897:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m897 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js:520:27 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m520 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m0n[38;5;249m;[0m
+ [38;5;240m    │[0m                           ─┬  
+ [38;5;240m    │[0m                            ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js:522:33 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m522 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m<[0m[38;5;249m<[0m[38;5;249m=[0m[38;5;249m [0m8n[38;5;249m;[0m
+ [38;5;240m    │[0m                                 ─┬  
+ [38;5;240m    │[0m                                  ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/matroska/matroska-muxer.js:525:33 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m525 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m![0m[38;5;249m=[0m[38;5;249m=[0m[38;5;249m [0m0n[38;5;249m [0m[38;5;249m&[0m[38;5;249m&[0m[38;5;249m [0m[38;5;249m![0m[38;5;249me[0m[38;5;249mx[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249mF[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249ms[0m[38;5;249m([0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mi[0m[38;5;249md[0m[38;5;249m)[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m    │[0m                                 ─┬  
+ [38;5;240m    │[0m                                  ╰── 
+[38;5;246m─────╯[0m
+
+[33m[TOLERATED_TRANSFORM] [0mBig integer literals are not available in the configured target environment.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/mediabunny@1.61.6/node_modules/mediabunny/dist/modules/src/segmented-input.js:189:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m189 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m1n[38;5;249m;[0m
+ [38;5;240m    │[0m                ─┬  
+ [38;5;240m    │[0m                 ╰── 
+[38;5;246m─────╯[0m
+
+✓ 3847 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/embed/assets/aiTasks.worker-r1Qlm1qq.js      2.00 kB
+dist/embed/assets/mediaWorker-D182Rd8-.js       485.27 kB
+dist/embed/thingtime.min.js                   2,468.46 kB │ gzip: 708.54 kB
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:317:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m317 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m[38;5;249m([0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m`[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m    │[0m                    ──┬─  
+ [38;5;240m    │[0m                      ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:566:9 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m566 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m
+ [38;5;240m    │[0m            ──┬─  
+ [38;5;240m    │[0m              ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1602:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1602 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1781:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1781 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1887:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1887 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/components/Lopu/aiTasks.client.ts:33:96 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m33 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mw[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mW[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0m[38;5;249m/[0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m@[0m[38;5;249mv[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249mV[0m[38;5;249mI[0m[38;5;249mT[0m[38;5;249mE[0m[38;5;249m_[0m[38;5;249mW[0m[38;5;249mO[0m[38;5;249mR[0m[38;5;249mK[0m[38;5;249mE[0m[38;5;249mR[0m[38;5;249m_[0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mS[0m[38;5;249mE[0m[38;5;249mT[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249mc[0m[38;5;249m3[0m[38;5;249md[0m[38;5;249m1[0m[38;5;249m2[0m[38;5;249mf[0m[38;5;249me[0m[38;5;249m6[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249m"[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m   │[0m                                                                                                     ─────┬─────  
+ [38;5;240m   │[0m                                                                                                          ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/webPlatform/WebPlatformSurface.tsx:62:175 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m62 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249m.[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m?[0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mH[0m[38;5;249mo[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mM[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249mP[0m[38;5;249mi[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m([0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249m.[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mW[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0m[38;5;249m/[0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m@[0m[38;5;249mv[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249mV[0m[38;5;249mI[0m[38;5;249mT[0m[38;5;249mE[0m[38;5;249m_[0m[38;5;249mW[0m[38;5;249mO[0m[38;5;249mR[0m[38;5;249mK[0m[38;5;249mE[0m[38;5;249mR[0m[38;5;249m_[0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mS[0m[38;5;249mE[0m[38;5;249mT[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249m0[0m[38;5;249m1[0m[38;5;249md[0m[38;5;249m7[0m[38;5;249me[0m[38;5;249m6[0m[38;5;249m8[0m[38;5;249ma[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249m"[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249mt[0m[38;5;249my[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m"[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mI[0m[38;5;249md[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m   │[0m                                                                                                                                                                                    ─────┬─────  
+ [38;5;240m   │[0m                                                                                                                                                                                         ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+✓ built in 2.76s
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> verify:embed
+> node scripts/verify-embed-bundle.mjs
+
+[verify] Single-file embed ready: dist/embed/thingtime.min.js (2,468,462 bytes, 703,326 gzip; budget 2,560,000 / 716,800 gzip).
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> build:draft
+> vite build --config vite.draft.config.ts
+
+vite v8.1.4 building client environment for production...
+
+ WARN  inlineDynamicImports option is ignored because codeSplitting: false is set.
+
+[2Ktransforming...✓ 3819 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/draft-preview/assets/aiTasks.worker-CKRd9k1s.js       1.98 kB
+dist/draft-preview/assets/mediaWorker-BoV8L5k2.js        470.60 kB
+dist/draft-preview/runner.js                          18,100.03 kB │ gzip: 3,528.13 kB
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:317:11 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m317 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m[38;5;249m([0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mf[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m`[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m    │[0m                    ──┬─  
+ [38;5;240m    │[0m                      ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:566:9 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m566 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249m`[0m
+ [38;5;240m    │[0m            ──┬─  
+ [38;5;240m    │[0m              ╰─── Use of direct `eval` here.
+ [38;5;240m    │[0m 
+ [38;5;240m    │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m─────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1602:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1602 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1781:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1781 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EVAL] [0mUse of direct `eval` function is strongly discouraged as it poses security risks and may cause issues with minification.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/smarts/index.tsx:1887:10 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m1887 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249mj[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0meval[38;5;249m([0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249my[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                ──┬─  
+ [38;5;240m     │[0m                  ╰─── Use of direct `eval` here.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: Consider using indirect eval. For more information, check the documentation: https://rolldown.rs/guide/troubleshooting#avoiding-direct-eval
+[38;5;246m──────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/components/Lopu/aiTasks.client.ts:33:96 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m33 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mw[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mS[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mW[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0m[38;5;249m/[0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m@[0m[38;5;249mv[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249mV[0m[38;5;249mI[0m[38;5;249mT[0m[38;5;249mE[0m[38;5;249m_[0m[38;5;249mW[0m[38;5;249mO[0m[38;5;249mR[0m[38;5;249mK[0m[38;5;249mE[0m[38;5;249mR[0m[38;5;249m_[0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mS[0m[38;5;249mE[0m[38;5;249mT[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249ma[0m[38;5;249m4[0m[38;5;249m3[0m[38;5;249m9[0m[38;5;249m7[0m[38;5;249me[0m[38;5;249m2[0m[38;5;249ma[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249m"[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m   │[0m                                                                                                     ─────┬─────  
+ [38;5;240m   │[0m                                                                                                          ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/webPlatform/WebPlatformSurface.tsx:62:175 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m62 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249m.[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m?[0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mH[0m[38;5;249mo[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mM[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249mP[0m[38;5;249mi[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249me[0m[38;5;249m([0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249m.[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249md[0m[38;5;249mi[0m[38;5;249ma[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mj[0m[38;5;249mo[0m[38;5;249mb[0m[38;5;249m.[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mW[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mk[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0m[38;5;249m/[0m[38;5;249m*[0m[38;5;249m [0m[38;5;249m@[0m[38;5;249mv[0m[38;5;249mi[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m-[0m[38;5;249mi[0m[38;5;249mg[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m*[0m[38;5;249m/[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249mV[0m[38;5;249mI[0m[38;5;249mT[0m[38;5;249mE[0m[38;5;249m_[0m[38;5;249mW[0m[38;5;249mO[0m[38;5;249mR[0m[38;5;249mK[0m[38;5;249mE[0m[38;5;249mR[0m[38;5;249m_[0m[38;5;249mA[0m[38;5;249mS[0m[38;5;249mS[0m[38;5;249mE[0m[38;5;249mT[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249ma[0m[38;5;249mc[0m[38;5;249m4[0m[38;5;249m3[0m[38;5;249m1[0m[38;5;249m5[0m[38;5;249m2[0m[38;5;249m0[0m[38;5;249m_[0m[38;5;249m_[0m[38;5;249m"[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m'[0m[38;5;249m'[0m[38;5;249m [0m[38;5;249m+[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m{[0m[38;5;249m [0m[38;5;249mt[0m[38;5;249my[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m"[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m"[0m[38;5;249m [0m[38;5;249m}[0m[38;5;249m)[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mI[0m[38;5;249md[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249m{[0m
+ [38;5;240m   │[0m                                                                                                                                                                                    ─────┬─────  
+ [38;5;240m   │[0m                                                                                                                                                                                         ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+✓ built in 5.40s
+npm warn Unknown env config "verify-deps-before-run". This will stop working in the next major version of npm.
+npm warn Unknown env config "dir". This will stop working in the next major version of npm.
+npm warn Unknown env config "_jsr-registry". This will stop working in the next major version of npm.
+
+> build:offline
+> node scripts/build-offline-shell.mjs
+
+[offline] 266 verified app assets, 23551412 bytes
+
+> @1.0.0 sync:nitro-template /workspace/thingtime/remix
+> node scripts/sync-nitro-template.mjs
+
+[nitro] Synced dist/index.html to server/assets/index.html.
+
+> @1.0.0 build:server /workspace/thingtime/remix
+> node scripts/ensure-dependencies.js && nitro build
+
+(node:70261) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/thingtime/remix/nitro.config.ts?_1 is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /workspace/thingtime/remix/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ℹ Using index.html as renderer template.
+[nitro] ✔ Generated public .output/public
+workflows build complete (83 steps, 3 workflows, time 10.4s)
+[nitro] ℹ Building server (builder: rolldown, preset: node-server, compatibility date: 2026-07-02)
+ℹ Tracing dependencies:
+- bcrypt (5.1.1)
+- tslib (2.8.1, 1.14.1)
+- cbor-extract (2.2.2)
+- @resvg/resvg-js (2.6.2)
+- sharp (0.35.5)
+- node-gyp-build-optional-packages (5.1.1)
+- @img/colour (1.1.0)
+- @img/sharp-linux-x64 (0.35.5)
+- @img/sharp-linuxmusl-x64 (0.35.5)
+- @mapbox/node-pre-gyp (1.0.11)
+- semver (7.8.5, 6.3.1)
+- detect-libc (2.1.2)
+- @resvg/resvg-js-linux-x64-musl (2.6.2)
+- @resvg/resvg-js-linux-x64-gnu (2.6.2)
+- @img/sharp-libvips-linux-x64 (1.3.4)
+- @img/sharp-libvips-linuxmusl-x64 (1.3.4)
+- npmlog (5.0.1)
+- rimraf (3.0.2)
+- tar (6.2.1)
+- nopt (5.0.0)
+- make-dir (3.1.0)
+- node-fetch (2.7.0)
+- https-proxy-agent (5.0.1)
+- set-blocking (2.0.0)
+- gauge (3.0.2)
+- console-control-strings (1.1.0)
+- glob (7.2.3)
+- are-we-there-yet (2.0.0)
+- abbrev (1.1.1)
+- whatwg-url (5.0.0)
+- minipass (5.0.0, 3.3.6)
+- debug (4.4.3)
+- fs-minipass (2.1.0)
+- minizlib (2.1.2)
+- yallist (4.0.0)
+- chownr (2.0.0)
+- mkdirp (1.0.4)
+- agent-base (6.0.2)
+- minimatch (3.1.5)
+- once (1.4.0)
+- inflight (1.0.6)
+- inherits (2.0.4)
+- fs.realpath (1.0.0)
+- path-is-absolute (1.0.1)
+- signal-exit (3.0.7)
+- color-support (1.1.3)
+- has-unicode (2.0.1)
+- aproba (2.1.0)
+- readable-stream (3.6.2)
+- delegates (1.0.0)
+- wide-align (1.1.5)
+- object-assign (4.1.1)
+- tr46 (0.0.3)
+- webidl-conversions (3.0.1)
+- supports-color (8.1.1)
+- string-width (4.2.3)
+- strip-ansi (6.0.1)
+- ms (2.1.3)
+- brace-expansion (1.1.16)
+- wrappy (1.0.2)
+- string_decoder (1.3.0)
+- emoji-regex (8.0.0)
+- util-deprecate (1.0.2)
+- has-flag (4.0.0)
+- ansi-regex (5.0.1)
+- is-fullwidth-code-point (3.0.0)
+- balanced-match (1.0.2)
+- concat-map (0.0.1)
+- safe-buffer (5.2.1)
+- @cbor-extract/cbor-extract-linux-x64 (2.2.2)
+✔ Traced 70 dependencies (317 files) in 2386ms.
+ℹ Ensure your production environment matches the builder OS and architecture (linux-x64) to avoid native module issues.
+UNRESOLVED_IMPORT
+node_modules/.pnpm/@workflow+world-local@4.2.4/node_modules/@workflow/world-local/dist/telemetry.js (5:32) [33m[UNRESOLVED_IMPORT] [0mCould not resolve '@opentelemetry/api' in node_modules/.pnpm/@workflow+world-local@4.2.4/node_modules/@workflow/world-local/dist/telemetry.js
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@workflow+world-local@4.2.4/node_modules/@workflow/world-local/dist/telemetry.js:5:33 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mA[0m[38;5;249mp[0m[38;5;249mi[0m[38;5;249mP[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m([0m'@opentelemetry/api'[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mc[0m[38;5;249mh[0m[38;5;249m([0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m  │[0m                                 ──────────┬─────────  
+ [38;5;240m  │[0m                                           ╰─────────── Module not found, treating it as an external dependency
+[38;5;246m───╯[0m
+
+UNRESOLVED_IMPORT
+node_modules/.pnpm/@workflow+world-vercel@4.6.2/node_modules/@workflow/world-vercel/dist/telemetry.js (5:32) [33m[UNRESOLVED_IMPORT] [0mCould not resolve '@opentelemetry/api' in node_modules/.pnpm/@workflow+world-vercel@4.6.2/node_modules/@workflow/world-vercel/dist/telemetry.js
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m node_modules/.pnpm/@workflow+world-vercel@4.6.2/node_modules/@workflow/world-vercel/dist/telemetry.js:5:33 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mA[0m[38;5;249mp[0m[38;5;249mi[0m[38;5;249mP[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m([0m'@opentelemetry/api'[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mc[0m[38;5;249mh[0m[38;5;249m([0m[38;5;249m([0m[38;5;249m)[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m>[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m  │[0m                                 ──────────┬─────────  
+ [38;5;240m  │[0m                                           ╰─────────── Module not found, treating it as an external dependency
+[38;5;246m───╯[0m
+
+UNRESOLVED_IMPORT
+app/webPlatform/WebPlatformSurface.tsx (5:28) [33m[UNRESOLVED_IMPORT] [0mCould not resolve 'virtual:thingtime-platform-document' in app/webPlatform/WebPlatformSurface.tsx
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m app/webPlatform/WebPlatformSurface.tsx:5:29 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249mi[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mo[0m[38;5;249mr[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249mD[0m[38;5;249mo[0m[38;5;249mc[0m[38;5;249mu[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mm[0m[38;5;249m [0m'virtual:thingtime-platform-document'[38;5;249m;[0m
+ [38;5;240m  │[0m                             ──────────────────┬──────────────────  
+ [38;5;240m  │[0m                                               ╰──────────────────── Module not found, treating it as an external dependency
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: The id starts with "virtual:", which by convention denotes a virtual module that is expected to be resolved by a plugin. Make sure the plugin that should provide it is registered and resolves the id in its `resolveId` hook.
+[38;5;246m───╯[0m
+
+INEFFECTIVE_DYNAMIC_IMPORT
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0mapp/api/utils/webpages/webpages.ts is dynamically imported by app/api/utils/lopu/chatTools.ts, app/api/utils/meta/socialPreview.ts, app/api/utils/things/things.ts but also statically imported by app/api/utils/timeline/componentBindings.ts, app/api/utils/timeline/publishedComponents.ts, app/api/utils/webpages/componentPreview.ts, app/api/utils/webpages/demos.ts, app/api/utils/webpages/seed.ts, ..., dynamic import will not move module into another chunk.
+
+ℹ Generated .output/nitro.json
+[nitro] ✔ Server built in 7963ms
+  ├─ .output/server/_..._.mjs (26.2 kB) (5.86 kB gzip)
+  ├─ .output/server/_2..._.mjs (4.59 kB) (1.73 kB gzip)
+  ├─ .output/server/_abort.mjs (662 B) (345 B gzip)
+  ├─ .output/server/_account-hints.mjs (1.17 kB) (555 B gzip)
+  ├─ .output/server/_account.mjs (2.78 kB) (1.06 kB gzip)
+  ├─ .output/server/_accounts.mjs (4.1 kB) (1.4 kB gzip)
+  ├─ .output/server/_accounts2.mjs (731 B) (395 B gzip)
+  ├─ .output/server/_accounts3.mjs (1.01 kB) (481 B gzip)
+  ├─ .output/server/_actions.mjs (3.34 kB) (1.27 kB gzip)
+  ├─ .output/server/_active.mjs (954 B) (461 B gzip)
+  ├─ .output/server/_active2.mjs (1.27 kB) (551 B gzip)
+  ├─ .output/server/_activity.mjs (1.26 kB) (604 B gzip)
+  ├─ .output/server/_agent-overview.mjs (22.6 kB) (6.92 kB gzip)
+  ├─ .output/server/_algorithms.mjs (1.44 kB) (576 B gzip)
+  ├─ .output/server/_annotate.mjs (620 B) (311 B gzip)
+  ├─ .output/server/_app-data.mjs (3.12 kB) (1 kB gzip)
+  ├─ .output/server/_approvals.mjs (1.72 kB) (650 B gzip)
+  ├─ .output/server/_apps.mjs (1.37 kB) (632 B gzip)
+  ├─ .output/server/_apps2.mjs (1.54 kB) (635 B gzip)
+  ├─ .output/server/_archive.mjs (22.3 kB) (6.91 kB gzip)
+  ├─ .output/server/_assertion.mjs (2.24 kB) (863 B gzip)
+  ├─ .output/server/_assume.mjs (2.36 kB) (935 B gzip)
+  ├─ .output/server/_audience-sources.mjs (729 B) (391 B gzip)
+  ├─ .output/server/_authorize.mjs (481 B) (273 B gzip)
+  ├─ .output/server/_authorize2.mjs (3.72 kB) (1.27 kB gzip)
+  ├─ .output/server/_authorize3.mjs (4.11 kB) (1.38 kB gzip)
+  ├─ .output/server/_automations.mjs (1.95 kB) (789 B gzip)
+  ├─ .output/server/_backfill-detected-types.mjs (2.65 kB) (969 B gzip)
+  ├─ .output/server/_batches.mjs (61.1 kB) (14.5 kB gzip)
+  ├─ .output/server/_begin.mjs (1.32 kB) (620 B gzip)
+  ├─ .output/server/_browse.mjs (1.59 kB) (677 B gzip)
+  ├─ .output/server/_browse2.mjs (10.6 kB) (3 kB gzip)
+  ├─ .output/server/_bulk.mjs (1.58 kB) (711 B gzip)
+  ├─ .output/server/_callback.mjs (1.28 kB) (568 B gzip)
+  ├─ .output/server/_callback2.mjs (1.48 kB) (781 B gzip)
+  ├─ .output/server/_capture.mjs (4.45 kB) (1.77 kB gzip)
+  ├─ .output/server/_channels.mjs (1.35 kB) (624 B gzip)
+  ├─ .output/server/_characters.mjs (10.2 kB) (3.09 kB gzip)
+  ├─ .output/server/_chat.mjs (1.95 kB) (840 B gzip)
+  ├─ .output/server/_chat2.mjs (1.98 kB) (891 B gzip)
+  ├─ .output/server/_chatgpt-plan.mjs (4.92 kB) (1.59 kB gzip)
+  ├─ .output/server/_chats.mjs (1.51 kB) (569 B gzip)
+  ├─ .output/server/_chats2.mjs (3.94 kB) (1.34 kB gzip)
+  ├─ .output/server/_chunks/access.mjs (2.21 kB) (938 B gzip)
+  ├─ .output/server/_chunks/accessMode.mjs (3.37 kB) (1.37 kB gzip)
+  ├─ .output/server/_chunks/accountedThings.mjs (7.57 kB) (2 kB gzip)
+  ├─ .output/server/_chunks/accountHintsHeaders.mjs (4.99 kB) (1.47 kB gzip)
+  ├─ .output/server/_chunks/accounting.mjs (32.2 kB) (7.75 kB gzip)
+  ├─ .output/server/_chunks/accountLinks.mjs (4.35 kB) (1.45 kB gzip)
+  ├─ .output/server/_chunks/accounts.mjs (11.2 kB) (3.12 kB gzip)
+  ├─ .output/server/_chunks/actionDataRoutes.mjs (2.14 kB) (578 B gzip)
+  ├─ .output/server/_chunks/actionFlowResult.mjs (13.9 kB) (4.4 kB gzip)
+  ├─ .output/server/_chunks/actionInputs.mjs (3.28 kB) (1.13 kB gzip)
+  ├─ .output/server/_chunks/actionRecovery.mjs (1.71 kB) (722 B gzip)
+  ├─ .output/server/_chunks/actionRecovery2.mjs (3.25 kB) (1.24 kB gzip)
+  ├─ .output/server/_chunks/adminDirectory.mjs (9.2 kB) (2.75 kB gzip)
+  ├─ .output/server/_chunks/adminPreviewController.mjs (4.68 kB) (1.72 kB gzip)
+  ├─ .output/server/_chunks/adminResponse.mjs (639 B) (341 B gzip)
+  ├─ .output/server/_chunks/agentTesting.mjs (1.84 kB) (953 B gzip)
+  ├─ .output/server/_chunks/aiConnections.mjs (22 kB) (5.57 kB gzip)
+  ├─ .output/server/_chunks/algorithm.mjs (48.8 kB) (14.2 kB gzip)
+  ├─ .output/server/_chunks/algorithms.mjs (27.4 kB) (5.95 kB gzip)
+  ├─ .output/server/_chunks/analyzeText.mjs (21.2 kB) (5.58 kB gzip)
+  ├─ .output/server/_chunks/apiDocs.mjs (951 kB) (259 kB gzip)
+  ├─ .output/server/_chunks/apiFallback.mjs (8.72 kB) (2.91 kB gzip)
+  ├─ .output/server/_chunks/appData.mjs (17.4 kB) (4.7 kB gzip)
+  ├─ .output/server/_chunks/appOrigin.mjs (1.43 kB) (668 B gzip)
+  ├─ .output/server/_chunks/appOriginsCore.mjs (2.96 kB) (1.08 kB gzip)
+  ├─ .output/server/_chunks/appRequest.mjs (1.16 kB) (495 B gzip)
+  ├─ .output/server/_chunks/apps.mjs (14.5 kB) (3.9 kB gzip)
+  ├─ .output/server/_chunks/appSuites.mjs (533 kB) (120 kB gzip)
+  ├─ .output/server/_chunks/appTokens.mjs (3.48 kB) (1.29 kB gzip)
+  ├─ .output/server/_chunks/archive.mjs (9.46 kB) (3 kB gzip)
+  ├─ .output/server/_chunks/attachmentContentUrl.mjs (416 B) (264 B gzip)
+  ├─ .output/server/_chunks/attachmentResponses.mjs (5.61 kB) (1.92 kB gzip)
+  ├─ .output/server/_chunks/attachmentRetention.mjs (10.4 kB) (3.58 kB gzip)
+  ├─ .output/server/_chunks/attachments.mjs (90.2 kB) (18.2 kB gzip)
+  ├─ .output/server/_chunks/attachmentStore.mjs (50.8 kB) (10.2 kB gzip)
+  ├─ .output/server/_chunks/authCookie.mjs (1.04 kB) (535 B gzip)
+  ├─ .output/server/_chunks/authOtps.mjs (2.92 kB) (1.09 kB gzip)
+  ├─ .output/server/_chunks/backgroundTaskCore.mjs (1.78 kB) (750 B gzip)
+  ├─ .output/server/_chunks/backgroundTasks.mjs (25.9 kB) (6.58 kB gzip)
+  ├─ .output/server/_chunks/backgroundTaskScope.mjs (717 B) (394 B gzip)
+  ├─ .output/server/_chunks/browse.mjs (17.2 kB) (4.04 kB gzip)
+  ├─ .output/server/_chunks/browse2.mjs (6.06 kB) (2.18 kB gzip)
+  ├─ .output/server/_chunks/builderGuide.mjs (54.1 kB) (17.9 kB gzip)
+  ├─ .output/server/_chunks/capabilityContract.mjs (767 B) (385 B gzip)
+  ├─ .output/server/_chunks/characterEntitlements.mjs (34.2 kB) (9.03 kB gzip)
+  ├─ .output/server/_chunks/characterSession.mjs (2.28 kB) (825 B gzip)
+  ├─ .output/server/_chunks/chat.mjs (174 kB) (46.4 kB gzip)
+  ├─ .output/server/_chunks/chatArchive.mjs (8.39 kB) (2.63 kB gzip)
+  ├─ .output/server/_chunks/chatArchiveDeleteTransfer.mjs (5.41 kB) (1.97 kB gzip)
+  ├─ .output/server/_chunks/chatArchiveReadTransfer.mjs (9.45 kB) (2.89 kB gzip)
+  ├─ .output/server/_chunks/chatArchiveTransfer.mjs (10.8 kB) (3.7 kB gzip)
+  ├─ .output/server/_chunks/chatgptPlanAdmission.mjs (1.63 kB) (647 B gzip)
+  ├─ .output/server/_chunks/chatgptPlanAdmissionCore.mjs (1.2 kB) (553 B gzip)
+  ├─ .output/server/_chunks/chatgptPlanProtocol.mjs (16.8 kB) (4.96 kB gzip)
+  ├─ .output/server/_chunks/chatgptPlanScope.mjs (38.9 kB) (9.65 kB gzip)
+  ├─ .output/server/_chunks/checkpointResults.mjs (2.53 kB) (1.15 kB gzip)
+  ├─ .output/server/_chunks/claudeOAuth.mjs (18.3 kB) (5.84 kB gzip)
+  ├─ .output/server/_chunks/claudeOAuthCore.mjs (459 B) (290 B gzip)
+  ├─ .output/server/_chunks/claudeProvider.mjs (3.99 kB) (1.78 kB gzip)
+  ├─ .output/server/_chunks/claudeRuntime.mjs (9.23 kB) (2.78 kB gzip)
+  ├─ .output/server/_chunks/collections.mjs (45.7 kB) (9.98 kB gzip)
+  ├─ .output/server/_chunks/communities.mjs (22.8 kB) (5.01 kB gzip)
+  ├─ .output/server/_chunks/compositionMediaCore.mjs (9.23 kB) (2.86 kB gzip)
+  ├─ .output/server/_chunks/config.mjs (1.11 kB) (545 B gzip)
+  ├─ .output/server/_chunks/config2.mjs (15.6 kB) (3.1 kB gzip)
+  ├─ .output/server/_chunks/config3.mjs (1.85 kB) (695 B gzip)
+  ├─ .output/server/_chunks/connections.mjs (121 kB) (27.4 kB gzip)
+  ├─ .output/server/_chunks/continuationAdmission.server.mjs (2.54 kB) (1.04 kB gzip)
+  ├─ .output/server/_chunks/continuationCore.mjs (3 kB) (1.19 kB gzip)
+  ├─ .output/server/_chunks/continuationFinalization.server.mjs (4.22 kB) (1.3 kB gzip)
+  ├─ .output/server/_chunks/cors.mjs (1.33 kB) (660 B gzip)
+  ├─ .output/server/_chunks/credentialVault.mjs (15 kB) (4.12 kB gzip)
+  ├─ .output/server/_chunks/dataEnvironment.mjs (2.51 kB) (1.09 kB gzip)
+  ├─ .output/server/_chunks/dataPlane.mjs (353 B) (245 B gzip)
+  ├─ .output/server/_chunks/dataPlane2.mjs (1.64 kB) (799 B gzip)
+  ├─ .output/server/_chunks/defaultAlgorithms.mjs (1.98 kB) (841 B gzip)
+  ├─ .output/server/_chunks/desktopOAuth.mjs (3.75 kB) (1.37 kB gzip)
+  ├─ .output/server/_chunks/desktopOAuthCore.mjs (1.1 kB) (520 B gzip)
+  ├─ .output/server/_chunks/desktopOAuthRedirect.mjs (2.19 kB) (917 B gzip)
+  ├─ .output/server/_chunks/deviceAuth.mjs (5.73 kB) (1.84 kB gzip)
+  ├─ .output/server/_chunks/deviceCommands.mjs (41.8 kB) (8.16 kB gzip)
+  ├─ .output/server/_chunks/deviceCore.mjs (61.1 kB) (13.1 kB gzip)
+  ├─ .output/server/_chunks/deviceLiveAiCore.mjs (26.6 kB) (6.38 kB gzip)
+  ├─ .output/server/_chunks/devices.mjs (32.4 kB) (7.91 kB gzip)
+  ├─ .output/server/_chunks/deviceScreens.mjs (8.87 kB) (2.35 kB gzip)
+  ├─ .output/server/_chunks/devVerification.mjs (451 B) (266 B gzip)
+  ├─ .output/server/_chunks/email.mjs (2.69 kB) (809 B gzip)
+  ├─ .output/server/_chunks/emailVerifications.mjs (959 B) (437 B gzip)
+  ├─ .output/server/_chunks/emojiImportCore.mjs (1.97 kB) (856 B gzip)
+  ├─ .output/server/_chunks/emojis.mjs (8.9 kB) (2.79 kB gzip)
+  ├─ .output/server/_chunks/emojiTransfer.mjs (6.31 kB) (2.18 kB gzip)
+  ├─ .output/server/_chunks/endpoint.mjs (6.89 kB) (2.27 kB gzip)
+  ├─ .output/server/_chunks/enforce.mjs (5 kB) (1.76 kB gzip)
+  ├─ .output/server/_chunks/environment.mjs (638 B) (346 B gzip)
+  ├─ .output/server/_chunks/errorLogs.mjs (26.4 kB) (7.77 kB gzip)
+  ├─ .output/server/_chunks/execute.mjs (36.4 kB) (9.6 kB gzip)
+  ├─ .output/server/_chunks/externalAi.mjs (12.1 kB) (3.45 kB gzip)
+  ├─ .output/server/_chunks/fallbacks.mjs (23.6 kB) (8.86 kB gzip)
+  ├─ .output/server/_chunks/fedcm.mjs (1.34 kB) (627 B gzip)
+  ├─ .output/server/_chunks/files.mjs (52.2 kB) (12.5 kB gzip)
+  ├─ .output/server/_chunks/filters.mjs (12.4 kB) (4.21 kB gzip)
+  ├─ .output/server/_chunks/firstPartyActionHost.mjs (7.08 kB) (2.46 kB gzip)
+  ├─ .output/server/_chunks/forkBoundMedia.mjs (1.96 kB) (818 B gzip)
+  ├─ .output/server/_chunks/forkCompositionCore.mjs (4.26 kB) (1.34 kB gzip)
+  ├─ .output/server/_chunks/forkMediaCore.mjs (2.7 kB) (1.11 kB gzip)
+  ├─ .output/server/_chunks/format.mjs (8.82 kB) (2.76 kB gzip)
+  ├─ .output/server/_chunks/foundPostIdentity.client.mjs (382 B) (256 B gzip)
+  ├─ .output/server/_chunks/foundPostRequest.mjs (1.11 kB) (567 B gzip)
+  ├─ .output/server/_chunks/gate.mjs (36.7 kB) (9.92 kB gzip)
+  ├─ .output/server/_chunks/getCurrentUser.mjs (3.99 kB) (1.29 kB gzip)
+  ├─ .output/server/_chunks/githubClient.mjs (27.7 kB) (7.29 kB gzip)
+  ├─ .output/server/_chunks/googleOAuth.mjs (61 kB) (15.9 kB gzip)
+  ├─ .output/server/_chunks/googlePlaces.mjs (3.54 kB) (1.53 kB gzip)
+  ├─ .output/server/_chunks/grants.mjs (2.45 kB) (985 B gzip)
+  ├─ .output/server/_chunks/groups.mjs (7.67 kB) (2.28 kB gzip)
+  ├─ .output/server/_chunks/http.mjs (1.95 kB) (892 B gzip)
+  ├─ .output/server/_chunks/indexablePaths.mjs (1.85 kB) (795 B gzip)
+  ├─ .output/server/_chunks/indexLayoutActivation.mjs (956 B) (494 B gzip)
+  ├─ .output/server/_chunks/integrations.mjs (20.6 kB) (5.99 kB gzip)
+  ├─ .output/server/_chunks/internalRequestActor.mjs (583 B) (323 B gzip)
+  ├─ .output/server/_chunks/invites.mjs (14.4 kB) (4.59 kB gzip)
+  ├─ .output/server/_chunks/jwt.mjs (7.77 kB) (2.24 kB gzip)
+  ├─ .output/server/_chunks/legacyThingLayout.mjs (5.56 kB) (2.01 kB gzip)
+  ├─ .output/server/_chunks/listQuery.mjs (3.69 kB) (1.44 kB gzip)
+  ├─ .output/server/_chunks/liveActivity.mjs (8.05 kB) (2.84 kB gzip)
+  ├─ .output/server/_chunks/localAttachmentStorage.mjs (27.9 kB) (7.33 kB gzip)
+  ├─ .output/server/_chunks/lopuAccess.mjs (4.55 kB) (1.45 kB gzip)
+  ├─ .output/server/_chunks/lopuChatDefaults.mjs (1.97 kB) (742 B gzip)
+  ├─ .output/server/_chunks/lopuChats.mjs (37.5 kB) (9.8 kB gzip)
+  ├─ .output/server/_chunks/lopuPageContext.mjs (1.65 kB) (805 B gzip)
+  ├─ .output/server/_chunks/lopuPromptSettings.mjs (4.05 kB) (1.77 kB gzip)
+  ├─ .output/server/_chunks/marketingPublications.mjs (195 kB) (51.3 kB gzip)
+  ├─ .output/server/_chunks/messageContract.mjs (1.5 kB) (641 B gzip)
+  ├─ .output/server/_chunks/messenger.mjs (59.8 kB) (12.8 kB gzip)
+  ├─ .output/server/_chunks/messengerMediaCore.mjs (2.08 kB) (792 B gzip)
+  ├─ .output/server/_chunks/migrationDiagnostics.mjs (12.2 kB) (3.36 kB gzip)
+  ├─ .output/server/_chunks/migrations.mjs (133 kB) (32.3 kB gzip)
+  ├─ .output/server/_chunks/modelDiscovery.mjs (6.93 kB) (2.51 kB gzip)
+  ├─ .output/server/_chunks/models.mjs (10.3 kB) (3.28 kB gzip)
+  ├─ .output/server/_chunks/modelsCore.mjs (11.1 kB) (3.24 kB gzip)
+  ├─ .output/server/_chunks/modelSync.mjs (10.3 kB) (3.05 kB gzip)
+  ├─ .output/server/_chunks/moderationAdmin.mjs (11.8 kB) (2.9 kB gzip)
+  ├─ .output/server/_chunks/moderationCore.mjs (1.42 kB) (651 B gzip)
+  ├─ .output/server/_chunks/moderationCredentials.mjs (1.02 kB) (517 B gzip)
+  ├─ .output/server/_chunks/moderationSettings.mjs (2.21 kB) (771 B gzip)
+  ├─ .output/server/_chunks/moderationSettingsCore.mjs (3.12 kB) (1.13 kB gzip)
+  ├─ .output/server/_chunks/musing.mjs (10.5 kB) (3.6 kB gzip)
+  ├─ .output/server/_chunks/mutationContext.mjs (1.59 kB) (728 B gzip)
+  ├─ .output/server/_chunks/namespace.mjs (49.4 kB) (10.3 kB gzip)
+  ├─ .output/server/_chunks/network.server.mjs (3.27 kB) (1.43 kB gzip)
+  ├─ .output/server/_chunks/networkCore.mjs (2.08 kB) (935 B gzip)
+  ├─ .output/server/_chunks/networkProbeAccess.mjs (2.7 kB) (967 B gzip)
+  ├─ .output/server/_chunks/notifications.mjs (35.8 kB) (9.9 kB gzip)
+  ├─ .output/server/_chunks/oauth.mjs (4.33 kB) (1.48 kB gzip)
+  ├─ .output/server/_chunks/omniRequest.mjs (2.58 kB) (1.1 kB gzip)
+  ├─ .output/server/_chunks/openaiProvider.mjs (5.25 kB) (1.81 kB gzip)
+  ├─ .output/server/_chunks/packs.mjs (10 MB) (875 kB gzip)
+  ├─ .output/server/_chunks/passkeys.mjs (24.5 kB) (6.73 kB gzip)
+  ├─ .output/server/_chunks/passwordConfirmation.mjs (1.35 kB) (562 B gzip)
+  ├─ .output/server/_chunks/passwordResets.mjs (2.18 kB) (863 B gzip)
+  ├─ .output/server/_chunks/passwords.mjs (477 B) (271 B gzip)
+  ├─ .output/server/_chunks/patTokens.mjs (15.1 kB) (3.83 kB gzip)
+  ├─ .output/server/_chunks/peerDiscovery.mjs (20.2 kB) (5.65 kB gzip)
+  ├─ .output/server/_chunks/platformApis.mjs (20.2 kB) (5.81 kB gzip)
+  ├─ .output/server/_chunks/plugin.mjs (99.7 kB) (21.2 kB gzip)
+  ├─ .output/server/_chunks/pluginCore.mjs (42.9 kB) (12.3 kB gzip)
+  ├─ .output/server/_chunks/pokeworld.mjs (1.86 MB) (587 kB gzip)
+  ├─ .output/server/_chunks/postCreate.mjs (2.14 kB) (840 B gzip)
+  ├─ .output/server/_chunks/prConflictResolverModelWaterfall.mjs (2.26 kB) (770 B gzip)
+  ├─ .output/server/_chunks/prConflictResolverModelWaterfallCore.mjs (10.2 kB) (2.25 kB gzip)
+  ├─ .output/server/_chunks/pricing.mjs (4.51 kB) (1.34 kB gzip)
+  ├─ .output/server/_chunks/privateS3.mjs (12.3 kB) (3.65 kB gzip)
+  ├─ .output/server/_chunks/profileMedia.mjs (494 B) (266 B gzip)
+  ├─ .output/server/_chunks/providerProbe.mjs (6.21 kB) (2.3 kB gzip)
+  ├─ .output/server/_chunks/providerReadiness.mjs (1.88 kB) (733 B gzip)
+  ├─ .output/server/_chunks/providerRouter.mjs (4.39 kB) (1.53 kB gzip)
+  ├─ .output/server/_chunks/providers.mjs (4.32 kB) (1.03 kB gzip)
+  ├─ .output/server/_chunks/publicOrigin.mjs (832 B) (415 B gzip)
+  ├─ .output/server/_chunks/quotaLegacyCore.mjs (17.8 kB) (4.4 kB gzip)
+  ├─ .output/server/_chunks/recording.mjs (4.39 kB) (1.38 kB gzip)
+  ├─ .output/server/_chunks/recordingHandoff.mjs (5.02 kB) (1.85 kB gzip)
+  ├─ .output/server/_chunks/recordingsConnections.mjs (11.1 kB) (3.5 kB gzip)
+  ├─ .output/server/_chunks/recordingsReminders.mjs (5.1 kB) (1.66 kB gzip)
+  ├─ .output/server/_chunks/recordingsStore.mjs (17.9 kB) (5.69 kB gzip)
+  ├─ .output/server/_chunks/recordingsWorker.mjs (19.6 kB) (5.53 kB gzip)
+  ├─ .output/server/_chunks/recordingTransfer.mjs (33 kB) (9.82 kB gzip)
+  ├─ .output/server/_chunks/registerUser.mjs (7.22 kB) (2.44 kB gzip)
+  ├─ .output/server/_chunks/registry.mjs (447 kB) (111 kB gzip)
+  ├─ .output/server/_chunks/relationshipIndexLayout.mjs (6.87 kB) (2.37 kB gzip)
+  ├─ .output/server/_chunks/reminders.mjs (7.73 kB) (2.51 kB gzip)
+  ├─ .output/server/_chunks/remindersCore.mjs (4.1 kB) (1.54 kB gzip)
+  ├─ .output/server/_chunks/renderer-template.mjs (4.62 kB) (1.76 kB gzip)
+  ├─ .output/server/_chunks/requireAdmin.mjs (589 B) (322 B gzip)
+  ├─ .output/server/_chunks/resolveActor.mjs (4.22 kB) (1.39 kB gzip)
+  ├─ .output/server/_chunks/retentionCore.mjs (2.1 kB) (874 B gzip)
+  ├─ .output/server/_chunks/safeError.mjs (1.48 kB) (656 B gzip)
+  ├─ .output/server/_chunks/sandbox.mjs (2.78 kB) (1.23 kB gzip)
+  ├─ .output/server/_chunks/savedTheme.mjs (870 B) (465 B gzip)
+  ├─ .output/server/_chunks/scheduledMessages.mjs (5.55 kB) (1.98 kB gzip)
+  ├─ .output/server/_chunks/scopedUser.mjs (971 B) (441 B gzip)
+  ├─ .output/server/_chunks/scopes.mjs (9.51 kB) (2.95 kB gzip)
+  ├─ .output/server/_chunks/search.mjs (12.6 kB) (3.95 kB gzip)
+  ├─ .output/server/_chunks/searchRanking.mjs (11 kB) (3.66 kB gzip)
+  ├─ .output/server/_chunks/seed.mjs (74.7 kB) (21.4 kB gzip)
+  ├─ .output/server/_chunks/sessions.mjs (1.79 kB) (764 B gzip)
+  ├─ .output/server/_chunks/shared.mjs (11.1 kB) (3.14 kB gzip)
+  ├─ .output/server/_chunks/shared2.mjs (941 B) (536 B gzip)
+  ├─ .output/server/_chunks/sharedComposition.mjs (19.8 kB) (4.78 kB gzip)
+  ├─ .output/server/_chunks/sharedCompositionCore.mjs (32.5 kB) (8.79 kB gzip)
+  ├─ .output/server/_chunks/sharedThings.mjs (2.08 kB) (790 B gzip)
+  ├─ .output/server/_chunks/singleUseTokens.mjs (1.37 kB) (603 B gzip)
+  ├─ .output/server/_chunks/sitemap.mjs (27.8 kB) (6.41 kB gzip)
+  ├─ .output/server/_chunks/social.mjs (16.8 kB) (4.02 kB gzip)
+  ├─ .output/server/_chunks/socialCard.mjs (1.13 MB) (523 kB gzip)
+  ├─ .output/server/_chunks/socialMeta.mjs (6.65 kB) (2.4 kB gzip)
+  ├─ .output/server/_chunks/socialPreview.mjs (23.2 kB) (6.26 kB gzip)
+  ├─ .output/server/_chunks/species.mjs (36.1 kB) (4.92 kB gzip)
+  ├─ .output/server/_chunks/ssoHandoff.mjs (3.42 kB) (1.27 kB gzip)
+  ├─ .output/server/_chunks/stackChat.mjs (10 kB) (2.82 kB gzip)
+  ├─ .output/server/_chunks/status.mjs (3.08 kB) (1.16 kB gzip)
+  ├─ .output/server/_chunks/status2.mjs (28.9 kB) (6.56 kB gzip)
+  ├─ .output/server/_chunks/statusTarget.mjs (4.51 kB) (1.71 kB gzip)
+  ├─ .output/server/_chunks/storage.mjs (1.7 kB) (528 B gzip)
+  ├─ .output/server/_chunks/store.mjs (19.3 kB) (5.1 kB gzip)
+  ├─ .output/server/_chunks/storedSnapshot.mjs (1.32 kB) (679 B gzip)
+  ├─ .output/server/_chunks/Submit.mjs (461 kB) (112 kB gzip)
+  ├─ .output/server/_chunks/subscription.mjs (1.66 kB) (706 B gzip)
+  ├─ .output/server/_chunks/subscriptions.mjs (20.9 kB) (4.98 kB gzip)
+  ├─ .output/server/_chunks/subspaceMessages.mjs (9.04 kB) (2.21 kB gzip)
+  ├─ .output/server/_chunks/subspaces.mjs (79.7 kB) (17.5 kB gzip)
+  ├─ .output/server/_chunks/suiteInstallation.mjs (3.81 kB) (1.32 kB gzip)
+  ├─ .output/server/_chunks/suites.mjs (2.27 kB) (1 kB gzip)
+  ├─ .output/server/_chunks/systemEnvironment.mjs (5.02 kB) (1.99 kB gzip)
+  ├─ .output/server/_chunks/templates.mjs (14.5 kB) (4.47 kB gzip)
+  ├─ .output/server/_chunks/testConfig.mjs (2.06 kB) (870 B gzip)
+  ├─ .output/server/_chunks/themes.mjs (16.7 kB) (4.29 kB gzip)
+  ├─ .output/server/_chunks/thingActions.mjs (760 B) (430 B gzip)
+  ├─ .output/server/_chunks/thingActions2.mjs (621 B) (321 B gzip)
+  ├─ .output/server/_chunks/things.mjs (266 kB) (64.7 kB gzip)
+  ├─ .output/server/_chunks/tierCatalog.mjs (6.89 kB) (2.34 kB gzip)
+  ├─ .output/server/_chunks/tierCatalogStore.mjs (27.4 kB) (6.45 kB gzip)
+  ├─ .output/server/_chunks/tokens.mjs (7.43 kB) (2.76 kB gzip)
+  ├─ .output/server/_chunks/tokens2.mjs (344 B) (232 B gzip)
+  ├─ .output/server/_chunks/transcripts.mjs (1.8 kB) (776 B gzip)
+  ├─ .output/server/_chunks/users.mjs (84.6 kB) (17.2 kB gzip)
+  ├─ .output/server/_chunks/userStorage.mjs (10.8 kB) (2.93 kB gzip)
+  ├─ .output/server/_chunks/userVault.mjs (15.9 kB) (4.16 kB gzip)
+  ├─ .output/server/_chunks/userVaultCore.mjs (1.78 kB) (728 B gzip)
+  ├─ .output/server/_chunks/userVaultModel.mjs (12.3 kB) (2.87 kB gzip)
+  ├─ .output/server/_chunks/vaultCipher.mjs (1.94 kB) (819 B gzip)
+  ├─ .output/server/_chunks/vaultKeys.mjs (12.3 kB) (3.2 kB gzip)
+  ├─ .output/server/_chunks/vaultProviderClient.mjs (16.1 kB) (4.85 kB gzip)
+  ├─ .output/server/_chunks/vaultProviders.mjs (7.55 kB) (2.65 kB gzip)
+  ├─ .output/server/_chunks/vercelRunner.mjs (11.1 kB) (3.22 kB gzip)
+  ├─ .output/server/_chunks/views.mjs (5.23 kB) (2.01 kB gzip)
+  ├─ .output/server/_chunks/voice.mjs (8.5 kB) (2.88 kB gzip)
+  ├─ .output/server/_chunks/waitlist.mjs (2.85 kB) (1.28 kB gzip)
+  ├─ .output/server/_chunks/watchPairing.mjs (16.6 kB) (4.36 kB gzip)
+  ├─ .output/server/_chunks/waterfallService.mjs (6.32 kB) (2.09 kB gzip)
+  ├─ .output/server/_chunks/webhooks.mjs (30.3 kB) (7.32 kB gzip)
+  ├─ .output/server/_chunks/webhookStore.mjs (5.14 kB) (1.78 kB gzip)
+  ├─ .output/server/_chunks/webpageAttachments.mjs (3.23 kB) (1.41 kB gzip)
+  ├─ .output/server/_ci.mjs (3.26 kB) (1.29 kB gzip)
+  ├─ .output/server/_claim.mjs (1.28 kB) (617 B gzip)
+  ├─ .output/server/_cleanup.mjs (1.99 kB) (789 B gzip)
+  ├─ .output/server/_client-metadata.mjs (583 B) (332 B gzip)
+  ├─ .output/server/_commands.mjs (2.41 kB) (797 B gzip)
+  ├─ .output/server/_commands2.mjs (2.35 kB) (858 B gzip)
+  ├─ .output/server/_comment.mjs (4.13 kB) (1.42 kB gzip)
+  ├─ .output/server/_communities.mjs (1.42 kB) (574 B gzip)
+  ├─ .output/server/_complete.mjs (5.67 kB) (2 kB gzip)
+  ├─ .output/server/_complete2.mjs (640 B) (319 B gzip)
+  ├─ .output/server/_config.mjs (754 B) (408 B gzip)
+  ├─ .output/server/_config2.mjs (446 B) (267 B gzip)
+  ├─ .output/server/_confirm.mjs (2 kB) (832 B gzip)
+  ├─ .output/server/_connections.mjs (1.84 kB) (748 B gzip)
+  ├─ .output/server/_connections2.mjs (1.88 kB) (672 B gzip)
+  ├─ .output/server/_connections3.mjs (1.45 kB) (651 B gzip)
+  ├─ .output/server/_content.mjs (16.3 kB) (4.49 kB gzip)
+  ├─ .output/server/_credentials.mjs (3.32 kB) (1.12 kB gzip)
+  ├─ .output/server/_credentials2.mjs (3 kB) (1.05 kB gzip)
+  ├─ .output/server/_credits.mjs (6.06 kB) (1.99 kB gzip)
+  ├─ .output/server/_crypto.mjs (16.1 kB) (4.75 kB gzip)
+  ├─ .output/server/_data-summary.mjs (1.01 kB) (513 B gzip)
+  ├─ .output/server/_delete-all.mjs (1.25 kB) (601 B gzip)
+  ├─ .output/server/_delete.mjs (881 B) (436 B gzip)
+  ├─ .output/server/_delete10.mjs (847 B) (418 B gzip)
+  ├─ .output/server/_delete11.mjs (2.16 kB) (905 B gzip)
+  ├─ .output/server/_delete2.mjs (1.65 kB) (724 B gzip)
+  ├─ .output/server/_delete3.mjs (1.18 kB) (565 B gzip)
+  ├─ .output/server/_delete4.mjs (644 B) (333 B gzip)
+  ├─ .output/server/_delete5.mjs (1.78 kB) (733 B gzip)
+  ├─ .output/server/_delete6.mjs (1.17 kB) (553 B gzip)
+  ├─ .output/server/_delete7.mjs (1.17 kB) (548 B gzip)
+  ├─ .output/server/_delete8.mjs (1.47 kB) (644 B gzip)
+  ├─ .output/server/_delete9.mjs (1.24 kB) (565 B gzip)
+  ├─ .output/server/_demos.mjs (4.64 kB) (1.7 kB gzip)
+  ├─ .output/server/_deployment-links.mjs (18.6 kB) (5.47 kB gzip)
+  ├─ .output/server/_deployments.mjs (1.38 kB) (533 B gzip)
+  ├─ .output/server/_devices.mjs (1.31 kB) (596 B gzip)
+  ├─ .output/server/_devices2.mjs (2.92 kB) (1.1 kB gzip)
+  ├─ .output/server/_diagnostic.mjs (1.05 kB) (473 B gzip)
+  ├─ .output/server/_disconnect.mjs (3.16 kB) (1.3 kB gzip)
+  ├─ .output/server/_dispatch.mjs (1.7 kB) (802 B gzip)
+  ├─ .output/server/_download.mjs (900 B) (455 B gzip)
+  ├─ .output/server/_drafts.mjs (18.4 kB) (5.37 kB gzip)
+  ├─ .output/server/_edit.mjs (1.17 kB) (551 B gzip)
+  ├─ .output/server/_embeds.mjs (12.4 kB) (3.86 kB gzip)
+  ├─ .output/server/_emojis.mjs (2.31 kB) (845 B gzip)
+  ├─ .output/server/_endpoint.mjs (3.96 kB) (1.43 kB gzip)
+  ├─ .output/server/_endpoints.mjs (4.19 kB) (1.49 kB gzip)
+  ├─ .output/server/_environment.mjs (2.56 kB) (993 B gzip)
+  ├─ .output/server/_error-logs.mjs (1.25 kB) (565 B gzip)
+  ├─ .output/server/_events.mjs (2.29 kB) (996 B gzip)
+  ├─ .output/server/_expire.mjs (1.03 kB) (538 B gzip)
+  ├─ .output/server/_export.mjs (27 kB) (7.22 kB gzip)
+  ├─ .output/server/_feed.mjs (1.99 kB) (816 B gzip)
+  ├─ .output/server/_feed2.mjs (1.03 kB) (475 B gzip)
+  ├─ .output/server/_feed3.mjs (3.74 kB) (1.42 kB gzip)
+  ├─ .output/server/_files.mjs (26.2 kB) (7.41 kB gzip)
+  ├─ .output/server/_filters.mjs (2.17 kB) (756 B gzip)
+  ├─ .output/server/_follow.mjs (2.4 kB) (880 B gzip)
+  ├─ .output/server/_fork.mjs (11.8 kB) (3.68 kB gzip)
+  ├─ .output/server/_friend.mjs (1.44 kB) (646 B gzip)
+  ├─ .output/server/_frontend.mjs (1.43 kB) (688 B gzip)
+  ├─ .output/server/_get-connection.mjs (1.68 kB) (786 B gzip)
+  ├─ .output/server/_get.mjs (838 B) (425 B gzip)
+  ├─ .output/server/_get2.mjs (3.47 kB) (1.32 kB gzip)
+  ├─ .output/server/_get3.mjs (10.7 kB) (2.94 kB gzip)
+  ├─ .output/server/_get4.mjs (862 B) (425 B gzip)
+  ├─ .output/server/_grants.mjs (984 B) (490 B gzip)
+  ├─ .output/server/_groups.mjs (2.45 kB) (891 B gzip)
+  ├─ .output/server/_history.mjs (2.47 kB) (948 B gzip)
+  ├─ .output/server/_identity.mjs (1.6 kB) (732 B gzip)
+  ├─ .output/server/_import.mjs (15.5 kB) (4.02 kB gzip)
+  ├─ .output/server/_install.mjs (1.54 kB) (686 B gzip)
+  ├─ .output/server/_integrations.mjs (2.24 kB) (761 B gzip)
+  ├─ .output/server/_interactions.mjs (2.44 kB) (1.01 kB gzip)
+  ├─ .output/server/_introspect.mjs (1.59 kB) (735 B gzip)
+  ├─ .output/server/_invites.mjs (3.74 kB) (1.26 kB gzip)
+  ├─ .output/server/_invites2.mjs (1.63 kB) (614 B gzip)
+  ├─ .output/server/_ios-release.mjs (9.07 kB) (3.08 kB gzip)
+  ├─ .output/server/_join.mjs (1.18 kB) (554 B gzip)
+  ├─ .output/server/_join2.mjs (1.25 kB) (580 B gzip)
+  ├─ .output/server/_jwks.mjs (644 B) (382 B gzip)
+  ├─ .output/server/_leave.mjs (1.16 kB) (551 B gzip)
+  ├─ .output/server/_leave2.mjs (1.26 kB) (580 B gzip)
+  ├─ .output/server/_libs/@anthropic-ai/sdk+[...].mjs (397 kB) (90.3 kB gzip)
+  ├─ .output/server/_libs/@aws-sdk/checksums+[...].mjs (402 kB) (89.4 kB gzip)
+  ├─ .output/server/_libs/@aws-sdk/client-s3+[...].mjs (665 kB) (121 kB gzip)
+  ├─ .output/server/_libs/@aws-sdk/client-sesv2+[...].mjs (797 kB) (160 kB gzip)
+  ├─ .output/server/_libs/@chakra-ui/hooks+[...].mjs (157 kB) (36.4 kB gzip)
+  ├─ .output/server/_libs/@chakra-ui/react+[...].mjs (1.26 MB) (270 kB gzip)
+  ├─ .output/server/_libs/@monaco-editor/loader+[...].mjs (20 kB) (4.98 kB gzip)
+  ├─ .output/server/_libs/@mongodb-js/saslprep+[...].mjs (14.3 kB) (5.1 kB gzip)
+  ├─ .output/server/_libs/@peculiar/asn1-android+[...].mjs (166 kB) (29.5 kB gzip)
+  ├─ .output/server/_libs/@peculiar/asn1-cms+[...].mjs (222 kB) (28.7 kB gzip)
+  ├─ .output/server/_libs/@peculiar/asn1-ecc+[...].mjs (59.5 kB) (9.29 kB gzip)
+  ├─ .output/server/_libs/@peculiar/asn1-pfx+[...].mjs (34.8 kB) (4.19 kB gzip)
+  ├─ .output/server/_libs/@peculiar/x509+[...].mjs (198 kB) (33.9 kB gzip)
+  ├─ .output/server/_libs/@selderee/plugin-htmlparser2+[...].mjs (70.4 kB) (16 kB gzip)
+  ├─ .output/server/_libs/@tokenizer/inflate+[...].mjs (37.8 kB) (10.7 kB gzip)
+  ├─ .output/server/_libs/@vercel/cli-config+[...].mjs (503 kB) (71.6 kB gzip)
+  ├─ .output/server/_libs/@vercel/cli-exec+[...].mjs (94.1 kB) (19.4 kB gzip)
+  ├─ .output/server/_libs/@vercel/oidc-aws-credentials-provider+[...].mjs (3.58 kB) (980 B gzip)
+  ├─ .output/server/_libs/@vercel/queue+[...].mjs (130 kB) (32.8 kB gzip)
+  ├─ .output/server/_libs/@vercel/sandbox+[...].mjs (1.33 MB) (294 kB gzip)
+  ├─ .output/server/_libs/@workflow/core+[...].mjs (2.07 MB) (461 kB gzip)
+  ├─ .output/server/_libs/@zone-eu/mailsplit+[...].mjs (842 kB) (287 kB gzip)
+  ├─ .output/server/_libs/astronomy-engine.mjs (129 kB) (39.1 kB gzip)
+  ├─ .output/server/_libs/atomic-sleep.mjs (1.33 kB) (538 B gzip)
+  ├─ .output/server/_libs/aws-sdk__s3-request-presigner.mjs (5.2 kB) (1.7 kB gzip)
+  ├─ .output/server/_libs/babel__runtime.mjs (12.5 kB) (2.27 kB gzip)
+  ├─ .output/server/_libs/borewit__text-codec.mjs (5.77 kB) (1.75 kB gzip)
+  ├─ .output/server/_libs/bson.mjs (144 kB) (28.9 kB gzip)
+  ├─ .output/server/_libs/chakra-ui__anatomy.mjs (4.68 kB) (1.47 kB gzip)
+  ├─ .output/server/_libs/croner.mjs (21.5 kB) (5.88 kB gzip)
+  ├─ .output/server/_libs/deepmerge-ts.mjs (53.6 kB) (7.34 kB gzip)
+  ├─ .output/server/_libs/dom-serializer+entities.mjs (101 kB) (35.9 kB gzip)
+  ├─ .output/server/_libs/domutils.mjs (34.2 kB) (7.49 kB gzip)
+  ├─ .output/server/_libs/editorjs__checklist.mjs (10.4 kB) (3.7 kB gzip)
+  ├─ .output/server/_libs/editorjs__code.mjs (5.51 kB) (2.38 kB gzip)
+  ├─ .output/server/_libs/editorjs__delimiter.mjs (3.08 kB) (1.44 kB gzip)
+  ├─ .output/server/_libs/editorjs__editorjs.mjs (305 kB) (72.6 kB gzip)
+  ├─ .output/server/_libs/editorjs__embed.mjs (16.6 kB) (5.2 kB gzip)
+  ├─ .output/server/_libs/editorjs__header.mjs (10.6 kB) (3.47 kB gzip)
+  ├─ .output/server/_libs/editorjs__inline-code.mjs (3.41 kB) (1.5 kB gzip)
+  ├─ .output/server/_libs/editorjs__list.mjs (69 kB) (16.5 kB gzip)
+  ├─ .output/server/_libs/editorjs__marker.mjs (3.44 kB) (1.59 kB gzip)
+  ├─ .output/server/_libs/editorjs__quote.mjs (32 kB) (8.88 kB gzip)
+  ├─ .output/server/_libs/editorjs__simple-image.mjs (10.3 kB) (3.38 kB gzip)
+  ├─ .output/server/_libs/editorjs__table.mjs (39 kB) (10.1 kB gzip)
+  ├─ .output/server/_libs/editorjs__underline.mjs (3.31 kB) (1.44 kB gzip)
+  ├─ .output/server/_libs/editorjs__warning.mjs (5.68 kB) (2.18 kB gzip)
+  ├─ .output/server/_libs/emojis-list.mjs (46.7 kB) (9.04 kB gzip)
+  ├─ .output/server/_libs/entities.mjs (105 kB) (50.7 kB gzip)
+  ├─ .output/server/_libs/fflate.mjs (23 kB) (7.57 kB gzip)
+  ├─ .output/server/_libs/file-type+[...].mjs (85.2 kB) (18.4 kB gzip)
+  ├─ .output/server/_libs/fuse.js.mjs (52.3 kB) (11.3 kB gzip)
+  ├─ .output/server/_libs/h3+rou3+srvx.mjs (46.8 kB) (12.4 kB gzip)
+  ├─ .output/server/_libs/he.mjs (103 kB) (32.6 kB gzip)
+  ├─ .output/server/_libs/hexagon__base64.mjs (4.26 kB) (1.42 kB gzip)
+  ├─ .output/server/_libs/hookable.mjs (1.37 kB) (603 B gzip)
+  ├─ .output/server/_libs/html-to-text+htmlparser2.mjs (108 kB) (23.2 kB gzip)
+  ├─ .output/server/_libs/imapflow+[...].mjs (649 kB) (156 kB gzip)
+  ├─ .output/server/_libs/ipaddr.js.mjs (24.3 kB) (5.11 kB gzip)
+  ├─ .output/server/_libs/jose.mjs (50.1 kB) (11.5 kB gzip)
+  ├─ .output/server/_libs/jose+vercel__oidc.mjs (222 kB) (36.1 kB gzip)
+  ├─ .output/server/_libs/jridgewell__resolve-uri.mjs (5 kB) (1.78 kB gzip)
+  ├─ .output/server/_libs/jridgewell__sourcemap-codec.mjs (2.78 kB) (1.1 kB gzip)
+  ├─ .output/server/_libs/jridgewell__trace-mapping.mjs (5.8 kB) (1.95 kB gzip)
+  ├─ .output/server/_libs/levischuck__tiny-cbor.mjs (12.1 kB) (3.36 kB gzip)
+  ├─ .output/server/_libs/linkify-it+uc.micro.mjs (24.2 kB) (8.29 kB gzip)
+  ├─ .output/server/_libs/localforage.mjs (65.6 kB) (12.3 kB gzip)
+  ├─ .output/server/_libs/lucide-react.mjs (635 kB) (119 kB gzip)
+  ├─ .output/server/_libs/mailparser+[...].mjs (83.1 kB) (25 kB gzip)
+  ├─ .output/server/_libs/monaco-editor__react.mjs (10.2 kB) (3.28 kB gzip)
+  ├─ .output/server/_libs/mongodb+[...].mjs (1.36 MB) (270 kB gzip)
+  ├─ .output/server/_libs/nanoid.mjs (948 B) (513 B gzip)
+  ├─ .output/server/_libs/noble__hashes.mjs (17.2 kB) (6.22 kB gzip)
+  ├─ .output/server/_libs/openai.mjs (351 kB) (62.3 kB gzip)
+  ├─ .output/server/_libs/parse5.mjs (199 kB) (32.3 kB gzip)
+  ├─ .output/server/_libs/peculiar__asn1-csr.mjs (4.58 kB) (1.02 kB gzip)
+  ├─ .output/server/_libs/peculiar__asn1-pkcs9.mjs (14.9 kB) (2.46 kB gzip)
+  ├─ .output/server/_libs/peculiar__asn1-rsa.mjs (8.96 kB) (1.56 kB gzip)
+  ├─ .output/server/_libs/pinojs__redact.mjs (11.6 kB) (2.5 kB gzip)
+  ├─ .output/server/_libs/postcss-value-parser.mjs (11.9 kB) (2.67 kB gzip)
+  ├─ .output/server/_libs/postcss+source-map-js.mjs (191 kB) (42.4 kB gzip)
+  ├─ .output/server/_libs/react-click-away-listener.mjs (2.23 kB) (1.01 kB gzip)
+  ├─ .output/server/_libs/react-router.mjs (103 kB) (25.9 kB gzip)
+  ├─ .output/server/_libs/simplewebauthn__server.mjs (131 kB) (36.4 kB gzip)
+  ├─ .output/server/_libs/tinycolor2.mjs (27.8 kB) (7 kB gzip)
+  ├─ .output/server/_libs/tinygradient.mjs (10.5 kB) (2.94 kB gzip)
+  ├─ .output/server/_libs/tldts.mjs (207 kB) (51.5 kB gzip)
+  ├─ .output/server/_libs/ufo.mjs (2.39 kB) (810 B gzip)
+  ├─ .output/server/_libs/unicode-emoji-json.mjs (360 kB) (30.7 kB gzip)
+  ├─ .output/server/_libs/unstorage.mjs (17.5 kB) (4.5 kB gzip)
+  ├─ .output/server/_libs/uuid.mjs (15.2 kB) (2.9 kB gzip)
+  ├─ .output/server/_libs/vercel__functions.mjs (46.2 kB) (8.17 kB gzip)
+  ├─ .output/server/_libs/workflow.mjs (1.03 kB) (615 B gzip)
+  ├─ .output/server/_link.mjs (768 B) (366 B gzip)
+  ├─ .output/server/_links.mjs (3.69 kB) (1.15 kB gzip)
+  ├─ .output/server/_live-activity.mjs (3.36 kB) (1.27 kB gzip)
+  ├─ .output/server/_live-sync.mjs (36.5 kB) (8.26 kB gzip)
+  ├─ .output/server/_local-object.mjs (548 B) (276 B gzip)
+  ├─ .output/server/_login-options.mjs (976 B) (510 B gzip)
+  ├─ .output/server/_login.mjs (2.52 kB) (1.01 kB gzip)
+  ├─ .output/server/_login2.mjs (6.08 kB) (1.86 kB gzip)
+  ├─ .output/server/_logout.mjs (1.79 kB) (750 B gzip)
+  ├─ .output/server/_lopu-access.mjs (2.45 kB) (924 B gzip)
+  ├─ .output/server/_lopu-access2.mjs (3.54 kB) (1.18 kB gzip)
+  ├─ .output/server/_lopu-chat-defaults.mjs (4.17 kB) (1.33 kB gzip)
+  ├─ .output/server/_lopu-prompt.mjs (3.93 kB) (1.36 kB gzip)
+  ├─ .output/server/_mail.mjs (7.75 kB) (2.36 kB gzip)
+  ├─ .output/server/_mcp.mjs (361 B) (239 B gzip)
+  ├─ .output/server/_me.mjs (462 B) (274 B gzip)
+  ├─ .output/server/_members.mjs (1.17 kB) (551 B gzip)
+  ├─ .output/server/_members2.mjs (1.28 kB) (587 B gzip)
+  ├─ .output/server/_members3.mjs (1.84 kB) (711 B gzip)
+  ├─ .output/server/_messages.mjs (2.39 kB) (882 B gzip)
+  ├─ .output/server/_migrations.mjs (863 B) (406 B gzip)
+  ├─ .output/server/_models.mjs (4.79 kB) (1.48 kB gzip)
+  ├─ .output/server/_models2.mjs (4.21 kB) (1.51 kB gzip)
+  ├─ .output/server/_moderate.mjs (1.24 kB) (568 B gzip)
+  ├─ .output/server/_moderation.mjs (2.96 kB) (933 B gzip)
+  ├─ .output/server/_modlog.mjs (1.01 kB) (480 B gzip)
+  ├─ .output/server/_mongodb.mjs (1.21 kB) (570 B gzip)
+  ├─ .output/server/_musing.mjs (6.11 kB) (2.22 kB gzip)
+  ├─ .output/server/_network.mjs (2.16 kB) (885 B gzip)
+  ├─ .output/server/_nitro.mjs (4.76 kB) (1.64 kB gzip)
+  ├─ .output/server/_notifications.mjs (2.07 kB) (847 B gzip)
+  ├─ .output/server/_overview.mjs (1.39 kB) (635 B gzip)
+  ├─ .output/server/_owned.mjs (1.19 kB) (581 B gzip)
+  ├─ .output/server/_pairing.mjs (1.73 kB) (771 B gzip)
+  ├─ .output/server/_pairing2.mjs (5.61 kB) (1.6 kB gzip)
+  ├─ .output/server/_parts.mjs (633 B) (325 B gzip)
+  ├─ .output/server/_passkeys.mjs (681 B) (361 B gzip)
+  ├─ .output/server/_password-reset.mjs (1.8 kB) (816 B gzip)
+  ├─ .output/server/_passwords.mjs (24.8 kB) (6.46 kB gzip)
+  ├─ .output/server/_peers.mjs (1.16 kB) (534 B gzip)
+  ├─ .output/server/_peers2.mjs (4.96 kB) (1.58 kB gzip)
+  ├─ .output/server/_permissions.mjs (1.42 kB) (612 B gzip)
+  ├─ .output/server/_personal.mjs (12.6 kB) (3.38 kB gzip)
+  ├─ .output/server/_ping.mjs (574 B) (316 B gzip)
+  ├─ .output/server/_populate.mjs (131 kB) (26.5 kB gzip)
+  ├─ .output/server/_pr-conflict-auto-resolver-model-waterfall.mjs (2.84 kB) (948 B gzip)
+  ├─ .output/server/_previews.mjs (2.89 kB) (1.07 kB gzip)
+  ├─ .output/server/_profile.mjs (2.93 kB) (1.03 kB gzip)
+  ├─ .output/server/_progress.mjs (7.79 kB) (2.55 kB gzip)
+  ├─ .output/server/_providers.mjs (474 B) (281 B gzip)
+  ├─ .output/server/_public-uploads.mjs (1.71 kB) (701 B gzip)
+  ├─ .output/server/_public.mjs (3.17 kB) (1.14 kB gzip)
+  ├─ .output/server/_publications.mjs (2.32 kB) (856 B gzip)
+  ├─ .output/server/_publications2.mjs (1.14 kB) (569 B gzip)
+  ├─ .output/server/_quota.mjs (21.6 kB) (4.81 kB gzip)
+  ├─ .output/server/_rate-limits.mjs (1.51 kB) (571 B gzip)
+  ├─ .output/server/_raw-results.mjs (34.5 kB) (8.81 kB gzip)
+  ├─ .output/server/_react.mjs (1.19 kB) (572 B gzip)
+  ├─ .output/server/_react2.mjs (2.68 kB) (1.07 kB gzip)
+  ├─ .output/server/_reactions-recent.mjs (800 B) (416 B gzip)
+  ├─ .output/server/_read.mjs (1.15 kB) (544 B gzip)
+  ├─ .output/server/_read2.mjs (1.28 kB) (598 B gzip)
+  ├─ .output/server/_reconcile.mjs (983 B) (477 B gzip)
+  ├─ .output/server/_record.mjs (2.9 kB) (1.16 kB gzip)
+  ├─ .output/server/_recordings.mjs (9.88 kB) (2.92 kB gzip)
+  ├─ .output/server/_recordings2.mjs (1.92 kB) (787 B gzip)
+  ├─ .output/server/_register-options.mjs (1.85 kB) (774 B gzip)
+  ├─ .output/server/_register.mjs (1.66 kB) (735 B gzip)
+  ├─ .output/server/_register2.mjs (2.44 kB) (980 B gzip)
+  ├─ .output/server/_register3.mjs (397 B) (249 B gzip)
+  ├─ .output/server/_relationships.mjs (1.38 kB) (634 B gzip)
+  ├─ .output/server/_relay.mjs (461 B) (274 B gzip)
+  ├─ .output/server/_reminders.mjs (3.24 kB) (1.17 kB gzip)
+  ├─ .output/server/_remove.mjs (1.29 kB) (594 B gzip)
+  ├─ .output/server/_reply.mjs (32.2 kB) (9.25 kB gzip)
+  ├─ .output/server/_reply2.mjs (2.5 kB) (1.13 kB gzip)
+  ├─ .output/server/_report.mjs (1.23 kB) (563 B gzip)
+  ├─ .output/server/_reports.mjs (1.82 kB) (679 B gzip)
+  ├─ .output/server/_request.mjs (6.57 kB) (2.49 kB gzip)
+  ├─ .output/server/_requests.mjs (1.54 kB) (578 B gzip)
+  ├─ .output/server/_resend-verification.mjs (1.8 kB) (764 B gzip)
+  ├─ .output/server/_resolve.mjs (1.57 kB) (718 B gzip)
+  ├─ .output/server/_resolve2.mjs (4.33 kB) (1.65 kB gzip)
+  ├─ .output/server/_reveal.mjs (5.23 kB) (1.67 kB gzip)
+  ├─ .output/server/_reveal2.mjs (7.74 kB) (2.39 kB gzip)
+  ├─ .output/server/_revoke.mjs (951 B) (460 B gzip)
+  ├─ .output/server/_revoke2.mjs (1.81 kB) (741 B gzip)
+  ├─ .output/server/_revoke3.mjs (907 B) (446 B gzip)
+  ├─ .output/server/_revoke4.mjs (1.42 kB) (665 B gzip)
+  ├─ .output/server/_route.mjs (1.66 kB) (700 B gzip)
+  ├─ .output/server/_routes/api/docs.mjs (4.45 kB) (1.85 kB gzip)
+  ├─ .output/server/_routes/api/root_data_docs.mjs (1.2 kB) (622 B gzip)
+  ├─ .output/server/_routes/api/root_data.mjs (3.98 kB) (1.49 kB gzip)
+  ├─ .output/server/_routes/index.mjs (335 B) (211 B gzip)
+  ├─ .output/server/_rss.mjs (4.4 kB) (1.88 kB gzip)
+  ├─ .output/server/_run.mjs (2.35 kB) (973 B gzip)
+  ├─ .output/server/_run2.mjs (2.38 kB) (852 B gzip)
+  ├─ .output/server/_run3.mjs (2.26 kB) (848 B gzip)
+  ├─ .output/server/_runs.mjs (1.36 kB) (645 B gzip)
+  ├─ .output/server/_runtime.mjs (1.71 kB) (779 B gzip)
+  ├─ .output/server/_sandbox.mjs (3.05 kB) (1.17 kB gzip)
+  ├─ .output/server/_save.mjs (1.49 kB) (683 B gzip)
+  ├─ .output/server/_saved.mjs (3.31 kB) (1.35 kB gzip)
+  ├─ .output/server/_schemas.mjs (1.02 kB) (541 B gzip)
+  ├─ .output/server/_scopes.mjs (646 B) (357 B gzip)
+  ├─ .output/server/_screen.mjs (1.91 kB) (696 B gzip)
+  ├─ .output/server/_search.mjs (958 B) (501 B gzip)
+  ├─ .output/server/_search2.mjs (1.3 kB) (606 B gzip)
+  ├─ .output/server/_search3.mjs (4.18 kB) (1.5 kB gzip)
+  ├─ .output/server/_search4.mjs (1.13 kB) (568 B gzip)
+  ├─ .output/server/_sections.mjs (1.17 kB) (549 B gzip)
+  ├─ .output/server/_seed-demos.mjs (2.4 kB) (852 B gzip)
+  ├─ .output/server/_seed.mjs (6.04 kB) (2.15 kB gzip)
+  ├─ .output/server/_seed2.mjs (1.58 kB) (603 B gzip)
+  ├─ .output/server/_self.mjs (655 B) (359 B gzip)
+  ├─ .output/server/_service-account.mjs (4.52 kB) (1.66 kB gzip)
+  ├─ .output/server/_session.mjs (2.6 kB) (1.06 kB gzip)
+  ├─ .output/server/_set-admin.mjs (1.06 kB) (487 B gzip)
+  ├─ .output/server/_settings.mjs (1.56 kB) (612 B gzip)
+  ├─ .output/server/_settings2.mjs (3.87 kB) (1.24 kB gzip)
+  ├─ .output/server/_share.mjs (1.63 kB) (739 B gzip)
+  ├─ .output/server/_shared.mjs (999 B) (511 B gzip)
+  ├─ .output/server/_shared2.mjs (2.5 kB) (1.01 kB gzip)
+  ├─ .output/server/_shared3.mjs (1.95 kB) (824 B gzip)
+  ├─ .output/server/_shared4.mjs (2.03 kB) (808 B gzip)
+  ├─ .output/server/_shared5.mjs (1.36 kB) (644 B gzip)
+  ├─ .output/server/_sitemap.mjs (467 B) (265 B gzip)
+  ├─ .output/server/_sso-handoff.mjs (1.33 kB) (622 B gzip)
+  ├─ .output/server/_sso-session.mjs (1.48 kB) (673 B gzip)
+  ├─ .output/server/_stack-completion.mjs (4.61 kB) (1.79 kB gzip)
+  ├─ .output/server/_stacks.mjs (6.58 kB) (2.05 kB gzip)
+  ├─ .output/server/_state.mjs (1.3 kB) (588 B gzip)
+  ├─ .output/server/_status-data.mjs (447 B) (267 B gzip)
+  ├─ .output/server/_status-data2.mjs (622 B) (342 B gzip)
+  ├─ .output/server/_status.mjs (1.01 kB) (472 B gzip)
+  ├─ .output/server/_status2.mjs (782 B) (353 B gzip)
+  ├─ .output/server/_storage.mjs (17.3 kB) (4.59 kB gzip)
+  ├─ .output/server/_subscriptions.mjs (3.92 kB) (1.15 kB gzip)
+  ├─ .output/server/_subspaces.mjs (2.4 kB) (931 B gzip)
+  ├─ .output/server/_sweep.mjs (3.28 kB) (1.15 kB gzip)
+  ├─ .output/server/_switch.mjs (1.78 kB) (750 B gzip)
+  ├─ .output/server/_sync.mjs (1.53 kB) (705 B gzip)
+  ├─ .output/server/_sync2.mjs (24 kB) (6.23 kB gzip)
+  ├─ .output/server/_sync3.mjs (12.7 kB) (3.83 kB gzip)
+  ├─ .output/server/_sync4.mjs (2.19 kB) (899 B gzip)
+  ├─ .output/server/_sync5.mjs (376 B) (237 B gzip)
+  ├─ .output/server/_sync6.mjs (2.24 kB) (876 B gzip)
+  ├─ .output/server/_sync7.mjs (24.3 kB) (6.34 kB gzip)
+  ├─ .output/server/_sync8.mjs (3.31 kB) (1.16 kB gzip)
+  ├─ .output/server/_tasks.mjs (474 B) (266 B gzip)
+  ├─ .output/server/_teapot.mjs (626 B) (379 B gzip)
+  ├─ .output/server/_template.mjs (3.83 kB) (1.38 kB gzip)
+  ├─ .output/server/_temporary.mjs (4.11 kB) (1.55 kB gzip)
+  ├─ .output/server/_test-otp.mjs (1.46 kB) (684 B gzip)
+  ├─ .output/server/_test.mjs (5.19 kB) (1.93 kB gzip)
+  ├─ .output/server/_themes.mjs (1.33 kB) (548 B gzip)
+  ├─ .output/server/_things.mjs (10.9 kB) (3.47 kB gzip)
+  ├─ .output/server/_things2.mjs (26.2 kB) (6.79 kB gzip)
+  ├─ .output/server/_things3.mjs (6.36 kB) (2.09 kB gzip)
+  ├─ .output/server/_tiers.mjs (2.51 kB) (755 B gzip)
+  ├─ .output/server/_tiers2.mjs (469 B) (284 B gzip)
+  ├─ .output/server/_timeline.mjs (99.8 kB) (23.5 kB gzip)
+  ├─ .output/server/_token.mjs (1.49 kB) (697 B gzip)
+  ├─ .output/server/_token2.mjs (403 B) (254 B gzip)
+  ├─ .output/server/_token3.mjs (2 kB) (867 B gzip)
+  ├─ .output/server/_tokens.mjs (2.54 kB) (965 B gzip)
+  ├─ .output/server/_topup-request.mjs (5.57 kB) (2.06 kB gzip)
+  ├─ .output/server/_track.mjs (1.16 kB) (561 B gzip)
+  ├─ .output/server/_transfer.mjs (1.24 kB) (569 B gzip)
+  ├─ .output/server/_trending.mjs (5.39 kB) (2.02 kB gzip)
+  ├─ .output/server/_two-factor.mjs (1.94 kB) (683 B gzip)
+  ├─ .output/server/_unlink.mjs (1.24 kB) (579 B gzip)
+  ├─ .output/server/_unsubscribe.mjs (2.46 kB) (1.21 kB gzip)
+  ├─ .output/server/_update.mjs (912 B) (442 B gzip)
+  ├─ .output/server/_update2.mjs (1.3 kB) (613 B gzip)
+  ├─ .output/server/_update3.mjs (1.63 kB) (709 B gzip)
+  ├─ .output/server/_update4.mjs (1.15 kB) (544 B gzip)
+  ├─ .output/server/_update5.mjs (1.17 kB) (546 B gzip)
+  ├─ .output/server/_update6.mjs (2.35 kB) (939 B gzip)
+  ├─ .output/server/_update7.mjs (1.24 kB) (568 B gzip)
+  ├─ .output/server/_update8.mjs (2.23 kB) (943 B gzip)
+  ├─ .output/server/_updates.mjs (777 B) (392 B gzip)
+  ├─ .output/server/_updown.mjs (1.47 kB) (652 B gzip)
+  ├─ .output/server/_upload.mjs (1.06 kB) (542 B gzip)
+  ├─ .output/server/_uploads.mjs (653 B) (335 B gzip)
+  ├─ .output/server/_usage.mjs (1.68 kB) (755 B gzip)
+  ├─ .output/server/_user.mjs (1.32 kB) (613 B gzip)
+  ├─ .output/server/_userinfo.mjs (2.65 kB) (1.03 kB gzip)
+  ├─ .output/server/_users.mjs (999 B) (497 B gzip)
+  ├─ .output/server/_vault.mjs (24.1 kB) (6.41 kB gzip)
+  ├─ .output/server/_vercel.mjs (1.18 kB) (535 B gzip)
+  ├─ .output/server/_verify-email.mjs (1.46 kB) (644 B gzip)
+  ├─ .output/server/_views.mjs (1.22 kB) (571 B gzip)
+  ├─ .output/server/_virtual/assets.mjs (15.5 kB) (3.57 kB gzip)
+  ├─ .output/server/_virtual/dist.mjs (15.5 kB) (3.57 kB gzip)
+  ├─ .output/server/_vote.mjs (4.94 kB) (1.84 kB gzip)
+  ├─ .output/server/_waitlist.mjs (910 B) (467 B gzip)
+  ├─ .output/server/_waterfalls.mjs (5.68 kB) (1.95 kB gzip)
+  ├─ .output/server/_webhook.mjs (2.13 kB) (878 B gzip)
+  ├─ .output/server/_webhook2.mjs (1.75 kB) (789 B gzip)
+  ├─ .output/server/_webhook3.mjs (1.45 kB) (665 B gzip)
+  ├─ .output/server/_weekly-summary.mjs (7.68 kB) (2.63 kB gzip)
+  ├─ .output/server/_workspaces.mjs (21.2 kB) (5.79 kB gzip)
+  ├─ .output/server/index.mjs (3.91 MB) (737 kB gzip)
+  └─ .output/server/package.json (2.17 kB) (817 B gzip)
+Σ Total size: 89.8 MB (29.7 MB gzip)
+[nitro] ✔ You can preview this build using npx nitro preview
+{"sha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476", "fileCount": 2975}
+{"buildExitCode": 0, "beforeSha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476", "afterSha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476", "sourceUnchangedDuringBuild": true, "changedFiles": []}

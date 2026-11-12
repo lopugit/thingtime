@@ -67,6 +67,7 @@ export const action = async ({ request }: { request: Request }) => {
     {
       ok: true,
       user: result.user,
+      ...(result.verificationDelivery ? { verificationDelivery: result.verificationDelivery } : {}),
       verificationLink: showLink ? result.verificationLink : undefined
     },
     { headers }

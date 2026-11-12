@@ -1,0 +1,16 @@
+{
+  "kind": "task-private native macOS WKWebView plus actual canonical Nitro on separate host Node; not iOS embedded-app acceptance",
+  "didFinish": true,
+  "sameExactOriginAllowRegex": true,
+  "responseStatuses": {
+    "200": 147
+  },
+  "thingsRequests": 1,
+  "middlewareErrors": 0,
+  "uiPersistenceVerified": false,
+  "sourceSha256": {
+    "host.mjs": "67b249bcef1d2b42ba2cdf40b9bee6bc579a526d4087a275317432fdb1882209",
+    "serve.mjs": "c21e2081372bcab69f1b962c1524b9bc80bec5f7877cbb7fa80c2f1282c4e75b",
+    "wk.swift": "89aea4492efce2c236dcc6d35ba6fbd155ca8f389e853ad5d4b490bb07ecc733"
+  }
+}

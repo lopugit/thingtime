@@ -1,0 +1,170 @@
+🦄
+Login
+🌈
+🦄
+
+BUILDER CANVAS · 2 BLOCKS · UNSAVED
+
+← my pages
+
+Draft saved on this device ✓
+
+global initial nested text
+
++
++
+＋
+Add a block
+
+Global blocks 🌐
+
+✕
+
+Blocks
+
+Select a block…
+column
+· text
+
+SELECTED BLOCK · COLUMN
+
+↑
+↓
+delete
+Bind data Action
+
+Direction
+
+column
+row
+grid
+
+Gap
+
+LAYOUT
+
+Align
+
+auto
+start
+center
+end
+stretch
+
+Max width (px)
+
+WIDTH
+
+HEIGHT
+
+MIN WIDTH
+
+MIN HEIGHT
+
+PADDING
+
+▢
+⬍⬌
+⛶
+
+MARGIN
+
+▢
+⬍⬌
+⛶
+
+APPEARANCE
+
+BACKGROUND
+
+OPACITY
+
+CORNER RADIUS
+
+▢
+⛶
+
+BORDER
+
+STYLE
+
+none
+solid
+dashed
+dotted
+double
+
+WIDTH
+
+COLOR
+
+SHADOW
+
+X
+
+Y
+
+BLUR
+
+SPREAD
+
+COLOR
+
+NATIVE CODE
+
+Custom CSS (property: value per line)
+
+SITE PAGE
+
+Name
+
+Saving forks this page into your Things — only you see your version.
+
+Transfer
+Save my version
+Discard
+✉️
+CONTACT
+
+connect@thingtime.com
+
+Support Thingtime
+
+© 2026 Thingtime
+
+🌱 git/unknown
+Current Tab
+
+Nitro API: status unavailable
+
+Frontend: status unavailable
+
+MongoDB: status unavailable
+
+🌈
+🦄
+🧙‍♂️
+📖
+DOCS
+
+Legal policies & terms
+
+Docs home
+
+Design mockups
+
+Design system
+
+🌈
+ACCOUNT
+
+Log in
+
+Register
+
+column
+/
+text
++
+⊞
+⋯

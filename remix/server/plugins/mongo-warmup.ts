@@ -1,7 +1,7 @@
 import { definePlugin } from 'nitro';
 import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 import { hasSelfHostedApiEnv } from '../utils/apiFallback';
-import { getGatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { getGatewaySettings, withGatewayWork } from '../../app/api/utils/deployment/environmentGateway';
 
 import { ensureIndexes, warnIfTransactionsUnsupported } from '../../app/api/utils/mongodb/collections';
 
@@ -20,8 +20,8 @@ export default definePlugin(() => {
     // discover/warm a configured gateway from its startup plugin. First
     // admitted DB access opens the pool; first mutation ensures its plan.
     if (getGatewaySettings()) return;
-    void ensureIndexes().catch(() => {});
-    void warnIfTransactionsUnsupported().catch(() => {});
+    void withGatewayWork(ensureIndexes).catch(() => {});
+    void withGatewayWork(warnIfTransactionsUnsupported).catch(() => {});
   } catch {
     // A configured but unavailable database must not crash static serving.
   }

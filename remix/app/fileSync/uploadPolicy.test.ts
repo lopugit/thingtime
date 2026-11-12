@@ -42,3 +42,9 @@ test('folder hourly waits retain exact native deadline on part and whole-file pa
  const expected = { requestId: 'request', ownerId: 'owner', origin: scope.origin }, retryAt = '2026-11-12T04:00:00.000Z';
  for (const action of ['upload-file', 'upload-part', 'defer-upload']) assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...expected, rootId: 'root', syncWait: 'data-budget', retryAt } }, expected, { action, rootId: 'root' } as any), (error: any) => error.reason === 'data-budget' && error.retryAt === Date.parse(retryAt));
 });
+
+test('folder upload policy rejects either independently published Things 1.64 contract', () => {
+ assert.equal(FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS['api.things'], '1.65.0');
+ for (const version of [undefined, '1.64.0', '1.64.99', '2.0.0']) assert.equal(capabilitySatisfies(version, FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS['api.things']), false);
+ for (const version of ['1.65.0', '1.65.1', '1.66.0']) assert.equal(capabilitySatisfies(version, FILE_SYNC_UPLOAD_POLICY_REQUIREMENTS['api.things']), true);
+});

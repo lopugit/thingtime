@@ -1,0 +1,68 @@
+{
+  "synthetic": true,
+  "actualSecureVaultScope": true,
+  "actualEncryptedLocalProviderVault": true,
+  "providerAuthenticationTested": false,
+  "results": [
+    {
+      "width": 1440,
+      "encryptedOfflineSave": true,
+      "coldUnlock": true,
+      "setupTokenRejected": true,
+      "modeChangeClearsToken": true,
+      "bounds": {
+        "width": 1440,
+        "scrollWidth": 1440,
+        "top": 0,
+        "bottom": 425,
+        "max": 425
+      },
+      "requests": [],
+      "errors": []
+    },
+    {
+      "width": 390,
+      "encryptedOfflineSave": true,
+      "coldUnlock": true,
+      "setupTokenRejected": true,
+      "modeChangeClearsToken": true,
+      "bounds": {
+        "width": 390,
+        "scrollWidth": 390,
+        "top": 0,
+        "bottom": 807,
+        "max": 807
+      },
+      "requests": [],
+      "errors": []
+    },
+    {
+      "width": 320,
+      "encryptedOfflineSave": true,
+      "coldUnlock": true,
+      "setupTokenRejected": true,
+      "modeChangeClearsToken": true,
+      "bounds": {
+        "width": 320,
+        "scrollWidth": 320,
+        "top": 0,
+        "bottom": 885,
+        "max": 885
+      },
+      "requests": [],
+      "errors": []
+    }
+  ],
+  "capabilityCases": [
+    {
+      "version": "1.4.0",
+      "remoteWrites": 0,
+      "refused": true
+    },
+    {
+      "version": "1.5.0",
+      "remoteWrites": 1,
+      "refused": false
+    }
+  ]
+}

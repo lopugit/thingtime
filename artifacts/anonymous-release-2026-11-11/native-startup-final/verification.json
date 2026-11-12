@@ -1,0 +1,37 @@
+{
+  "passed": false,
+  "startedAt": "2026-11-11T07:36:06.683Z",
+  "finishedAt": "2026-11-11T07:38:55.673Z",
+  "phase": "recover-failing-release",
+  "implementation": {
+    "main.cjs": "4beed3e8cd629b716a9bc4e6227c1e4dda40813ccefc6fed47583d92a628c1b0",
+    "preload.cjs": "73d781609d4e29c7ae6e15a74f9f6a2daadba9dd6f0ec08b0902b1d23dd33468",
+    "lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "lib/web-bundle-launch.cjs": "b4547e68e29213051133c7e8a8897e7b2df19003d5652b772265336f41c7180b",
+    "../native-bundles/host.cjs": "5e12b298aa2cac9c8082a947b7547bd6a65cc3d0ab2de69552e3135a4b2808aa",
+    "../native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "../native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e"
+  },
+  "cleanupVerified": true,
+  "rendererBoundaryHost": "isolated Chromium; native startup and rollback use the installed development app",
+  "rendererBoundaryVersion": "Chrome/140.0.7339.16",
+  "rendererBoundaryCases": [
+    {
+      "broken": false,
+      "acknowledged": 1,
+      "renderErrors": 0,
+      "routerErrors": null
+    },
+    {
+      "broken": true,
+      "acknowledged": 0,
+      "renderErrors": 1,
+      "routerErrors": null
+    }
+  ],
+  "failure": {
+    "name": "AssertionError",
+    "code": "ERR_ASSERTION",
+    "message": "Real native startup did not settle"
+  }
+}

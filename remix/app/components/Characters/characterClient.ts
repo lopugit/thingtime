@@ -6,7 +6,8 @@ export async function characterRequest(input?: Record<string, unknown>, query?: 
   await requireThingtimeCapability('api.auth-characters', '1.0.0');
   // Credentials deliberately bypass the general request history/diagnostics.
   const response = await fetch(`/api/v1/auth/characters${query ? `?${new URLSearchParams(query)}` : ''}`, {
-    method: input ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', signal,
+    method: input ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+    signal: AbortSignal.any([AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]),
     headers: { 'Content-Type': 'application/json' }, ...(input ? { body: JSON.stringify(input) } : {})
   });
   const data = await response.json();

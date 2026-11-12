@@ -1,0 +1,30 @@
+{
+  "distributionSha256": "3fa1b8fb0720768b01c2e0dae3a17e788476e8c1613a1d9a54e206793b45326e",
+  "sourceToBinaryReproducibility": "unproven",
+  "apiStarted": false,
+  "storageTested": false,
+  "simulatorDeleted": true,
+  "native": {
+    "node": "v24.22.1",
+    "mobile": "24.22.1-0",
+    "platform": "ios",
+    "arch": "arm64",
+    "attempted": "canonical .output/server/index.mjs",
+    "sourceSha256": "39be8cf1b16f9eb99455cd337adb26e32829521d2643de72addc4169cb0dbfde",
+    "imported": false,
+    "apiStarted": false,
+    "bcrypt": {
+      "rounds": 10,
+      "valid": true,
+      "invalid": false
+    },
+    "error": {
+      "name": "Error",
+      "code": null,
+      "message": "Could not load the \"sharp\" module using the ios-arm64 runtime\nPossible solutions:\n- Manually install libvips >= 8.18.7\n    See https://sharp.pixelplumbing.com/install#building-from-source\n- Add WebAssembly-based dependencies:\n    npm install sharp @img/sharp-wasm32\n- Consult the installation documentation:\n    See https://sharp.pixelplumbing.com/install",
+      "stack": "Error: Could not load the \"sharp\" module using the ios-arm64 runtime\nPossible solutions:\n- Manually install libvips >= 8.18.7\n    See https://sharp.pixelplumbing.com/install#building-from-source\n- Add WebAssembly-based dependencies:\n    npm install sharp @img/sharp-wasm32\n- Consult the installation documentation:\n    See https://sharp.pixelplumbing.com/install\n    at file://<APP_BUNDLE>/.output/server/node_modules/sharp/dist/sharp.mjs:171:9\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:647:26)\n    at async file://<APP_BUNDLE>/probe.mjs:16:23"
+    }
+  },
+  "experimentCompleted": true,
+  "observedAt": "2026-11-11T09:34:02.437557+00:00"
+}

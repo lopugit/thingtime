@@ -1,0 +1,22 @@
+✖ normal Things importer retains the complete exact anonymous draft after reload (8267.260023ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8318.246115
+
+✖ failing tests:
+
+test at ../../tmp/qa-import.test.mjs:14:1
+✖ normal Things importer retains the complete exact anonymous draft after reload (8267.260023ms)
+  page.goto: Navigation to "http://127.0.0.1:18724/things" is interrupted by another navigation to "chrome-error://chromewebdata/"
+  Call log:
+    - navigating to "http://127.0.0.1:18724/things", waiting until "load"
+  
+      at TestContext.<anonymous> (/tmp/qa-import.test.mjs:102:15) {
+    name: 'Error',
+    log: [ '  - navigating to "http://127.0.0.1:18724/things", waiting until "load"' ]
+  }

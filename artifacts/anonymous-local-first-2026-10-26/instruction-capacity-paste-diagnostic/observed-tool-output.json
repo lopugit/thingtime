@@ -1,0 +1,58 @@
+{
+  "recoveredAt": "2026-10-26T04:36:58.780165+00:00",
+  "captureKind": "Recovered transcription of observed tool stdout, not a rerun or independently persisted original stream",
+  "sourceTool": "functions.exec -> tools.write_stdin",
+  "sourceExecSessionId": 23736,
+  "sourceChunkIds": [
+    "b92971"
+  ],
+  "originalCaptureFailure": "DockerEngine.run streamed stdout through progress callback; its returned result was empty, and the helper wrote that empty return to result.txt.",
+  "stdoutPath": "result.txt",
+  "stdoutSha256": "2fe3a858006032cddc3f08bf68f136a79f0fef73db14efa7326697d58b61fb2a",
+  "diagnosticSourcePath": "diagnostic.mjs",
+  "diagnosticSourceSha256": "5874bf192de98a37b0f09c5a031b8971323e107cbc8f6ad2a178b49592ab61bd",
+  "helperPath": "tmp/continuation/instruction-capacity-paste.cjs",
+  "helperSha256": "38c3e467e1bd7d1d7a107f0339bea56c0f568cd7e5d4cc467d38b095f1fbced8",
+  "boundaryPath": "boundary.json",
+  "cleanupPath": "cleanup.json",
+  "measurements": {
+    "mode": "trusted-paste",
+    "milliseconds": 498,
+    "bytes": 120048,
+    "hardLines": 12002,
+    "events": [
+      {
+        "type": "paste"
+      },
+      {
+        "type": "beforeinput",
+        "inputType": "insertFromPaste",
+        "dataLength": 72048
+      },
+      {
+        "type": "input",
+        "inputType": "insertFromPaste",
+        "dataLength": 72048
+      },
+      {
+        "type": "beforeinput",
+        "inputType": "historyUndo"
+      },
+      {
+        "type": "input",
+        "inputType": "historyUndo"
+      },
+      {
+        "type": "beforeinput",
+        "inputType": "historyRedo"
+      },
+      {
+        "type": "input",
+        "inputType": "historyRedo"
+      }
+    ],
+    "undoEmpty": true,
+    "redoExact": true
+  },
+  "scope": "Disposable static native textarea diagnostic only. This does not establish normal Settings application acceptance."
+}

@@ -1,14 +1,14 @@
 import { json, readJsonBody } from '../../http';
 import { getCurrentUser } from '../auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
-import { mongoDataPlane } from '../mongodb/dataPlane';
+import { contentDataPlane } from '../things/contentDataPlane';
 import { withFriendIds } from '../things/things';
 import { sanitizeWebpageBlocks } from '../../../schemas/registry';
 import { resolveBlockComponents } from './webpages';
 
 const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const reply = (body: unknown, status = 200) => json(body, { status, headers });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, plane: mongoDataPlane, viewer: withFriendIds, resolve: resolveBlockComponents };
+const defaults = { user: getCurrentUser, limit: enforceRateLimit, plane: contentDataPlane, viewer: withFriendIds, resolve: resolveBlockComponents };
 export function createDraftComponentsAction(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
 	return async ({ request }: { request: Request }) => {

@@ -1,0 +1,23 @@
+✖ global and site nested blocks remain individually editable after offline save and reload (26780.971027ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26823.092729
+
+✖ failing tests:
+
+test at ../../tmp/qa-site.test.mjs:11:1
+✖ global and site nested blocks remain individually editable after offline save and reload (26780.971027ms)
+  locator.click: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for locator('[data-testid="dropwell-box-1"], [data-testid^="dropwell-box-1-"]').last()
+  
+      at add (/tmp/qa-site.test.mjs:48:87)
+      at TestContext.<anonymous> (/tmp/qa-site.test.mjs:96:25) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('[data-testid="dropwell-box-1"], [data-testid^="dropwell-box-1-"]').last()` ]
+  }

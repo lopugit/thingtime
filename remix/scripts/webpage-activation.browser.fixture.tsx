@@ -6,8 +6,13 @@ import { ThingtimeContext } from '../app/Providers/ThingtimeProvider';
 import { LiveWebpageView } from '../app/components/Builder/LiveWebpage';
 import type { UseWebpageDraft } from '../app/components/Builder/useWebpage';
 import type { WebpageBlock } from '../app/components/Builder/webpageBlocks';
+import { bindLocalWorkspace } from '../app/local-workspace/runtime.client';
+import { rootIdentity } from '../app/utils/rootIdentity';
 
 const setup = new URLSearchParams(window.location.search);
+const generation = rootIdentity.read().generation;
+rootIdentity.confirm(generation);
+bindLocalWorkspace(false, generation, { kind: 'account', ownerId: 'fixture-owner', origin: window.location.origin, dataPlane: 'home' });
 function Fixture() {
 	const location = useLocation();
 	const edit = location.pathname === '/builder';
@@ -31,7 +36,8 @@ function Fixture() {
 						dayInput: 'day', queryResult: { selectedId: 'record.id' } }
 				} : {}) }
 			},
-			source: shared ? 'system' : 'user', componentsByRef: {}
+			source: shared ? 'system' : 'user', componentsByRef: {},
+			activationReady: !setup.has('unverified-device')
 		},
 		blocks, componentsByRef: {}, loading: false, error: false, dirty: false,
 		branch: setup.has('branch') ? { id: 'history', name: 'Archived branch', locked: true, componentNotice: 'Historical composition', canRefresh: () => false } : undefined

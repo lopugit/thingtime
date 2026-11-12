@@ -1,0 +1,29 @@
+{
+  "startedAt": "2026-10-26T22:15:17.933Z",
+  "endedAt": "2026-10-26T22:15:46.833Z",
+  "cancelled": false,
+  "phases": [
+    {
+      "command": "build:client",
+      "startedAt": "2026-10-26T22:15:17.947Z",
+      "code": 0,
+      "signal": null,
+      "endedAt": "2026-10-26T22:15:33.579Z"
+    },
+    {
+      "command": "sync:nitro-template",
+      "startedAt": "2026-10-26T22:15:33.579Z",
+      "code": 0,
+      "signal": null,
+      "endedAt": "2026-10-26T22:15:33.822Z"
+    },
+    {
+      "command": "build:server",
+      "startedAt": "2026-10-26T22:15:33.822Z",
+      "code": 0,
+      "signal": null,
+      "endedAt": "2026-10-26T22:15:46.831Z"
+    }
+  ],
+  "dotenvRestored": true
+}

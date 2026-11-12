@@ -1,0 +1,61 @@
+{
+  "workspace": "native-bundle-dev-pr1000",
+  "installedApp": "/Users/lopu/Applications/Thingtime Dev native-bundle-dev-pr1000.app",
+  "resources": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-dev-pr1000/source/electron",
+  "runtime": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-dev-pr1000/runtime/Electron.app",
+  "profile": "/Users/lopu/Library/Application Support/Thingtime Dev/native-bundle-dev-pr1000/profile",
+  "prepareOnly": true,
+  "stoppedVerified": true,
+  "launcherAndRuntimeSignaturesVerified": true,
+  "launcherExecutableVerified": true,
+  "files": [
+    {
+      "path": "main.cjs",
+      "sha256": "b6f50b32b3d766d4bb4b8a770fb8ed24575e17d2c828906a6fbf48cb27c9f645",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "preload.cjs",
+      "sha256": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "lib/web-bundle-activation.cjs",
+      "sha256": "5c704737428fb819531b75b463ea5f5901095697336c98beabb4792ae8391e47",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "scripts/dev-workspace.mjs",
+      "sha256": "06677ab9809baefc10e55289cef3f1a81f621616c87f7e1a0b8002b4ea5d427a",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "scripts/verify-password-provider.mjs",
+      "sha256": "7b4219f7ad57cc518430d310be038aeebda61aae51c3fc422adb7bd6ef7217d4",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "scripts/password-helper-identity.mjs",
+      "sha256": "6d3e7951a6ba5b3ebb0d61e48c9d6fe087fce17da8c24d443d97273ab7583e0c",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "dist/web/metadata.json",
+      "sha256": "ef8a5a75e2b06563dca3170f0177c16a19bb7911ec8511e396c432cc3251bdba",
+      "matchesAcceptedSnapshot": true
+    },
+    {
+      "path": "dist/web-integrity.json",
+      "sha256": "b38c1b7bd1fe6cf1426c8414d12fbc90425606b137cca273a76c9e25cedf988b",
+      "matchesAcceptedSnapshot": true
+    }
+  ],
+  "helperExecutableSha256": "542b8ff8af8cd23f1b784379180ce42defb0ca40b4482e390c0ddfc63133bbcf",
+  "sameHelperAsPassingFixture": true,
+  "canonicalTrustPolicyPreserved": true,
+  "actualLaunchAcceptanceOfThisReconstructedCopy": false,
+  "acceptanceBelongsToCleanedFixture": "verification.json",
+  "qaFixtureCleanupVerified": true,
+  "retainedHelperInstallations": "/Users/lopu/Applications/Thingtime Dev native-auto-pr1000 Helpers",
+  "signatureScope": "Development launcher/runtime ad-hoc; private native helper Apple Development signed; no production distribution claim."
+}

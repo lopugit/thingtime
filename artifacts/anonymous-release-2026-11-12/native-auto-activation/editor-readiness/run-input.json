@@ -1,0 +1,25 @@
+{
+  "sourceRevision": "8c9d2e392c2bd4f0af2f42f3f0012a6dd58599a4",
+  "uncontendedBuildExitCode": 0,
+  "hashes": {
+    "electron/main.cjs": "47603b10676a34c475acf252f8ae5d4c49af5cd5679f11d9624c747e917c11f4",
+    "electron/preload.cjs": "59479363c7775f82b23fee5d82065a06c1bb348ce4de0a4e5702473389803008",
+    "electron/lib/web-bundle-activation.cjs": "bf56527ebcc568ea91d930beea32509838378835bf172f313c56cf06ce08412a",
+    "electron/lib/web-bundle-updates.cjs": "ddc3b3a7ed5ebcce3caf526bf1b6f4181138a603aaa58591e67a83c445af9194",
+    "electron/lib/renderer-server.cjs": "ad500280f9483c954e3378b6f6dd310679a2a5f68b296cb98cb0a8f18d739959",
+    "electron/dist/web/metadata.json": "94e358cdb59ef151710e10a91a1844f8c6ef085f0ced5657b71da781d5eea6cc",
+    "remix/app/components/Nav/Drawer/CustomDrawerItems.tsx": "916aa9496ca241dd7848ec153d52cd2279673def8149957227ca5cdb83b90e38",
+    "remix/app/components/Nav/Drawer/customDrawerBlocks.ts": "8d26ec785efea2c51f4d6a40b8d60436d325f8effa2714b07357cfbff291d53d",
+    "remix/app/components/MagicInput/MagicInput.tsx": "54d59f652d1109c5f093879a8f8e921b4ef5c9190e597b0a31ca35a8f277f5e4",
+    "remix/app/components/MagicInput/MagicInput.browser.test.mjs": "08f8900ebaf1ff2cd8b847950e63e7f2a71c66a2eb734736c01935a8afc7fedf",
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "5d900cab4d6de3a073421e0ba10d99d711dc39bbd69694433d5a2081bb689eb0"
+  },
+  "workspace": "native-bundle-qa-auto-pr1000-ready",
+  "ports": {
+    "renderer": 28640,
+    "api": 41784,
+    "database": 41785,
+    "inspector": 41786
+  },
+  "mode": "Remote synthetic API; actual updated renderer; fixed MagicInput mount interleaving; no local account API claim"
+}

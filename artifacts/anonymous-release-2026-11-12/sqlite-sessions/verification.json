@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-11-11T15:53:32.337648+00:00",
+  "scope": "Canonical session persistence dependency removed from direct Mongo collections through an explicit typed home SessionRepository; native real-file module acceptance only, not real API registration or login.",
+  "authoredFiles": [
+    "remix/app/api/utils/auth/sessions.ts",
+    "remix/app/api/utils/auth/sessionCore.ts",
+    "remix/app/api/utils/auth/sessionRepository.ts",
+    "remix/app/api/utils/documentStore/nativeSessions.ts",
+    "remix/app/api/utils/documentStore/nativeSessions.test.ts",
+    "remix/app/api/utils/documentStore/collectionProvider.ts"
+  ],
+  "sourceHashes": {
+    "remix/app/api/utils/auth/sessions.ts": "c43cb68d04c616723d0c5108537948fdbff391bd2f69abd9eb1eb0c90a82b658",
+    "remix/app/api/utils/auth/sessionCore.ts": "506a059e3968ed4165a4cbde2562ecd0717dfc543dce0a308fd60091518d5e08",
+    "remix/app/api/utils/auth/sessionRepository.ts": "24bb9600e673238c568d87039187d991ff592b8a2dcce2b6aba44edf2bc565b5",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "7f66565a762e65e07bfef94f4da7f3573b3b26289019b15d44a7230a7c4bee4b",
+    "remix/app/api/utils/documentStore/nativeSessions.test.ts": "5a88366c2e36feb73c02ace7f0752e7b2620c384c238ae8e827d3c3af5f26498",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "96a3bdd00919fb81d6b95fe98e08d280ef530bb330cd921559d1c0666d8300ee",
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.test.ts": "9ca594e97efed1d59e03574be9fcb9eb0147043555e4de56529d1f69e4d0a814",
+    "remix/app/api/utils/documentStore/contract.ts": "fdc303132d4efce328adbb257e6a13336a3985ac951a3ee8bcb606d7010d481e",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts": "1770c5d35883b0be68da342106c96d417056870760b8b6a776d3c58bb5fe3c42",
+    "remix/app/api/utils/documentStore/nativeUserStorage.ts": "a5737c092a94ab626a1c0f17738d57e9602235585590295b389d637290c4d37a",
+    "remix/app/api/utils/documentStore/reopen.fixture.mjs": "628722c1003110ad06654ed3d6981e4ed7c078963d6f00672b37a909050f65a3",
+    "remix/app/api/utils/documentStore/sqliteStore.test.ts": "dce263357545a2ad6cf4297e54c7c453546981d6ebca3762e1a1b7568b780c0c",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/mongodb/collectionNames.ts": "e8d98412ed648ba1d6d8d1ac92edbe95608d018e1a39db9a9e8b039a48f5725f",
+    "remix/app/schemas/registry.ts": "775d57c36011c5877b06e8ef395746d28c241b055533ecf71c0c8b76457872d0",
+    "remix/package.json": "a7753058ae7124478fcfaf0a4f0c22d4c39eed37ce2ee285229eca6e97638053"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "exitCode": 0,
+      "tests": 47,
+      "passed": 47,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "log": "/tmp/pr1000-native-sessions-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/auth/sessions.ts app/api/utils/auth/sessionCore.ts app/api/utils/auth/sessionRepository.ts app/api/utils/documentStore/nativeSessions.ts app/api/utils/documentStore/nativeSessions.test.ts app/api/utils/documentStore/collectionProvider.ts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "/tmp/pr1000-native-sessions-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit --pretty false",
+      "exitCode": 0,
+      "diagnostics": 0,
+      "log": "/tmp/pr1000-native-sessions-types.log"
+    }
+  ],
+  "canonicalTestWiring": "test:document-store uses app/api/utils/documentStore/*.test.ts and test:unit invokes test:document-store; no package script changes needed.",
+  "sessionRegressions": 10,
+  "covered": [
+    "Actual canonical createSession/getLiveSession/revokeSession using real file-backed SQLite BSON collections.",
+    "Expiry and revocation across reopen; non-expiring session reap date; existing expiry retained; secureVaultKey removed.",
+    "Duplicate preallocated jti has one winner across two SQLite handles.",
+    "Concurrent home repository scopes remain isolated; nested/wrong-plane/expired/direct-saved repository calls refuse.",
+    "Detached or queued work after scope exit fails before writes and never falls back to Mongo.",
+    "Native caller-owned transaction options refuse before insert; no fake driver session or independent commit under a claimed caller transaction.",
+    "Existing exported Mongo revocation pipeline matches its exact historical aggregation expression/key removal contract.",
+    "Hosted canonical session helper import loads no native repository/SQLite.",
+    "Hostile session metadata accessors/toBSON hooks cannot execute before BSON admission."
+  ],
+  "mongoCompatibility": "Default SessionRepository delegates to existing getSessionsCollection with identical insert options, jti filter and revokedSessionPipeline. Root owns real Mongo API harness revalidation.",
+  "limitations": [
+    "No native profile/runtime/request activation selector or real HTTP registration/authenticated API acceptance.",
+    "Tests create only session records through canonical helpers; no account rows, alternate signup handler or successful authentication claim.",
+    "Caller-owned native transaction/session binding remains unsupported.",
+    "SQLite has no TTL cleanup worker; canonical live reads still enforce expiry and revocation.",
+    "Settings/rate limits, user+vault secure state, tier/subscription bootstrap, rosters, notifications, verification records and email outbox remain registration dependencies.",
+    "Provider-aware Nitro readiness/bootstrap, exact profile signing/origin, private Thing/Timeline/accounting recovery adapters and real API restart acceptance remain unfinished."
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "scope": "Actual component browser regression",
+  "before": {
+    "sourceSha256": "54d59f652d1109c5f093879a8f8e921b4ef5c9190e597b0a31ca35a8f277f5e4",
+    "passed": 0,
+    "failed": 1,
+    "expected": "A",
+    "actual": "B"
+  },
+  "after": {
+    "sourceSha256": "6055dd5e98ba9e1e31224f2e0684a8536878810c3702942486e4b823978acd0a",
+    "passed": 5,
+    "failed": 0,
+    "observations": [
+      {
+        "case": "mount-interleaving",
+        "textRetained": true,
+        "rawEnterValueRetained": true
+      },
+      {
+        "case": "controlled-echo",
+        "focusCaretAndIdentityRetained": true,
+        "externalResetApplied": true
+      },
+      {
+        "case": "uncontrolled-reset",
+        "placeholderDidNotErase": true,
+        "explicitEmptyResetApplied": true
+      },
+      {
+        "case": "stale-local-echo",
+        "externalAtoBtoARenderedAndSubmitted": true
+      },
+      {
+        "case": "composition-and-markup",
+        "compositionEchoCaretRetained": true,
+        "rawEnterValueRetained": true,
+        "initialAndUpdatedMarkupInert": true,
+        "widths": [
+          1440,
+          390
+        ]
+      }
+    ]
+  },
+  "productSourceFrozen": true,
+  "nativeRunAfterFinalCorrection": false
+}

@@ -1,0 +1,29 @@
+{
+  "tests": {
+    "command": "corepack pnpm --dir remix exec node --experimental-test-module-mocks --import tsx --test app/api/utils/ai/claudeOAuth.test.ts app/api/utils/attachments/zipStream.test.ts app/api/utils/lopu/chat.streaming.test.mts app/api/utils/backups/backupTransport.test.ts app/api/utils/backups/backupDispatch.test.ts",
+    "passed": 129,
+    "failed": 0,
+    "skipped": 0,
+    "log": "/tmp/pr1000-stream-extra-tests.log"
+  },
+  "sourceHashes": {
+    "remix/app/api/utils/ai/claudeOAuth.ts": "362897283018151d4781cdf3fd1411765b6ef23df7a2ecab511050823728d91b",
+    "remix/app/api/utils/ai/claudeOAuth.test.ts": "223c3307a2e3d4b3ee8a873b8487563793bb4f5378ee0a46e7e359619028ea85",
+    "remix/app/api/utils/attachments/zipStream.ts": "fc919c3462bc8e451e8ff7cb10be9f55372ac16479bbae7a94d41cfda341e8e3",
+    "remix/app/api/utils/attachments/zipStream.test.ts": "7b062d7ba2c2f254b8f51a9cd9d2658fc973354cf07592a188ba5fa7fdf11257",
+    "remix/app/api/utils/lopu/chat.ts": "e6ca7288828fcfd67399a5ab837b0cb814870ade27e145bc682b35c8bd6cb69a",
+    "remix/app/api/utils/lopu/chat.streaming.test.mts": "2197051cc3ff3d888cce29741aa774ead8def83be6459c0f9bcbf84e5ce8f726",
+    "remix/app/api/utils/backups/backupTransport.server.ts": "50626ac580739d1cfd9a5bfa074d18b2368b66094e19319635218f49bffb5b6d",
+    "remix/app/api/utils/backups/backupTransport.test.ts": "6489b39201001b0ca015eeb464416cfd263821d99e9e35d8d1bd1d6a3f53e50e",
+    "remix/app/api/utils/backups/backupDispatch.server.ts": "082f5d9d507b4960729f88665689c05d62fdea918011c9df3387b5191913602f",
+    "remix/app/api/utils/backups/backupDispatch.test.ts": "31b016523aabac547acbd4e7a2476126739e9e78b7df1e72118708af97923d91",
+    "remix/app/api/utils/deployment/environmentGateway.ts": "90eb3798d40a58eb91b2b49d9722f3ef7ab8e8b277e6f27f27a1df918b83b9df"
+  },
+  "lint": {
+    "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/ai/claudeOAuth.test.ts app/api/utils/attachments/zipStream.test.ts app/api/utils/lopu/chat.streaming.test.mts app/api/utils/backups/backupDispatch.server.ts app/api/utils/backups/backupDispatch.test.ts",
+    "exitCode": 0,
+    "errors": 0,
+    "warnings": 10,
+    "log": "/tmp/pr1000-stream-extra-lint.log"
+  }
+}

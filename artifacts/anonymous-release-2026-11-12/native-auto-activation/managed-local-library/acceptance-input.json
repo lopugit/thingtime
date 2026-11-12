@@ -1,0 +1,22 @@
+{
+  "head": "c039dee857dcd3558192111e956921395648cd69",
+  "fixtureHashes": {
+    "electron/scripts/verify-web-bundle-auto-activation.mjs": "bc227f899829029cde4cecc571ef77a976627f7564d554c6f038ab39288eaa33",
+    "electron/test/fixtures/configure-native-auto-qa.cjs": "2cc0cca6abd61285991b8dd68661dbbb686bc4e095055e5de01ec8ec6aab82dc",
+    "electron/test/fixtures/native-auto-local.cjs": "0b86987ac6160cf6b107f0624173ff95e1663307b84fe84e3ddc785d2a997339",
+    "electron/test/native-auto-local.test.cjs": "5616f7fe51fa7c867a17c57de7383468cf2a04282b56b58c0a060234d9cc2f05"
+  },
+  "webHashes": {
+    "electron/dist/web/.output/server/index.mjs": "ef8123c805272920d5ddf0e5a3d64d735c42886f7619327950d4083fecc1bd50",
+    "electron/dist/web/metadata.json": "dbbda02c205987d330cba621b1123c0c13baff92b42984dea2c0819243adcc32",
+    "electron/dist/web-integrity.json": "02e9035f1441086dba5e37b0b299b790473daaff67bcb07d0f6499d49ea23322"
+  },
+  "priorHomeFailureRemainsOpen": true,
+  "ports": [
+    29625,
+    29626,
+    29627
+  ],
+  "freshWorkspaceVerified": true,
+  "oneChangedFixtureAttempt": true
+}

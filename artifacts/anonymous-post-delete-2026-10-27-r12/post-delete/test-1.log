@@ -1,0 +1,22 @@
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (43367.36037ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43440.562407
+
+✖ failing tests:
+
+test at ../post-delete.test.mjs:7:1
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (43367.36037ms)
+  page.goto: Page crashed
+  Call log:
+    - navigating to "http://127.0.0.1:18724/post/029feeeb-7850-418c-9801-aeb74b64f7b3", waiting until "load"
+  
+      at TestContext.<anonymous> (/tmp/check/post-delete.test.mjs:96:16) {
+    name: 'Error',
+    log: [ '  - navigating to "http://127.0.0.1:18724/post/029feeeb-7850-418c-9801-aeb74b64f7b3", waiting until "load"' ]
+  }

@@ -1,0 +1,103 @@
+{
+  "message": "ProtocolError: Protocol error (Storage.setCookies): Invalid cookie fields",
+  "body": "🦄\nLogin\n🌈\n🦄\nTHINGTIME · FRESH THINGS FIRST ⏱️\nFeed 📰\n⏱️ Latest\nOn this device\n🪐 My subspaces\nFilters\n🌈\nWhat's on your mind? ✨\n\n🪐\n\nNothing here yet — be the first to post ✨\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 7ms\n\nMongoDB: connected (8ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "ids": [
+    "7a0e75bb-ddae-4be1-b9a4-5ea4c14b5ce2",
+    "801b9be3-6f6c-4e5b-9b5d-b58ec16c8122",
+    "89e899f7-1091-4632-9ed8-07fd6897cd8b",
+    "8750a818-bd04-4d34-bc6e-2fd7bb2b4977",
+    "a826e2e7-0c24-488e-b2c9-ef5dd4236c04",
+    "86d2aa4a-4e80-4b65-a9be-2612a1b934f6",
+    "00a6b7f4-dc94-4036-a7a1-d3deafb3cf58",
+    "d932b3ba-7f00-49d1-b706-9214963c7d13",
+    "aed430cd-c4ba-4ad1-a04b-d0f4df302ba5",
+    "9cb7a137-396e-4db8-bb9f-0c4c5123c8c2",
+    "a46795c0-5cc5-44f4-9965-6466eb2e1357",
+    "3d00f7d0-e451-4708-ac69-73a4ce8aad74",
+    "2b0967d7-9c64-483f-a1a8-565791d8c0bb",
+    "e82d6d35-16d7-4d0e-9ae1-195760a4044a",
+    "8d66df31-9d80-4622-954a-655c57b445c3",
+    "084c7c0b-e4f6-4cd7-aa3d-d4b14ed74160",
+    "9dce163a-0efb-40d0-8059-711ddc1744d4",
+    "d83bef4f-3128-4ab5-8eca-7b15b0e1fecc",
+    "7c60e8ac-df89-456f-86bf-1d67ec1c9da5",
+    "695cee22-a2ec-4e2d-965f-37efecb5151b",
+    "cd96f59c-5794-4f55-9324-a495a73e689e",
+    "f19e9b95-dc5f-4cfd-bfda-13cd3f52af02",
+    "888747ff-8da1-4408-8878-caf8af59b1e5",
+    "01221e30-6599-4dfa-a8ca-6a5edf56b075",
+    "0ce64e94-6f47-4698-b25f-12ef31135605"
+  ],
+  "feeds": [
+    {
+      "cursor": null,
+      "ids": [
+        "0ce64e94-6f47-4698-b25f-12ef31135605",
+        "01221e30-6599-4dfa-a8ca-6a5edf56b075",
+        "888747ff-8da1-4408-8878-caf8af59b1e5",
+        "f19e9b95-dc5f-4cfd-bfda-13cd3f52af02",
+        "cd96f59c-5794-4f55-9324-a495a73e689e",
+        "695cee22-a2ec-4e2d-965f-37efecb5151b",
+        "7c60e8ac-df89-456f-86bf-1d67ec1c9da5",
+        "d83bef4f-3128-4ab5-8eca-7b15b0e1fecc",
+        "9dce163a-0efb-40d0-8059-711ddc1744d4",
+        "084c7c0b-e4f6-4cd7-aa3d-d4b14ed74160",
+        "8d66df31-9d80-4622-954a-655c57b445c3",
+        "e82d6d35-16d7-4d0e-9ae1-195760a4044a",
+        "2b0967d7-9c64-483f-a1a8-565791d8c0bb",
+        "3d00f7d0-e451-4708-ac69-73a4ce8aad74",
+        "a46795c0-5cc5-44f4-9965-6466eb2e1357",
+        "9cb7a137-396e-4db8-bb9f-0c4c5123c8c2",
+        "aed430cd-c4ba-4ad1-a04b-d0f4df302ba5",
+        "d932b3ba-7f00-49d1-b706-9214963c7d13",
+        "00a6b7f4-dc94-4036-a7a1-d3deafb3cf58",
+        "86d2aa4a-4e80-4b65-a9be-2612a1b934f6"
+      ],
+      "nextCursor": "1793044759845_86d2aa4a-4e80-4b65-a9be-2612a1b934f6"
+    },
+    {
+      "cursor": null,
+      "ids": [
+        "0ce64e94-6f47-4698-b25f-12ef31135605",
+        "01221e30-6599-4dfa-a8ca-6a5edf56b075",
+        "888747ff-8da1-4408-8878-caf8af59b1e5",
+        "f19e9b95-dc5f-4cfd-bfda-13cd3f52af02",
+        "cd96f59c-5794-4f55-9324-a495a73e689e",
+        "695cee22-a2ec-4e2d-965f-37efecb5151b",
+        "7c60e8ac-df89-456f-86bf-1d67ec1c9da5",
+        "d83bef4f-3128-4ab5-8eca-7b15b0e1fecc",
+        "9dce163a-0efb-40d0-8059-711ddc1744d4",
+        "084c7c0b-e4f6-4cd7-aa3d-d4b14ed74160",
+        "8d66df31-9d80-4622-954a-655c57b445c3",
+        "e82d6d35-16d7-4d0e-9ae1-195760a4044a",
+        "2b0967d7-9c64-483f-a1a8-565791d8c0bb",
+        "3d00f7d0-e451-4708-ac69-73a4ce8aad74",
+        "a46795c0-5cc5-44f4-9965-6466eb2e1357",
+        "9cb7a137-396e-4db8-bb9f-0c4c5123c8c2",
+        "aed430cd-c4ba-4ad1-a04b-d0f4df302ba5",
+        "d932b3ba-7f00-49d1-b706-9214963c7d13",
+        "00a6b7f4-dc94-4036-a7a1-d3deafb3cf58",
+        "86d2aa4a-4e80-4b65-a9be-2612a1b934f6"
+      ],
+      "nextCursor": "1793044759845_86d2aa4a-4e80-4b65-a9be-2612a1b934f6"
+    },
+    {
+      "cursor": "1793044759845_86d2aa4a-4e80-4b65-a9be-2612a1b934f6",
+      "ids": [
+        "a826e2e7-0c24-488e-b2c9-ef5dd4236c04",
+        "8750a818-bd04-4d34-bc6e-2fd7bb2b4977",
+        "89e899f7-1091-4632-9ed8-07fd6897cd8b",
+        "801b9be3-6f6c-4e5b-9b5d-b58ec16c8122",
+        "7a0e75bb-ddae-4be1-b9a4-5ea4c14b5ce2"
+      ],
+      "nextCursor": null
+    },
+    {
+      "cursor": null,
+      "ids": [],
+      "nextCursor": null
+    }
+  ],
+  "writes": [],
+  "errors": []
+}

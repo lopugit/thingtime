@@ -1,0 +1,21 @@
+{
+  "canonicalFilesMatched": 1846,
+  "onlyExplicitAddonSubstitutions": true,
+  "nativeAddons": {
+    "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node": {
+      "path": "server/node_modules/bcrypt/prebuilds/ios-arm64/bcrypt.node",
+      "bytes": 142528,
+      "sha256": "ef76191184be930143058f6f32ffe03fe52d7faca33f1a7e0997cdd72a531ad9"
+    },
+    "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node": {
+      "path": "server/node_modules/sharp/src/build/Release/sharp-ios-arm64-0.35.5.node",
+      "bytes": 8270848,
+      "sha256": "954e6b3e2c436b8b84834cfdcd96880785c7c0496c3381a916af7cc9fcd1d575"
+    }
+  },
+  "inventory": {
+    "sha256": "ce534c0fc7be52fd387d4a258d9cc2890756fde8167c418ba60040bd94de7276",
+    "files": 1848,
+    "bytes": 278835905
+  }
+}

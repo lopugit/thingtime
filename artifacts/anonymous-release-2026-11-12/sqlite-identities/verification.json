@@ -1,0 +1,61 @@
+{
+  "observedAt": "2026-11-11T16:45:18.280370+00:00",
+  "scope": "canonical user identity + session repository integration; synthetic module fixtures, not API registration",
+  "sourceRevision": null,
+  "sourceHashes": {
+    "remix/app/api/utils/auth/users.ts": "b073760c225699520478fae87b3f386c983d8b772193a87d521cff49ad9ada18",
+    "remix/app/api/utils/auth/userIdentityRepository.ts": "8a98eb212c73ae8614803ab7d6bf6c37be5b8f90a6e226c275de50ac87a804d7",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "71f8d700c3e1aba36022f309ec74da953c42ab460428ce4c5da325869e67d737",
+    "remix/app/api/utils/documentStore/nativeThingsCollection.ts": "df9d4822b0383f35f349f5a691a61280beb35ca18ce77f2980174cc7b951d28d",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.test.ts": "e753fa948b667c6bae59bfac15a371d3bf69df492a043b0c5cb0ca776b04d27c",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.mongo.fixture.mts": "942ed483193f5769abccf34e0bf8999777fdf39b9b2e0bc8150a1fb058a13a36",
+    "remix/app/api/utils/documentStore/nativeUserStorage.test.ts": "379e814020dc964a3c37bf867caead589960b4afe30684e3c6ccc729695e4a10"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix run test:document-store",
+      "exitCode": 0,
+      "tests": 56,
+      "fail": 0,
+      "skip": 0,
+      "log": "/tmp/pr1000-native-identities-all.log",
+      "passCount": 56
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/auth/users.ts app/api/utils/auth/userIdentityRepository.ts app/api/utils/documentStore/nativeUserIdentities.ts app/api/utils/documentStore/nativeUserIdentities.test.ts app/api/utils/documentStore/nativeUserIdentities.mongo.fixture.mts app/api/utils/documentStore/nativeThingsCollection.ts app/api/utils/documentStore/nativeUserStorage.test.ts",
+      "exitCode": 0,
+      "errors": 0,
+      "warnings": 0,
+      "log": "/tmp/pr1000-native-identities-lint.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec tsc --noEmit",
+      "exitCode": 0,
+      "log": "/tmp/pr1000-native-identities-types.log"
+    }
+  ],
+  "guarantees": [
+    "Canonical insertUser mints identities/envelope; native profile identity cannot use caller _id/owner",
+    "Existing username+hashed email uniqueKeys durable across separate SQLite handles",
+    "Canonical identity and live-session read/revocation after SQLite reopen",
+    "Unsupported users.ts persistence cannot fall back to Mongo within native context",
+    "Hosted Mongo/legacy selectors, Things precedence, transaction forwarding and no native imports regression",
+    "Semantic batch identity read uses one scan/transaction and preserves request order/dedup",
+    "Shared immutable native Things definitions compose canonical identity and accounting on the same provider across reopen"
+  ],
+  "remaining": [
+    "No native HTTP provider activation",
+    "Canonical signup-wide shared transaction and tier/subscription initialization",
+    "Vault-password binding and verification/notification/email outbox repositories",
+    "Account roster, subscription and Character-dependent session resolution",
+    "Nitro native provider readiness/bootstrap and real register/me/logout HTTP acceptance",
+    "Canonical private Thing/Timeline and full storage parity"
+  ],
+  "limitations": [
+    "Synthetic module fixtures; no API registration/account seed or real password credential",
+    "No provider/API selection; unsupported native identity transaction fails before account write",
+    "Batch OR filtering remains O(rows * requested keys), not an indexed query",
+    "Existing incompatible immutable native collection definitions refuse and require explicit migration",
+    "Native registerUser HTTP bootstrap must not be enabled: Mongo index/tier readiness is not adapted"
+  ]
+}

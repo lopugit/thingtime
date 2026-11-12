@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { ATTACHMENT_ENVELOPE_VERSION } from './attachmentCore';
-import { MAX_PROFILE_ATTACHMENT_BYTES, createProfileAttachmentReconciler, isBindableProfileAttachment, type AttachmentDoc } from './attachmentStore';
+import { cancelledAttachmentReceipt, MAX_PROFILE_ATTACHMENT_BYTES, createProfileAttachmentReconciler, isBindableProfileAttachment, type AttachmentDoc } from './attachmentStore';
 
 const now = new Date('2026-08-09T00:00:00.000Z');
 
@@ -156,4 +156,19 @@ test('profile binding is idempotent, rejects duplicate slots, and fails closed o
 		}),
 		/changed while the profile was being updated/
 	);
+});
+
+
+test('cancellation receipts retain only private zero-object accounting', async () => {
+	const { currentContentStorageSizeBytes } = await import('../storage/storageCore');
+	const receipt = cancelledAttachmentReceipt('owner', 'canonical-id', now);
+	assert.equal(receipt.attachmentState, 'cancelled');
+	assert.equal(receipt.attachmentCancellationRequested, true);
+	assert.equal(receipt.objectSizeBytes, 0);
+	assert.deepEqual(receipt.acl, ['tt:user']);
+	assert.equal(receipt.attachmentExpiresAt, undefined);
+	assert.equal(receipt.uploadId, undefined);
+	assert.equal(receipt.targetId, undefined);
+	assert.equal(currentContentStorageSizeBytes(receipt), receipt.sizeBytes);
+	assert.ok(receipt.sizeBytes > 0 && receipt.sizeBytes < 256);
 });

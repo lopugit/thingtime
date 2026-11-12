@@ -1,0 +1,22 @@
+{
+  "owned": {
+    "remix/app/api/utils/auth/emailVerifications.ts": "c23844a7fae07cc5fcdc9e319d45774e5ccf7db61925a67c50c88c91a98879c8",
+    "remix/app/api/utils/auth/singleUseTokens.ts": "7f4e1f017b0140b48d12bc0fbc7093d1e7a2fa5fcd7699ffcfef56672570c441",
+    "remix/app/api/utils/auth/singleUseTokenRepository.ts": "3fcb1e4ce6e5dfaf6a49d52f0f30def7e5de9926e2f2e6f54ca375d786cd0ec4",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.ts": "d143642ac24d27a75ee6a4d8f8713bad8068caed384b5fc7a19feb30d73cf4c3",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.test.ts": "1c305a49df17f25a5bcc6d7aa1dbb44393fa4d44865e7508e4d8dcd73ed75917",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.restart.fixture.mts": "6c0287b5b750043554d53c761d750215c9c6c8d5c757ebf8fb5162e943c8c0e5",
+    "remix/app/api/utils/documentStore/nativeSingleUseTokens.mongo.fixture.mts": "f26bff7f7dec251bdcf2556e366e618cf3adf495a16d177b09c202a01491ed40"
+  },
+  "observedDependencies": {
+    "remix/app/api/utils/auth/homeRepositoryScope.ts": "ac1334fc9b4a2ac170fccb2399210a5eff42612fa083957940274f7e14d495da",
+    "remix/app/api/utils/auth/userIdentityRepository.ts": "b178b2b13602f75c96e94e15d8e1cab4b878af2cb30119dfd7d5c2b20e77df8d",
+    "remix/app/api/utils/auth/sessionRepository.ts": "ca1ec85849dd995f7c023becd981a823fd855f5d4bf06c038283bf8bc59087f3",
+    "remix/app/api/utils/documentStore/nativeUserIdentities.ts": "8e9cc3ec9e218b59ec07c337b44406289fc26f9427b47b0c4a3549eddbaf7517",
+    "remix/app/api/utils/documentStore/nativeSessions.ts": "f6dca3477bca1824fea4c236414c33db5eaa4ebb5e9aff8f958409116e63a9b1",
+    "remix/app/api/utils/documentStore/collectionContract.ts": "9a9c2959860b6f1411751af74542d7b079b4e531898e87e2a013bb0632c37902",
+    "remix/app/api/utils/documentStore/collectionProvider.ts": "96a3bdd00919fb81d6b95fe98e08d280ef530bb330cd921559d1c0666d8300ee",
+    "remix/app/api/utils/documentStore/sqliteStore.ts": "2bfbb26ccfc867bfde1435f8a44f3f0027bccd595152d0f29e271b1a0a24ceb8",
+    "remix/app/api/utils/mongodb/collectionNames.ts": "e8d98412ed648ba1d6d8d1ac92edbe95608d018e1a39db9a9e8b039a48f5725f"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "kind": "actual canonical Nitro on host Node, no database or fallback",
+  "node": "v24.18.0",
+  "platform": "darwin",
+  "requests": [
+    {
+      "path": "/",
+      "status": 200,
+      "milliseconds": 25,
+      "viteRoot": true,
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/things",
+      "status": 200,
+      "milliseconds": 11,
+      "viteRoot": true,
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/.well-known/thingtime-capabilities.json",
+      "status": 200,
+      "milliseconds": 5,
+      "viteRoot": false,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "path": "/api/v1/auth/me",
+      "status": 503,
+      "milliseconds": 3,
+      "viteRoot": false,
+      "contentType": "application/json"
+    }
+  ],
+  "events": [
+    {
+      "route": "/",
+      "event": "request"
+    },
+    {
+      "route": "/",
+      "event": "finish",
+      "status": 200
+    },
+    {
+      "route": "/things",
+      "event": "request"
+    },
+    {
+      "route": "/things",
+      "event": "finish",
+      "status": 200
+    },
+    {
+      "route": "/.well-known/thingtime-capabilities.json",
+      "event": "request"
+    },
+    {
+      "route": "/.well-known/thingtime-capabilities.json",
+      "event": "finish",
+      "status": 200
+    },
+    {
+      "route": "/api/v1/auth/me",
+      "event": "request"
+    },
+    {
+      "route": "/api/v1/auth/me",
+      "event": "finish",
+      "status": 503
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "verified": true,
+  "app": "e67c4e475fa0aff7b838310dfdcd864063a9f05c",
+  "siteChecks": [
+    "global: native nested text/button/icon independently edited and saved through two offline reloads",
+    "site: native nested text/button/icon independently edited and saved through two offline reloads",
+    "native /ode renders both saved scopes with button-to-input keyboard navigation and editable live inputs at desktop/390/320px; no Action execution or input-value persistence is claimed"
+  ],
+  "siteViewChecks": 21,
+  "importOffline": true,
+  "importColdReloadOffline": true,
+  "privateRootAndDependencyCount": 2,
+  "unauthenticatedPublicResolverStatus": 404,
+  "httpMutationCount": 0,
+  "authenticatedRequestCount": 0,
+  "serverAuditedRequestCount": 52,
+  "intermittentOfflineNavigation": {
+    "earlierNetErrFailed": true,
+    "finalOfflinePass": true,
+    "cause": "unresolved"
+  },
+  "cleanup": {
+    "sessionId": "26e6fb16-f1a7-477a-bda5-74a155a0f925",
+    "remainingOwnedContainers": [],
+    "temporaryDerivativeImage": "sha256:0b7bde3b38df250fe68d8495fca49847c4f7d16dcb31873d96b8ce73908e4e72",
+    "derivativeTagRemoved": true,
+    "privateStateRemoved": true,
+    "leaseRemoved": true
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "checks": [
+    "offline native create/edit/library rename and cold reload",
+    "native History preview/export/restore preserves current title through offline reload"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "contentRefusals": 0,
+  "remoteReceiptCount": 0,
+  "bounds": [
+    {
+      "width": 1440,
+      "box": {
+        "x": 170,
+        "y": 12,
+        "width": 1100,
+        "height": 976
+      }
+    },
+    {
+      "width": 390,
+      "box": {
+        "x": 0,
+        "y": 168.8125,
+        "width": 390,
+        "height": 675.1875
+      }
+    },
+    {
+      "width": 320,
+      "box": {
+        "x": 0,
+        "y": 168.8125,
+        "width": 320,
+        "height": 675.1875
+      }
+    }
+  ]
+}

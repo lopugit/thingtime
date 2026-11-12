@@ -1,0 +1,104 @@
+{
+  "recordedAt": "2026-11-11T20:36:41.455800+00:00",
+  "baseCommit": "5847cacbd13d04f73a2cd71e5d19032d9288b506",
+  "sourceAttribution": "Base plus shared dirty tree. Hashes name complete files; server API catch-all also contains parent-authored native dispatch changes, which this batch did not modify. Package edit only appends the new focused test.",
+  "sourceHashes": {
+    "remix/app/api/utils/capabilities/runtimeAvailability.ts": "c6d05df7605e997d058323e6e64f13f82adda96bb6f803e0a85e52f9823be9dc",
+    "remix/app/api/utils/capabilities/runtimeAvailability.test.ts": "3a2e4fc84e7d5c9b3d41b34cb795dd7a514a63b56db5a95da3a14497e357aad8",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.ts": "b0e86bfda2ce9a971b08bc0410af46b268b48d2dfde4a63db66decf1932af365",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "7e0cf8d0416726ff3e6300e1d7272a99928c72cba3c3952d1087c3f34f8daaa5",
+    "remix/app/docs/apiDocs.ts": "21529646ca75ed28bee17c5f2a4322db8aa640e09a97ad78a9f6ebe340696604",
+    "remix/app/docs/apiCapabilities.test.ts": "c4b4f0f9bec1dde2aea62fb32d32324ab1faedcdea7be7135151a3886d60fd68",
+    "remix/server/utils/nativeHomeCapabilities.ts": "4f8c6fb4b7f2f924cb91b830421aa382cbee4251223e3e7581fa59423d049676",
+    "remix/server/handlers/thingtime-capabilities.ts": "dea7383330a0e4a88e4f88e8cba27bbc48ecf4c323172b0a816d6323fafc231e",
+    "remix/server/routes/api/[...].ts": "8f164ff2eb472279d1a62fb7286ed574045b98508891c6bf6774e34d5cca85d1",
+    "remix/package.json": "9acc61bd578bd6c321988675b3a4d36492fe5e2b0cf1d3566f37abc935c2b84a"
+  },
+  "checks": [
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test app/api/utils/capabilities/runtimeAvailability.test.ts",
+      "exitCode": 0,
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0,
+      "log": "pr1000-native-capabilities-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "exitCode": 0,
+      "tests": 211,
+      "pass": 211,
+      "fail": 0,
+      "skipped": 0,
+      "log": "pr1000-native-capabilities-existing.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/capabilities/runtimeAvailability.ts app/api/utils/capabilities/runtimeAvailability.test.ts app/api/utils/capabilities/thingtimeCapabilities.ts app/api/utils/capabilities/thingtimeCapabilities.test.ts app/docs/apiDocs.ts app/docs/apiCapabilities.test.ts server/utils/nativeHomeCapabilities.ts server/handlers/thingtime-capabilities.ts server/routes/api/[...].ts",
+      "exitCode": 0,
+      "eslintErrors": 0,
+      "eslintWarnings": 9,
+      "log": "pr1000-native-capabilities-lint.log"
+    },
+    {
+      "command": "git diff --check -- <owned files>",
+      "exitCode": 0
+    },
+    {
+      "command": "corepack pnpm --dir remix run typecheck",
+      "exitCode": 0,
+      "typescriptDiagnostics": 0,
+      "log": "pr1000-native-capabilities-types-fixed.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run test:api-capabilities",
+      "exitCode": 0,
+      "tests": 211,
+      "pass": 211,
+      "fail": 0,
+      "skipped": 0,
+      "log": "pr1000-native-capabilities-types-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix exec node --import tsx --test server/utils/environmentGateway.test.ts",
+      "exitCode": 0,
+      "tests": 9,
+      "pass": 9,
+      "fail": 0,
+      "skipped": 0,
+      "log": "pr1000-native-capabilities-gateway-tests.log"
+    },
+    {
+      "command": "corepack pnpm --dir remix run lint:files -- app/api/utils/capabilities/runtimeAvailability.ts app/api/utils/capabilities/thingtimeCapabilities.ts",
+      "exitCode": 0,
+      "eslintErrors": 0,
+      "eslintWarnings": 0,
+      "log": "pr1000-native-capabilities-types-lint.log"
+    }
+  ],
+  "contracts": {
+    "api.capabilities": "1.3.0",
+    "api.auth-register": "1.4.0"
+  },
+  "semantics": [
+    "Hosted manifests preserve shape; deliberate semantic versions advance.",
+    "Selected native features omit unsupported or partially implemented method groups; complete registry retained separately and all existing operations retained with availability.",
+    "Native wrong-origin/malformed/not-ready profile advertises discovery only; docs remain readable, not authority for account operations.",
+    "No private runtime paths/IDs/key material/supported operation snapshot serialized. Native gateway and dataEnvironment null.",
+    "Existing origin and active-api client checkers accept supported contracts, reject absent feature despite registered metadata, reject wrong origin and breaking major."
+  ],
+  "limitations": [
+    "Not a live HTTP/native API acceptance; parent owns combined build and real manifest smoke.",
+    "Native registration additive verificationDelivery reports queued/failed and delivered:false, never email delivery.",
+    "Email-OTP native login remains503; no bypass.",
+    "No dispatch/composer/provider activation changes."
+  ],
+  "typeRepair": {
+    "files": [
+      "remix/app/api/utils/capabilities/runtimeAvailability.ts",
+      "remix/app/api/utils/capabilities/thingtimeCapabilities.ts"
+    ],
+    "behavior": "Explicit public manifest type and readonly method declarations with optional runtime availability fields; no wire/runtime changes. No casts to any, suppressions or exclusions."
+  },
+  "sourceReceipt": "/tmp/pr1000-native-capabilities-verification.json"
+}

@@ -17,10 +17,11 @@ export const migratePasswordIconBranding=(blocks:WebpageBlock[]):WebpageBlock[]=
  const visit=(items:WebpageBlock[]):WebpageBlock[]=>{let changed=false;const next=items.map(block=>{
   const children=block.children?visit(block.children):undefined;
   const repair=block.id==='icon-help'&&block.type==='element'&&block.text==='Upload an image, or choose an HTTPS URL. URL icons contact that website anonymously when displayed. Some sites block private loading; upload the image if that happens.';
-  // Only migrate the shipped layout; retain user-authored CSS, text and removals.
-  const grid = block.id === 'icon-fields' && block.tag === 'fieldset' && matchesCss(block.css, legacyIconGridCss);
-  const upload = block.id === 'icon-upload' && block.tag === 'input' && block.props?.type === 'file' && (!block.css || !Object.keys(block.css).length);
-  if(!repair&&!grid&&!upload&&children===block.children)return block;changed=true;return{...block,...(grid?{css:iconGridCss}:upload?{css:iconUploadCss}:{}),...(repair?{text:'Saved Website fields supply an automatic icon, trying them in order. Upload an image or choose an HTTPS icon URL to override it. Remove icon returns to automatic Website icons, then the Thingtime tree if none works. Public icon lookups are anonymous.'}:{}),...(children?{children}:{})};
+  // Only the shipped grid gets a new track. Missing file constraints merge
+  // before authored CSS, retaining custom widths, maxima and box sizing.
+  const grid = block.id === 'icon-fields' && block.type === 'element' && block.tag === 'fieldset' && matchesCss(block.css, legacyIconGridCss);
+  const fileSizing=block.id==='icon-upload'&&block.type==='element'&&block.tag==='input'&&block.props?.type==='file'&&!Object.prototype.hasOwnProperty.call(block.css||{},'min-width');
+  if(!repair&&!grid&&!fileSizing&&children===block.children)return block;changed=true;return{...block,...(grid?{css:iconGridCss}:fileSizing?{css:{...iconUploadCss,...block.css}}:{}),...(repair?{text:'Saved Website fields supply an automatic icon, trying them in order. Upload an image or choose an HTTPS icon URL to override it. Remove icon returns to automatic Website icons, then the Thingtime tree if none works. Public icon lookups are anonymous.'}:{}),...(children?{children}:{})};
  });return changed?next:items;};return visit(branded);
 };
 const passwordIconBlocks_DEFAULTS: WebpageBlock[] = [el('icon-fields', 'fieldset', '', {}, [

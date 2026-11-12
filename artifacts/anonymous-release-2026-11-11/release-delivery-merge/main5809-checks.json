@@ -1,0 +1,137 @@
+{
+  "observedAt": "2026-11-11T09:21:47.976299+00:00",
+  "scope": "Final local combined-source main5809 refresh before merge commit; CI/deployment separate",
+  "featureParent": "b7f27c39b20ffb76e13df261270d972337f3d7d3",
+  "mergedMain": "5809d02e9e5a6e2530696ac1103946b2b03f68b9",
+  "staticAndFocusedChecks": {
+    "observedAt": "2026-11-11T09:21:12.994123+00:00",
+    "results": {
+      "capabilities": {
+        "exitCode": 0,
+        "command": [
+          "corepack",
+          "pnpm",
+          "run",
+          "test:api-capabilities"
+        ],
+        "log": "/tmp/thingtime-pr1000-main5809-capabilities.log",
+        "passed": 199,
+        "failed": 0,
+        "skipped": 0,
+        "tests": 199
+      },
+      "focused": {
+        "exitCode": 0,
+        "command": [
+          "node",
+          "--experimental-test-module-mocks",
+          "--import",
+          "tsx",
+          "--test",
+          "app/api/utils/ai/anthropicApiKey.test.ts",
+          "app/api/utils/connections/providerErrors.test.ts",
+          "app/api/utils/connections/providerScopeEvidence.test.ts",
+          "app/components/Lopu/lopuChatStream.test.ts",
+          "app/api/utils/lopu/chat.streaming.test.mts"
+        ],
+        "log": "/tmp/thingtime-pr1000-main5809-focused.log",
+        "passed": 112,
+        "failed": 0,
+        "skipped": 0,
+        "tests": 112
+      },
+      "typecheck": {
+        "exitCode": 0,
+        "command": [
+          "corepack",
+          "pnpm",
+          "run",
+          "typecheck"
+        ],
+        "log": "/tmp/thingtime-pr1000-main5809-typecheck.log"
+      },
+      "ratchet": {
+        "exitCode": 0,
+        "command": [
+          "corepack",
+          "pnpm",
+          "run",
+          "typecheck:ratchet"
+        ],
+        "log": "/tmp/thingtime-pr1000-main5809-ratchet.log"
+      },
+      "lint": {
+        "exitCode": 0,
+        "command": [
+          "corepack",
+          "pnpm",
+          "run",
+          "lint"
+        ],
+        "log": "/tmp/thingtime-pr1000-main5809-lint.log",
+        "lintErrors": 0,
+        "lintWarnings": 371
+      }
+    }
+  },
+  "checks": {
+    "build": {
+      "command": "corepack pnpm --dir remix run build",
+      "exitCode": 0,
+      "logSha256": "a4a55dbd5771522279aafb82d6d008b50a4e2f5347141c791ce6a9632dcacbb2"
+    },
+    "smoke": {
+      "command": "node remix/scripts/smoke-built-content-execution.mjs",
+      "exitCode": 0,
+      "logSha256": "34e00827ebddaf967554e62073d140fc09bc19c153448b01ddaa13aa9cbc084a"
+    },
+    "connections-smoke": {
+      "command": "node remix/scripts/smoke-built-connections.mjs",
+      "exitCode": 0,
+      "logSha256": "2e2eb274ce430b80f732462689d5bea131e4d0c76c9e8a9b5569bd1a72931a78"
+    },
+    "native-build": {
+      "command": "corepack pnpm --dir electron run build:web",
+      "exitCode": 0,
+      "logSha256": "28b1288d634ff445359137096e082a5163e363c1e2db8f38be5c0a8282e9146a"
+    },
+    "native-prepare": {
+      "command": "corepack pnpm --dir electron run dev:parallel --workspace=native-bundle-qa-pr1000 --prepare-only --use-staged",
+      "exitCode": 0,
+      "logSha256": "dd6efcd606924647dac8ae39c6fa2d9ae8ac643e666d723714a9985fe303b528"
+    },
+    "native-startup": {
+      "command": "THINGTIME_NATIVE_BUNDLE_QA=1 node electron/scripts/verify-web-bundle-startup.mjs --workspace=native-bundle-qa-pr1000 --output=artifacts/anonymous-release-2026-11-11/release-delivery-merge/native-startup-main5809 --chromium=<task-owned Chromium>",
+      "exitCode": 0,
+      "logSha256": "d59400f3bfc96fbd134878ab15bd645d5bbb865b10213e459ec7c62601695760"
+    }
+  },
+  "sourceSha256": {
+    "remix/CHANGELOG.md": "516b8de173434510b12921fd3c68895e52c3f9ac94d46ebf395d10227aff2fe0",
+    "remix/app/api/utils/ai/anthropicApiKey.test.ts": "4a45054e48aa6169db22ca89ff14cbd062547561432bf17361648947b6d9b5c9",
+    "remix/app/api/utils/ai/anthropicApiKey.ts": "51ff6a09302dcadd281abe0f1cd4d85eec7fa7a3e07b3498593c2d168a49a85c",
+    "remix/app/api/utils/ai/providerWaterfall.ts": "556bfc2a85795392f34d8164a283cbd6d20c31e30d8e7ef55d57b33f13d5cf12",
+    "remix/app/api/utils/capabilities/requireCapability.client.test.ts": "37eb674cd85d8aaaa912d727ac2361d96f82fcd13349392ffc0c735ca27c8aeb",
+    "remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts": "187057b7780cae6a762784f867e335c578dce6526eb3e6c95164085ce63ce61c",
+    "remix/app/api/utils/connections/providerErrors.test.ts": "2a2db4bb10990cc445d2d79739a6c892a1e8f1f9c9d2a0c48f79a96898a6eae0",
+    "remix/app/api/utils/connections/providerErrors.ts": "9ff8d8396a8e3ceafd74ff24cd2b95fdbdb954d6d3083a65f5eebec1ba6b1811",
+    "remix/app/api/utils/connections/providerScopeEvidence.test.ts": "ef09878086d82a8a603a06613e70e605995b1b06b44c855d7a189844f8e450c5",
+    "remix/app/api/utils/connections/providers.ts": "6ccfc32d92f752c66eeae5ba050ffeacda85f80ab494db623ba6c6bee4433a7c",
+    "remix/app/api/utils/lopu/chat.streaming.test.mts": "5dd575f3be1f6e0fa67c1d92a59e7236dbbc70f28b2ada9446d14d1ae54023b2",
+    "remix/app/api/utils/lopu/vaultProviders.ts": "2141fc4293ffb97193c8f879aebae491e74d0c415e6334215ce3d5b2b7602911",
+    "remix/app/components/Lopu/lopuChatStream.test.ts": "a1d319d3d4baa1e8b37a6fb655e099eaa08028f45323422a8291140c561ad548",
+    "remix/app/components/Lopu/lopuChatStream.ts": "9e71d5d703316026d3a6d9a509db35cdfb033c5254b98ee49a827919b2812e09",
+    "remix/app/docs/apiCapabilities.test.ts": "85cfac0c0cb4b509c05637c28f67f889f00f4c849906377afbb6f8dcb87a1817",
+    "remix/app/docs/apiDocs.ts": "b9cc04e4da69394f30bd746caa2230444ff570f4370f000426a74f1ff07ed690",
+    "remix/scripts/smoke-built-connections.mjs": "e107bdfd2a225667e1546eb9ba1f903099de12efd0de6195f80f3b9954f0b8b1",
+    "remix/scripts/smoke-built-content-execution.mjs": "172f6646df037f78f0a03d4788e30e249d47b1ea661eb532ac375677b352b4db"
+  },
+  "noLoginAcceptance": "main5809-ui/browser/verification.json",
+  "planAcceptance": "main5809-ui/plan/verification.json",
+  "nativeStartupAcceptance": "native-startup-main5809/verification.json",
+  "draftRunnerSha256": "1d86529a152cee95b5e467f52325292be023cab016a9f54de3ea06c069e829a4",
+  "productionActivation": false,
+  "stableAppReplaced": false,
+  "earlierWorkspaceAndElectronSuites": "Retain original b337 checkpoint source association; not rerun for provider-only delta",
+  "semanticGraphCoverage": "Structural refresh; no new document semantic coverage claimed after recorded bounded backend failures"
+}

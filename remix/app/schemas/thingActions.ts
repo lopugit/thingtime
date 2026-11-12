@@ -7,6 +7,7 @@ export const THING_ACTIONS = {
   'storage-placement': { id: 'storage-placement', command: 'storage-placement', label: 'Storage settings', icon: '💾', lucide: 'hard-drive' },
   history: { id: 'history', command: 'history', label: 'History', icon: '🕰️', lucide: 'clock' },
   'copy-link': { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' },
+  download: { id: 'download', command: 'download', label: 'Download…', icon: '📥', lucide: 'download' },
   'share-preview': { id: 'share-preview', command: 'share-preview', label: 'Share link & customise preview', icon: '🖼️', lucide: 'image' },
   rename: { id: 'rename', command: 'rename', label: 'Rename', icon: '✏️', lucide: 'text-cursor-input' },
   edit: { id: 'edit', command: 'edit', label: 'Edit', icon: '✏️', lucide: 'pen-line' },

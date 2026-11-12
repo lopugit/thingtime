@@ -1,0 +1,78 @@
+{
+  "observedAt": "2026-11-11T07:16:18.640400+00:00",
+  "parents": [
+    "d3f5e823e79244de4ac6c899df94c803b90040ff",
+    "981036caaf58f2766d07588bf1ce635a1f843e09"
+  ],
+  "state": "resolved merge working tree; native startup WIP excluded and preserved separately",
+  "checks": [
+    {
+      "name": "typecheck",
+      "exitCode": 0,
+      "elapsedSeconds": 100.91
+    },
+    {
+      "name": "ratchet",
+      "exitCode": 0,
+      "elapsedSeconds": 63.72
+    },
+    {
+      "name": "lint",
+      "exitCode": 0,
+      "elapsedSeconds": 50.13
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "elapsedSeconds": 50.13
+    }
+  ],
+  "focusedTests": {
+    "passed": 163,
+    "failed": 0,
+    "skipped": 0
+  },
+  "apiCapabilityTests": {
+    "passed": 193,
+    "failed": 0,
+    "skipped": 0
+  },
+  "compiledContracts": {
+    "passed": 23,
+    "runtime": "built Vercel handler with synthetic environment; no account data"
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 370
+  },
+  "rendererParity": {
+    "runnerSha256": "c1415d5d0945826eed52817fb5e915450335cab73568e7ca7cbc0279fef5d3d1",
+    "sourceFiles": {
+      "remix/app/components/Kinds/HtmlThingRenderer.tsx": "fde2722e52d22460e1a53a3aa208463d7aecb8fe649758a868ce197126577bda",
+      "remix/app/components/Builder/WebpageBlocksRenderer.tsx": "90ab6d6af957d42e248a62fb2005a2d732be67492b6c40d64c4a4d5658f0e218",
+      "remix/app/draftPreview/entry.tsx": "90acdbae2e01f637b6e13b09c139222919dde45a1228c8e76d28d7e5a3da6385",
+      "remix/app/draftPreview/prepare.ts": "5a7d7c905a4ecaa2b36fd409a465464c84f83fc8ee37bf58a2795ecb1913f6e3",
+      "remix/vite.draft.config.ts": "add86e141fb94b50da86e62f9f4346aa576039c9c41ab93e0d0eed56ca207092"
+    },
+    "reuses": "../main-integration-preview/verification.json",
+    "newBrowserRun": false
+  },
+  "productionDiscovery": {
+    "origin": "https://thingtime.com",
+    "httpStatus": 200,
+    "api.chatgpt-mcp": "2.2.0",
+    "renderExportAdvertised": false,
+    "connectedHostToolAvailable": false
+  },
+  "release": {
+    "primaryBranchMerged": false,
+    "manuallyDeployed": false,
+    "stableAppReplaced": false
+  },
+  "limitations": [
+    "CI and preview for resulting commit remain separate.",
+    "The prior aggregate workspace retention timeout is not cleared by these focused checks.",
+    "Native startup/rollback acceptance remains incomplete in separately preserved work.",
+    "No new iOS installed or physical-device acceptance."
+  ]
+}

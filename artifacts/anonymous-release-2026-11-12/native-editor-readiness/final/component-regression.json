@@ -1,0 +1,36 @@
+{
+  "scope": "Actual component browser regression; synthetic DOM composition, not OS IME acceptance",
+  "sourceSha256": "6055dd5e98ba9e1e31224f2e0684a8536878810c3702942486e4b823978acd0a",
+  "browserVersion": "149.0.7827.55",
+  "observations": [
+    {
+      "case": "mount-interleaving",
+      "textRetained": true,
+      "rawEnterValueRetained": true
+    },
+    {
+      "case": "controlled-echo",
+      "focusCaretAndIdentityRetained": true,
+      "externalResetApplied": true
+    },
+    {
+      "case": "uncontrolled-reset",
+      "placeholderDidNotErase": true,
+      "explicitEmptyResetApplied": true
+    },
+    {
+      "case": "stale-local-echo",
+      "externalAtoBtoARenderedAndSubmitted": true
+    },
+    {
+      "case": "composition-and-markup",
+      "compositionEchoCaretRetained": true,
+      "rawEnterValueRetained": true,
+      "initialAndUpdatedMarkupInert": true,
+      "widths": [
+        1440,
+        390
+      ]
+    }
+  ]
+}

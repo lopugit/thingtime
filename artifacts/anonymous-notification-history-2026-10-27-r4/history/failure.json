@@ -1,0 +1,62 @@
+{
+  "message": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'Reconnect', exact: true })\n    - locator resolved to <button disabled type=\"button\" class=\"chakra-button cha-e8ab4z\">Reconnect</button>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n  - element was detached from the DOM, retrying\n",
+  "body": "🦄\nhistoryqa-8856b031\n🌈\n1\n🦄\n\nTHINGTIME · EVERYTHING THAT REACHED YOU 🔔\n\nNotifications 🔔\nSettings ⚙️\n\nLopu messages saved in this workspace on this device. Search them even when you are offline.\n\nOn this device\nAccount history\n\n1 message could not sync; it remains saved here.\n\nRetry account sync\nAll\n🤝 Social\n💬 Engagement\n📰 Feed\n⚙️ System\nAll types\n🤝 Friend requests\n💚 Request accepted\n👀 New followers\n👥 Groups\n🙋 Join requests (mods)\n🎉 Join requests accepted\n🎩 Subspace roles\n🚫 Subspace bans\n💬 Comments\n↩️ Replies\n🤣 Reactions\n🔁 Shares\n📣 Mentions\n🧹 Posts removed by mods\n🚩 Reports (mods)\n📰 Posts from people you follow\n🫶 Posts from friends\n⚡ Action runs\n🦄 Recording reminders\n⏰ Lopu reminders\n🦄 New Lopu messages\n🗝️ Successful sign-ins\n🦄 Lopu messages\nUnread only\n\nFrom\n\nTo\n\n1 notification · 0 unread\n\nMark all read ✓\n🦄\n🦄\n\nMoved 1 ✨\n\njust now\n\n⚙️ SYSTEM\n\nDevice history uses browser storage. Clearing site data removes these local copies.\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nHISTORYQA-8856B031\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄",
+  "errors": [],
+  "historyRequests": [
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    }
+  ],
+  "sentEventIds": [
+    "d5488f49-7b65-4752-a6d3-2cc679617a61"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-11-11T07:55:04.132140+00:00",
+  "mainFetched": "981036caaf58f2766d07588bf1ce635a1f843e09",
+  "mainMergeResult": "Already up to date",
+  "checkpointParent": "952efc036f750bcee5299e715296a5aae029c030",
+  "sourceLayer": "working tree subsequently committed with this receipt",
+  "runtimeHashesMatchAcceptance": true,
+  "runtimeSources": {
+    "main.cjs": "855f1fb662a402038d01ecde86234e4f6096bb4c785fdf29f7f5e65e41e8a100",
+    "preload.cjs": "73d781609d4e29c7ae6e15a74f9f6a2daadba9dd6f0ec08b0902b1d23dd33468",
+    "lib/web-bundle-store.cjs": "f8dc0df3e4eca4a204d11259349e16efe679eacaf7988a5fe4105666f619dd33",
+    "lib/web-bundle-launch.cjs": "b4547e68e29213051133c7e8a8897e7b2df19003d5652b772265336f41c7180b",
+    "../native-bundles/host.cjs": "5e12b298aa2cac9c8082a947b7547bd6a65cc3d0ab2de69552e3135a4b2808aa",
+    "../native-bundles/release.cjs": "20e4cf19440281b721293bedda6673eb61c3ea6a7dd4b2ddc0b45feda3f2ceba",
+    "../native-bundles/inventory.cjs": "9018151f06c30b8c40a8d3be5a4d31c870699fc90adecf9bbc47c17f0b3c217e"
+  },
+  "electron": {
+    "total": 510,
+    "passed": 505,
+    "failed": 0,
+    "skipped": 5
+  },
+  "rawTypecheck": "passed",
+  "zeroErrorRatchet": "passed",
+  "lint": {
+    "errors": 0,
+    "warnings": 370
+  },
+  "canonicalWebBuild": "passed",
+  "actualNativeAcceptance": "verification.json",
+  "logSha256": {
+    "electron": "b4f553c07b14296e83e4d9dad81c95f1520078c2d60cc404707b0b8e1792ea89",
+    "typecheck": "df469cc54e4595ff8c1206babde1302015c3bec7c32a9a445823623fee48eeaa",
+    "ratchet": "d051311009a9abcc8a56a463f93c74ad63828b4eccef8d33d48031476fdc86f9",
+    "lint": "cf9cac86933840cd89a599b728c1ab2a2babc512756d33376d98defd14166ea0",
+    "build": "95575aca55b48a3afba8411f27978b22cfe3a2a0a29ea1dc165e773fb03d14fb"
+  },
+  "limits": [
+    "No new full workspace-suite pass: prior aggregate retention timeout remains unresolved.",
+    "No production activation, stable-app replacement or iOS runtime acceptance.",
+    "CI and deployed preview acceptance must be assessed separately on the resulting commit."
+  ]
+}

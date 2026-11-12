@@ -1,0 +1,10 @@
+{
+  "phase": "scroll",
+  "errors": [],
+  "accountOperations": [
+    "verification-settings",
+    "verification-settings",
+    "verification-settings"
+  ],
+  "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\ntrue !== false\n"
+}

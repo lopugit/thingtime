@@ -1,0 +1,624 @@
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 269]
+[Planning deferred tasks]
+[11 / 124]
+[59 / 124]
+[61 / 125] CCommanderInventory
+[67 / 134]
+[69 / 134]
+[72 / 134] AppleFileSync
+[76 / 222]
+[82 / 222]
+[85 / 222]
+[89 / 222]
+[94 / 222]
+[96 / 222]
+[97 / 222]
+[101 / 222]
+[103 / 222]
+[104 / 222]
+[108 / 222]
+[112 / 222]
+[114 / 222]
+[117 / 222]
+[119 / 222]
+[120 / 222]
+[127 / 222]
+[132 / 222]
+[133 / 222]
+[136 / 222]
+[137 / 222]
+[140 / 222]
+[143 / 222]
+[144 / 222]
+[145 / 222]
+[150 / 222] AppleFileSync
+[158 / 222] AppleFileSync
+[159 / 222] FileSyncRecoverySupport
+[160 / 222] FileSyncRecoverySupport
+[162 / 222] AppleFileSync
+[163 / 222] AppleFileSync
+[165 / 222] AppleFileSync
+[166 / 222] AppleFileSync
+[166 / 222]
+[171 / 223]
+[173 / 225]
+[176 / 231] FileSyncEmbeddedFixture-product
+[178 / 233] FileSyncEmbeddedFixture-product
+[187 / 233] FileSyncRecoverySupport
+[198 / 233]
+[201 / 235]
+[210 / 236] AppleFileSyncTests-product
+[212 / 236] FileSyncRecoveryFixture-product
+[216 / 240] FileSyncRecoveryFixture
+[223 / 240] FileSyncRecoveryFixture
+[225 / 240] FileSyncRecoveryFixture
+[231 / 269]
+[236 / 269]
+[239 / 269]
+[242 / 269]
+[243 / 269]
+[248 / 269] AppleFileSyncTests-product
+[251 / 269] AppleFileSyncTests-product
+[253 / 269] AppleFileSyncTests-product
+[258 / 269] AppleFileSyncTests-product
+[260 / 269] AppleFileSyncTests-product
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/MobileFolderInventoryTests.swift:560:36: warning: result of call to 'capture(bookmark:excludedPaths:ignoreRules:append:replay:)' is unused [#NoUsage]
+558 |         let work = Task.detached { () throws -> Void in
+559 |             var rows: [MobileFolderReader.Entry] = []
+560 |             try MobileFolderReader.capture(bookmark: bookmark, append: { row in
+    |                                    `- warning: result of call to 'capture(bookmark:excludedPaths:ignoreRules:append:replay:)' is unused [#NoUsage]
+561 |                 rows.append(row)
+562 |                 withUnsafeCurrentTask { $0?.cancel() }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[261 / 269] AppleFileSyncTests-product
+[262 / 269] AppleFileSyncTests-product
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/SyncResourceLimitsTests.swift:45:23: warning: result of call to 'measure(_:admit:)' is unused [#NoUsage]
+43 |         let meter = SyncSourceCpuMeter(cpuPercent: 1, concurrency: 4)
+44 |         let task = Task.detached {
+45 |             try meter.measure { var total = 0; for i in 0..<200_000 { total &+= i }; return total }
+   |                       `- warning: result of call to 'measure(_:admit:)' is unused [#NoUsage]
+46 |             try meter.checkpoint()
+47 |         }
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[263 / 269] AllIncludingTests
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:726:54: warning: instance method 'wait' is unavailable from asynchronous contexts; Await a Task handle instead; this is an error in the Swift 6 language mode
+ 724 |         }
+ 725 |         defer { allowFinish.signal(); read.cancel() }
+ 726 |         let fetching = await Task.detached { started.wait(timeout: .now() + 5) == .success }.value
+     |                                                      `- warning: instance method 'wait' is unavailable from asynchronous contexts; Await a Task handle instead; this is an error in the Swift 6 language mode
+ 727 |         XCTAssertTrue(fetching)
+ 728 |         var readyPaths: [String] = []
+
+Dispatch.DispatchSemaphore.wait:2:13: note: 'wait(timeout:)' declared here
+1 | class DispatchSemaphore {
+2 | public func wait(timeout: DispatchTime) -> DispatchTimeoutResult}
+  |             `- note: 'wait(timeout:)' declared here
+3 |
+[263 / 269] AppleFileSyncTests-product
+[265 / 269] AppleFileSyncTests-product
+Build complete! (25.04 sec.)
+Test Suite 'All tests' started at 2026-11-12 11:21:10.911.
+Test Suite 'AppleFileSyncTests.xctest' started at 2026-11-12 11:21:10.912.
+Test Suite 'CommanderBackupCaptureTests' started at 2026-11-12 11:21:10.912.
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testCancellationTerminatesUnresponsiveHelper]' started.
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testCancellationTerminatesUnresponsiveHelper]' passed (1.413 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testLiveIndexExcludesOnlyItsPhysicallyNestedPrivateCache]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testLiveIndexExcludesOnlyItsPhysicallyNestedPrivateCache] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testLiveIndexExcludesOnlyItsPhysicallyNestedPrivateCache]' failed (0.309 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testNestedDirectoryChangeIsAReportedCoverageGap]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testNestedDirectoryChangeIsAReportedCoverageGap] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testNestedDirectoryChangeIsAReportedCoverageGap]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProcessFailureCannotSealOrBecomeEmptySuccess]' started.
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProcessFailureCannotSealOrBecomeEmptySuccess]' passed (0.179 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProductionCommanderStreamEntryPassesBulkReaderAndStaleSourceFails]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testProductionCommanderStreamEntryPassesBulkReaderAndStaleSourceFails] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProductionCommanderStreamEntryPassesBulkReaderAndStaleSourceFails]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProductionDirectoryRevisionsRemainDurableAndMatchNativeFullStamp]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testProductionDirectoryRevisionsRemainDurableAndMatchNativeFullStamp] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testProductionDirectoryRevisionsRemainDurableAndMatchNativeFullStamp]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustCaptureMatchesSwiftContentAndGitignorePolicy]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustCaptureMatchesSwiftContentAndGitignorePolicy] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustCaptureMatchesSwiftContentAndGitignorePolicy]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustLinkTargetsFallbackProvenanceAndOwnedJournalExclusion]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustLinkTargetsFallbackProvenanceAndOwnedJournalExclusion] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustLinkTargetsFallbackProvenanceAndOwnedJournalExclusion]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustSpecialFilesAndCollisionLedgerStayPartial]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustSpecialFilesAndCollisionLedgerStayPartial] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustSpecialFilesAndCollisionLedgerStayPartial]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustStreamingFeedRetainsGenerationAndSkipsUnsupportedEntries]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustStreamingFeedRetainsGenerationAndSkipsUnsupportedEntries] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testRealRustStreamingFeedRetainsGenerationAndSkipsUnsupportedEntries]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testStreamingPauseAndRestartRetainCommittedRustRevisions]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.CommanderBackupCaptureTests testStreamingPauseAndRestartRetainCommittedRustRevisions] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.CommanderBackupCaptureTests testStreamingPauseAndRestartRetainCommittedRustRevisions]' failed (0.001 seconds).
+Test Suite 'CommanderBackupCaptureTests' failed at 2026-11-12 11:21:12.823.
+	 Executed 11 tests, with 9 failures (9 unexpected) in 1.908 (1.910) seconds
+Test Suite 'DriveReconnectTests' started at 2026-11-12 11:21:12.823.
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testAbandonedCaptureRemainsInterruptedAfterRealRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testAbandonedCaptureRemainsInterruptedAfterRealRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testAbandonedCaptureRemainsInterruptedAfterRealRemount]' skipped (0.001 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCompletedJournalAndPortableLinkStayPrivateAndTypedAfterRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testCompletedJournalAndPortableLinkStayPrivateAndTypedAfterRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCompletedJournalAndPortableLinkStayPrivateAndTypedAfterRemount]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumePreparedDownloadRecoversAfterRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testCrossVolumePreparedDownloadRecoversAfterRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumePreparedDownloadRecoversAfterRemount]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumePublishedDownloadRecoversLostReceiptAfterRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testCrossVolumePublishedDownloadRecoversLostReceiptAfterRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumePublishedDownloadRecoversLostReceiptAfterRemount]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumeTwoStepDisplacementRecoversAfterRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testCrossVolumeTwoStepDisplacementRecoversAfterRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCrossVolumeTwoStepDisplacementRecoversAfterRemount]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCurrentAttachmentMigratesLegacyJournalAndLinkReceiptsBeforeReconnect]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testCurrentAttachmentMigratesLegacyJournalAndLinkReceiptsBeforeReconnect] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testCurrentAttachmentMigratesLegacyJournalAndLinkReceiptsBeforeReconnect]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testDeletedSelectedFolderOnMountedVolumeIsNotAnOfflineRetry]' started.
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testDeletedSelectedFolderOnMountedVolumeIsNotAnOfflineRetry]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testExistingBookmarkMigratesLegacyCaptureAfterRealRemount]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testExistingBookmarkMigratesLegacyCaptureAfterRealRemount] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testExistingBookmarkMigratesLegacyCaptureAfterRealRemount]' skipped (0.001 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testKnownMismatchedUUIDCannotBorrowCurrentDeviceIdentity]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.DriveReconnectTests testKnownMismatchedUUIDCannotBorrowCurrentDeviceIdentity] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testKnownMismatchedUUIDCannotBorrowCurrentDeviceIdentity]' failed (0.012 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testLaterEditAfterRemountRetainsUncertainPublication]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testLaterEditAfterRemountRetainsUncertainPublication] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testLaterEditAfterRemountRetainsUncertainPublication]' skipped (0.001 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testPersistentAliasSurvivesReuseOfAnOlderAttachmentNumber]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.DriveReconnectTests testPersistentAliasSurvivesReuseOfAnOlderAttachmentNumber] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testPersistentAliasSurvivesReuseOfAnOlderAttachmentNumber]' failed (0.008 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testRealRemountInvalidatesRetainedNativeInventory]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testRealRemountInvalidatesRetainedNativeInventory] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testRealRemountInvalidatesRetainedNativeInventory]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testReplacedJournalAfterRemountIsRefused]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testReplacedJournalAfterRemountIsRefused] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testReplacedJournalAfterRemountIsRefused]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testSameMountpointRemountReconcilesWithoutChangingGrant]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testSameMountpointRemountReconcilesWithoutChangingGrant] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testSameMountpointRemountReconcilesWithoutChangingGrant]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testUnboundLegacyJournalRemainsUnreadableInsteadOfUploadingPrivateBytes]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/DriveReconnectTests.swift:137: -[AppleFileSyncTests.DriveReconnectTests testUnboundLegacyJournalRemainsUnreadableInsteadOfUploadingPrivateBytes] : Test skipped - Set THINGTIME_TEST_DRIVE_REMOUNT=1 for disposable APFS remount acceptance
+Test Case '-[AppleFileSyncTests.DriveReconnectTests testUnboundLegacyJournalRemainsUnreadableInsteadOfUploadingPrivateBytes]' skipped (0.000 seconds).
+Test Suite 'DriveReconnectTests' failed at 2026-11-12 11:21:12.854.
+	 Executed 15 tests, with 12 tests skipped and 2 failures (2 unexpected) in 0.029 (0.031) seconds
+Test Suite 'FileSyncCompatibilityTests' started at 2026-11-12 11:21:12.854.
+Test Case '-[AppleFileSyncTests.FileSyncCompatibilityTests testExistingOwnerScopeKeepsItsJSONAndKeychainIdentity]' started.
+Test Case '-[AppleFileSyncTests.FileSyncCompatibilityTests testExistingOwnerScopeKeepsItsJSONAndKeychainIdentity]' passed (0.000 seconds).
+Test Suite 'FileSyncCompatibilityTests' passed at 2026-11-12 11:21:12.854.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'FileUploadPartStoreTests' started at 2026-11-12 11:21:12.855.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testChangedGrantAndSourceRefusedUnderSameIdentity]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testChangedGrantAndSourceRefusedUnderSameIdentity]' passed (0.016 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testCorruptionAndLinkedPayloadsRefused]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testCorruptionAndLinkedPayloadsRefused]' passed (0.022 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testCountAndByteLimitsPreserveExistingPartsAndReleaseBudget]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testCountAndByteLimitsPreserveExistingPartsAndReleaseBudget]' passed (0.018 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testDurableReuseAndExplicitRelease]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testDurableReuseAndExplicitRelease]' passed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testGrantCleanupIsOwnerOriginAndRootScoped]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testGrantCleanupIsOwnerOriginAndRootScoped]' passed (0.020 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testIncompleteCaptureAndPreRecordOrphanRecoverWithoutTrustingBytes]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartStoreTests testIncompleteCaptureAndPreRecordOrphanRecoverWithoutTrustingBytes]' passed (0.009 seconds).
+Test Suite 'FileUploadPartStoreTests' passed at 2026-11-12 11:21:12.948.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.092 (0.093) seconds
+Test Suite 'FileUploadPartTests' started at 2026-11-12 11:21:12.948.
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testCanonicalBoundariesIncompleteStreamsAndCancellationRefuseParts]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testCanonicalBoundariesIncompleteStreamsAndCancellationRefuseParts]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testFileBackedPartsMatchHashesAndCleanUp]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testFileBackedPartsMatchHashesAndCleanUp]' passed (0.955 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testLargePartCaptureRemainsChunkBounded]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testLargePartCaptureRemainsChunkBounded]' passed (0.045 seconds).
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testSelectedFolderMutationCannotPublishAPart]' started.
+Test Case '-[AppleFileSyncTests.FileUploadPartTests testSelectedFolderMutationCannotPublishAPart]' passed (0.011 seconds).
+Test Suite 'FileUploadPartTests' passed at 2026-11-12 11:21:13.962.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.013 (1.014) seconds
+Test Suite 'FileVersionExportTests' started at 2026-11-12 11:21:13.962.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testAuthorizationLostAfterCopyRemovesUnpublishedCandidate]' started.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testAuthorizationLostAfterCopyRemovesUnpublishedCandidate]' passed (0.004 seconds).
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testCancellationBeforePublicationLeavesDestinationUntouched]' started.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testCancellationBeforePublicationLeavesDestinationUntouched]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testCorruptTruncatedAndOversizedRangesRefuseAndCleanPrivateBytes]' started.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testCorruptTruncatedAndOversizedRangesRefuseAndCleanPrivateBytes]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testInvalidNamesFingerprintAndRangeFramingRefuse]' started.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testInvalidNamesFingerprintAndRangeFramingRefuse]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testMultiPartRangeExportPreservesExistingFilesAndSymlinks]' started.
+Test Case '-[AppleFileSyncTests.FileVersionExportTests testMultiPartRangeExportPreservesExistingFilesAndSymlinks]' passed (0.816 seconds).
+Test Suite 'FileVersionExportTests' passed at 2026-11-12 11:21:14.789.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.826 (0.827) seconds
+Test Suite 'ManagedFileReplicaTests' started at 2026-11-12 11:21:14.789.
+Test Case '-[AppleFileSyncTests.ManagedFileReplicaTests testEmptyReplicaPublishesWithoutRequestingARange]' started.
+Test Case '-[AppleFileSyncTests.ManagedFileReplicaTests testEmptyReplicaPublishesWithoutRequestingARange]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.ManagedFileReplicaTests testVerifiedReplicaIsIsolatedAndEvictionCannotRemoveChangedOrUnauthorizedBytes]' started.
+Test Case '-[AppleFileSyncTests.ManagedFileReplicaTests testVerifiedReplicaIsIsolatedAndEvictionCannotRemoveChangedOrUnauthorizedBytes]' passed (0.005 seconds).
+Test Suite 'ManagedFileReplicaTests' passed at 2026-11-12 11:21:14.797.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'MobileFolderBatchValidatorTests' started at 2026-11-12 11:21:14.797.
+Test Case '-[AppleFileSyncTests.MobileFolderBatchValidatorTests testFullStampDriftAndSymlinkReplacementFailClosed]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBatchValidatorTests testFullStampDriftAndSymlinkReplacementFailClosed]' passed (0.025 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderBatchValidatorTests testStructuralBoundsAliasesAndFilesAreRefused]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBatchValidatorTests testStructuralBoundsAliasesAndFilesAreRefused]' passed (0.000 seconds).
+Test Suite 'MobileFolderBatchValidatorTests' passed at 2026-11-12 11:21:14.823.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.026 (0.026) seconds
+Test Suite 'MobileFolderBulkReaderTests' started at 2026-11-12 11:21:14.823.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testAliasesAndResourceBoundsFailClosed]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testAliasesAndResourceBoundsFailClosed]' passed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testIdentityGuardClassifiesSavedDescriptorWithoutExposingValues]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testIdentityGuardClassifiesSavedDescriptorWithoutExposingValues]' passed (0.023 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testNewCaseAliasAndSymlinkReplacementRefuseExistingSource]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testNewCaseAliasAndSymlinkReplacementRefuseExistingSource]' passed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testReadGuardReportsOnlyProvenFailureWithoutChangingThrownError]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testReadGuardReportsOnlyProvenFailureWithoutChangingThrownError]' passed (0.018 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testRealBoundedFileAndFinalDigestFence]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderBulkReaderTests testRealBoundedFileAndFinalDigestFence]' passed (0.026 seconds).
+Test Suite 'MobileFolderBulkReaderTests' passed at 2026-11-12 11:21:14.906.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.082 (0.083) seconds
+Test Suite 'MobileFolderIgnoreRulesTests' started at 2026-11-12 11:21:14.906.
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testConformanceWithGitCheckIgnoreIncludingByteWildcards]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testConformanceWithGitCheckIgnoreIncludingByteWildcards]' passed (4.543 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testEscapedGlobstarSeparatorAndHyphenFollowGit]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testEscapedGlobstarSeparatorAndHyphenFollowGit]' passed (0.000 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testSharedGitOracleCorpusMatchesNative]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testSharedGitOracleCorpusMatchesNative]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testValidationPreservesPolicyBytesAndHasNoBacktrackingExplosion]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderIgnoreRulesTests testValidationPreservesPolicyBytesAndHasNoBacktrackingExplosion]' passed (0.037 seconds).
+Test Suite 'MobileFolderIgnoreRulesTests' passed at 2026-11-12 11:21:19.491.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 4.583 (4.584) seconds
+Test Suite 'MobileFolderInventoryTests' started at 2026-11-12 11:21:19.491.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupCancellationAndLostHostLeaveUnsealedGeneration]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testBackupCancellationAndLostHostLeaveUnsealedGeneration] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupCancellationAndLostHostLeaveUnsealedGeneration]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupCaptureKeepsSupportedFilesAndPagesExplicitSkips]' failed (0.013 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupRootMutationRecordsGapWithoutWholeTreeReplay]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupRootMutationRecordsGapWithoutWholeTreeReplay]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupUnreadableSubtreeIsExplicitAndDoesNotHideSupportedSibling]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testBackupUnreadableSubtreeIsExplicitAndDoesNotHideSupportedSibling] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testBackupUnreadableSubtreeIsExplicitAndDoesNotHideSupportedSibling]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testCancellationDuringTraversalCannotFinishCapture]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testCancellationDuringTraversalCannotFinishCapture] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testCancellationDuringTraversalCannotFinishCapture]' failed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testCaptureFailureOrPartialBackupCannotChangeExclusionPolicy]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testCaptureFailureOrPartialBackupCannotChangeExclusionPolicy] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testCaptureFailureOrPartialBackupCannotChangeExclusionPolicy]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testEmptyCaptureAndWrongGenerationScopeOrBookmarkRefused]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testEmptyCaptureAndWrongGenerationScopeOrBookmarkRefused] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testEmptyCaptureAndWrongGenerationScopeOrBookmarkRefused]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testExclusionsPruneBeforeOpeningAndPreserveExactPathBoundaries]' failed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testExclusionsValidateBeforeOpeningTheGrant]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testExclusionsValidateBeforeOpeningTheGrant]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreMatchingAndEmittedInventoryPreserveDecomposedFilenameBytes]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreMatchingAndEmittedInventoryPreserveDecomposedFilenameBytes] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreMatchingAndEmittedInventoryPreserveDecomposedFilenameBytes]' failed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnorePolicyIdentityUsesExactUnicodeBytesAndValidatesBeforeGrantAccess]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testIgnorePolicyIdentityUsesExactUnicodeBytesAndValidatesBeforeGrantAccess] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnorePolicyIdentityUsesExactUnicodeBytesAndValidatesBeforeGrantAccess]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testIgnoreRulesPruneDependenciesBeforeOpenAndBindCapturePolicy]' failed (0.004 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testLargeCapturePagesReopenAndRetainExactObservation]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testLargeCapturePagesReopenAndRetainExactObservation] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testLargeCapturePagesReopenAndRetainExactObservation]' failed (1.046 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testLegacyJournalRequiresRecaptureWithoutPresentingOldRowsAsEmpty]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testLegacyJournalRequiresRecaptureWithoutPresentingOldRowsAsEmpty] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testLegacyJournalRequiresRecaptureWithoutPresentingOldRowsAsEmpty]' failed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testOptionalPageSizesReuseSealedCapturesWithExactOffsetsAndByteBounds]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testOptionalPageSizesReuseSealedCapturesWithExactOffsetsAndByteBounds] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testOptionalPageSizesReuseSealedCapturesWithExactOffsetsAndByteBounds]' failed (0.158 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testRealTransportAdvertisesStrictCapabilityAndEnforcesItsBoundary]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testRealTransportAdvertisesStrictCapabilityAndEnforcesItsBoundary] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testRealTransportAdvertisesStrictCapabilityAndEnforcesItsBoundary]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testRootDirectoryChangeKeepsOriginalFailureWithoutInventingAPath]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testRootDirectoryChangeKeepsOriginalFailureWithoutInventingAPath]' passed (0.004 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testScanDiagnosticsRejectLinksSpecialAndInvalidPathsWithoutReadingTargets]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testScanDiagnosticsRejectLinksSpecialAndInvalidPathsWithoutReadingTargets]' passed (0.008 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testSkipPagesOptInto4096WithLegacyDefaultAndExactLastPage]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testSkipPagesOptInto4096WithLegacyDefaultAndExactLastPage] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testSkipPagesOptInto4096WithLegacyDefaultAndExactLastPage]' failed (0.320 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testStreamingCaptureRechecksEarlierFilesBeforeCompletion]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testStreamingCaptureRechecksEarlierFilesBeforeCompletion]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testStrictDuplicateIdentityRefusalAndBackupGapPreserveSymbolicLinks]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testStrictDuplicateIdentityRefusalAndBackupGapPreserveSymbolicLinks] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testStrictDuplicateIdentityRefusalAndBackupGapPreserveSymbolicLinks]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testTruncatedCaptureAndReplacedDatabaseNeverBecomeCompleteOrEmpty]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/RustIndexFixture.swift:15: error: -[AppleFileSyncTests.MobileFolderInventoryTests testTruncatedCaptureAndReplacedDatabaseNeverBecomeCompleteOrEmpty] : failed: caught error: "Error Domain=Run macos/ThingtimeNode/scripts/test-commander-backup.sh to build the fixture indexer. Code=1 "(null)""
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testTruncatedCaptureAndReplacedDatabaseNeverBecomeCompleteOrEmpty]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testTypedRootGapDoesNotInventAnEntryPath]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderInventoryTests testTypedRootGapDoesNotInventAnEntryPath]' passed (0.000 seconds).
+Test Suite 'MobileFolderInventoryTests' failed at 2026-11-12 11:21:21.103.
+	 Executed 23 tests, with 17 failures (17 unexpected) in 1.608 (1.612) seconds
+Test Suite 'MobileFolderTests' started at 2026-11-12 11:21:21.103.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testCancellationStopsHashingWithoutACompleteScan]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testCancellationStopsHashingWithoutACompleteScan]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testCancelledInspectionCannotReportAbsence]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testCancelledInspectionCannotReportAbsence]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testDirectoriesAndEmptyFilesStayInCompleteInventory]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testDirectoriesAndEmptyFilesStayInCompleteInventory]' passed (0.006 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testGrantsReloadDeduplicateScopeAndRemoveWithoutDeletingFiles]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testGrantsReloadDeduplicateScopeAndRemoveWithoutDeletingFiles]' passed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testInspectionInWideDirectoriesHasNoWholeScanEntryLimit]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testInspectionInWideDirectoriesHasNoWholeScanEntryLimit]' passed (1.000 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testInspectionMatchesCompleteScanButDoesNotTraverseUnrelatedItems]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testInspectionMatchesCompleteScanButDoesNotTraverseUnrelatedItems]' passed (0.030 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testKeychainReloadStaysOnDeviceAndScopedToAccountAndOrigin]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testKeychainReloadStaysOnDeviceAndScopedToAccountAndOrigin]' passed (0.089 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testMissingFolderIsFailureNotAnEmptyScan]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testMissingFolderIsFailureNotAnEmptyScan]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testMultipartFingerprintMatchesSharedByteContractAndBoundedReads]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testMultipartFingerprintMatchesSharedByteContractAndBoundedReads]' passed (0.020 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testPersistedReloadStaysScopedToAccountAndOrigin]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testPersistedReloadStaysScopedToAccountAndOrigin]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSaveFailureCannotPublishNewFolderAccess]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSaveFailureCannotPublishNewFolderAccess]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSourceLocationIsExactOwnerScopedMetadataAndNeverRelativeAuthority]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSourceLocationIsExactOwnerScopedMetadataAndNeverRelativeAuthority]' passed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testStampInspectionAvoidsWholeFileHashAndRejectsChangedOrUnsafePaths]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testStampInspectionAvoidsWholeFileHashAndRejectsChangedOrUnsafePaths]' passed (0.021 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testStreamRejectsReplacedPathsChangedInodesCancellationAndConsumerRefusal]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testStreamRejectsReplacedPathsChangedInodesCancellationAndConsumerRefusal]' passed (0.022 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSymlinksTraversalAndChangedFilesCannotReturnBytes]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testSymlinksTraversalAndChangedFilesCannotReturnBytes]' passed (0.022 seconds).
+Test Case '-[AppleFileSyncTests.MobileFolderTests testWriteApprovalIsSeparateBoundedAndClearedByReselection]' started.
+Test Case '-[AppleFileSyncTests.MobileFolderTests testWriteApprovalIsSeparateBoundedAndClearedByReselection]' passed (0.006 seconds).
+Test Suite 'MobileFolderTests' passed at 2026-11-12 11:21:22.348.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 1.241 (1.245) seconds
+Test Suite 'MobileSyncStagingTests' started at 2026-11-12 11:21:22.348.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testConcurrentReceiverInstancesDeduplicateTheSameChunk]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testConcurrentReceiverInstancesDeduplicateTheSameChunk]' passed (0.020 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testCrashAfterBytesBeforeCheckpointDiscardsOnlyUnacknowledgedTail]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testCrashAfterBytesBeforeCheckpointDiscardsOnlyUnacknowledgedTail]' passed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testCrashThenLocalEditRemainsPendingAndPreservesBothVersions]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testCrashThenLocalEditRemainsPendingAndPreservesBothVersions]' passed (0.027 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testEmptyFilesFoldersAndCorruptCompletedPayloads]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testEmptyFilesFoldersAndCorruptCompletedPayloads]' passed (0.025 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testEmptyRegularFileRestoresWithoutBytesAndRecoversExactReceipt]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testEmptyRegularFileRestoresWithoutBytesAndRecoversExactReceipt]' passed (0.112 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testInterruptedPublicationRecoversWithoutRepeatingSwap]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testInterruptedPublicationRecoversWithoutRepeatingSwap]' passed (0.043 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testMultipartStagingResumesAfterReopenAndVerifiesEveryByte]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testMultipartStagingResumesAfterReopenAndVerifiesEveryByte]' passed (0.200 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationAndRecoveryAcrossWideAncestorsRetainAliasChecks]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationAndRecoveryAcrossWideAncestorsRetainAliasChecks]' passed (2.310 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationCreatesAndReplacesAtomicallyRetainingPriorBytes]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationCreatesAndReplacesAtomicallyRetainingPriorBytes]' passed (0.050 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationCreatesEmptyFolders]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationCreatesEmptyFolders]' passed (0.013 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationRefusesLocalChangesAndSymlinkEscape]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testPublicationRefusesLocalChangesAndSymlinkEscape]' passed (0.035 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testRacingUncoordinatedWriterIsRetainedAndNotReportedAsSuccess]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testRacingUncoordinatedWriterIsRetainedAndNotReportedAsSuccess]' passed (0.020 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testScopeOperationRangesAndChecksumsFailClosed]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testScopeOperationRangesAndChecksumsFailClosed]' passed (0.006 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testStreamCheckpointReplayAndInterruptedTailRecovery]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testStreamCheckpointReplayAndInterruptedTailRecovery]' passed (0.011 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testStreamFlushCrashTruncationAndInvalidFramesCannotAdvanceCheckpoint]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testStreamFlushCrashTruncationAndInvalidFramesCannotAdvanceCheckpoint]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testSymlinkPayloadNeverWritesOutsidePrivateStaging]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncStagingTests testSymlinkPayloadNeverWritesOutsidePrivateStaging]' passed (0.003 seconds).
+Test Suite 'MobileSyncStagingTests' passed at 2026-11-12 11:21:25.238.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 2.886 (2.890) seconds
+Test Suite 'MobileSyncTrashTests' started at 2026-11-12 11:21:25.238.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testChangedSourceNonemptyFolderAndSymbolicLinksRefuseBeforeMoving]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testChangedSourceNonemptyFolderAndSymbolicLinksRefuseBeforeMoving]' passed (0.031 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testChildReceiptsAdvanceAnEmptyParentWithoutChangingTheOriginalOperation]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testChildReceiptsAdvanceAnEmptyParentWithoutChangingTheOriginalOperation]' passed (0.050 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testExposedJournalRefusesWithoutRemovingTheSource]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testExposedJournalRefusesWithoutRemovingTheSource]' passed (0.010 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testFolderPopulatedDuringTrashRaceCanBeExplicitlyRecoveredWithoutTraversingChildren]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testFolderPopulatedDuringTrashRaceCanBeExplicitlyRecoveredWithoutTraversingChildren]' passed (0.044 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testInterruptedRestoreRecoversWithoutMovingOrOverwritingAgain]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testInterruptedRestoreRecoversWithoutMovingOrOverwritingAgain]' passed (0.057 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testInterruptedTrashRecoversAfterRelaunchAndPreservesARecreatedSource]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testInterruptedTrashRecoversAfterRelaunchAndPreservesARecreatedSource]' passed (0.032 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testOwnerBookmarkAndImmutableOperationBindingsRejectSubstitution]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testOwnerBookmarkAndImmutableOperationBindingsRejectSubstitution]' passed (0.024 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testPostCrashChildReceiptDoesNotInventAParentTransition]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testPostCrashChildReceiptDoesNotInventAParentTransition]' passed (0.048 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRacingAncestorSymlinkCannotEscapeThePickerGrant]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRacingAncestorSymlinkCannotEscapeThePickerGrant]' passed (0.018 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRacingReplacementIsRetainedForExplicitReviewInsteadOfClaimingSuccess]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRacingReplacementIsRetainedForExplicitReviewInsteadOfClaimingSuccess]' passed (0.055 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRebasedFolderMoveRecoversAfterInterruptionAndRejectsForeignPredecessors]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRebasedFolderMoveRecoversAfterInterruptionAndRejectsForeignPredecessors]' passed (0.097 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRecoveryPagesPreserveOwnershipAndPendingRestoreAcrossRestart]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRecoveryPagesPreserveOwnershipAndPendingRestoreAcrossRestart]' passed (0.141 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRecoveryPaginationHasNoDuplicatesAndIncludesPreviousConnections]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRecoveryPaginationHasNoDuplicatesAndIncludesPreviousConnections]' passed (0.313 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRestoreNeverOverwritesAndAllowsAReviewedAlternatePath]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testRestoreNeverOverwritesAndAllowsAReviewedAlternatePath]' passed (0.032 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testSelectingTheJournalCannotMoveItsOwnLockOrRetainedData]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testSelectingTheJournalCannotMoveItsOwnLockOrRetainedData]' passed (0.020 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testSiblingsUseBoundedReceiptLinksAndRejectInterveningParentChanges]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testSiblingsUseBoundedReceiptLinksAndRejectInterveningParentChanges]' passed (0.049 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testTrashAndExclusiveRestorePreserveFilesEmptyFilesAndEmptyFolders]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testTrashAndExclusiveRestorePreserveFilesEmptyFilesAndEmptyFolders]' passed (0.094 seconds).
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testTrashAndRestoreInWideDirectoryKeepAllSiblingBytes]' started.
+Test Case '-[AppleFileSyncTests.MobileSyncTrashTests testTrashAndRestoreInWideDirectoryKeepAllSiblingBytes]' passed (1.098 seconds).
+Test Suite 'MobileSyncTrashTests' passed at 2026-11-12 11:21:27.457.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 2.214 (2.219) seconds
+Test Suite 'NativeFileDestinationTests' started at 2026-11-12 11:21:27.457.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testInvalidOrUnanchoredPathsNeverReachTheKernel]' started.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testInvalidOrUnanchoredPathsNeverReachTheKernel]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testLegacyKernelRetryRetainsNoFollowAndAtomicExclusionOrSwap]' started.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testLegacyKernelRetryRetainsNoFollowAndAtomicExclusionOrSwap]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testLegacyRetryRefusesSymlinkTraversalAndOccupiedDestination]' started.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testLegacyRetryRefusesSymlinkTraversalAndOccupiedDestination]' passed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testMutationBetweenLegacyAttemptAndRetryStillFailsContentVerification]' started.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testMutationBetweenLegacyAttemptAndRetryStillFailsContentVerification]' passed (0.004 seconds).
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testOtherSyscallFailuresNeverRetry]' started.
+Test Case '-[AppleFileSyncTests.NativeFileDestinationTests testOtherSyscallFailuresNeverRetry]' passed (0.001 seconds).
+Test Suite 'NativeFileDestinationTests' passed at 2026-11-12 11:21:27.467.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'NativeSymbolicLinkTests' started at 2026-11-12 11:21:27.467.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testExplicitDownloadRehydratesSameTargetFallbackOnCapableFilesystem]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testExplicitDownloadRehydratesSameTargetFallbackOnCapableFilesystem]' passed (0.026 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testInvalidTargetsAndParentEscapeRefuse]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testInvalidTargetsAndParentEscapeRefuse]' passed (0.011 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testMountedFATDisplacementInterruptionResumesAndRefusesConcurrentWriter]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/NativeSymbolicLinkTests.swift:204: -[AppleFileSyncTests.NativeSymbolicLinkTests testMountedFATDisplacementInterruptionResumesAndRefusesConcurrentWriter] : Test skipped - Requires explicitly mounted task-owned FAT filesystem
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testMountedFATDisplacementInterruptionResumesAndRefusesConcurrentWriter]' skipped (0.001 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testMountedUnsupportedFilesystemCrossVolumePublicationAndTrashRecovery]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/NativeSymbolicLinkTests.swift:160: -[AppleFileSyncTests.NativeSymbolicLinkTests testMountedUnsupportedFilesystemCrossVolumePublicationAndTrashRecovery] : Test skipped - Requires explicitly mounted task-owned unsupported filesystem
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testMountedUnsupportedFilesystemCrossVolumePublicationAndTrashRecovery]' skipped (0.000 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testOnlyVerifiedJournalIdentityIsHiddenAndOutsideTargetIsUntouched]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testOnlyVerifiedJournalIdentityIsHiddenAndOutsideTargetIsUntouched]' passed (0.011 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testPermissionsFullDiskAndCollisionsNeverBecomeFallbacks]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testPermissionsFullDiskAndCollisionsNeverBecomeFallbacks]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testPublicationReplacementRestartRecoveryAndPortableFallback]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testPublicationReplacementRestartRecoveryAndPortableFallback]' passed (0.103 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testRegularToLinkAndLinkToRegularKeepDisplacedInodeAcrossLostReply]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testRegularToLinkAndLinkToRegularKeepDisplacedInodeAcrossLostReply]' passed (0.049 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testScanReadBrokenLoopAbsoluteAndNonUTF8LinksNeverResolveTargets]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testScanReadBrokenLoopAbsoluteAndNonUTF8LinksNeverResolveTargets]' passed (0.045 seconds).
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testTrashRestartAndRestorePreserveLinkAndFallbackMetadata]' started.
+Test Case '-[AppleFileSyncTests.NativeSymbolicLinkTests testTrashRestartAndRestorePreserveLinkAndFallbackMetadata]' passed (0.147 seconds).
+Test Suite 'NativeSymbolicLinkTests' passed at 2026-11-12 11:21:27.863.
+	 Executed 10 tests, with 2 tests skipped and 0 failures (0 unexpected) in 0.394 (0.396) seconds
+Test Suite 'PhotoLibraryTests' started at 2026-11-12 11:21:27.863.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testBackgroundPhotoPreparationIsUnpublishedAndCancellable]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testBackgroundPhotoPreparationIsUnpublishedAndCancellable] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testBackgroundPhotoPreparationIsUnpublishedAndCancellable] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testBackgroundPhotoPreparationIsUnpublishedAndCancellable]' failed (0.007 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testBoundedLookaheadDoesNotAdvanceOrReplaceUnacknowledgedSelection]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testBoundedLookaheadDoesNotAdvanceOrReplaceUnacknowledgedSelection]' passed (0.006 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testChangedSelectedAssetStartsNewUnacknowledgedBatchWithoutDroppingKnownReceipt]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testChangedSelectedAssetStartsNewUnacknowledgedBatchWithoutDroppingKnownReceipt] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testChangedSelectedAssetStartsNewUnacknowledgedBatchWithoutDroppingKnownReceipt] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testChangedSelectedAssetStartsNewUnacknowledgedBatchWithoutDroppingKnownReceipt]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testCloudCaptureBudgetDefersRemainingResourcesWithoutTruncatingTheLibrary]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testCloudCaptureBudgetDefersRemainingResourcesWithoutTruncatingTheLibrary] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testCloudCaptureBudgetDefersRemainingResourcesWithoutTruncatingTheLibrary] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testCloudCaptureBudgetDefersRemainingResourcesWithoutTruncatingTheLibrary]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testCloudOnlyCompanionDoesNotBlockAvailableOriginalsAndReturnsAfterDownload]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testCloudOnlyCompanionDoesNotBlockAvailableOriginalsAndReturnsAfterDownload] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testCloudOnlyCompanionDoesNotBlockAvailableOriginalsAndReturnsAfterDownload] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testCloudOnlyCompanionDoesNotBlockAvailableOriginalsAndReturnsAfterDownload]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testDeferredCompanionsGetATurnAndLocalReprobeDoesNotUseNetwork]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testDeferredCompanionsGetATurnAndLocalReprobeDoesNotUseNetwork] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testDeferredCompanionsGetATurnAndLocalReprobeDoesNotUseNetwork] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testDeferredCompanionsGetATurnAndLocalReprobeDoesNotUseNetwork]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testDiscardedSelectionWithOrphanedDeferredRecordDoesNotBlockLocalBackup]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testDiscardedSelectionWithOrphanedDeferredRecordDoesNotBlockLocalBackup] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testDiscardedSelectionWithOrphanedDeferredRecordDoesNotBlockLocalBackup] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testDiscardedSelectionWithOrphanedDeferredRecordDoesNotBlockLocalBackup]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testExplicitCloudDownloadPreservesCompanionBytesAndRefusesWithoutLivePolicy]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testExplicitCloudDownloadPreservesCompanionBytesAndRefusesWithoutLivePolicy] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testExplicitCloudDownloadPreservesCompanionBytesAndRefusesWithoutLivePolicy] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testExplicitCloudDownloadPreservesCompanionBytesAndRefusesWithoutLivePolicy]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testMutationAndCancellationCannotReturnACompleteInventory]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testMutationAndCancellationCannotReturnACompleteInventory] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testMutationAndCancellationCannotReturnACompleteInventory] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testMutationAndCancellationCannotReturnACompleteInventory]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testNewestCloudOriginalWaitsWithoutBlockingReadyOrderedBatches]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testNewestMixedOriginalsAndCompanionsAdvanceWithCachedMembershipAndNewArrival]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testNewestMixedOriginalsAndCompanionsAdvanceWithCachedMembershipAndNewArrival] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testNewestMixedOriginalsAndCompanionsAdvanceWithCachedMembershipAndNewArrival] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testNewestMixedOriginalsAndCompanionsAdvanceWithCachedMembershipAndNewArrival]' failed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testOrderedCaptureSealsFirstGroupBeforeFullDiscoveryAndResumesExactCursor]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testOrderedCaptureSealsFirstGroupBeforeFullDiscoveryAndResumesExactCursor] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testOrderedCaptureSealsFirstGroupBeforeFullDiscoveryAndResumesExactCursor] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testOrderedCaptureSealsFirstGroupBeforeFullDiscoveryAndResumesExactCursor]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testOriginalMultipartFingerprintStableVersionsAndRangeCache]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testOriginalMultipartFingerprintStableVersionsAndRangeCache] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testOriginalMultipartFingerprintStableVersionsAndRangeCache] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testOriginalMultipartFingerprintStableVersionsAndRangeCache]' failed (0.002 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPagedPhotoCaptureRejectsMembershipChangeBeforeFinalPage]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testPagedPhotoCaptureRejectsMembershipChangeBeforeFinalPage] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testPagedPhotoCaptureRejectsMembershipChangeBeforeFinalPage] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPagedPhotoCaptureRejectsMembershipChangeBeforeFinalPage]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPermissionRevocationMissingOriginalAndChangedLibraryFailClosed]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testPermissionRevocationMissingOriginalAndChangedLibraryFailClosed] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testPermissionRevocationMissingOriginalAndChangedLibraryFailClosed] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPermissionRevocationMissingOriginalAndChangedLibraryFailClosed]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoExportFailuresDescribeTheActualRecoveryWithoutLeakingNativeDetails]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoExportFailuresDescribeTheActualRecoveryWithoutLeakingNativeDetails]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoGrantReloadScopeAndWriteRefusal]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoGrantReloadScopeAndWriteRefusal]' passed (0.000 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoStreamMatchesOriginalAndRevocationStopsProvisionalBytes]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testPhotoStreamMatchesOriginalAndRevocationStopsProvisionalBytes] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testPhotoStreamMatchesOriginalAndRevocationStopsProvisionalBytes] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testPhotoStreamMatchesOriginalAndRevocationStopsProvisionalBytes]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testReadReobservesOriginalAndRejectsChangedBytesAfterLogicalCacheHit]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testReadReobservesOriginalAndRejectsChangedBytesAfterLogicalCacheHit] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testReadReobservesOriginalAndRejectsChangedBytesAfterLogicalCacheHit] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testReadReobservesOriginalAndRejectsChangedBytesAfterLogicalCacheHit]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testResourcesWithSameNamesAndLivePhotoCompanionsRemainDistinct]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testResourcesWithSameNamesAndLivePhotoCompanionsRemainDistinct] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testResourcesWithSameNamesAndLivePhotoCompanionsRemainDistinct] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testResourcesWithSameNamesAndLivePhotoCompanionsRemainDistinct]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testRetirementKeepsActiveAndLastTerminalEpochForLostAcknowledgement]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testRetirementKeepsActiveAndLastTerminalEpochForLostAcknowledgement]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSingleNewestAssetIsReadyBeforeLaterAssetsAndAliasReopenPreservesItsReceipt]' failed (0.004 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexBackpressuresLargeAcknowledgedPrefixAndResumesIncrementally]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexBackpressuresLargeAcknowledgedPrefixAndResumesIncrementally]' passed (4.089 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPrecedesOriginalPreparationAndRetainsOutboxAcrossRestart]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPrecedesOriginalPreparationAndRetainsOutboxAcrossRestart] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPrecedesOriginalPreparationAndRetainsOutboxAcrossRestart] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPrecedesOriginalPreparationAndRetainsOutboxAcrossRestart]' failed (0.006 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPreservesKnownUnavailableReasonAcrossRestartAndRotatesOnlyMetadata]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexPreservesKnownUnavailableReasonAcrossRestartAndRotatesOnlyMetadata]' passed (0.032 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexRetainsPreparedVersionsAcrossRotationAndLabelsLegacyReceipts]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexRetainsPreparedVersionsAcrossRotationAndLabelsLegacyReceipts]' passed (0.026 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexRotationFailureRetainsBackfillIntentBeforeActivatingEpoch]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testSourceIndexRotationFailureRetainsBackfillIntentBeforeActivatingEpoch]' passed (0.017 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnavailableIndexerNeverFallsBackToSwift]' started.
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnavailableIndexerNeverFallsBackToSwift]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnavailableOriginalRetryKeepsCompletedObservationsAndEveryResource]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testUnavailableOriginalRetryKeepsCompletedObservationsAndEveryResource] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testUnavailableOriginalRetryKeepsCompletedObservationsAndEveryResource] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnavailableOriginalRetryKeepsCompletedObservationsAndEveryResource]' failed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnreadableNewestOriginalPersistsTypedRetryWithoutBlockingOlderBatch]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testUnreadableNewestOriginalPersistsTypedRetryWithoutBlockingOlderBatch] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:0: error: -[AppleFileSyncTests.PhotoLibraryTests testUnreadableNewestOriginalPersistsTypedRetryWithoutBlockingOlderBatch] : failed: caught error: "Error Domain=NSCocoaErrorDomain Code=4 "“43F30C10-EB6C-4F6E-A3AD-FC5405A87000” couldn’t be removed." UserInfo={NSUserStringVariant=(
+    Remove
+), NSFilePath=/var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/43F30C10-EB6C-4F6E-A3AD-FC5405A87000, NSURL=file:///var/folders/3m/2_n1zfmj709_vsvdc2p_f94h0000gn/T/43F30C10-EB6C-4F6E-A3AD-FC5405A87000, NSUnderlyingError=0x79d2a45710 {Error Domain=NSPOSIXErrorDomain Code=2 "No such file or directory"}}"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testUnreadableNewestOriginalPersistsTypedRetryWithoutBlockingOlderBatch]' failed (0.003 seconds).
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen]' started.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:113: error: -[AppleFileSyncTests.PhotoLibraryTests testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen] : failed - Build commander-indexer or set THINGTIME_TEST_COMMANDER_INDEXER to run the PhotoKit inventory tests.
+/Users/lopu/.codex-2/worktrees/anonymous-release/thingtime/apple/FileSync/Tests/AppleFileSyncTests/PhotoLibraryTests.swift:114: error: -[AppleFileSyncTests.PhotoLibraryTests testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen] : failed: caught error: "unavailable"
+Test Case '-[AppleFileSyncTests.PhotoLibraryTests testWiFiOnlyNewestUnavailableRemainsInExactQueueAcrossReopen]' failed (0.004 seconds).
+Test Suite 'PhotoLibraryTests' failed at 2026-11-12 11:21:32.101.
+	 Executed 31 tests, with 44 failures (22 unexpected) in 4.231 (4.238) seconds
+Test Suite 'PhotoSourceIndexOutboxTests' started at 2026-11-12 11:21:32.101.
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testCounterWriteFailureKeepsAlreadyAllocatedPageImmutableInSameProcess]' started.
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testCounterWriteFailureKeepsAlreadyAllocatedPageImmutableInSameProcess]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testCrashBetweenPageAndCounterNeverReusesSequence]' started.
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testCrashBetweenPageAndCounterNeverReusesSequence]' passed (0.006 seconds).
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testLargeResourceGroupUsesBoundedPagesAndSealsOnlyLast]' started.
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testLargeResourceGroupUsesBoundedPagesAndSealsOnlyLast]' passed (0.049 seconds).
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testUncertainDeliverySurvivesRestartWithImmutableIdentity]' started.
+Test Case '-[AppleFileSyncTests.PhotoSourceIndexOutboxTests testUncertainDeliverySurvivesRestartWithImmutableIdentity]' passed (0.006 seconds).
+Test Suite 'PhotoSourceIndexOutboxTests' passed at 2026-11-12 11:21:32.168.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.066 (0.067) seconds
+Test Suite 'SyncResourceLimitsTests' started at 2026-11-12 11:21:32.168.
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testClosedNativePolicyAndExactIEEE754Fields]' started.
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testClosedNativePolicyAndExactIEEE754Fields]' passed (0.001 seconds).
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testDeviceDefaultsAndSharedScanBudgetCancellation]' started.
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testDeviceDefaultsAndSharedScanBudgetCancellation]' passed (0.202 seconds).
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testNestedHashChunksDoNotDoubleCountThreadCPU]' started.
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testNestedHashChunksDoNotDoubleCountThreadCPU]' passed (0.005 seconds).
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testThreadCPUCounterSharesQuotaAndCancellation]' started.
+Test Case '-[AppleFileSyncTests.SyncResourceLimitsTests testThreadCPUCounterSharesQuotaAndCancellation]' passed (0.000 seconds).
+Test Suite 'SyncResourceLimitsTests' passed at 2026-11-12 11:21:32.377.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.208 (0.209) seconds
+Test Suite 'AppleFileSyncTests.xctest' failed at 2026-11-12 11:21:32.377.
+	 Executed 182 tests, with 14 tests skipped and 72 failures (50 unexpected) in 21.423 (21.465) seconds
+Test Suite 'All tests' failed at 2026-11-12 11:21:32.377.
+	 Executed 182 tests, with 14 tests skipped and 72 failures (50 unexpected) in 21.423 (21.466) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2067.1
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - AppleFileSyncTests (XCTest)

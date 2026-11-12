@@ -1,0 +1,72 @@
+{
+  "scope": "synthetic browser transport; no real account or native ceremony",
+  "results": [
+    {
+      "label": "desktop",
+      "width": 1440,
+      "checks": [
+        "cold intake",
+        "explicit review",
+        "masked setup",
+        "no automatic save",
+        "warm cancellation preserves draft",
+        "explicit saved-code write",
+        "editable nested blocks",
+        "top/bottom overflow"
+      ]
+    },
+    {
+      "label": "mobile",
+      "width": 390,
+      "checks": [
+        "cold intake",
+        "explicit review",
+        "masked setup",
+        "no automatic save",
+        "warm cancellation preserves draft",
+        "explicit saved-code write",
+        "editable nested blocks",
+        "top/bottom overflow"
+      ]
+    },
+    {
+      "label": "local-desktop",
+      "width": 1440,
+      "checks": [
+        "actual anonymous LocalPasswordVault",
+        "device-only session label",
+        "actual Lock vault transition",
+        "editable session and lock labels",
+        "no account setup intake",
+        "no account verification controls or transport for anonymous vault/draft",
+        "top/bottom overflow"
+      ]
+    },
+    {
+      "label": "local-mobile",
+      "width": 390,
+      "checks": [
+        "actual anonymous LocalPasswordVault",
+        "device-only session label",
+        "actual Lock vault transition",
+        "editable session and lock labels",
+        "no account setup intake",
+        "no account verification controls or transport for anonymous vault/draft",
+        "top/bottom overflow"
+      ]
+    },
+    {
+      "label": "local-narrow",
+      "width": 320,
+      "checks": [
+        "actual anonymous LocalPasswordVault",
+        "device-only session label",
+        "actual Lock vault transition",
+        "editable session and lock labels",
+        "no account setup intake",
+        "no account verification controls or transport for anonymous vault/draft",
+        "top/bottom overflow"
+      ]
+    }
+  ]
+}

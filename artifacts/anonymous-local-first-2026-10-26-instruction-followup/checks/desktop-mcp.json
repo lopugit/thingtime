@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-10-26T07:34:07.105207+00:00",
+  "configuredServer": "thingtime",
+  "configuredEntryPoint": "MCP/dist/index.js",
+  "exposedChatNamespace": "thingtime-drafts",
+  "capabilitiesCall": {
+    "success": false,
+    "error": "Transport closed"
+  },
+  "unifiedDesktopToolProof": false,
+  "cliHostProof": "../../anonymous-local-first-2026-10-26-mcp-options/unified-cli-host",
+  "boundary": "No supported desktop reload tool exposed; prior Computer Use refusal for Codex settings is preserved."
+}

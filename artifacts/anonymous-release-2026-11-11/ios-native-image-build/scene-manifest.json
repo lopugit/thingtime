@@ -1,0 +1,11 @@
+{
+  "UIApplicationSupportsMultipleScenes": false,
+  "UISceneConfigurations": {
+    "UIWindowSceneSessionRoleApplication": [
+      {
+        "UISceneConfigurationName": "Probe Scene",
+        "UISceneDelegateClassName": "ProbeSceneDelegate"
+      }
+    ]
+  }
+}

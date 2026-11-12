@@ -1,0 +1,92 @@
+{
+  "pathname": "/nativeAutoActivationFixture",
+  "fields": [
+    {
+      "tag": "DIV",
+      "editable": "false",
+      "label": null,
+      "visible": true,
+      "text": "nativeAutoActivationFixture"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Emoji",
+      "visible": false,
+      "text": "",
+      "value": "🔗"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Title",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Hover tooltip",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "URL (relative or https://)",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Commander: search Things",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Emoji",
+      "visible": false,
+      "text": "",
+      "value": "🔗"
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Title",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Hover tooltip",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "URL (relative or https://)",
+      "visible": false,
+      "text": "",
+      "value": ""
+    },
+    {
+      "tag": "INPUT",
+      "editable": null,
+      "label": "Commander: search Things",
+      "visible": false,
+      "text": "",
+      "value": ""
+    }
+  ]
+}
